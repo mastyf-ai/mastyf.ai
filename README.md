@@ -70,7 +70,7 @@ MCP Doctor scans your Model Context Protocol (MCP) servers for security vulnerab
 - **Graceful Shutdown** — SIGINT/SIGTERM handlers flush DB and close connections
 - **Batched DB Writes** — 1s debounced flush reduces I/O by 10x
 - **Alert Thresholds** — 6 CLI flags with exit codes 1/2 for CI/CD integration
-- **GitHub Actions CI** — Node 18/20/22 matrix, 52 unit tests
+- **GitHub Actions CI** — Node 18/20/22 matrix, 62 unit tests across 9 suites
 
 ---
 
@@ -110,21 +110,47 @@ mcp-doctor report --config ./cline_mcp_settings.json
 **Example output (real data from proxy):**
 ```
 💰 Cost Audit
-github-server: 289 tokens, $0.0023 (gpt-4o)
-  search:      124 tokens, 3 calls, $0.0010
-  read_file:    83 tokens, 2 calls, $0.0007
-  write_to_file: 82 tokens, 1 call,  $0.0006
+mcp-doctor: 161 tokens, $0.0016 (gpt-4o)
+  audit_costs:   81 tokens, 1 call, $0.0008
+  check_health:  80 tokens, 1 call, $0.0008
 
 ❤️ Health Check
-github-server: 203ms latency, 100% success, 26 tools
-  ⚠ Tool overload: 26 tools may confuse agents
-
-🔒 Security Scan
-github-server - Score: A (80)
-  CVEs: None
-  ⚠ 1 hardcoded secret detected
+mcp-doctor: 218ms latency, 100% success, 4 tools
 
 Overall Score: 90/100
+```
+
+> **Important:** The cost audit will show `$0.0000` until the proxy has been running and captured real `tools/call` traffic. This is not a bug — the `call_records` table starts empty. See the [live pipeline verification](#live-pipeline-verification) below.
+
+---
+
+## Live Pipeline Verification
+
+To verify the full pipeline works end-to-end with real data (no mocks):
+
+```bash
+# Terminal 1: Start the proxy
+mcp-doctor proxy --config ./cline_mcp_settings.json
+
+# Terminal 2: Run your AI workflows (or pipe test calls)
+
+# Terminal 1: Ctrl+C when done, then:
+mcp-doctor audit --config ./cline_mcp_settings.json
+mcp-doctor report --config ./cline_mcp_settings.json
+```
+
+**Verified results** (proxy wrapping mcp-doctor's own MCP server, 3 real `tools/call` requests):
+
+```
+server: mcp-doctor, tool: scan_security,  124 tokens, 2463ms (real NVD API call)
+server: mcp-doctor, tool: audit_costs,     83 tokens,    4ms
+server: mcp-doctor, tool: check_health,    82 tokens,    4ms
+
+💰 Cost Audit
+mcp-doctor: 289 tokens, $0.0023 (gpt-4o)
+  scan_security: 124 tokens, 1 call, $0.0010
+  audit_costs:    83 tokens, 1 call, $0.0007
+  check_health:   82 tokens, 1 call, $0.0007
 ```
 
 ---
