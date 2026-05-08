@@ -1,6 +1,6 @@
 {
   "name": "@rudraneel/mcp-doctor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Security, cost, and health audit for MCP infrastructure",
   "type": "module",
   "files": ["dist"],
