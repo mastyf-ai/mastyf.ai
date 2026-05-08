@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { CveFinding } from '../types.js';
 import { Logger } from '../utils/logger.js';
+import { nvdLimiter, nvdApiKeyLimiter } from '../utils/rate-limiter.js';
 
 /**
  * Client for NIST NVD API (https://services.nvd.nist.gov/rest/json/cves/2.0).
@@ -29,6 +30,9 @@ export class NvdClient {
       if (this.apiKey) {
         headers['apiKey'] = this.apiKey;
       }
+
+      const limiter = this.apiKey ? nvdApiKeyLimiter : nvdLimiter;
+      await limiter.acquire();
 
       const response = await axios.get(this.baseUrl, {
         params,

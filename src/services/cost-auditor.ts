@@ -11,9 +11,9 @@ export class CostAuditor {
   private tokenCounter: TokenCounter;
   private pricing: PricingClient;
 
-  constructor() {
+  constructor(pricingClient?: PricingClient) {
     this.tokenCounter = new TokenCounter();
-    this.pricing = new PricingClient();
+    this.pricing = pricingClient || new PricingClient();
   }
 
   /**

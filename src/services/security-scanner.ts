@@ -14,11 +14,16 @@ export class SecurityScanner {
   private typoDetector: TypoSquatDetector;
   private secretScanner: SecretScanner;
 
-  constructor() {
-    this.cveChecker = new CveChecker();
-    this.authProber = new AuthProber();
-    this.typoDetector = new TypoSquatDetector();
-    this.secretScanner = new SecretScanner();
+  constructor(
+    cveChecker?: CveChecker,
+    authProber?: AuthProber,
+    typoDetector?: TypoSquatDetector,
+    secretScanner?: SecretScanner
+  ) {
+    this.cveChecker = cveChecker || new CveChecker();
+    this.authProber = authProber || new AuthProber();
+    this.typoDetector = typoDetector || new TypoSquatDetector();
+    this.secretScanner = secretScanner || new SecretScanner();
   }
 
   async scanServer(server: McpServerConfig): Promise<SecurityReport> {

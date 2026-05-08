@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { CveFinding } from '../types.js';
 import { Logger } from '../utils/logger.js';
+import { osvLimiter } from '../utils/rate-limiter.js';
 
 /**
  * Client for the OSV.dev API (https://api.osv.dev).
@@ -21,6 +22,7 @@ export class OsvClient {
    */
   async check(packageName: string, version?: string): Promise<CveFinding[]> {
     try {
+      await osvLimiter.acquire();
       // Normalize to purl-compatible format
       const purl = this.toPurl(packageName, version);
       const response = await axios.post(`${this.baseUrl}/query`, {
