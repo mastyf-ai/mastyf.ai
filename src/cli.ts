@@ -12,6 +12,7 @@ import { PolicyConfig } from './policy/policy-types.js';
 import { OAuthValidator } from './auth/oauth.js';
 import { AuthConfig } from './auth/auth-types.js';
 import { startMetricsServer } from './utils/metrics.js';
+import { startDashboardServer } from './utils/dashboard-server.js';
 import { initTracing } from './utils/tracing.js';
 import { createContainer } from './container.js';
 
@@ -302,6 +303,10 @@ program
     // Start Prometheus metrics server if enabled
     const metricsPort = parseInt(process.env['METRICS_PORT'] || '9090', 10);
     startMetricsServer(metricsPort).catch(() => {});
+
+    // Start dashboard server if enabled
+    const dashboardPort = parseInt(process.env['DASHBOARD_PORT'] || '4000', 10);
+    startDashboardServer(dashboardPort, undefined).catch(() => {});
 
     console.error(chalk.green('MCP Guardian proxy running. Press Ctrl+C to stop.'));
     const cleanup = () => { manager.stopAll(); db.close(); process.exit(0); };
