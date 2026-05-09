@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mcp-guardian.fullname" . }}-config
+  labels:
+    {{- include "mcp-guardian.labels" . | nindent 4 }}
+data:
+  policy.yaml: |
+    ---
+    version: "1.0"
+    policy:
+      mode: {{ .Values.config.policy.mode }}
+      rules:
+        - name: "block-shell-injection"
+          action: block
+          patterns:
+            - "curl\\s|wget\\s"
+            - "rm\\s+-rf"
+            - ";\\s*\\w"
+            - "&&|\\|\\|"
+            - "\\$\\{"
+            - "`[^`]+`"
+            - "/etc/passwd|/etc/shadow"
+        - name: "block-path-traversal"
+          action: block
+          patterns:
+            - "\\.\\.\\/"
+        - name: "deny-dangerous-tools"
+          action: block
+          tools:
+            deny:
+              - "execute_command"
+              - "bash"
+              - "sh"
+              - "eval"
+              - "exec"
+        - name: "rate-limit-tool-calls"
+          action: flag
+          maxCallsPerMinute: 120
+        - name: "token-budget"
+          action: flag
+          maxTokens: 50000

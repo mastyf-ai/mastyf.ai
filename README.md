@@ -31,6 +31,7 @@ MCP Guardian scans your [Model Context Protocol](https://modelcontextprotocol.io
   - [Available Tools](#available-tools)
   - [Available Resources & Prompts](#available-resources--prompts)
 - [CI/CD Integration](#cicd-integration)
+- [Production Deployment (K8s + Helm)](#production-deployment-k8s--helm)
 - [Docker](#docker)
 - [Architecture](#architecture)
   - [Data Flow (Proxy → DB → Audit)](#data-flow-proxy--db--audit)
@@ -403,6 +404,41 @@ Run MCP Guardian in CI to catch issues before deployment:
 
 ---
 
+## Production Deployment (K8s + Helm)
+
+See the full guide at **[deploy/PRODUCTION.md](deploy/PRODUCTION.md)**.
+
+### Quick Helm Install
+
+```bash
+# Install from local chart
+helm install mcp-guardian ./deploy/helm/mcp-guardian \
+  --set config.policy.mode=block \
+  --set config.mcpConfigPath=/etc/mcp-guardian/cline_mcp_settings.json
+
+# Or from the repo (future)
+helm repo add mcp-guardian https://rudraneel93.github.io/mcp-guardian
+helm install mcp-guardian mcp-guardian/mcp-guardian
+```
+
+### Key Features
+- **Helm chart** with ConfigMap-backed policies, PVC persistence, and safe defaults
+- **Fail-closed** by default (block traffic if proxy crashes) — configurable to fail-open
+- **Sidecar injection pattern** documented for stdio MCP servers
+- **Scaling guide** with CPU/memory recommendations per traffic level
+- **Pod Disruption Budget** for HA, anti-affinity for multi-AZ
+- **SIEM integration** via pino structured JSON logs (Splunk, Datadog, Elasticsearch)
+
+### Performance Overhead
+
+| Scenario | p50 | p99 | Overhead |
+|----------|-----|-----|----------|
+| Direct MCP (no proxy) | 5ms | 7ms | — |
+| Proxy (no policy) | 27ms | 77ms | +25.78ms |
+| Proxy (blocking policy) | 27ms | 74ms | +25.93ms |
+
+Policy engine adds **~0.15ms** — negligible. The ~26ms is Node.js child process stdio overhead.
+
 ## Docker
 
 A Docker image is available for running the proxy in containerized environments.
@@ -676,12 +712,14 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 - [x] STRIDE threat model (SECURITY.md)
 - [x] 74 tests (11 suites)
 - [x] GitHub Actions CI (Node 18/20/22 matrix)
+- [x] Performance benchmarks (p50: 5ms baseline, +25.78ms proxy overhead, +0.15ms policy)
+- [x] Helm chart + production deployment guide (K8s, fail-open/closed, sidecar pattern, scaling)
 - [x] Published to npm as [`@mcp-guardian/server`](https://www.npmjs.com/package/@mcp-guardian/server)
 - [ ] OPA integration for Rego policies
 - [ ] OAuth 2.1 / OIDC proxy authentication
 - [ ] Web dashboard for historical trends
 - [ ] Slack/Discord alerting
-- [ ] Performance benchmarks
+- [ ] Prometheus metrics endpoint
 - [ ] Multi-user proxy
 
 ---

@@ -1,0 +1,19 @@
+apiVersion: v2
+name: mcp-guardian
+description: Security, cost, and health audit proxy for MCP infrastructure
+type: application
+version: 0.4.0
+appVersion: "0.4.0"
+keywords:
+  - mcp
+  - model-context-protocol
+  - security
+  - audit
+  - proxy
+  - guardian
+home: https://github.com/rudraneel93/mcp-guardian
+sources:
+  - https://github.com/rudraneel93/mcp-guardian
+maintainers:
+  - name: rudraneel93
+    email: rudraneel93@gmail.com
