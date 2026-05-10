@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "1.3.9",
+  "version": "1.3.10",
   "description": "Security, cost, and health audit for MCP infrastructure",
   "type": "module",
   "files": [
