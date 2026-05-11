@@ -54,6 +54,12 @@ export class TokenCounter {
   countWithProvider(text: string, model?: string): TokenCountResult {
     if (!model) return this.estimate(text, 'unknown', 'default');
     const m = model.toLowerCase();
+    // OpenAI — exact tiktoken count
+    if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
+      const enc: TiktokenEncoding = (m.includes('4o') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4'))
+        ? 'o200k_base' : 'cl100k_base';
+      return { tokens: this.tiktokenCount(text, enc), provider: 'openai', isEstimate: false, method: enc };
+    }
     if (m.startsWith('claude-')) return this.estimate(text, 'anthropic', 'char-ratio-0.30');
     if (m.startsWith('gemini-') || m.startsWith('gemma-')) return this.estimate(text, 'google', 'char-ratio-0.22');
     if (m.startsWith('deepseek-')) return this.estimate(text, 'deepseek', 'char-ratio-0.27');
