@@ -1,184 +1,144 @@
 /**
- * HTTP/SSE Transparent Proxy for Cost Auditing.
+ * HTTP/SSE Transparent Proxy for Cost Auditing (v2.1).
  *
  * Intercepts HTTP requests to upstream MCP servers, inspects JSON-RPC tools/call
  * payloads, runs token counting and policy evaluation, then forwards to the target.
- * This closes the single biggest production gap — the original proxy only handled
- * stdio-based MCP servers.
  */
-import httpProxy from 'http-proxy';
-import { IncomingMessage, ServerResponse, Server } from 'http';
+import * as http from 'http';
+import { URL } from 'url';
 
-// Import existing core modules for token counting, policy, and DB
-// These will be injected at runtime to avoid circular dependencies
-
-interface TokenCounterLike {
-  count(text: string): number;
-  countWithProvider(text: string, model?: string): { tokens: number; provider: string; isEstimate: boolean };
-}
-
-interface PolicyEngineLike {
-  evaluate(context: any): { action: string; rule: string; reason: string };
-  getMode(): string;
-}
-
-interface DatabaseLike {
-  addCallRecord(record: any): Promise<void>;
-}
+// Lightweight injection-compatible interfaces (no runtime dependency on core)
+interface TokenCounterLike { count(text: string): number; }
+interface PolicyEngineLike { evaluate(c: any): { action: string; rule: string; reason: string }; }
+interface DatabaseLike { addCallRecord(r: any): Promise<void>; }
 
 export function createHttpProxy(
-  target: string,
+  targetUrl: string,
   policyEngine: PolicyEngineLike | null,
   db: DatabaseLike,
   tokenCounter: TokenCounterLike,
-  dbLogFn?: (entry: Record<string, unknown>) => void,
-): Server {
-  const proxy = httpProxy.createProxyServer({
-    target,
-    changeOrigin: true,
-    ws: false,
-    proxyTimeout: 30000,
-    timeout: 30000,
-  });
+): http.Server {
+  const target = targetUrl.replace(/\/$/, '');
 
-  const server = new Server(async (req: IncomingMessage, res: ServerResponse) => {
-    const requestId = Math.random().toString(36).slice(2);
+  const server = http.createServer(async (clientReq, clientRes) => {
     const start = Date.now();
-
-    // ── Only intercept POST requests (JSON-RPC calls) ──
-    if (req.method !== 'POST') {
-      proxy.web(req, res, { target });
+    // Only intercept POST (tools/call)
+    if (clientReq.method !== 'POST') {
+      const upstream = new URL(target + (clientReq.url ?? '/'));
+      const opts: http.RequestOptions = {
+        hostname: upstream.hostname, port: upstream.port || 80,
+        path: upstream.pathname + upstream.search, method: clientReq.method,
+        headers: { ...clientReq.headers, host: upstream.hostname },
+      };
+      const upstreamReq = http.request(opts, upstreamRes => {
+        clientRes.writeHead(upstreamRes.statusCode ?? 200, upstreamRes.headers);
+        upstreamRes.pipe(clientRes);
+      });
+      upstreamReq.on('error', () => { if (!clientRes.headersSent) clientRes.writeHead(502).end(); });
+      clientReq.pipe(upstreamReq);
       return;
     }
 
-    // ── Buffer the body for inspection ──────────────────
+    // Buffer body
     const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
-    req.on('end', async () => {
-      const rawBody = Buffer.concat(chunks);
-      let parsed: any;
-      try {
-        parsed = JSON.parse(rawBody.toString());
-      } catch {
-        // Not JSON — forward normally
-        proxy.web(req, res, { target, buffer: rawBody });
-        return;
-      }
+    for await (const chunk of clientReq) chunks.push(chunk as Buffer);
+    const rawBody = Buffer.concat(chunks).toString();
 
-      // ── Check if it's a tools/call JSON-RPC ──────────────
-      if (parsed.method === 'tools/call') {
-        const toolName = parsed.params?.name || 'unknown';
-        const args = parsed.params?.arguments || {};
+    let parsed: any;
+    try { parsed = JSON.parse(rawBody); } catch {
+      // Not JSON — forward
+      const upstream = new URL(target + (clientReq.url ?? '/'));
+      const opts: http.RequestOptions = {
+        hostname: upstream.hostname, port: upstream.port || 80,
+        path: upstream.pathname + upstream.search, method: 'POST',
+        headers: { ...clientReq.headers, host: upstream.hostname, 'content-length': String(rawBody.length) },
+      };
+      const upstreamReq = http.request(opts, upstreamRes => {
+        clientRes.writeHead(upstreamRes.statusCode ?? 200, upstreamRes.headers);
+        upstreamRes.pipe(clientRes);
+      });
+      upstreamReq.on('error', () => { if (!clientRes.headersSent) clientRes.writeHead(502).end(); });
+      upstreamReq.write(rawBody);
+      upstreamReq.end();
+      return;
+    }
 
-        // ── Policy evaluation ─────────────────────────────
-        if (policyEngine) {
-          const policyResult = policyEngine.evaluate({
-            toolName,
-            arguments: args,
-            transport: 'http',
-            serverName: target,
-            requestId,
-            requestTokens: tokenCounter.count(rawBody.toString()),
-            timestamp: new Date().toISOString(),
-          });
+    // tools/call
+    if (parsed.method === 'tools/call') {
+      const toolName = parsed.params?.name || 'unknown';
+      const inputTokens = tokenCounter.count(rawBody);
 
-          if (policyResult.action === 'block') {
-            res.statusCode = 403;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({
-              jsonrpc: '2.0',
-              id: parsed.id,
-              error: {
-                code: -32000,
-                message: `Blocked by MCP Guardian policy: ${policyResult.reason}`,
-                data: { rule: policyResult.rule },
-              },
-            }));
-
-            // Log blocked call to DB
-            if (dbLogFn) {
-              dbLogFn({
-                requestId, toolName, target,
-                blocked: true, reason: policyResult.reason,
-                inputTokens: tokenCounter.count(rawBody.toString()),
-                durationMs: Date.now() - start,
-              });
-            }
-            return;
-          }
+      // Policy check
+      if (policyEngine) {
+        const policyResult = policyEngine.evaluate({
+          toolName, arguments: parsed.params?.arguments || {},
+          serverName: target, requestTokens: inputTokens,
+          timestamp: new Date().toISOString(),
+        });
+        if (policyResult.action === 'block') {
+          clientRes.writeHead(403, { 'Content-Type': 'application/json' });
+          clientRes.end(JSON.stringify({
+            jsonrpc: '2.0', id: parsed.id,
+            error: { code: -32000, message: `Blocked: ${policyResult.reason}`, data: { rule: policyResult.rule } },
+          }));
+          return;
         }
-
-        // ── Count input tokens ────────────────────────────
-        const inputTokens = tokenCounter.count(rawBody.toString());
-
-        // ── Forward request, capture response ─────────────
-        const proxyReq = proxy.web(req, res, {
-          target,
-          selfHandleResponse: true,
-          buffer: rawBody,
-        });
-
-        const responseChunks: Buffer[] = [];
-        proxyReq.on('proxyRes', (proxyRes) => {
-          proxyRes.on('data', (chunk: Buffer) => responseChunks.push(chunk));
-          proxyRes.on('end', async () => {
-            const responseBody = Buffer.concat(responseChunks).toString();
-            let outputTokens = 0;
-
-            try {
-              const responseJson = JSON.parse(responseBody);
-              if (responseJson.result?.content) {
-                const text = (responseJson.result.content as Array<{ text?: string }>)
-                  .map(c => c.text || '')
-                  .join('');
-                outputTokens = tokenCounter.count(text);
-              }
-            } catch {
-              // Non-JSON response — use character estimate
-              outputTokens = Math.round(responseBody.length * 0.25);
-            }
-
-            const totalTokens = inputTokens + outputTokens;
-            const durationMs = Date.now() - start;
-
-            // ── Log to database ───────────────────────────
-            try {
-              await db.addCallRecord({
-                requestId,
-                serverName: target,
-                toolName,
-                requestTokens: inputTokens,
-                responseTokens: outputTokens,
-                totalTokens,
-                durationMs,
-                timestamp: new Date().toISOString(),
-              });
-            } catch (err: any) {
-              console.error(`[http-proxy] DB log error: ${err?.message}`);
-            }
-
-            if (dbLogFn) {
-              dbLogFn({
-                requestId, toolName, target,
-                inputTokens, outputTokens, totalTokens,
-                durationMs, blocked: false,
-              });
-            }
-          });
-        });
-
-        proxyReq.on('error', (err) => {
-          console.error(`[http-proxy] Proxy error: ${err.message}`);
-          if (!res.headersSent) {
-            res.statusCode = 502;
-            res.end(JSON.stringify({ error: `Upstream error: ${err.message}` }));
-          }
-        });
-      } else {
-        // Not a tools/call: proxy normally
-        proxy.web(req, res, { target, buffer: rawBody });
       }
-    });
+
+      // Forward
+      const upstream = new URL(target + (clientReq.url ?? '/'));
+      const opts: http.RequestOptions = {
+        hostname: upstream.hostname, port: upstream.port || 80,
+        path: upstream.pathname + upstream.search, method: 'POST',
+        headers: { ...clientReq.headers, host: upstream.hostname, 'content-length': String(rawBody.length) },
+      };
+      const upstreamReq = http.request(opts, async (upstreamRes) => {
+        const respChunks: Buffer[] = [];
+        upstreamRes.on('data', (chunk: Buffer) => respChunks.push(chunk));
+        upstreamRes.on('end', async () => {
+          const responseBody = Buffer.concat(respChunks).toString();
+          let outputTokens = 0;
+          try {
+            const responseJson = JSON.parse(responseBody);
+            if (responseJson.result?.content) {
+              outputTokens = tokenCounter.count(
+                (responseJson.result.content as any[]).map(c => c.text || '').join('')
+              );
+            }
+          } catch { outputTokens = Math.round(responseBody.length * 0.25); }
+
+          clientRes.writeHead(upstreamRes.statusCode ?? 200, upstreamRes.headers);
+          clientRes.end(responseBody);
+
+          try {
+            await db.addCallRecord({
+              serverName: target, toolName,
+              requestTokens: inputTokens, responseTokens: outputTokens,
+              totalTokens: inputTokens + outputTokens, durationMs: Date.now() - start,
+              timestamp: new Date().toISOString(),
+            });
+          } catch { /* DB log failure is non-fatal */ }
+        });
+      });
+      upstreamReq.on('error', () => { if (!clientRes.headersSent) clientRes.writeHead(502).end(); });
+      upstreamReq.write(rawBody);
+      upstreamReq.end();
+    } else {
+      // Forward non-tools/call
+      const upstream = new URL(target + (clientReq.url ?? '/'));
+      const opts: http.RequestOptions = {
+        hostname: upstream.hostname, port: upstream.port || 80,
+        path: upstream.pathname + upstream.search, method: 'POST',
+        headers: { ...clientReq.headers, host: upstream.hostname, 'content-length': String(rawBody.length) },
+      };
+      const upstreamReq = http.request(opts, upstreamRes => {
+        clientRes.writeHead(upstreamRes.statusCode ?? 200, upstreamRes.headers);
+        upstreamRes.pipe(clientRes);
+      });
+      upstreamReq.on('error', () => { if (!clientRes.headersSent) clientRes.writeHead(502).end(); });
+      upstreamReq.write(rawBody);
+      upstreamReq.end();
+    }
   });
 
   return server;
