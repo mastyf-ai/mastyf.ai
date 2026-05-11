@@ -16,8 +16,8 @@ export class HealthMonitor {
 
     const historicalRate = await this.db.getRecentSuccessRate(server.name);
     const successRate = probe.success
-      ? Math.max(historicalRate, 0.5)
-      : Math.min(historicalRate, 0.3);
+      ? (historicalRate !== null ? Math.max(historicalRate, 0.5) : 1.0)
+      : (historicalRate !== null ? Math.min(historicalRate, 0.3) : 0.0);
 
     const toolCount = probe.toolCount ?? 0;
     const overloadWarning = toolCount > 15;

@@ -6,7 +6,8 @@ import { ProxyCallRecord } from '../types.js';
 
 export interface IDatabase {
   initialize(): Promise<void>;
-  getRecentSuccessRate(serverName: string): Promise<number>;
+  /** Returns null when no health data exists — no fabricated default. */
+  getRecentSuccessRate(serverName: string): Promise<number | null>;
   addSecurityScan(serverName: string, score: number, cveCount: number, details: unknown): Promise<void>;
   addCostRecord(serverName: string, tokens: number, cost: number): Promise<void>;
   addHealthCheck(serverName: string, latency: number, success: boolean, toolCount: number): Promise<void>;

@@ -81,7 +81,7 @@ export class PostgresDatabase implements IDatabase {
     }
   }
 
-  async getRecentSuccessRate(serverName: string): Promise<number> {
+  async getRecentSuccessRate(serverName: string): Promise<number | null> {
     const result = await this.pool.query(
       'SELECT AVG(success) as avg FROM health_checks WHERE server_name = $1 ORDER BY timestamp DESC LIMIT 10',
       [serverName]
@@ -89,7 +89,7 @@ export class PostgresDatabase implements IDatabase {
     if (result.rows.length > 0 && result.rows[0].avg !== null) {
       return Number(result.rows[0].avg);
     }
-    return 1;
+    return null;
   }
 
   async addSecurityScan(serverName: string, score: number, cveCount: number, details: unknown): Promise<void> {

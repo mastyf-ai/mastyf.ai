@@ -210,13 +210,11 @@ export class PricingClient {
     }
   }
 
-  /** Calculate estimated cost for a given number of tokens. */
-  calculateCost(tokens: number, model: string, isOutput: boolean = false): number {
+  /** Calculate estimated cost for a given number of tokens. Returns null for unknown models — no fabricated defaults. */
+  calculateCost(tokens: number, model: string, isOutput: boolean = false): number | null {
     const price = this.prices[model];
     if (!price) {
-      // Unknown model — use a conservative default of $10/M input, $30/M output
-      const rate = isOutput ? 30.0 : 10.0;
-      return (tokens / 1_000_000) * rate;
+      return null;
     }
     const rate = isOutput ? price.output : price.input;
     return (tokens / 1_000_000) * rate;

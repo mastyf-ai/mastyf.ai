@@ -68,9 +68,10 @@ export class CostAuditor {
 
     for (const [toolName, data] of toolMap) {
       const totalTokens = data.inputTokens + data.outputTokens;
-      const cost =
-        this.pricing.calculateCost(data.inputTokens, pricingModel, false) +
-        this.pricing.calculateCost(data.outputTokens, pricingModel, true);
+      const inputCost = this.pricing.calculateCost(data.inputTokens, pricingModel, false);
+      const outputCost = this.pricing.calculateCost(data.outputTokens, pricingModel, true);
+      // pricingModel is 'gpt-4o' which is always in the 97-model table — null is unreachable
+      const cost = (inputCost ?? 0) + (outputCost ?? 0);
 
       breakdown.push({
         toolName,

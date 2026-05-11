@@ -202,17 +202,17 @@ export class HistoryDatabase implements IDatabase {
       .all(serverName) as CostRecord[];
   }
 
-  async getTotalCost(serverName?: string): Promise<number> {
+  async getTotalCost(serverName?: string): Promise<number | null> {
     if (serverName) {
       const row = this.db
         .prepare('SELECT SUM(estimated_cost_usd) as total FROM cost_records WHERE server_name = ?')
         .get(serverName) as { total: number | null } | undefined;
-      return row?.total ?? 0;
+      return row?.total ?? null;
     }
     const row = this.db
       .prepare('SELECT SUM(estimated_cost_usd) as total FROM cost_records')
       .get() as { total: number | null } | undefined;
-    return row?.total ?? 0;
+    return row?.total ?? null;
   }
 
   // ── Health checks ────────────────────────────────────────────────────────
@@ -231,11 +231,15 @@ export class HistoryDatabase implements IDatabase {
     );
   }
 
-  async getRecentSuccessRate(serverName: string): Promise<number> {
+  /**
+   * Returns the average success rate from the last 10 health checks,
+   * or null when no health data exists — no fabricated 100% default.
+   */
+  async getRecentSuccessRate(serverName: string): Promise<number | null> {
     const row = this.db
       .prepare('SELECT AVG(success) as avg FROM health_checks WHERE server_name = ? ORDER BY id DESC LIMIT 10')
       .get(serverName) as { avg: number | null } | undefined;
-    return row?.avg ?? 1.0;
+    return row?.avg ?? null;
   }
 
   // ── Maintenance ──────────────────────────────────────────────────────────
