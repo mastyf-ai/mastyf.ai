@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-> **Always use the latest version:** `npm install -g @mcp-guardian/server@latest` — current is **v2.1.2**. See the [Changelog](./CHANGELOG.md) for full version history and [GitHub Releases](https://github.com/rudraneel93/mcp-guardian/releases) for per-version source tags.
+> **Always use the latest version:** `npm install -g @mcp-guardian/server@latest` — current is **v2.2.2**. See the [Changelog](./CHANGELOG.md) for full version history and [GitHub Releases](https://github.com/rudraneel93/mcp-guardian/releases) for per-version source tags.
 
 MCP Guardian is a **security and governance proxy** for [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) infrastructure. It sits between AI clients and MCP servers, enforcing active security policies, tracking real token costs, and monitoring health — all while providing enterprise-grade observability and audit trails.
 
