@@ -95,7 +95,7 @@ const program = new Command();
 program
   .name('mcp-guardian')
   .description('Security, cost, and health audit for MCP infrastructure')
-  .version('1.1.0');
+  .version(process.env.npm_package_version || '2.1.1');
 
 program
   .command('scan')
