@@ -78,8 +78,7 @@ export class SseProxyServer extends EventEmitter {
         timestamp: new Date().toISOString(),
       };
       try {
-        // @ts-expect-error - dynamic method access
-        this.opts.db.addCallRecord?.(record);
+        this.opts.db.addCallRecord(record);
       } catch { /* best-effort */ }
     }
 

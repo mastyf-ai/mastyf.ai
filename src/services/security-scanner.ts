@@ -133,8 +133,8 @@ function calculateSecurityScore(
   if (!auth.isTransportEncrypted) penalty += config.penalties.unencryptedTransport;
   if (typos.length > 0) penalty += config.penalties.typosquat;
   if (secrets.length > 0) penalty += config.penalties.secretFound * Math.min(secrets.length, 3);
-  if (cmdWarnings.some(w => w.severity === 'HIGH')) penalty += config.penalties.cmdHigh;
-  if (cmdWarnings.some(w => w.severity === 'MEDIUM')) penalty += config.penalties.cmdMedium;
+  if (cmdWarnings.some(w => w.severity === 'high')) penalty += config.penalties.cmdHigh;
+  if (cmdWarnings.some(w => w.severity === 'medium')) penalty += config.penalties.cmdMedium;
 
   let bonus = 0;
   if (auth.hasAuthentication) bonus += config.bonuses.authPresent;
@@ -168,7 +168,7 @@ function generateRecommendations(
   if (typos.length > 0) recs.push(`Verify package name against official registry — possible typo-squatting: ${typos.map((t) => t.similarityTo).join(', ')}`);
   if (secrets.length > 0) recs.push(`Remove ${secrets.length} hardcoded secret(s) from tool definitions — use environment variable references instead`);
   for (const w of cmdWarnings) {
-    recs.push(`[${w.severity}] ${w.field}: ${w.issue}`);
+    recs.push(`[${w.severity}] ${w.token}: ${w.message}`);
   }
   if (recs.length === 0) recs.push('No security issues found');
   return recs;
