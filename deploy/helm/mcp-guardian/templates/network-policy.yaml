@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mcp-guardian.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "mcp-guardian.name" . }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow intra-namespace traffic to the proxy port
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.proxyPort | default 3000 }}
+    # Allow dashboard access only from specified CIDR (configurable)
+    {{- if .Values.dashboard.allowedCidr }}
+    - from:
+        - ipBlock:
+            cidr: {{ .Values.dashboard.allowedCidr }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.dashboardPort | default 4000 }}
+    {{- end }}
+  egress:
+    # Allow DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+    # Allow upstream MCP servers (all egress)
+    - {}

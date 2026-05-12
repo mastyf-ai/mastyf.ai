@@ -1,6 +1,10 @@
 version: '1.0'
 policy:
   mode: block
+  # default_action applies when NO rule matches
+  # "allow" = fail-open (current behaviour — INSECURE for production)
+  # "block" = fail-closed (recommended for production)
+  default_action: block
   rules:
     - name: block-shell-injection
       description: Block tool calls containing shell injection or command chaining

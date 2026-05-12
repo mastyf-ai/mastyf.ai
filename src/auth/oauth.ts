@@ -67,9 +67,12 @@ export class OAuthValidator {
     }
 
     try {
+      // ═══ GAP 11: JWT algorithm pinning — prevents algorithm confusion attacks ═══
+      const ALLOWED_ALGORITHMS = ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'PS256'];
       const { payload } = await jose.jwtVerify(token, this.jwks, {
         issuer: this.config.issuer,
         audience: this.config.audience,
+        algorithms: ALLOWED_ALGORITHMS,
         clockTolerance: this.config.clockTolerance || 30,
       });
 

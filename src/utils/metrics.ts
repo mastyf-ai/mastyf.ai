@@ -72,12 +72,30 @@ export async function startMetricsServer(port: number = 9090): Promise<Registry>
 
   try {
     const { createServer } = await import('http');
-    const server = createServer(async (_req, res) => {
+    const server = createServer(async (req, res) => {
+      const url = req.url || '/metrics';
+
+      // GAP 16: /healthz — liveness probe
+      if (url === '/healthz') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
+        return;
+      }
+
+      // GAP 16: /readyz — readiness probe
+      if (url === '/readyz') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ready' }));
+        return;
+      }
+
+      // Default: Prometheus metrics
       res.writeHead(200, { 'Content-Type': registry.contentType });
       res.end(await registry.metrics());
     });
     server.listen(port, () => {
       Logger.info(`[metrics] Prometheus metrics available at http://0.0.0.0:${port}/metrics`);
+      Logger.info(`[metrics] Health: http://0.0.0.0:${port}/healthz | Readiness: http://0.0.0.0:${port}/readyz`);
     });
     return registry;
   } catch (err: any) {

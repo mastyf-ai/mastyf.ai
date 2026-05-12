@@ -42,9 +42,15 @@ export interface TypoSquatResult {
 }
 
 export interface SecretFinding {
-  type: string; // 'api_key', 'token', 'password'
+  type: string; // 'api_key', 'token', 'password', 'high-entropy-string'
   location: string;
-  severity: 'HIGH' | 'MEDIUM';
+  severity: 'HIGH' | 'MEDIUM' | 'high' | 'medium';
+  /** Redacted display string (e.g. "sk-ant-[REDACTED]b3f2") */
+  redacted?: string;
+  /** Context where the secret was found (e.g. env var name) */
+  context?: string;
+  /** Detection method: 'regex' or 'entropy' */
+  method?: 'regex' | 'entropy';
 }
 
 export interface CostReport {

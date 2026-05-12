@@ -14,6 +14,7 @@ import { LRUCache } from 'lru-cache';
 export class PolicyEngine {
   private rules: PolicyConfig['policy']['rules'];
   private mode: PolicyMode;
+  private config: PolicyConfig;
   private callCounters: LRUCache<string, { count: number; resetAt: number }> = new LRUCache({
     max: 50000,
     ttl: 60000,
@@ -25,6 +26,7 @@ export class PolicyEngine {
   constructor(config: PolicyConfig) {
     this.rules = config.policy.rules;
     this.mode = config.policy.mode;
+    this.config = config;
   }
 
   /**
@@ -61,8 +63,9 @@ export class PolicyEngine {
       if (decision) return decision;
     }
 
-    // Default: pass
-    return { action: 'pass', rule: 'default', reason: 'No policy rules matched' };
+    // GAP 14: Apply default_action from policy config (fail-closed by default)
+    const defaultAction = this.config.policy.default_action || 'pass';
+    return { action: this.resolveAction(defaultAction), rule: 'default', reason: `No matching rule — applying default_action: ${defaultAction}` };
   }
 
   private evaluateRule(

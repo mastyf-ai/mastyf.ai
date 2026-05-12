@@ -55,3 +55,21 @@ externalSecrets:
 networkPolicy:
   enabled: false
   allowedNamespace: "default"
+
+secrets:
+  # Use Vault or SOPS instead of plain values for production
+  # Set to 'external' to use an existing Secret object
+  mode: "external"
+  existingSecret: ""     # Name of pre-created K8s Secret
+
+# Proxy port for intra-namespace traffic
+service:
+  proxyPort: 3000
+  dashboardPort: 4000
+</replace_in_file>
+<task_progress>
+- [x] GAP 6, 9, 14, 16
+- [x] GAP 10: Helm values.yaml secrets + ports, healthz configmap
+- [ ] GAP 15: Agent cost attribution
+- [ ] Build, test, commit, push, publish
+</task_progress>

@@ -10,10 +10,13 @@
 import Database from 'better-sqlite3';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { Logger } from '../utils/logger.js';
 import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from './database-interface.js';
+// `proper-lockfile` has no published `@types/` — safe: API surface is tiny
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const lockfile = require('proper-lockfile') as typeof import('proper-lockfile');
 
 export interface SecurityRecord {
   id: number;
@@ -48,6 +51,8 @@ const DEFAULT_DB_PATH = join(homedir(), '.mcp-guardian', 'history.db');
 export class HistoryDatabase implements IDatabase {
   private db: Database.Database;
   private dbPath: string;
+  private lockfilePath: string = '';
+  private lockRelease: (() => Promise<void>) | null = null;
   private PURGE_TTL_DAYS = 30;
   private purgeInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -65,8 +70,23 @@ export class HistoryDatabase implements IDatabase {
     }
 
     this.dbPath = dbPathOrMemory ?? DEFAULT_DB_PATH;
+    this.lockfilePath = this.dbPath + '.lock';
     const dir = dirname(this.dbPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+    // GAP 6: Advisory file lock — prevent concurrent proxy instances
+    try {
+      if (!existsSync(this.dbPath)) {
+        writeFileSync(this.dbPath, '');
+      }
+      this.lockRelease = lockfile.lockSync(this.dbPath, { retries: { retries: 3, minTimeout: 200 } });
+    } catch {
+      throw new Error(
+        `[mcp-guardian] Cannot acquire DB lock on ${this.dbPath}. ` +
+        'Is another mcp-guardian proxy already running? ' +
+        'Use MCP_GUARDIAN_DB_PATH to set a separate DB per instance.'
+      );
+    }
 
     this.db = new Database(this.dbPath);
 
@@ -77,7 +97,7 @@ export class HistoryDatabase implements IDatabase {
 
     this.migrate();
     this.startPurgeInterval();
-    Logger.info(`[HistoryDb] Opened: ${this.dbPath} (WAL mode)`);
+    Logger.info(`[HistoryDb] Opened: ${this.dbPath} (WAL mode, lock acquired)`);
   }
 
   async initialize(): Promise<void> {

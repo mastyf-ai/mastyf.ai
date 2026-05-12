@@ -52,6 +52,8 @@ export interface PolicyConfig {
   version: string;
   policy: {
     mode: PolicyMode;
+    /** GAP 14: default_action when no rule matches. 'allow' = fail-open, 'block' = fail-closed */
+    default_action?: PolicyAction;
     rules: PolicyRule[];
   };
 }

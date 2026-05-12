@@ -1,0 +1,4 @@
+owner: rudraneel93
+git-repo: mcp-guardian
+release-name-template: "helm-{{ .Version }}"
+pages-branch: gh-pages
