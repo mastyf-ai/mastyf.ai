@@ -171,6 +171,27 @@ export class McpProxyServer {
           Metrics.proxyLatencyMs.observe({ server_name: this.serverName }, proxyLatencyMs);
           Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'pass', authn_success: 'true' });
           if (this.sessionCache) Metrics.activeSessions.set(this.sessionCache.size);
+
+          // ── v2.5: Response inspection for prompt injection / data exfiltration ──
+          if (this.policyEngine && msg?.result) {
+            const responseText = JSON.stringify(msg.result);
+            const { clean, detections } = this.policyEngine.evaluateResponse(
+              this.requestToolName || 'unknown',
+              this.serverName,
+              responseText,
+            );
+            if (!clean) {
+              Logger.warn(`[proxy:${this.serverName}] Suspicious response from '${this.requestToolName}': ${detections.join('; ')}`);
+              StructuredLogger.info({
+                event: 'response_flagged',
+                serverName: this.serverName,
+                toolName: this.requestToolName,
+                detections,
+                requestId: this.currentRequestId,
+              });
+            }
+          }
+
           this.currentRequestId = null;
           this.requestToolName = null;
         }

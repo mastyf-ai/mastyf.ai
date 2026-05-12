@@ -42,3 +42,16 @@ podSecurityContext:
 dashboard:
   enabled: true
   authEnabled: true
+
+metrics:
+  enabled: false
+  port: 9090
+
+externalSecrets:
+  enabled: false
+  secretStore: "vault-backend"
+  path: "mcp-guardian/prod"
+
+networkPolicy:
+  enabled: false
+  allowedNamespace: "default"
