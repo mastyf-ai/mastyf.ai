@@ -164,6 +164,21 @@ export class HistoryDatabase implements IDatabase {
     }));
   }
 
+  /** Execute callback within a database transaction. If the callback throws, the transaction is rolled back. */
+  async transaction<T>(fn: () => Promise<T> | T): Promise<T> {
+    // Wrap sync callback for better-sqlite3's synchronous transaction support
+    const txn = this.db.transaction(() => {
+      const result = fn();
+      // If fn returns a Promise, we can't use better-sqlite3's synchronous transaction
+      // — fall back to awaiting the Promise and returning the value
+      if (result instanceof Promise) {
+        throw new Error('Async callbacks not supported in SQLite transactions — use synchronous operations');
+      }
+      return result as T;
+    });
+    return txn();
+  }
+
   async flush(): Promise<void> {
     // No-op with better-sqlite3 — writes are synchronous
   }

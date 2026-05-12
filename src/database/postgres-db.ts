@@ -151,6 +151,21 @@ export class PostgresDatabase implements IDatabase {
     }));
   }
 
+  async transaction<T>(fn: () => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await fn();
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   async flush(): Promise<void> {
     // PostgreSQL auto-commits — no flush needed
   }
