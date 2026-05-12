@@ -339,13 +339,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-async function main() {
+export async function startMcpServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   Logger.info('MCP Guardian running on stdio');
 }
 
-main().catch((err) => {
-  Logger.error(`MCP Guardian failed to start: ${err}`);
-  process.exit(1);
-});
+// Auto-start when run directly (not imported)
+const isMainModule = process.argv[1]?.includes('index.js') || process.argv[1]?.includes('index.ts');
+if (isMainModule) {
+  startMcpServer().catch((err) => {
+    Logger.error(`MCP Guardian failed to start: ${err}`);
+    process.exit(1);
+  });
+}
