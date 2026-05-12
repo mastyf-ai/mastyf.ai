@@ -51,7 +51,7 @@
     "cost-tracking"
   ],
   "scripts": {
-    "build": "turbo run build",
+    "build": "tsc --project tsconfig.json && turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "eval": "tsx corpus/run-eval.ts",
