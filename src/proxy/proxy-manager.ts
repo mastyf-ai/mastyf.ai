@@ -1,5 +1,6 @@
 import { HistoryDatabase } from '../database/history-db.js';
 import { McpProxyServer } from './proxy-server.js';
+import { SseProxyServer } from './sse-proxy-server.js';
 import { McpServerConfig } from '../types.js';
 import { Logger } from '../utils/logger.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
@@ -8,7 +9,8 @@ import { OAuthValidator } from '../auth/oauth.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 
 export class ProxyManager {
-  private proxies: McpProxyServer[] = [];
+  private stdioProxies: McpProxyServer[] = [];
+  private sseProxies: Map<string, SseProxyServer> = new Map();
   private policyEngine: PolicyEngine | undefined;
 
   constructor(
@@ -16,18 +18,16 @@ export class ProxyManager {
     policyEngineOrWatcher?: PolicyEngine | PolicyWatcher,
     private authValidator?: OAuthValidator,
   ) {
-    // Resolve PolicyWatcher → current engine on construction
     if (policyEngineOrWatcher instanceof PolicyWatcher) {
       this.policyEngine = policyEngineOrWatcher.get() ?? undefined;
-      // Register hot-reload callback: on policy file change, atomically swap engines on all proxies
       const updateEngine = () => {
         const newEngine = policyEngineOrWatcher!.get();
         if (newEngine) {
           this.policyEngine = newEngine;
-          for (const proxy of this.proxies) {
+          for (const proxy of this.stdioProxies) {
             proxy.setPolicyEngine(newEngine);
           }
-          Logger.info(`[proxy-manager] Policy hot-reloaded across ${this.proxies.length} proxy(s)`);
+          Logger.info(`[proxy-manager] Policy hot-reloaded across ${this.stdioProxies.length} stdio + ${this.sseProxies.size} SSE proxy(s)`);
         }
       };
       (policyEngineOrWatcher as PolicyWatcher).onReload = updateEngine;
@@ -37,76 +37,127 @@ export class ProxyManager {
   }
 
   getProxies(): McpProxyServer[] {
-    return this.proxies;
+    return this.stdioProxies;
+  }
+
+  /** Returns summary counts for the CLI proxy command output */
+  getProxyStats(): { stdioCount: number; sseCount: number } {
+    return { stdioCount: this.stdioProxies.length, sseCount: this.sseProxies.size };
   }
 
   async startAll(configs: McpServerConfig[]): Promise<void> {
-    // ── HTTP/SSE proxy gap warning ──────────────────────────
-    const sseServers = configs.filter((c) => c.transport === 'sse' || c.url);
-    const stdioServers = configs.filter(
-      (c) => c.transport === 'stdio' && c.command
-    );
+    const sseServers = configs.filter((c) => c.transport === 'sse' || (c.url && !c.command));
+    const stdioServers = configs.filter((c) => c.command);
 
-    if (sseServers.length > 0) {
-      const names = sseServers.map((s) => `   • ${s.name} (${s.url || 'unknown'})`).join('\n');
-      Logger.warn(
-        `⚠  PROXY LIMITATION: The following servers use HTTP/SSE transport ` +
-          `and CANNOT be intercepted by the stdio proxy.\n` +
-          `Policy enforcement and token tracking are INACTIVE for these servers:\n` +
-          `${names}\n` +
-          `To protect HTTP/SSE servers, use an HTTP reverse proxy with mcp-guardian ` +
-          `as middleware (see docs/http-proxy-mode.md).`
-      );
-      StructuredLogger.info({
-        event: 'sse_proxy_gap',
-        sseServerCount: sseServers.length,
-        sseServerNames: sseServers.map((s) => s.name),
-      });
-    }
+    let stdioStarted = 0;
+    let sseStarted = 0;
 
+    // ─── Stdio proxies ─────────────────────────────────────
     for (const config of stdioServers) {
       try {
-        // Sanitise environment — only pass configured env + non-secret system vars
         const sanitizedEnv: Record<string, string> = {
           ...(config.env || {}),
           PATH: process.env['PATH'] || '',
           HOME: process.env['HOME'] || '',
         };
-
         const proxy = new McpProxyServer(
-          config.command!,
-          config.args || [],
-          sanitizedEnv,
-          this.db,
-          config.name,
-          this.policyEngine,
-          this.authValidator,
+          config.command!, config.args || [], sanitizedEnv,
+          this.db, config.name, this.policyEngine, this.authValidator,
         );
-        this.proxies.push(proxy);
-        const extras: string[] = [];
-        if (this.policyEngine) extras.push(`policy: ${this.policyEngine.getMode()}`);
-        if (this.authValidator) extras.push('auth: OAuth 2.1');
-        Logger.info(
-          `Proxy started for ${config.name} (${config.command})${extras.length ? ` [${extras.join(', ')}]` : ''}`
-        );
+        this.stdioProxies.push(proxy);
+        stdioStarted++;
+        Logger.info(`[proxy] stdio active for "${config.name}" → ${config.command}`);
       } catch (err: any) {
-        Logger.error(`Failed to start proxy for ${config.name}: ${err?.message}`);
+        Logger.error(`[proxy] FAILED stdio for "${config.name}": ${err?.message}`);
       }
     }
 
-    if (sseServers.length > 0 && stdioServers.length === 0) {
+    // ─── SSE/HTTP proxies — NEW: actually spawn them ──────
+    for (const config of sseServers) {
+      try {
+        const url = config.url;
+        if (!url) {
+          Logger.warn(`[proxy] SKIPPED SSE server "${config.name}" — no URL configured. Add 'url' to mcp.json.`);
+          continue;
+        }
+        const authHeader = config.env?.['AUTH_TOKEN']
+          ? `Bearer ${config.env['AUTH_TOKEN']}`
+          : undefined;
+        const sseProxy = new SseProxyServer({
+          upstreamUrl: url,
+          serverName: config.name,
+          policy: this.policyEngine,
+          db: this.db,
+          authHeader,
+        });
+        sseProxy.on('blocked', ({ reason }) => {
+          Logger.warn(`[proxy][${config.name}] BLOCKED: ${reason}`);
+        });
+        this.sseProxies.set(config.name, sseProxy);
+        sseStarted++;
+        Logger.info(`[proxy] SSE active for "${config.name}" → ${url}`);
+      } catch (err: any) {
+        Logger.error(`[proxy] FAILED SSE for "${config.name}": ${err?.message}`);
+      }
+    }
+
+    // ─── Summary — loud and clear ═══════════════════════════
+    const total = stdioStarted + sseStarted;
+    const skipped = configs.length - total;
+
+    if (total === 0) {
+      Logger.error(
+        '╔══════════════════════════════════════════════════════════╗\n' +
+        '║  ZERO PROXIES STARTED — NO PROTECTION ACTIVE             ║\n' +
+        '╠══════════════════════════════════════════════════════════╣\n' +
+        '║  All configured servers were skipped.                    ║\n' +
+        '║  Check that each server has "command" (stdio) or         ║\n' +
+        '║  "url" (SSE/HTTP) in your MCP config.                   ║\n' +
+        '╚══════════════════════════════════════════════════════════╝'
+      );
+      return;
+    }
+
+    Logger.info(
+      `╔══════════════════════════════════════════╗\n` +
+      `║  MCP Guardian Proxy — Protection Active  ║\n` +
+      `╠══════════════════════════════════════════╣\n` +
+      `║  Stdio: ${String(stdioStarted).padStart(4)} servers              ║\n` +
+      `║  SSE:   ${String(sseStarted).padStart(4)} servers              ║\n` +
+      `║  Total: ${String(total).padStart(4)} servers protected        ║`
+    );
+
+    if (skipped > 0) {
+      const startedNames = new Set<string>();
+      for (const p of this.stdioProxies) startedNames.add(p['serverName'] as string);
+      for (const [name] of this.sseProxies) startedNames.add(name);
+      const skippedNames = configs.filter(c => !startedNames.has(c.name)).map(c => c.name);
       Logger.warn(
-        'All configured servers use HTTP/SSE transport. The stdio proxy cannot intercept any of them. ' +
-          'Runtime protection is ZERO.'
+        `║  ⚠  SKIPPED: ${String(skipped).padStart(2)} server(s)              ║\n` +
+        `║     ${skippedNames.join(', ').substring(0, 40)}${skippedNames.join(', ').length > 40 ? '…' : ''}`
       );
     }
+
+    const policyMsg = this.policyEngine
+      ? `║  Policy: ${this.policyEngine.getMode().padEnd(8)}                    ║\n`
+      : '║  Policy: audit-only (no --policy flag)      ║\n';
+
+    Logger.info(
+      `║                                          ║\n` +
+      policyMsg +
+      `╚══════════════════════════════════════════╝`
+    );
   }
 
   stopAll(): void {
-    for (const proxy of this.proxies) {
+    for (const proxy of this.stdioProxies) {
       proxy.kill();
     }
-    this.proxies = [];
+    this.stdioProxies = [];
+    for (const [, sseProxy] of this.sseProxies) {
+      sseProxy.removeAllListeners();
+    }
+    this.sseProxies.clear();
     Logger.info('All proxies stopped');
   }
 }
