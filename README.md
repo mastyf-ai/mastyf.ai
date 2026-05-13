@@ -490,13 +490,58 @@ mcp-guardian proxy --policy ./new-policy.yaml --dry-run
 
 This evaluates the policy against every call record in your history database and prints a per-server block/pass breakdown without activating the proxy. If the block rate is unexpectedly high or low, adjust rules before deploying.
 
+### How do AI clients authenticate with OAuth?
+
+The proxy validates JWT bearer tokens in the `Authorization` header of `tools/call` requests. However, AI clients like Cline and Claude Desktop don't natively generate OAuth tokens. You have three options:
+
+1. **Token injection via MCP config** — Set `env.AUTH_TOKEN` in your MCP server config. The proxy passes it as a Bearer token to upstream servers and validates it if `--auth-required` is set.
+2. **API gateway pattern** — Place an OAuth proxy (e.g., oauth2-proxy, Pomerium) in front of MCP Guardian. The gateway issues tokens; MCP Guardian validates them.
+3. **Service account tokens** — Generate a long-lived service account JWT and configure it as `AUTH_TOKEN`. Rotate it manually or via vault.
+
+RBAC scopes are defined in your policy YAML under `rules[].rbac.scopes` and mapped to JWT claims (the `scope` or `scopes` claim in the token). DPoP (RFC 9449) requires the client to sign a proof-of-possession JWT per request — this is functional in code but not yet supported by any mainstream AI client.
+
+### How accurate is token counting?
+
+For OpenAI models (GPT-4o, o1, o3), counting uses `tiktoken` with `o200k_base` encoding — these are exact (±1%). For other providers:
+
+| Provider | Method | Typical accuracy |
+|----------|--------|-----------------|
+| Anthropic (Claude) | Char ratio (0.30) | ±5–15% |
+| Google (Gemini) | Char ratio (0.22) | ±10–25% |
+| DeepSeek | Char ratio (0.27) | ±8–20% |
+| Mistral | Char ratio (0.25) | ±8–20% |
+| Meta (Llama) | Char ratio (0.25) | ±8–20% |
+
+Results are flagged with `isEstimate: true` when char-ratio counting is used. Treat non-OpenAI cost figures as estimates, not accounting-grade numbers.
+
+### How does CVE scoring work? Why aren't 100 CVEs penalized more?
+
+MCP Guardian uses **logarithmic compound scoring**: each additional CVE in the same severity tier adds diminishing penalty. 1 critical CVE = −30, 2 = −60, 5 = −100, 10 = −130, 100 = −230. This prevents a single vulnerable package from zeroing the entire score while still scaling penalty with volume. CVE recency and EPSS (Exploit Prediction Scoring System) integration is planned for v2.4.
+
+### How do I set up mTLS?
+
+mTLS requires:
+
+1. A Certificate Authority (CA) — you can use your existing PKI or create one with `openssl`
+2. A client certificate for each upstream MCP server signed by that CA
+3. The CA certificate configured in MCP Guardian via environment variables
+
+Set `MCP_TLS_CA_PATH=/path/to/ca.pem` and `MCP_TLS_CLIENT_CERT_PATH=/path/to/client.crt`, `MCP_TLS_CLIENT_KEY_PATH=/path/to/client.key` per server in your MCP config's `env` section. A `mcp-guardian certs init` helper command is planned for v2.4 to automate this.
+
+### What happens if my policy YAML is malformed?
+
+The proxy **fails closed** — malformed YAML causes a startup error and the proxy refuses to start. It does not silently fall back to the last good policy or default to audit mode. Use `--dry-run` to validate new policies before deploying:
+```bash
+mcp-guardian proxy --policy ./new-policy.yaml --dry-run
+```
+
 ### How do I contribute?
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. The monorepo uses pnpm workspaces with turbo for build orchestration. Run `pnpm install && pnpm build && pnpm test` to verify your setup. All PRs must pass the 80% coverage threshold and the red-team corpus evaluation (F1 ≥ 85%).
 
 ### Is it production-ready?
 
-MCP Guardian is **production-grade for controlled environments** (single-instance or Redis-backed multi-replica with `GUARDIAN_STRICT_MODE`). It handles the core use case — active policy enforcement with audit trails — reliably with WAL-mode SQLite and crash-safe writes. For high-trust enterprise deployments, a third-party security audit is planned for v2.5. See [SECURITY.md](SECURITY.md) for details on our security posture.
+MCP Guardian is **production-grade for controlled environments** (single-instance or Redis-backed multi-replica with `GUARDIAN_STRICT_MODE`). The database layer uses better-sqlite3 with WAL mode and advisory file locking — crash-safe and non-blocking. It handles the core use case — active policy enforcement with audit trails — reliably. For high-trust enterprise deployments, a third-party security audit is planned for v2.5. See [SECURITY.md](SECURITY.md) for details on our security posture.
 
 ---
 
