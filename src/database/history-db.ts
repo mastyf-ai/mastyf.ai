@@ -81,12 +81,21 @@ export class HistoryDatabase implements IDatabase {
         writeFileSync(this.dbPath, '');
       }
       this.lockRelease = lockfile.lockSync(this.dbPath, { retries: { retries: 3, minTimeout: 200 } });
-    } catch {
-      throw new Error(
-        `[mcp-guardian] Cannot acquire DB lock on ${this.dbPath}. ` +
-        'Is another mcp-guardian proxy already running? ' +
-        'Use MCP_GUARDIAN_DB_PATH to set a separate DB per instance.'
-      );
+    } catch (lockErr: any) {
+      // Stale lock from crashed container? Clean up and retry ONCE
+      const lockPath = this.dbPath + '.lock';
+      try {
+        if (existsSync(lockPath)) writeFileSync(lockPath, '');
+        this.lockRelease = lockfile.lockSync(this.dbPath, { retries: { retries: 1, minTimeout: 100 } });
+        Logger.warn(`[HistoryDb] Stale lock cleaned — acquired fresh lock on ${this.dbPath}`);
+      } catch {
+        throw new Error(
+          `[mcp-guardian] Cannot acquire DB lock on ${this.dbPath}. ` +
+          'Is another mcp-guardian proxy already running? ' +
+          `Original error: ${lockErr?.message || lockErr}. ` +
+          'Use MCP_GUARDIAN_DB_PATH to set a separate DB per instance.'
+        );
+      }
     }
 
     this.db = new Database(this.dbPath);
