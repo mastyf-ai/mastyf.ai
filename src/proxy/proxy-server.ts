@@ -13,6 +13,7 @@ import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
 import { SessionCache } from '../auth/session-cache.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
 import { LRUCache } from 'lru-cache';
+import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
 import * as Metrics from '../utils/metrics.js';
 
 const MAX_PAYLOAD_BYTES = parseInt(
@@ -172,22 +173,53 @@ export class McpProxyServer {
           Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'pass', authn_success: 'true' });
           if (this.sessionCache) Metrics.activeSessions.set(this.sessionCache.size);
 
-          // ── v2.5: Response inspection for prompt injection / data exfiltration ──
-          if (this.policyEngine && msg?.result) {
+          // ── v2.5+: Response inspection for prompt injection / data exfiltration ──
+          if (msg?.result) {
             const responseText = JSON.stringify(msg.result);
-            const { clean, detections } = this.policyEngine.evaluateResponse(
+
+            // Layer 1: Policy engine patterns (exfiltration URLs, token queries, base64)
+            const allDetections: string[] = [];
+            if (this.policyEngine) {
+              const { clean, detections } = this.policyEngine.evaluateResponse(
+                this.requestToolName || 'unknown',
+                this.serverName,
+                responseText,
+              );
+              if (!clean) allDetections.push(...detections);
+            }
+
+            // Layer 2: Dedicated prompt injection detector (jailbreak, role override, credential theft, etc.)
+            const injectionFindings = detectPromptInjection(
               this.requestToolName || 'unknown',
-              this.serverName,
               responseText,
             );
-            if (!clean) {
-              Logger.warn(`[proxy:${this.serverName}] Suspicious response from '${this.requestToolName}': ${detections.join('; ')}`);
+
+            if (injectionFindings.length > 0 || allDetections.length > 0) {
+              const allMessages = [
+                ...allDetections,
+                ...injectionFindings.map(f => `${f.severity.toUpperCase()}: ${f.description} (${f.matchPreview})`),
+              ];
+
+              const hasCritical = injectionFindings.some(f => f.severity === 'critical');
+
+              Logger.warn(
+                `[proxy:${this.serverName}] Suspicious response from '${this.requestToolName}': ${allMessages.slice(0, 5).join('; ')}` +
+                (allMessages.length > 5 ? `... (+${allMessages.length - 5} more)` : '')
+              );
+
               StructuredLogger.info({
                 event: 'response_flagged',
                 serverName: this.serverName,
                 toolName: this.requestToolName,
-                detections,
+                detections: allMessages,
+                criticalCount: injectionFindings.filter(f => f.severity === 'critical').length,
+                highCount: injectionFindings.filter(f => f.severity === 'high').length,
                 requestId: this.currentRequestId,
+              });
+
+              Metrics.injectionDetectedTotal?.inc({
+                server_name: this.serverName,
+                severity: hasCritical ? 'critical' : 'high',
               });
             }
           }
