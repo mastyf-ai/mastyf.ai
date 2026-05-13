@@ -1,6 +1,6 @@
 {
   "name": "mcp-guardian",
-  "version": "2.3.16",
+  "version": "2.3.19",
   "description": "Runtime security, cost governance, and health monitoring proxy for MCP infrastructure — three-layer detection engine (regex → schema → LLM), YAML policy engine with hot-reload, 50+ secret patterns + Shannon entropy, AST command validation, JWT algorithm pinning, default-deny fail-closed, K8s Helm with probes and NetworkPolicy",
   "category": "Security",
   "tags": [
@@ -78,6 +78,11 @@
   },
   "minimumCliVersion": "18.0.0",
   "releases": [
+    {
+      "version": "2.3.19",
+      "date": "2026-05-14",
+      "notes": "Glama compatibility — fixed lockSync retries param (proper-lockfile sync API), declared logging/resources/prompts capabilities for MCP SDK v1.0.4"
+    },
     {
       "version": "2.3.9",
       "date": "2026-05-13",
