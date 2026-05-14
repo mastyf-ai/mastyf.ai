@@ -3,7 +3,7 @@ services:
     name: mcp-guardian
     runtime: node
     repo: https://github.com/rudraneel93/mcp-guardian
-    buildCommand: npm install && npm run build
+    buildCommand: npm install -g pnpm && pnpm install --no-frozen-lockfile && pnpm run build
     startCommand: node render-start.js
     buildFilter:
       paths:
