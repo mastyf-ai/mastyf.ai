@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
@@ -99,6 +99,7 @@
     "zod": "^3.23.0"
   },
   "optionalDependencies": {
+    "@anthropic-ai/tokenizer": "^0.0.4",
     "pg": "^8.20.0"
   },
   "devDependencies": {

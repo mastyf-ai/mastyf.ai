@@ -184,9 +184,10 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Dashboard auth** — JWT sessions, API keys, CSRF, rate-limited login
 
 ### Cost Governance
-- **Real token counting** — `tiktoken` + char-ratio estimates per provider
-- **Live pricing** — litellm-backed model costs
-- **Per-tool breakdown** — Tokens, duration, USD for every intercepted call
+- **Provider-aware token counting** — OpenAI via `tiktoken`; Anthropic via optional `@anthropic-ai/tokenizer` or chars÷3.5; prefers API `usage` when present (`tokenSource: api | estimated`)
+- **Multimodal** — Image tokens `(width × height) / 750` added to tool-call estimates
+- **Live pricing** — litellm-backed model costs (USD only)
+- **Per-tool breakdown** — Tokens, duration, USD for every intercepted call — see [docs/COST_GOVERNANCE.md](docs/COST_GOVERNANCE.md)
 
 ### Health & Observability
 - **Live JSON-RPC probes** — Latency, success rate, tool count

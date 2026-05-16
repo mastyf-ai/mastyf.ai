@@ -80,6 +80,7 @@ export class PostgresDatabase implements IDatabase {
       await client.query('ALTER TABLE call_records ADD COLUMN IF NOT EXISTS model TEXT');
       await client.query('ALTER TABLE call_records ADD COLUMN IF NOT EXISTS cost_usd REAL');
       await client.query('ALTER TABLE call_records ADD COLUMN IF NOT EXISTS pricing_source TEXT');
+      await client.query('ALTER TABLE call_records ADD COLUMN IF NOT EXISTS token_source TEXT');
 
       // Run unified aggregation migration
       const { readFileSync } = await import('fs');
@@ -174,7 +175,7 @@ export class PostgresDatabase implements IDatabase {
 
   async addCallRecord(record: ProxyCallRecord): Promise<void> {
     await this.pool.query(
-      'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+      'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
       [
         record.serverName,
         record.toolName,
@@ -188,13 +189,14 @@ export class PostgresDatabase implements IDatabase {
         record.model ?? null,
         record.costUsd ?? null,
         record.pricingSource ?? null,
+        record.tokenSource ?? null,
       ]
     );
   }
 
   async getCallRecordsForServer(serverName: string): Promise<ProxyCallRecord[]> {
     const result = await this.pool.query(
-      'SELECT server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, timestamp::text, blocked, block_rule, block_reason, model, cost_usd, pricing_source FROM call_records WHERE server_name = $1',
+      'SELECT server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, timestamp::text, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source FROM call_records WHERE server_name = $1',
       [serverName]
     );
     return result.rows.map((row: any) => ({
@@ -211,6 +213,9 @@ export class PostgresDatabase implements IDatabase {
       blocked: Boolean(row.blocked),
       blockRule: row.block_rule ?? undefined,
       blockReason: row.block_reason ?? undefined,
+      tokenSource: row.token_source === 'api' || row.token_source === 'estimated'
+        ? row.token_source
+        : undefined,
     }));
   }
 

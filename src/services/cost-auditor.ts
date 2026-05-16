@@ -60,10 +60,15 @@ export class CostAuditor {
     let totalOutput = 0;
     let actualCostUSD = 0;
     let unpricedCalls = 0;
+    let apiSourcedCalls = 0;
+    let estimatedCalls = 0;
     const active = await pricing.getActivePricing();
     const pricingModel = active?.displayName || active?.modelId || 'unresolved';
 
     for (const r of records) {
+      if (r.tokenSource === 'api') apiSourcedCalls++;
+      else if (r.tokenSource === 'estimated') estimatedCalls++;
+
       const existing = toolMap.get(r.toolName) || {
         inputTokens: 0, outputTokens: 0, calls: 0, cost: 0, models: new Set<string>(),
       };
@@ -118,9 +123,16 @@ export class CostAuditor {
       pricingSources: [...sources],
       toolBreakdown: breakdown,
       unpricedCalls,
-      note: unpricedCalls > 0
-        ? `${unpricedCalls} call(s) could not be priced — ensure Cline is active or set GUARDIAN_MODEL`
-        : undefined,
+      note: [
+        unpricedCalls > 0
+          ? `${unpricedCalls} call(s) could not be priced — ensure Cline is active or set GUARDIAN_MODEL`
+          : null,
+        apiSourcedCalls > 0 || estimatedCalls > 0
+          ? `Token sources: ${apiSourcedCalls} API, ${estimatedCalls} estimated (USD only)`
+          : null,
+      ]
+        .filter(Boolean)
+        .join('; ') || undefined,
     };
   }
 

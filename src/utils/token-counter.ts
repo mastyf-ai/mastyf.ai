@@ -1,16 +1,22 @@
 /**
- * Live token counter — uses per-provider real tokenizers.
+ * Provider-aware token counting for cost governance.
  *
- * - OpenAI: tiktoken with model-specific encodings (o200k_base, cl100k_base) — exact
- * - Anthropic: Anthropic Messages API /v1/messages/count_tokens endpoint — exact
- * - Google: litellm subprocess (calls Gemini count_tokens) — exact
- * - All others: litellm subprocess with provider-specific tokenizer — exact
- * - Fallback: char-ratio estimates when API keys / litellm unavailable
+ * - OpenAI: tiktoken (o200k_base / cl100k_base) — exact in-process
+ * - Anthropic: @anthropic-ai/tokenizer (optional) or chars/3.5 heuristic
+ * - Google / others: litellm subprocess when available, else char-ratio
+ * - Multimodal: (width × height) / 750 per image (OpenAI-style tile rule)
+ * - API usage: prefers usage.input_tokens / output_tokens from responses
  */
 import { get_encoding, type TiktokenEncoding } from 'tiktoken';
 import { execSync, spawnSync } from 'child_process';
 import { createHash } from 'crypto';
+import { createRequire } from 'module';
 import { Logger } from './logger.js';
+
+const requireOptional = createRequire(import.meta.url);
+
+export type TokenProvider = 'openai' | 'anthropic' | 'google' | 'unknown';
+export type TokenSource = 'api' | 'estimated';
 
 export interface TokenCountResult {
   tokens: number;
@@ -18,100 +24,378 @@ export interface TokenCountResult {
   model?: string;
   isExact: boolean;
   method: string;
+  tokenSource?: TokenSource;
+}
+
+export interface ApiUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface ProxyTokenCounts {
+  requestTokens: number;
+  responseTokens: number;
+  totalTokens: number;
+  tokenSource: TokenSource;
+  requestTokenSource: TokenSource;
+  responseTokenSource: TokenSource;
+  imageTokens: number;
+  method?: string;
 }
 
 const PROVIDER_RATIOS: Record<string, number> = {
-  'anthropic': 0.30, 'google': 0.22, 'deepseek': 0.27,
-  'xai': 0.25, 'meta': 0.25, 'mistral': 0.25, 'cohere': 0.25,
-  'ai21': 0.25, 'reka': 0.25, 'amazon': 0.25, 'alibaba': 0.30,
-  'zhipu': 0.30, '01ai': 0.30, 'writer': 0.25, 'perplexity': 0.25,
-  'huggingface': 0.25,
+  anthropic: 1 / 3.5,
+  google: 0.22,
+  deepseek: 0.27,
+  xai: 0.25,
+  meta: 0.25,
+  mistral: 0.25,
+  cohere: 0.25,
+  ai21: 0.25,
+  reka: 0.25,
+  amazon: 0.25,
+  alibaba: 0.30,
+  zhipu: 0.30,
+  '01ai': 0.30,
+  writer: 0.25,
+  perplexity: 0.25,
+  huggingface: 0.25,
 };
 
-// Cache litellm counts to avoid repeated subprocess calls for identical text
+const IMAGE_TOKENS_DIVISOR = 750;
+const DRIFT_LOG_THRESHOLD = 0.05;
+
 const litellmCache = new Map<string, number>();
 const LITELLM_CACHE_MAX = 1000;
+
+let anthropicTokenizer: { countTokens: (text: string) => number } | null | undefined;
+
+/** Detect LLM provider from model id string. */
+export function detectProvider(modelId: string): TokenProvider {
+  const m = modelId.toLowerCase();
+  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
+    return 'openai';
+  }
+  if (m.startsWith('claude-')) return 'anthropic';
+  if (m.startsWith('gemini-') || m.startsWith('gemma-')) return 'google';
+  return 'unknown';
+}
+
+/** OpenAI-style image token estimate: (width × height) / 750 per image. */
+export function imageTokensFromDimensions(width: number, height: number): number {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return 0;
+  }
+  return Math.ceil((width * height) / IMAGE_TOKENS_DIVISOR);
+}
+
+/** Recursively scan payload for images and sum token estimates. */
+export function countImageTokensInPayload(payload: unknown, seen = new WeakSet<object>()): number {
+  if (payload == null) return 0;
+  if (typeof payload !== 'object') return 0;
+  if (seen.has(payload as object)) return 0;
+  seen.add(payload as object);
+
+  let total = 0;
+  const obj = payload as Record<string, unknown>;
+
+  const w = obj.width ?? obj.image_width;
+  const h = obj.height ?? obj.image_height;
+  if (typeof w === 'number' && typeof h === 'number') {
+    total += imageTokensFromDimensions(w, h);
+  }
+
+  if (obj.type === 'image' || obj.type === 'image_url') {
+    const detail = obj.detail as string | undefined;
+    if (detail === 'low') {
+      total += imageTokensFromDimensions(512, 512);
+    } else if (typeof w === 'number' && typeof h === 'number') {
+      total += imageTokensFromDimensions(w, h);
+    } else if (typeof obj.url === 'string' && obj.url.startsWith('data:image')) {
+      total += imageTokensFromDimensions(1024, 1024);
+    }
+  }
+
+  if (typeof obj.image_url === 'object' && obj.image_url !== null) {
+    total += countImageTokensInPayload(obj.image_url, seen);
+  }
+  if (typeof obj.source === 'object' && obj.source !== null) {
+    const src = obj.source as Record<string, unknown>;
+    if (src.type === 'base64' && typeof src.data === 'string') {
+      total += imageTokensFromDimensions(1024, 1024);
+    }
+  }
+  if (typeof obj.url === 'string' && obj.url.startsWith('data:image')) {
+    total += imageTokensFromDimensions(1024, 1024);
+  }
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      total += countImageTokensInPayload(item, seen);
+    }
+    return total;
+  }
+
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === 'object') {
+      total += countImageTokensInPayload(value, seen);
+    }
+  }
+  return total;
+}
+
+/** Extract provider usage block from JSON-RPC or nested metadata. */
+export function extractApiUsage(payload: unknown): ApiUsage | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const stack: unknown[] = [payload];
+  const seen = new Set<object>();
+
+  while (stack.length > 0) {
+    const cur = stack.pop();
+    if (!cur || typeof cur !== 'object' || seen.has(cur as object)) continue;
+    seen.add(cur as object);
+    const o = cur as Record<string, unknown>;
+
+    const usage = o.usage;
+    if (usage && typeof usage === 'object') {
+      const u = usage as Record<string, unknown>;
+      const input =
+        (typeof u.input_tokens === 'number' ? u.input_tokens : undefined) ??
+        (typeof u.prompt_tokens === 'number' ? u.prompt_tokens : undefined);
+      const output =
+        (typeof u.output_tokens === 'number' ? u.output_tokens : undefined) ??
+        (typeof u.completion_tokens === 'number' ? u.completion_tokens : undefined);
+      if (input !== undefined && output !== undefined) {
+        return { inputTokens: input, outputTokens: output };
+      }
+    }
+
+    for (const key of ['result', 'params', '_meta', 'metadata']) {
+      const child = o[key];
+      if (child && typeof child === 'object') stack.push(child);
+    }
+  }
+  return null;
+}
+
+/** Log when API-reported tokens diverge from estimate by more than 5%. */
+export function logTokenDriftIfNeeded(
+  estimated: number,
+  actual: number,
+  context: string,
+): void {
+  if (estimated <= 0 || actual <= 0) return;
+  const drift = Math.abs(actual - estimated) / Math.max(estimated, actual);
+  if (drift > DRIFT_LOG_THRESHOLD) {
+    Logger.warn(
+      `[token-counter] ${context}: estimate=${estimated} api=${actual} drift=${(drift * 100).toFixed(1)}%`,
+    );
+  }
+}
 
 export class TokenCounter {
   private encodings: Map<string, ReturnType<typeof get_encoding>> = new Map();
 
-  /** Quick count using GPT-4o encoding — for internal use only */
   count(text: string): number {
     return this.tiktokenCount(text, 'o200k_base');
   }
 
-  /**
-   * Live token count using provider-specific tokenizers.
-   * Returns the most accurate count available.
-   */
   countWithProvider(text: string, model?: string): TokenCountResult | null {
     if (!model) return null;
     const m = model.toLowerCase();
+    const provider = detectProvider(model);
 
-    // ─── OpenAI — tiktoken (exact, in-process) ───
-    if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
-      const enc: TiktokenEncoding = (m.includes('4o') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4'))
-        ? 'o200k_base' : 'cl100k_base';
-      return { tokens: this.tiktokenCount(text, enc), provider: 'openai', model, isExact: true, method: `tiktoken:${enc}` };
+    if (provider === 'openai') {
+      const enc: TiktokenEncoding =
+        m.includes('4o') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')
+          ? 'o200k_base'
+          : 'cl100k_base';
+      return {
+        tokens: this.tiktokenCount(text, enc),
+        provider: 'openai',
+        model,
+        isExact: true,
+        method: `tiktoken:${enc}`,
+        tokenSource: 'estimated',
+      };
     }
 
-    // ─── Anthropic — use Anthropic API count_tokens (exact) ───
-    if (m.startsWith('claude-')) {
-      const anthropicResult = this.anthropicCount(text, model);
-      if (anthropicResult !== null) return anthropicResult;
-      // Fallback to char-ratio only if API unavailable
-      return { tokens: Math.round(text.length * PROVIDER_RATIOS['anthropic']), provider: 'anthropic', model, isExact: false, method: 'char-ratio-0.30' };
+    if (provider === 'anthropic') {
+      const anthropicResult = this.anthropicCountLocal(text, model);
+      if (anthropicResult) return anthropicResult;
+      const apiResult = this.anthropicCountApi(text, model);
+      if (apiResult) return apiResult;
+      return {
+        tokens: Math.round(text.length * PROVIDER_RATIOS.anthropic),
+        provider: 'anthropic',
+        model,
+        isExact: false,
+        method: 'char-ratio-1/3.5',
+        tokenSource: 'estimated',
+      };
     }
 
-    // ─── Google — use litellm which calls Gemini count_tokens (exact) ───
-    if (m.startsWith('gemini-') || m.startsWith('gemma-')) {
+    if (provider === 'google') {
       const litellmResult = this.litellmCount(text, model);
-      if (litellmResult !== null) return litellmResult;
-      return { tokens: Math.round(text.length * PROVIDER_RATIOS['google']), provider: 'google', model, isExact: false, method: 'char-ratio-0.22' };
+      if (litellmResult) return litellmResult;
+      return {
+        tokens: Math.round(text.length * PROVIDER_RATIOS.google),
+        provider: 'google',
+        model,
+        isExact: false,
+        method: 'char-ratio-0.22',
+        tokenSource: 'estimated',
+      };
     }
 
-    // ─── All other providers — try litellm, fall back to char-ratio ───
     const litellmResult = this.litellmCount(text, model);
-    if (litellmResult !== null) return litellmResult;
+    if (litellmResult) return litellmResult;
 
-    // Provider-specific char-ratio fallback
-    if (m.startsWith('deepseek-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['deepseek']), provider: 'deepseek', model, isExact: false, method: 'char-ratio-0.27' };
-    if (m.startsWith('grok-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['xai']), provider: 'xai', model, isExact: false, method: 'char-ratio-0.25' };
-    if (m.startsWith('llama-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['meta']), provider: 'meta', model, isExact: false, method: 'char-ratio-0.25' };
-    if (m.startsWith('mistral-') || m.startsWith('mixtral-') || m.startsWith('codestral') || m.startsWith('pixtral-'))
-      return { tokens: Math.round(text.length * PROVIDER_RATIOS['mistral']), provider: 'mistral', model, isExact: false, method: 'char-ratio-0.25' };
-
-    const prefixMap: Record<string, string[]> = {
-      amazon: ['amazon-', 'nova-', 'titan-'],
-      alibaba: ['qwen-'],
-      zhipu: ['glm-'],
-      cohere: ['command-'],
-      ai21: ['jamba-'],
-      reka: ['reka-'],
-      '01ai': ['yi-'],
-      writer: ['palmyra-'],
-      perplexity: ['sonar-'],
-      huggingface: ['zephyr-', 'falcon-'],
-    };
-    for (const [provider, prefixes] of Object.entries(prefixMap)) {
-      if (prefixes.some(px => m.startsWith(px))) {
-        const ratio = PROVIDER_RATIOS[provider];
-        return { tokens: Math.round(text.length * ratio), provider, model, isExact: false, method: `char-ratio-${ratio}` };
-      }
+    if (m.startsWith('deepseek-')) {
+      return {
+        tokens: Math.round(text.length * PROVIDER_RATIOS.deepseek),
+        provider: 'deepseek',
+        model,
+        isExact: false,
+        method: 'char-ratio-0.27',
+        tokenSource: 'estimated',
+      };
+    }
+    if (m.startsWith('grok-')) {
+      return {
+        tokens: Math.round(text.length * PROVIDER_RATIOS.xai),
+        provider: 'xai',
+        model,
+        isExact: false,
+        method: 'char-ratio-0.25',
+        tokenSource: 'estimated',
+      };
+    }
+    if (m.startsWith('llama-')) {
+      return {
+        tokens: Math.round(text.length * PROVIDER_RATIOS.meta),
+        provider: 'meta',
+        model,
+        isExact: false,
+        method: 'char-ratio-0.25',
+        tokenSource: 'estimated',
+      };
+    }
+    if (
+      m.startsWith('mistral-') ||
+      m.startsWith('mixtral-') ||
+      m.startsWith('codestral') ||
+      m.startsWith('pixtral-')
+    ) {
+      return {
+        tokens: Math.round(text.length * PROVIDER_RATIOS.mistral),
+        provider: 'mistral',
+        model,
+        isExact: false,
+        method: 'char-ratio-0.25',
+        tokenSource: 'estimated',
+      };
     }
 
-    return null;
+    return {
+      tokens: this.tiktokenCount(text, 'o200k_base'),
+      provider: 'unknown',
+      model,
+      isExact: false,
+      method: 'tiktoken:o200k_base-fallback',
+      tokenSource: 'estimated',
+    };
   }
 
   /**
-   * Count tokens via Anthropic Messages API count_tokens endpoint.
-   * Requires ANTHROPIC_API_KEY.
-   * Returns null if API key not set or call fails.
-   *
-   * Uses the Messages API: POST /v1/messages/count_tokens
-   * with a minimal system message + text-as-user-message
+   * Count tokens for a proxied tools/call (request + response), preferring API usage.
    */
-  private anthropicCount(text: string, model: string): TokenCountResult | null {
+  countProxyCall(options: {
+    requestText: string;
+    responseText: string;
+    model?: string;
+    requestPayload?: unknown;
+    responsePayload?: unknown;
+  }): ProxyTokenCounts {
+    const { requestText, responseText, model, requestPayload, responsePayload } = options;
+    const imageTokens =
+      countImageTokensInPayload(requestPayload) + countImageTokensInPayload(responsePayload);
+
+    const reqEstimate = this.estimateTextTokens(requestText, model);
+    const resEstimate = this.estimateTextTokens(responseText, model);
+
+    const reqUsage = extractApiUsage(requestPayload);
+    const resUsage = extractApiUsage(responsePayload);
+    const combinedUsage = extractApiUsage(responsePayload) ?? extractApiUsage(requestPayload);
+
+    let requestTokens = reqEstimate.tokens + imageTokens;
+    let responseTokens = resEstimate.tokens;
+    let requestTokenSource: TokenSource = 'estimated';
+    let responseTokenSource: TokenSource = 'estimated';
+
+    if (reqUsage?.inputTokens !== undefined) {
+      logTokenDriftIfNeeded(requestTokens, reqUsage.inputTokens, 'request input_tokens');
+      requestTokens = reqUsage.inputTokens + imageTokens;
+      requestTokenSource = 'api';
+    } else if (combinedUsage?.inputTokens !== undefined) {
+      logTokenDriftIfNeeded(requestTokens, combinedUsage.inputTokens, 'combined input_tokens');
+      requestTokens = combinedUsage.inputTokens + imageTokens;
+      requestTokenSource = 'api';
+    }
+
+    if (resUsage?.outputTokens !== undefined) {
+      logTokenDriftIfNeeded(responseTokens, resUsage.outputTokens, 'response output_tokens');
+      responseTokens = resUsage.outputTokens;
+      responseTokenSource = 'api';
+    } else if (combinedUsage?.outputTokens !== undefined) {
+      logTokenDriftIfNeeded(responseTokens, combinedUsage.outputTokens, 'combined output_tokens');
+      responseTokens = combinedUsage.outputTokens;
+      responseTokenSource = 'api';
+    }
+
+    const tokenSource: TokenSource =
+      requestTokenSource === 'api' || responseTokenSource === 'api' ? 'api' : 'estimated';
+
+    return {
+      requestTokens,
+      responseTokens,
+      totalTokens: requestTokens + responseTokens,
+      tokenSource,
+      requestTokenSource,
+      responseTokenSource,
+      imageTokens,
+      method: reqEstimate.method,
+    };
+  }
+
+  private estimateTextTokens(text: string, model?: string): TokenCountResult {
+    if (model) {
+      const r = this.countWithProvider(text, model);
+      if (r) return r;
+    }
+    return {
+      tokens: this.tiktokenCount(text, 'o200k_base'),
+      provider: 'openai',
+      isExact: false,
+      method: 'tiktoken:o200k_base-default',
+      tokenSource: 'estimated',
+    };
+  }
+
+  private anthropicCountLocal(text: string, model: string): TokenCountResult | null {
+    const counted = countAnthropicTokensSync(text);
+    if (counted === null) return null;
+    return {
+      tokens: counted,
+      provider: 'anthropic',
+      model,
+      isExact: true,
+      method: '@anthropic-ai/tokenizer',
+      tokenSource: 'estimated',
+    };
+  }
+
+  private anthropicCountApi(text: string, model: string): TokenCountResult | null {
     const apiKey = process.env['ANTHROPIC_API_KEY'];
     if (!apiKey) return null;
 
@@ -122,39 +406,47 @@ export class TokenCounter {
           -H "anthropic-version: 2023-06-01" \\
           -H "content-type: application/json" \\
           -d '${JSON.stringify({
-            model: model,
+            model,
             messages: [{ role: 'user', content: text }],
           }).replace(/'/g, "'\\''")}'`,
-        { encoding: 'utf-8', timeout: 6000 }
+        { encoding: 'utf-8', timeout: 6000 },
       );
 
       const data = JSON.parse(result);
       if (data?.input_tokens !== undefined) {
-        return { tokens: data.input_tokens, provider: 'anthropic', model, isExact: true, method: 'anthropic-api:count_tokens' };
+        return {
+          tokens: data.input_tokens,
+          provider: 'anthropic',
+          model,
+          isExact: true,
+          method: 'anthropic-api:count_tokens',
+          tokenSource: 'estimated',
+        };
       }
     } catch (err) {
-      Logger.debug(`Anthropic token count failed: ${err instanceof Error ? err.message : String(err)}`);
+      Logger.debug(
+        `Anthropic API token count failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     return null;
   }
 
-  /**
-   * Count tokens via litellm Python subprocess.
-   * litellm calls the provider's real tokenizer (e.g., Gemini count_tokens, etc.)
-   * Requires: pip install litellm
-   * Returns null if litellm not available or call fails.
-   */
   private litellmCount(text: string, model: string): TokenCountResult | null {
-    // Check cache first — use content hash to avoid collisions
     const textHash = createHash('sha256').update(text).digest('hex').slice(0, 16);
     const cacheKey = `${model}::${textHash}`;
     if (litellmCache.has(cacheKey)) {
       const cachedTokens = litellmCache.get(cacheKey)!;
-      return { tokens: cachedTokens, provider: 'litellm', model, isExact: true, method: 'litellm' };
+      return {
+        tokens: cachedTokens,
+        provider: 'litellm',
+        model,
+        isExact: true,
+        method: 'litellm',
+        tokenSource: 'estimated',
+      };
     }
 
     try {
-      // Pass model and text via stdin to avoid shell injection
       const input = JSON.stringify({ model, text });
       const pythonScript = `
 import json, sys
@@ -172,32 +464,82 @@ except Exception as e:
         input,
       });
       if (proc.status !== 0 || proc.error) return null;
-      const result = proc.stdout;
-
-      const data = JSON.parse(result);
+      const data = JSON.parse(proc.stdout);
       if (data?.tokens !== undefined) {
-        // Cache the result
         if (litellmCache.size >= LITELLM_CACHE_MAX) {
-          // Clear oldest half
           const keys = Array.from(litellmCache.keys());
           for (let i = 0; i < keys.length / 2; i++) litellmCache.delete(keys[i]);
         }
         litellmCache.set(cacheKey, data.tokens);
-        return { tokens: data.tokens, provider: 'litellm', model, isExact: true, method: 'litellm' };
+        return {
+          tokens: data.tokens,
+          provider: 'litellm',
+          model,
+          isExact: true,
+          method: 'litellm',
+          tokenSource: 'estimated',
+        };
       }
     } catch (err) {
-      Logger.debug(`litellm token count failed for ${model}: ${err instanceof Error ? err.message : String(err)}`);
+      Logger.debug(
+        `litellm token count failed for ${model}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     return null;
   }
 
-  countSimple(text: string): number { return this.tiktokenCount(text, 'o200k_base'); }
+  countSimple(text: string): number {
+    return this.tiktokenCount(text, 'o200k_base');
+  }
 
   private tiktokenCount(text: string, encoding: TiktokenEncoding): number {
     let enc = this.encodings.get(encoding);
-    if (!enc) { enc = get_encoding(encoding); this.encodings.set(encoding, enc); }
+    if (!enc) {
+      enc = get_encoding(encoding);
+      this.encodings.set(encoding, enc);
+    }
     return enc.encode(text).length;
   }
 
-  free(): void { for (const enc of this.encodings.values()) enc.free(); this.encodings.clear(); }
+  free(): void {
+    for (const enc of this.encodings.values()) enc.free();
+    this.encodings.clear();
+  }
+}
+
+/** Extract model id from MCP tools/call message shape. */
+export function extractModelFromPayload(msg: unknown): string | undefined {
+  if (!msg || typeof msg !== 'object') return undefined;
+  const m = msg as Record<string, unknown>;
+  const params = m.params as Record<string, unknown> | undefined;
+  if (!params) return undefined;
+  const meta = params._meta as Record<string, unknown> | undefined;
+  if (typeof meta?.model === 'string' && meta.model.trim()) return meta.model.trim();
+  if (typeof meta?.modelId === 'string' && meta.modelId.trim()) return meta.modelId.trim();
+  if (typeof params.model === 'string' && params.model.trim()) return params.model.trim();
+  const args = params.arguments;
+  if (args && typeof args === 'object') {
+    const a = args as Record<string, unknown>;
+    if (typeof a.model === 'string' && a.model.trim()) return a.model.trim();
+    if (typeof a.modelId === 'string' && a.modelId.trim()) return a.modelId.trim();
+  }
+  return undefined;
+}
+
+/** Lazy-load optional @anthropic-ai/tokenizer; returns null when unavailable. */
+export function countAnthropicTokensSync(text: string): number | null {
+  if (anthropicTokenizer === undefined) {
+    try {
+      const mod = requireOptional('@anthropic-ai/tokenizer') as { countTokens: (t: string) => number };
+      anthropicTokenizer = mod;
+    } catch {
+      anthropicTokenizer = null;
+    }
+  }
+  if (!anthropicTokenizer) return null;
+  try {
+    return anthropicTokenizer.countTokens(text);
+  } catch {
+    return null;
+  }
 }

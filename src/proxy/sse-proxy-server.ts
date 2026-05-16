@@ -2,7 +2,7 @@ import http from 'http';
 import https from 'https';
 import { EventEmitter } from 'events';
 import { PolicyEngine } from '../policy/policy-engine.js';
-import { TokenCounter } from '../utils/token-counter.js';
+import { TokenCounter, extractModelFromPayload } from '../utils/token-counter.js';
 import { Logger } from '../utils/logger.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 
@@ -65,17 +65,30 @@ export class SseProxyServer extends EventEmitter {
 
     // Token counting for tools/call
     if (isToolCall) {
-      const inputTokens = this.tokenCounter.count(JSON.stringify(jsonRpcRequest));
-      const outputTokens = this.tokenCounter.count(JSON.stringify(response));
       const params = jsonRpcRequest.params as Record<string, unknown> | undefined;
+      const model =
+        extractModelFromPayload(jsonRpcRequest) ||
+        process.env.GUARDIAN_MODEL ||
+        process.env.ANTHROPIC_MODEL ||
+        process.env.OPENAI_MODEL;
+      const requestText = JSON.stringify(jsonRpcRequest);
+      const responseText = JSON.stringify(response);
+      const counts = this.tokenCounter.countProxyCall({
+        requestText,
+        responseText,
+        model,
+        requestPayload: jsonRpcRequest,
+        responsePayload: response,
+      });
       const record = {
         serverName: this.opts.serverName,
         toolName: (params?.name as string) ?? 'unknown',
-        requestTokens: inputTokens,
-        responseTokens: outputTokens,
-        totalTokens: inputTokens + outputTokens,
+        requestTokens: counts.requestTokens,
+        responseTokens: counts.responseTokens,
+        totalTokens: counts.totalTokens,
         durationMs,
         timestamp: new Date().toISOString(),
+        tokenSource: counts.tokenSource,
       };
       try {
         // Fire-and-forget best-effort; errors are logged but non-critical

@@ -119,4 +119,6 @@ export interface ProxyCallRecord {
   blocked?: boolean;
   blockRule?: string;
   blockReason?: string;
+  /** Whether token counts came from provider API usage or local estimate */
+  tokenSource?: 'api' | 'estimated';
 }

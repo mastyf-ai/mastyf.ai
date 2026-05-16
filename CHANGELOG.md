@@ -2,6 +2,15 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.6.1] - 2026-05-16
+
+### Fixed (cost governance accuracy)
+- **Provider-aware tokenization** — `detectProvider()` routes OpenAI to tiktoken, Anthropic to optional `@anthropic-ai/tokenizer` or chars÷3.5 heuristic (no OpenAI BPE on Claude).
+- **API usage** — Proxy prefers `usage.input_tokens` / `output_tokens` from responses; `tokenSource: api | estimated` on call records; warns when estimate vs API drift >5%.
+- **Multimodal** — Image tokens via `(width × height) / 750` added to request counts.
+- **Docs** — [docs/COST_GOVERNANCE.md](docs/COST_GOVERNANCE.md) (drift expectations, USD-only currency).
+- **Tests** — `tests/utils/token-counter.test.ts`, `tests/cost/multimodal-tokens.test.ts`.
+
 ## [2.6.0] - 2026-05-16
 
 ### Security (AI learning anti-poisoning)

@@ -260,11 +260,14 @@ export class HistoryDatabase implements IDatabase {
     if (!names.has('pricing_source')) {
       this.db.exec('ALTER TABLE call_records ADD COLUMN pricing_source TEXT');
     }
+    if (!names.has('token_source')) {
+      this.db.exec('ALTER TABLE call_records ADD COLUMN token_source TEXT');
+    }
   }
 
   async addCallRecord(record: ProxyCallRecord): Promise<void> {
     const stmt = this.db.prepare(
-      'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source) VALUES (@serverName, @toolName, @requestTokens, @responseTokens, @totalTokens, @durationMs, @blocked, @blockRule, @blockReason, @model, @costUsd, @pricingSource)'
+      'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source) VALUES (@serverName, @toolName, @requestTokens, @responseTokens, @totalTokens, @durationMs, @blocked, @blockRule, @blockReason, @model, @costUsd, @pricingSource, @tokenSource)'
     );
     stmt.run({
       serverName: record.serverName,
@@ -279,6 +282,7 @@ export class HistoryDatabase implements IDatabase {
       model: record.model ?? null,
       costUsd: record.costUsd ?? null,
       pricingSource: record.pricingSource ?? null,
+      tokenSource: record.tokenSource ?? null,
     });
   }
 
@@ -300,6 +304,9 @@ export class HistoryDatabase implements IDatabase {
       blocked: Boolean(row.blocked),
       blockRule: row.block_rule ?? undefined,
       blockReason: row.block_reason ?? undefined,
+      tokenSource: row.token_source === 'api' || row.token_source === 'estimated'
+        ? row.token_source
+        : undefined,
     }));
   }
 

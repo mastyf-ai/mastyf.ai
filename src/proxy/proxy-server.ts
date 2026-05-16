@@ -1,7 +1,11 @@
 import { spawn, ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
 import { randomUUID, createHash } from 'crypto';
-import { TokenCounter } from '../utils/token-counter.js';
+import {
+  TokenCounter,
+  countImageTokensInPayload,
+  extractModelFromPayload,
+} from '../utils/token-counter.js';
 import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from '../database/database-interface.js';
 import { Logger } from '../utils/logger.js';
@@ -48,6 +52,8 @@ export class McpProxyServer {
   private requestStartTime: number = 0;
   private requestToolName: string | null = null;
   private requestTokens: number = 0;
+  private requestRaw: string | null = null;
+  private requestModel: string | undefined;
   private requestArguments: Record<string, unknown> | undefined;
   private serverName: string;
   private policyEngine: PolicyEngine | null;
@@ -200,17 +206,31 @@ export class McpProxyServer {
 
         if (msg.id && msg.id === this.currentRequestId) {
           const proxyLatencyMs = Date.now() - this.requestStartTime;
-          const responseTokens = this.tokenCounter.count(line);
+          const reqMsg = {
+            params: { name: this.requestToolName, arguments: this.requestArguments },
+          };
+          const model =
+            this.requestModel ||
+            process.env.GUARDIAN_MODEL ||
+            process.env.ANTHROPIC_MODEL ||
+            process.env.OPENAI_MODEL;
+          const counts = this.tokenCounter.countProxyCall({
+            requestText: this.requestRaw || JSON.stringify(reqMsg),
+            responseText: line,
+            model,
+            requestPayload: reqMsg,
+            responsePayload: msg,
+          });
           const record: ProxyCallRecord = {
             serverName: this.serverName,
             toolName: this.requestToolName || 'unknown',
-            requestTokens: this.requestTokens,
-            responseTokens,
-            totalTokens: this.requestTokens + responseTokens,
+            requestTokens: counts.requestTokens,
+            responseTokens: counts.responseTokens,
+            totalTokens: counts.totalTokens,
             durationMs: proxyLatencyMs,
             timestamp: new Date().toISOString(),
+            tokenSource: counts.tokenSource,
           };
-          const reqMsg = { params: { name: this.requestToolName, arguments: this.requestArguments } };
           persistCallRecord(this.db, record, reqMsg).catch((err) =>
             Logger.debug(`Proxy: failed to store call record: ${err?.message}`)
           );
@@ -403,7 +423,17 @@ export class McpProxyServer {
         this.requestStartTime = proxyStartTime;
         this.currentRequestId = msg.id;
         this.requestToolName = msg.params?.name || 'unknown';
-        this.requestTokens = this.tokenCounter.count(raw);
+        this.requestRaw = raw;
+        this.requestModel =
+          extractModelFromPayload(msg) ||
+          process.env.GUARDIAN_MODEL ||
+          process.env.ANTHROPIC_MODEL ||
+          process.env.OPENAI_MODEL;
+        const reqEstimate =
+          this.tokenCounter.countWithProvider(raw, this.requestModel)?.tokens ??
+          this.tokenCounter.count(raw);
+        const imageTokens = countImageTokensInPayload(msg.params?.arguments);
+        this.requestTokens = reqEstimate + imageTokens;
         this.requestArguments = msg.params?.arguments;
         const toolName = this.requestToolName || 'unknown';
 
