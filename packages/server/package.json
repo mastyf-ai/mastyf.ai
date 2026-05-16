@@ -1,9 +1,12 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "2.4.3",
-  "description": "MCP server exposing security scan tools to AI assistants",
+  "version": "2.4.4",
+  "description": "Runtime security, cost governance, and health monitoring proxy for MCP infrastructure",
   "type": "module",
   "main": "./dist/index.js",
+  "bin": {
+    "mcp-guardian": "./dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -22,7 +25,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "default-policy.yaml"
   ],
   "readme": "README.md"
 }
