@@ -2,6 +2,19 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.6.3] - 2026-05-16
+
+### Added (Windows)
+- **`guardian-proxy.ps1`** — Native PowerShell stdio proxy launcher (repo root + `scripts/`); quotes `node`/`dist/cli.js` paths for usernames and install dirs with spaces.
+- **`mcp-guardian wrap` on win32** — Generates `powershell.exe -File guardian-proxy.ps1` entries instead of `guardian-proxy.sh`; Windows client config paths for Cline/Claude Desktop.
+- **`src/utils/windows-paths.ts`** — `quotePathForPowerShell`, `resolveGuardianProxyWrapper`, `buildWrappedMcpServerEntry`.
+- **`scripts/postinstall-windows.cjs`** — Warns when `better-sqlite3` fails to load on Windows.
+- **`installer/README.md`** — MSI installer roadmap (planned v2.7).
+- **Tests** — `tests/utils/windows-paths.test.ts`.
+
+### Docs
+- **`docs/WINDOWS.md`** — Native PowerShell setup, better-sqlite3 prebuild notes, Cursor example config, MSI roadmap.
+
 ## [2.6.2] - 2026-05-16
 
 ### Docs (scale & HA)

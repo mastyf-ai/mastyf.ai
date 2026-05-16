@@ -20,6 +20,11 @@ describe('client-wrap', () => {
       '#!/bin/sh\nexec node "$@"\n',
       'utf-8',
     );
+    fs.writeFileSync(
+      path.join(projectRoot, 'guardian-proxy.ps1'),
+      '& node "$cliPath" proxy @args\n',
+      'utf-8',
+    );
     fs.chmodSync(path.join(projectRoot, 'scripts/guardian-proxy.sh'), 0o755);
     fs.writeFileSync(
       path.join(projectRoot, 'policy-audit.yaml'),
@@ -72,6 +77,26 @@ describe('client-wrap', () => {
       ),
     );
     expect(example.mcpServers.github.command).toContain('guardian-proxy.sh');
+  });
+
+  it('uses guardian-proxy.ps1 via powershell on win32', () => {
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const result = runWrap({
+        client: 'auto',
+        configPath: clientConfig,
+        projectRoot,
+        policyPath: 'policy-audit.yaml',
+        apply: true,
+      });
+      const live = JSON.parse(fs.readFileSync(clientConfig, 'utf-8'));
+      expect(live.mcpServers.github.command).toMatch(/powershell/i);
+      expect(live.mcpServers.github.args).toContain('-File');
+      expect(result.wrapperScript).toContain('guardian-proxy.ps1');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original });
+    }
   });
 
   it('applies patch with backup when --apply', () => {

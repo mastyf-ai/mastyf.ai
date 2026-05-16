@@ -6,6 +6,11 @@ import path from 'path';
 import os from 'os';
 import { ConfigParser } from '../config-parser.js';
 import { McpServerConfig } from '../types.js';
+import {
+  buildWrappedMcpServerEntry,
+  isGuardianProxyCommand,
+  resolveGuardianProxyWrapper,
+} from '../utils/windows-paths.js';
 
 export type WrapClient = 'cline' | 'cursor' | 'claude-desktop' | 'windsurf' | 'auto';
 
@@ -34,11 +39,16 @@ const CLIENT_PATHS: Record<Exclude<WrapClient, 'auto'>, string[]> = {
       'Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json',
     ),
     path.join(os.homedir(), '.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json'),
+    path.join(
+      os.homedir(),
+      'AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json',
+    ),
   ],
   cursor: [path.join(os.homedir(), '.cursor/mcp.json')],
   'claude-desktop': [
     path.join(os.homedir(), 'Library/Application Support/Claude/claude_desktop_config.json'),
     path.join(os.homedir(), '.config/Claude/claude_desktop_config.json'),
+    path.join(os.homedir(), 'AppData/Roaming/Claude/claude_desktop_config.json'),
   ],
   windsurf: [path.join(os.homedir(), '.codeium/windsurf/mcp_config.json')],
 };
@@ -63,7 +73,7 @@ function isAlreadyWrapped(server: McpServerConfig): boolean {
   const args = server.args ?? [];
   if (args.includes('proxy')) return true;
   const cmd = server.command ?? '';
-  return cmd.includes('guardian-proxy') || cmd.includes('mcp-guardian');
+  return isGuardianProxyCommand(cmd);
 }
 
 function sanitizeFileName(name: string): string {
@@ -102,7 +112,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
 
   const projectRoot = path.resolve(opts.projectRoot);
   const configsDir = path.join(projectRoot, 'guardian-configs');
-  const wrapperScript = path.join(projectRoot, 'scripts/guardian-proxy.sh');
+  const wrapperScript = resolveGuardianProxyWrapper(projectRoot);
   const policyPath = path.isAbsolute(opts.policyPath)
     ? opts.policyPath
     : path.join(projectRoot, opts.policyPath);
@@ -159,11 +169,11 @@ export function runWrap(opts: WrapOptions): WrapResult {
       'utf-8',
     );
 
-    serverMap[server.name] = {
-      command: wrapperScript,
-      args: ['--config', singleConfigPath, '--policy', policyPath],
-      transport: 'stdio',
-    };
+    serverMap[server.name] = buildWrappedMcpServerEntry(
+      projectRoot,
+      singleConfigPath,
+      policyPath,
+    ) as unknown as Record<string, unknown>;
 
     wrapped.push(server.name);
   }
@@ -183,11 +193,11 @@ export function runWrap(opts: WrapOptions): WrapResult {
   for (const name of wrapped) {
     const safeName = sanitizeFileName(name);
     const singleConfigPath = path.join(configsDir, `${safeName}.json`);
-    exampleMap[name] = {
-      command: wrapperScript,
-      args: ['--config', singleConfigPath, '--policy', policyPath],
-      transport: 'stdio',
-    };
+    exampleMap[name] = buildWrappedMcpServerEntry(
+      projectRoot,
+      singleConfigPath,
+      policyPath,
+    ) as unknown as Record<string, unknown>;
   }
   setServers(exampleRaw, exampleMap);
   fs.writeFileSync(examplePath, JSON.stringify(exampleRaw, null, 2) + '\n', 'utf-8');

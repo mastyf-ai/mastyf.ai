@@ -14,7 +14,7 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Version 2.5.3** hardens production defaults (CVE gate opt-in, dashboard auth fail-closed, proxy stderr logging). **2.5.0** added one-command IDE wrapping (`mcp-guardian wrap`), Docker Compose, PostgreSQL/Redis HA paths, OPA/Rego hooks, compliance docs, and production Helm hardening.
+**Version 2.6.3** adds native Windows PowerShell proxy wrapping and path quoting. **2.5.3** hardens production defaults (CVE gate opt-in, dashboard auth fail-closed, proxy stderr logging). **2.5.0** added one-command IDE wrapping (`mcp-guardian wrap`), Docker Compose, PostgreSQL/Redis HA paths, OPA/Rego hooks, compliance docs, and production Helm hardening.
 
 ---
 
@@ -22,6 +22,7 @@ It works as a **transparent stdio proxy** (real-time enforcement for Cline, Curs
 
 - [Quick Start](#quick-start)
 - [Real-World Integration (Cline, Cursor, Claude Code)](#real-world-integration-cline-cursor-claude-code)
+  - [Windows (native PowerShell)](#windows-native-powershell)
 - [Two Operating Modes](#two-operating-modes)
 - [Features](#features)
 - [Installation](#installation)
@@ -134,6 +135,17 @@ mcp-guardian wrap --client cursor --policy policy-warn.yaml --apply
 Use **absolute paths** — Cline’s working directory is unpredictable.
 
 **Cline `env` note:** Cline often does not pass `env` from MCP JSON. Keep secrets in `guardian-configs/*.json`; use `guardian-proxy.sh` for `MCP_GUARDIAN_DB_PATH`, dashboard, and metrics env vars.
+
+### Windows (native PowerShell)
+
+On **win32**, `mcp-guardian wrap` uses `guardian-proxy.ps1` at the repo root and launches it via `powershell.exe -File` so paths like `C:\Users\John Doe\mcp-guardian` work. **WSL2** remains fully supported.
+
+```powershell
+pnpm build
+mcp-guardian wrap --client cursor --policy policy-audit.yaml --apply
+```
+
+See **[docs/WINDOWS.md](docs/WINDOWS.md)** for Cursor example `mcp.json`, better-sqlite3 prebuild notes, and MSI roadmap (v2.7).
 
 ### Policy rollout (production-safe)
 
@@ -640,6 +652,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Docs:** [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Production](deploy/PRODUCTION.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Security](SECURITY.md)
+**Docs:** [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Windows](docs/WINDOWS.md) · [Production](deploy/PRODUCTION.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Security](SECURITY.md)
 
 **Built with** TypeScript, better-sqlite3, pino, prom-client, jose, commander, chalk, tiktoken, and the MCP SDK.
