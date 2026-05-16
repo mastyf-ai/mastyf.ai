@@ -3,7 +3,7 @@
  * MCP Guardian instances and aggregates them into the central PostgreSQL
  * aggregated_metrics table for real-time dashboards and historical analysis.
  */
-import { Pool } from 'pg';
+import { loadPg, type PgPoolType } from '../database/pg-loader.js';
 import { Logger } from '../utils/logger.js';
 
 export interface InstanceEndpoint {
@@ -60,17 +60,28 @@ function parseEndpoints(env: string): InstanceEndpoint[] {
 }
 
 export class TelemetryCollector {
-  private pgPool: Pool;
+  private pgPool!: PgPoolType;
+  private poolReady: Promise<void> | null = null;
   private config: TelemetryConfig;
   private scrapeTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(config?: Partial<TelemetryConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.pgPool = new Pool({
-      connectionString: this.config.databaseUrl,
-      max: 5,
-      idleTimeoutMillis: 30000,
-    });
+  }
+
+  private async ensurePool(): Promise<PgPoolType> {
+    if (!this.poolReady) {
+      this.poolReady = (async () => {
+        const { Pool } = await loadPg();
+        this.pgPool = new Pool({
+          connectionString: this.config.databaseUrl,
+          max: 5,
+          idleTimeoutMillis: 30000,
+        });
+      })();
+    }
+    await this.poolReady;
+    return this.pgPool;
   }
 
   /**
@@ -83,7 +94,8 @@ export class TelemetryCollector {
       this.config.endpoints.push(instance);
     }
     // Ensure instance exists in PG
-    const client = await this.pgPool.connect();
+    const pool = await this.ensurePool();
+    const client = await pool.connect();
     try {
       await client.query(
         `INSERT INTO guardian_instances (instance_id, instance_name, status)
@@ -98,8 +110,11 @@ export class TelemetryCollector {
   }
 
   /** Start periodic scraping */
-  start(): void {
+  async start(): Promise<void> {
     if (this.scrapeTimer) return;
+    if (this.config.endpoints.length > 0) {
+      await this.ensurePool();
+    }
     Logger.info(`[TelemetryCollector] Starting periodic scrape every ${this.config.scrapeIntervalMs}ms for ${this.config.endpoints.length} instances`);
     this.scrapeTimer = setInterval(() => {
       this.scrapeAll().catch(err => {
@@ -269,7 +284,8 @@ export class TelemetryCollector {
 
   /** Store parsed metrics in PostgreSQL */
   private async storeMetrics(metrics: ParsedMetrics): Promise<void> {
-    const client = await this.pgPool.connect();
+    const pool = await this.ensurePool();
+    const client = await pool.connect();
     try {
       await client.query(
         `INSERT INTO aggregated_metrics
@@ -307,7 +323,8 @@ export class TelemetryCollector {
   /** Mark an instance as degraded when scraping fails */
   private async markInstanceDegraded(instanceId: string): Promise<void> {
     try {
-      const client = await this.pgPool.connect();
+      const pool = await this.ensurePool();
+      const client = await pool.connect();
       try {
         await client.query(
           `UPDATE guardian_instances
@@ -335,7 +352,8 @@ export class TelemetryCollector {
   } = {}): Promise<any[]> {
     try {
       const { instanceId, fromTimestamp, toTimestamp, limit = 100 } = options;
-      const client = await this.pgPool.connect();
+      const pool = await this.ensurePool();
+      const client = await pool.connect();
       try {
         let query = 'SELECT * FROM aggregated_metrics WHERE 1=1';
         const params: any[] = [];
@@ -371,7 +389,8 @@ export class TelemetryCollector {
   /** Get list of active instances with their latest metrics */
   async getActiveInstances(): Promise<any[]> {
     try {
-      const client = await this.pgPool.connect();
+      const pool = await this.ensurePool();
+      const client = await pool.connect();
       try {
         const result = await client.query(
           `SELECT gi.*, am.total_requests, am.blocked_requests, am.total_cost_usd, am.avg_latency_ms
@@ -396,6 +415,9 @@ export class TelemetryCollector {
 
   async close(): Promise<void> {
     this.stop();
-    await this.pgPool.end();
+    if (this.poolReady) {
+      const pool = await this.ensurePool();
+      await pool.end();
+    }
   }
 }

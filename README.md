@@ -6,7 +6,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
 [![mcp-guardian MCP server](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian/badges/score.svg)](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
-[![MCP SDK](https://img.shields.io/badge/MCP_SDK-1.0-green)](https://github.com/modelcontextprotocol/typescript-sdk)
+[![MCP SDK](https://img.shields.io/badge/MCP_SDK-1.25-green)](https://github.com/modelcontextprotocol/typescript-sdk)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
@@ -236,6 +236,8 @@ cd mcp-guardian
 pnpm install && pnpm build
 ```
 
+**PostgreSQL (optional):** Default storage is SQLite. For `DB_TYPE=postgres`, install the optional driver: `pnpm add pg` (included as an optional dependency; dynamic import only when PostgreSQL is enabled).
+
 ---
 
 ## CLI Reference
@@ -294,26 +296,29 @@ Reads **`MCP_GUARDIAN_DB_PATH`** (default `~/.mcp-guardian/history.db`) in **rea
 Policies are YAML evaluated on every `tools/call`. Pipeline: payload normalization → semantic shell analysis → rules (regex, tool deny, rate limits, RBAC).
 
 ```yaml
-# default-policy.yaml (enforce)
+# default-policy.yaml (production — fail-closed)
 policy:
   mode: block
-  default_action: pass
+  default_action: block   # tools not on allowlist are blocked
   semantic_shell: true
   rules:
     - name: block-shell-injection
       action: block
-      patterns: [curl\s|wget\s, rm\s+-rf, /etc/passwd]
+      patterns: [curl\s|wget\s, rm\s+-rf, \$\([^)]+\)]
     - name: deny-dangerous-tools
       action: block
       tools:
         deny: [execute_command, bash, sh, eval]
 ```
 
-| Shipped file | `mode` | Use when |
-|--------------|--------|----------|
-| `policy-audit.yaml` | audit | First week — observe only |
-| `policy-warn.yaml` | warn | Alert without blocking |
-| `default-policy.yaml` | block | Production enforcement |
+| Shipped file | `mode` | `default_action` | Use when |
+|--------------|--------|------------------|----------|
+| `policy-demo.yaml` | audit | pass | Local try-it / onboarding only |
+| `policy-audit.yaml` | audit | pass | First week — observe only |
+| `policy-warn.yaml` | warn | pass | Alert without blocking |
+| `default-policy.yaml` | block | block | Production enforcement |
+
+For a safe first run: `mcp-guardian proxy --policy policy-demo.yaml` (or `policy-audit.yaml`). Switch to `default-policy.yaml` before production.
 
 **Hot-reload:** edit YAML while proxy runs — engine swaps atomically.
 
@@ -431,8 +436,8 @@ docker run -v $(pwd)/mcp.json:/etc/mcp-guardian/mcp.json \
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_GUARDIAN_DB_PATH` | `~/.mcp-guardian/history.db` | SQLite path |
-| `DB_TYPE` | `sqlite` | Set `postgres` for shared store |
-| `DATABASE_URL` | — | PostgreSQL connection string |
+| `DB_TYPE` | `sqlite` | Set `postgres` for shared store (requires optional `pg` package) |
+| `DATABASE_URL` | — | PostgreSQL connection string when `DB_TYPE=postgres` |
 | `REDIS_URL` | — | Required for multi-replica rate limits |
 | `GUARDIAN_STRICT_MODE` | `false` | Fail startup without Redis in K8s |
 | `GUARDIAN_TENANT_ID` | `default` | Tenant label for audit/rate limits |

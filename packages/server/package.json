@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@mcp-guardian/core": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.25.2"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

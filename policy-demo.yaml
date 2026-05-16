@@ -1,0 +1,48 @@
+# Onboarding / try-it policy — permissive default_action for local exploration only.
+# Production: use default-policy.yaml (default_action: block, fail-closed allowlist).
+version: '1.0'
+policy:
+  mode: audit
+  default_action: pass
+  semantic_shell: true
+  rules:
+    - name: block-shell-injection
+      description: Block tool calls containing shell injection or command chaining
+      action: block
+      patterns:
+        - curl\s|wget\s
+        - rm\s+-rf
+        - ;\s*\w
+        - '&&|\|\|'
+        - \$\{
+        - \$\([^)]+\)
+        - '`[^`]+`'
+        - /etc/passwd|/etc/shadow
+    - name: block-path-traversal
+      description: Block tool calls with path traversal attempts
+      action: block
+      patterns:
+        - \.\.
+    - name: deny-dangerous-tools
+      description: Explicitly deny tools that can execute arbitrary code
+      action: block
+      tools:
+        deny:
+          - execute_command
+          - bash
+          - sh
+          - eval
+          - exec
+          - system
+          - spawn
+          - fork
+          - popen
+          - source
+    - name: rate-limit-tool-calls
+      description: Limit tool calls to 120 per minute per server+tool
+      action: flag
+      maxCallsPerMinute: 120
+    - name: token-budget
+      description: Flag tool calls exceeding 50K input tokens
+      action: flag
+      maxTokens: 50000

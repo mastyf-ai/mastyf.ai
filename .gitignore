@@ -13,3 +13,5 @@ default-policy-auto-generated.yaml
 scenarios/dogfood/output/
 scenarios/dogfood/sandbox/
 :memory:
+test-report.html
+test-report*.html

@@ -104,6 +104,7 @@ policy:
         - ;\s*\w
         - '&&|\|\|'
         - \$\{
+        - \$\([^)]+\)
         - '`[^`]+`'
         - powershell|pwsh|-enc|-EncodedCommand
     - name: rate-limit-tool-calls

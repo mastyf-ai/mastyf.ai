@@ -6,7 +6,7 @@
  * cost records, and health checks are aggregated in one place.
  */
 import { HistoryDatabase } from '../database/history-db.js';
-import { Pool } from 'pg';
+import { loadPg, type PgPoolType } from '../database/pg-loader.js';
 import { Logger } from '../utils/logger.js';
 import { ProxyCallRecord } from '../types.js';
 
@@ -28,21 +28,23 @@ const DEFAULT_CONFIG: SyncConfig = {
 
 export class AuditTrailSync {
   private localDb: HistoryDatabase;
-  private pgPool: Pool;
+  private pgPool!: PgPoolType;
   private config: SyncConfig;
   private syncTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(localDb: HistoryDatabase, config?: Partial<SyncConfig>) {
     this.localDb = localDb;
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  async initialize(): Promise<void> {
+    const { Pool } = await loadPg();
     this.pgPool = new Pool({
       connectionString: this.config.databaseUrl,
       max: 5,
       idleTimeoutMillis: 30000,
     });
-  }
 
-  async initialize(): Promise<void> {
     const client = await this.pgPool.connect();
     try {
       // Run migration

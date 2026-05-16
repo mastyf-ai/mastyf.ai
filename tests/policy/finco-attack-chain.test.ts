@@ -97,6 +97,12 @@ describe('FINCO attack chain (default-policy.yaml)', () => {
     expect(d.action).toBe('block');
   });
 
+  it('blocks command substitution in read_file path (C4 evasion)', () => {
+    const d = engine.evaluate(ctx('read_file', { path: '/tmp/$(whoami)/x' }));
+    expect(d.action).toBe('block');
+    expect(d.rule).toBe('block-shell-injection');
+  });
+
   it('allows benign read under workspace when scoped', () => {
     process.env.GUARDIAN_WORKSPACE = '/home/finco/app';
     engine = new PolicyEngine(defaultPolicy);

@@ -5,7 +5,7 @@
  * Integrates with existing pino logger in src/utils/structured-logger.ts
  * to provide real-time log shipping alongside stdout/file outputs.
  */
-import { Pool } from 'pg';
+import { loadPg, type PgPoolType } from '../database/pg-loader.js';
 import { Logger } from '../utils/logger.js';
 
 export interface LogEntry {
@@ -53,7 +53,8 @@ const DEFAULT_CONFIG: LogShipperConfig = {
 };
 
 export class LogShipper {
-  private pgPool: Pool;
+  private pgPool!: PgPoolType;
+  private poolReady: Promise<void> | null = null;
   private config: LogShipperConfig;
   private buffer: LogEntry[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
@@ -61,19 +62,31 @@ export class LogShipper {
 
   constructor(config?: Partial<LogShipperConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.pgPool = new Pool({
-      connectionString: this.config.databaseUrl,
-      max: 3,
-      idleTimeoutMillis: 30000,
-    });
+  }
+
+  private async ensurePool(): Promise<PgPoolType> {
+    if (!this.poolReady) {
+      this.poolReady = (async () => {
+        const { Pool } = await loadPg();
+        this.pgPool = new Pool({
+          connectionString: this.config.databaseUrl,
+          max: 3,
+          idleTimeoutMillis: 30000,
+        });
+      })();
+    }
+    await this.poolReady;
+    return this.pgPool;
   }
 
   /** Start the log shipper */
-  start(): void {
+  async start(): Promise<void> {
     if (!this.config.enabled) {
       Logger.info('[LogShipper] Disabled — set GUARDIAN_LOG_SHIP_ENABLED=true to enable');
       return;
     }
+
+    await this.ensurePool();
 
     Logger.info(`[LogShipper] Started — shipping logs >= ${LEVEL_NAMES[this.config.minLevel] || this.config.minLevel} to PG`);
 
@@ -93,7 +106,10 @@ export class LogShipper {
     }
     // Final flush
     await this.flush();
-    await this.pgPool.end();
+    if (this.poolReady) {
+      const pool = await this.ensurePool();
+      await pool.end();
+    }
   }
 
   /**
@@ -145,7 +161,8 @@ export class LogShipper {
     const batchSize = batch.length;
     if (batchSize === 0) return;
 
-    const client = await this.pgPool.connect();
+    const pool = await this.ensurePool();
+    const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
@@ -234,7 +251,8 @@ export class LogShipper {
   } = {}): Promise<any[]> {
     try {
       const { instanceId, level, serverName, limit = 100, offset = 0 } = options;
-      const client = await this.pgPool.connect();
+      const pool = await this.ensurePool();
+      const client = await pool.connect();
       try {
         let query = 'SELECT * FROM guardian_logs WHERE 1=1';
         const params: any[] = [];
@@ -274,7 +292,8 @@ export class LogShipper {
     byServer: Record<string, number>;
   }> {
     try {
-      const client = await this.pgPool.connect();
+      const pool = await this.ensurePool();
+      const client = await pool.connect();
       try {
         const [levelResult, serverResult, totalResult] = await Promise.all([
           client.query(

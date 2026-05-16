@@ -3,13 +3,13 @@
  * Uses connection pool for production workloads.
  * Enable with: DB_TYPE=postgres DATABASE_URL=postgresql://user:pass@host:5432/db
  */
-import { Pool } from 'pg';
 import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from './database-interface.js';
 import { Logger } from '../utils/logger.js';
+import { loadPg, type PgPoolType } from './pg-loader.js';
 
 export class PostgresDatabase implements IDatabase {
-  private pool!: Pool;
+  private pool!: PgPoolType;
   private initialized = false;
   private connectionString: string;
 
@@ -20,6 +20,7 @@ export class PostgresDatabase implements IDatabase {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
+    const { Pool } = await loadPg();
     this.pool = new Pool({
       connectionString: this.connectionString,
       max: 10,
