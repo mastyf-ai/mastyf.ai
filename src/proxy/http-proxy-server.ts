@@ -60,8 +60,13 @@ export class HttpProxyServer {
 
   async start(): Promise<void> {
     this.server = createServer((req, res) => this.handleRequest(req, res));
-    this.server.listen(this.port, () => {
-      Logger.info(`[http-proxy:${this.serverName}] Listening on http://0.0.0.0:${this.port} → ${this.targetUrl}`);
+    await new Promise<void>((resolve, reject) => {
+      this.server!.once('error', reject);
+      this.server!.listen(this.port, () => {
+        this.server!.removeListener('error', reject);
+        Logger.info(`[http-proxy:${this.serverName}] Listening on http://0.0.0.0:${this.port} → ${this.targetUrl}`);
+        resolve();
+      });
     });
   }
 
@@ -105,8 +110,18 @@ export class HttpProxyServer {
     }
 
     // ── Read body ────────────────────────────────────────────
+    const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
     const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(chunk);
+    let totalSize = 0;
+    for await (const chunk of req) {
+      totalSize += chunk.length;
+      if (totalSize > MAX_BODY_SIZE) {
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Request body too large' }));
+        return;
+      }
+      chunks.push(chunk);
+    }
     const body = Buffer.concat(chunks).toString();
 
     // ── Policy evaluation (if tools/call) ────────────────────
@@ -157,6 +172,7 @@ export class HttpProxyServer {
         path: upstreamUrl.pathname + upstreamUrl.search,
         method: req.method,
         headers: { ...req.headers, host: upstreamUrl.hostname },
+        timeout: 30000, // 30s upstream timeout (mirrors SseProxyServer)
       };
 
       // Attach mTLS agent for HTTPS connections
@@ -167,10 +183,17 @@ export class HttpProxyServer {
       const proxyReq = (isHttps ? httpsReq : httpReq)(reqOpts, (upstreamRes) => {
         res.writeHead(upstreamRes.statusCode || 200, upstreamRes.headers);
         upstreamRes.pipe(res);
-        this.circuitBreaker.recordSuccess();
-        Metrics.circuitBreakerState.set({ server_name: this.serverName }, this.circuitBreaker.getState() === 'OPEN' ? 1 : 0);
-        Metrics.proxyLatencyMs.observe({ server_name: this.serverName }, Date.now() - start);
-        Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'pass', authn_success: String(authnSuccess) });
+        // Record success on 'end', not when headers arrive — avoids false success on mid-stream drops
+        upstreamRes.on('end', () => {
+          this.circuitBreaker.recordSuccess();
+          Metrics.circuitBreakerState.set({ server_name: this.serverName }, this.circuitBreaker.getState() === 'OPEN' ? 1 : 0);
+          Metrics.proxyLatencyMs.observe({ server_name: this.serverName }, Date.now() - start);
+          Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'pass', authn_success: String(authnSuccess) });
+        });
+        upstreamRes.on('error', () => {
+          this.circuitBreaker.recordFailure();
+          Metrics.circuitBreakerState.set({ server_name: this.serverName }, 1);
+        });
       });
 
       proxyReq.on('error', (err) => {
@@ -179,6 +202,16 @@ export class HttpProxyServer {
         if (!res.headersSent) {
           res.writeHead(502, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: `Upstream error: ${err.message}` }));
+        }
+      });
+
+      proxyReq.on('timeout', () => {
+        proxyReq.destroy();
+        this.circuitBreaker.recordFailure();
+        Metrics.circuitBreakerState.set({ server_name: this.serverName }, 1);
+        if (!res.headersSent) {
+          res.writeHead(504, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Upstream timeout' }));
         }
       });
 

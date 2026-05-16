@@ -63,8 +63,8 @@ export class PolicyEngine {
       if (decision) return decision;
     }
 
-    // GAP 14: Apply default_action from policy config (fail-closed by default)
-    const defaultAction = this.config.policy.default_action || 'pass';
+    // GAP 14: Apply default_action from policy config (fail-closed by default for security)
+    const defaultAction = this.config.policy.default_action || 'block';
     return { action: this.resolveAction(defaultAction), rule: 'default', reason: `No matching rule — applying default_action: ${defaultAction}` };
   }
 
@@ -143,9 +143,8 @@ export class PolicyEngine {
       }
     }
 
-    // v1.2: Semantic shell detection rule — automatic high-risk pattern block
-    // Only run semantic shell detection for rules explicitly named for it (not any rule containing "shell")
-    if (rule.name === 'block-shell-injection') {
+    // v1.2: Semantic shell detection — opt-in via rule config flag
+    if ((rule as any).enableSemanticShellAnalysis) {
       // Command substitution is always high-risk
       if (analysis.shellRisk.hasCommandSubstitution) {
         return { action: this.resolveAction('block'), rule: rule.name, reason: 'Semantic: shell command substitution detected in arguments' };
@@ -186,7 +185,14 @@ export class PolicyEngine {
       }
       if (rule.rbac.clientIds && rule.rbac.clientIds.length > 0) {
         const clientId = identity.clientId || '';
-        const matches = rule.rbac.clientIds.some(pattern => new RegExp(pattern).test(clientId));
+        const matches = rule.rbac.clientIds.some(pattern => {
+          try {
+            return new RegExp(pattern).test(clientId);
+          } catch {
+            Logger.warn(`Policy: invalid clientId regex pattern in rule '${rule.name}': ${pattern}`);
+            return false;
+          }
+        });
         if (!matches) {
           return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Client ID '${clientId}' not allowed. Allowed patterns: [${rule.rbac.clientIds.join(', ')}]` };
         }
@@ -238,17 +244,11 @@ export class PolicyEngine {
   ];
 
   private static RESPONSE_EXFILTRATION_PATTERNS: RegExp[] = [
-    // curl/wget with explicit http(s):// URLs
     /\b(?:curl|wget|fetch|XMLHttpRequest|axios)\b.*\b(?:https?:\/\/[^\s"']+)/i,
-    // curl/wget with bare hostnames (attacker.com, evil.net, etc.) — catches "curl attacker.com"
     /\b(?:curl|wget)\b\s+.*(?:\b[a-zA-Z0-9][-a-zA-Z0-9]*\.(?:com|net|org|io|dev|xyz|ru|cn|tk|ml|ga|cf|gq|pw|top|club|online|site|website|space|fun|host|press|digital|world|life|co|me|us|eu|info|biz|pro|name|tv|cc|ws|fm|to|am|ai))/i,
-    // $(...) command substitution with credential file paths — catches "$(cat ~/.ssh/id_rsa)"
     /\$\(\s*(?:cat|head|tail|less|strings)\s+.*(?:~\/\.ssh|~\/\.aws|\.env|\.config|id_rsa|id_ed25519|authorized_keys|known_hosts|credentials|secret)/i,
-    // Backtick command substitution with credential paths
     /`[^`]*(?:cat|head|tail)\s+.*(?:~\/\.ssh|id_rsa|\.env|credentials|secret)[^`]*`/,
-    // Query parameter token exfiltration patterns
     /\?token=[A-Za-z0-9\-_]{20,}/i,
-    // Generic data exfiltration instructions
     /\b(?:send|post|upload|transmit)\b.*\b(?:secret|key|token|password|credential)/i,
   ];
 
@@ -259,28 +259,25 @@ export class PolicyEngine {
   ): { clean: boolean; detections: string[] } {
     const detections: string[] = [];
 
-    // ── Prompt injection heuristics ──────────────────────
     for (const pattern of PolicyEngine.RESPONSE_INJECTION_PATTERNS) {
       if (pattern.test(responseBody)) {
         detections.push(`Prompt injection: response matches '${pattern.source}'`);
       }
     }
 
-    // ── Data exfiltration heuristics ─────────────────────
     for (const pattern of PolicyEngine.RESPONSE_EXFILTRATION_PATTERNS) {
       if (pattern.test(responseBody)) {
         detections.push(`Data exfiltration: response matches '${pattern.source}'`);
       }
     }
 
-    // ── Base64 blob detection (potential encoded payloads) ─
     const b64chunks = [...responseBody.matchAll(/[A-Za-z0-9+/]{100,}={0,2}/g)];
     for (const chunk of b64chunks) {
       try {
         const decoded = Buffer.from(chunk[0], 'base64').toString('utf-8');
         if (/\b(bash|sh|cmd|powershell|eval|exec|curl|wget)\b/.test(decoded)) {
           detections.push('Base64-encoded shell command detected in response');
-          break; // One detection per response is enough for base64 scanning
+          break;
         }
       } catch {
         // Not valid base64 — ignore

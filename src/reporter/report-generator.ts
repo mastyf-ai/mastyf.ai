@@ -142,6 +142,9 @@ export class ReportGenerator {
       md += `- Tools: ${h.toolCount}\n`;
       md += `- Context pressure: ${(h.contextPressure * 100).toFixed(0)}%\n`;
       if (h.overloadWarning) md += `⚠️ Tool overload warning (>15 tools)\n`;
+      if (h.recommendations.length > 0) {
+        for (const rec of h.recommendations) md += `- ${rec}\n`;
+      }
       md += '\n';
     }
 

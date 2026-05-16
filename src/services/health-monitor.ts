@@ -12,7 +12,7 @@ export class HealthMonitor {
   async checkServer(server: McpServerConfig): Promise<HealthReport> {
     const start = Date.now();
     const probe: McpProbeResult = await McpClient.probe(server);
-    const latency = probe.latencyMs || (Date.now() - start);
+    const latency = probe.latencyMs ?? (Date.now() - start);
 
     const historicalRate = await this.db.getRecentSuccessRate(server.name);
     const successRate = probe.success

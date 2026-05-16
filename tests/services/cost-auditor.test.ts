@@ -43,13 +43,15 @@ describe('CostAuditor', () => {
     expect(report.outputTokens).toBe(470);
     expect(report.toolBreakdown).toHaveLength(2);
 
-    const echo = report.toolBreakdown.find((t) => t.toolName === 'echo')!;
-    expect(echo.tokens).toBe(700);
-    expect(echo.calls).toBe(2);
+    const echo = report.toolBreakdown.find((t) => t.toolName === 'echo');
+    expect(echo).toBeDefined();
+    expect(echo!.tokens).toBe(700);
+    expect(echo!.calls).toBe(2);
 
-    const add = report.toolBreakdown.find((t) => t.toolName === 'add')!;
-    expect(add.tokens).toBe(100);
-    expect(add.calls).toBe(1);
+    const add = report.toolBreakdown.find((t) => t.toolName === 'add');
+    expect(add).toBeDefined();
+    expect(add!.tokens).toBe(100);
+    expect(add!.calls).toBe(1);
 
     db.close();
   });

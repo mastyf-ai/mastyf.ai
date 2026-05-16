@@ -1,7 +1,8 @@
 import { execSync } from 'child_process';
 import { Logger } from '../utils/logger.js';
 
-export const PRICING_TABLE_DATE = new Date().toISOString().split('T')[0];
+// Last reviewed date for STATIC_PRICING — update when pricing table is refreshed
+export const PRICING_TABLE_DATE = '2025-03-01';
 export const PRICING_STALENESS_DAYS = 30;
 
 export function getPricingStalenessWarning(): string | null {

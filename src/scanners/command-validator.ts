@@ -20,7 +20,7 @@ const DANGEROUS_COMMANDS = new Set([
 ]);
 
 // Tier-2: Structural shell operators (indicate chaining/injection)
-const DANGEROUS_OPERATORS = new Set(['|', '||', '&&', ';', '`', '$(', '${']);
+const DANGEROUS_OPERATORS = new Set(['|', '||', '&&', ';', '&', '`', '$(', '${', '>', '>>', '<', '<<']);
 
 // Tier-3: Suspicious path patterns
 const SUSPICIOUS_PATH_PATTERNS = [
@@ -131,7 +131,6 @@ function normaliseHomoglyphs(input: string): string {
     '\u0441': 'c',  // Cyrillic с → c
     '\u0430': 'a',  // Cyrillic а → a
     '\u0435': 'e',  // Cyrillic е → e
-    '\u006D': 'm',  // already ASCII m (belt-and-suspenders)
     '\u2212': '-',  // minus sign → hyphen
     '\u2215': '/',  // division slash → forward slash
     '\u2216': '\\', // set minus → backslash
@@ -142,10 +141,8 @@ function normaliseHomoglyphs(input: string): string {
     '\u200D': '',   // zero-width joiner (remove)
     '\uFEFF': '',   // BOM (remove)
   };
-  return input.replace(
-    /[\u0441\u0430\u0435\u006D\u2212\u2215\u2216\uFF0F\uFF3C\u200B\u200C\u200D\uFEFF]/g,
-    (ch) => MAP[ch] ?? ch
-  );
+  const pattern = new RegExp(`[${Object.keys(MAP).join('')}]`, 'g');
+  return input.replace(pattern, (ch) => MAP[ch] ?? ch);
 }
 
 /**
@@ -156,6 +153,14 @@ export class CommandValidator {
   validate(serverConfig: { command?: string; args?: string[] }): CommandWarning[] {
     const command = serverConfig.command || '';
     const args = serverConfig.args || [];
+    if (!command.trim()) {
+      return [{
+        type: 'dangerous-command' as const,
+        severity: 'critical' as const,
+        message: 'Empty command detected in MCP server configuration',
+        token: command,
+      }];
+    }
     const result = validateCommand(command, args);
     return result.threats.map(t => ({
       type: t.type,

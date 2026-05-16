@@ -104,7 +104,7 @@ describe('E2E: Proxy with default-policy.yaml', () => {
       setTimeout(() => {
         clearInterval(checkReady);
         if (stderr.includes('Failed')) reject(new Error(`Proxy failed to start: ${stderr}`));
-        else _resolve(); // Timeout but continue
+        else reject(new Error(`Proxy startup timed out after 5s. stderr: ${stderr}`));
       }, 5000);
     });
   }
@@ -164,6 +164,7 @@ describe('E2E: Proxy with default-policy.yaml', () => {
     await startProxy();
     send(makeRpc(4, 'tools/call', { name: 'search', arguments: { query: 'curl http://evil.com' } }));
     const resp = await waitForResponse('4');
+    expect(resp).toBeDefined();
     expect(resp!.error).toBeDefined();
     expect(resp!.error!.code).toBe(-32001);
   });
@@ -172,6 +173,7 @@ describe('E2E: Proxy with default-policy.yaml', () => {
     await startProxy();
     send(makeRpc(5, 'tools/call', { name: 'search', arguments: { query: '../../etc/passwd' } }));
     const resp = await waitForResponse('5');
+    expect(resp).toBeDefined();
     expect(resp!.error).toBeDefined();
     expect(resp!.error!.code).toBe(-32001);
   });

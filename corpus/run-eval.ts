@@ -35,15 +35,43 @@ async function runEval() {
 
   console.log("Running corpus evaluation...\n");
 
+  // Warn if semantic scanning is disabled and semantic tests exist
+  const semanticEnabled = !!process.env.ANTHROPIC_API_KEY;
+  const semanticTests = poisoned.filter(e => e.expectedLayer?.includes("semantic"));
+  if (!semanticEnabled && semanticTests.length > 0) {
+    console.warn(`⚠️  WARNING: ANTHROPIC_API_KEY not set - semantic scanning disabled`);
+    console.warn(`   ${semanticTests.length} semantic test(s) will likely produce false negatives:`);
+    for (const t of semanticTests) console.warn(`   - ${t.id}: ${t.label}`);
+  }
+
   for (const entry of poisoned) {
     const result = await scanTool(entry.tool, {
       skipSemantic: !process.env.ANTHROPIC_API_KEY,
     });
 
     const detected = result.status !== "clean";
-    if (detected) {
+    const severityMatches = entry.expectedStatus ? result.status === entry.expectedStatus : true;
+
+    if (detected && severityMatches) {
+      // Validate layer if specified
+      if (entry.expectedLayer && result.issues.length > 0) {
+        const detectedLayers = result.issues.map((i: any) => i.layer);
+        const hasExpectedLayer = entry.expectedLayer.some((layer: string) =>
+          detectedLayers.includes(layer)
+        );
+        if (!hasExpectedLayer) {
+          fn++;
+          failures.push(`  WRONG LAYER [${entry.id}] expected: ${entry.expectedLayer.join(", ")}, got: ${detectedLayers.join(", ")}`);
+          process.stdout.write(`  [${entry.id}] WRONG LAYER\n`);
+          continue;
+        }
+      }
       tp++;
       process.stdout.write(`  [${entry.id}] ${entry.label}\n`);
+    } else if (detected && !severityMatches) {
+      fn++;
+      failures.push(`  WRONG SEVERITY [${entry.id}] ${entry.label}  expected: ${entry.expectedStatus}, got: ${result.status}`);
+      process.stdout.write(`  [${entry.id}] WRONG SEVERITY\n`);
     } else {
       fn++;
       failures.push(`  MISSED [${entry.id}] ${entry.label}  ${entry.notes ?? ""}`);

@@ -76,8 +76,11 @@ export class OAuthValidator {
         clockTolerance: this.config.clockTolerance || 30,
       });
 
+      if (!payload.sub) {
+        return { valid: false, error: 'JWT missing required sub claim' };
+      }
       const identity: AgentIdentity = {
-        sub: payload.sub || 'unknown',
+        sub: payload.sub,
         clientId: (payload as any).client_id || (payload as any).azp,
         scopes: (payload as any).scope ? String((payload as any).scope).split(' ') : undefined,
         issuer: payload.iss || this.config.issuer,

@@ -4,7 +4,7 @@
 
 | State Type | Storage | RPO | RTO | Acceptable Loss? |
 |------------|---------|-----|-----|-----------------|
-| Audit logs (call records, scans, costs) | SQLite / PostgreSQL | ≤1s (1s batch flush) | 10min | Minimize — compliance gap |
+| Audit logs (call records, scans, costs) | SQLite / PostgreSQL | Durability: ≤1s; Backup RPO: 1h-24h | 10min | Minimize — compliance gap |
 | Policy configuration | YAML (ConfigMap) | N/A (immutable at rest) | 0s (hot-reloaded) | No — security baseline |
 | Redis sessions (OAuth cache) | Redis | 5min (TTL) | 30s | Yes — JWTs re-validated |
 | Redis rate limit counters | Redis | 1min (window reset) | 60s | Yes — counters reset each window |

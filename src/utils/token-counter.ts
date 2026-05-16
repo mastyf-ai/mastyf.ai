@@ -8,7 +8,8 @@
  * - Fallback: char-ratio estimates when API keys / litellm unavailable
  */
 import { get_encoding, type TiktokenEncoding } from 'tiktoken';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
+import { createHash } from 'crypto';
 import { Logger } from './logger.js';
 
 export interface TokenCountResult {
@@ -144,34 +145,34 @@ export class TokenCounter {
    * Returns null if litellm not available or call fails.
    */
   private litellmCount(text: string, model: string): TokenCountResult | null {
-    // Check cache first
-    const cacheKey = `${model}::${text.length}::${text.slice(0, 50)}`;
+    // Check cache first — use content hash to avoid collisions
+    const textHash = createHash('sha256').update(text).digest('hex').slice(0, 16);
+    const cacheKey = `${model}::${textHash}`;
     if (litellmCache.has(cacheKey)) {
       const cachedTokens = litellmCache.get(cacheKey)!;
       return { tokens: cachedTokens, provider: 'litellm', model, isExact: true, method: 'litellm' };
     }
 
     try {
-      // litellm can be called via Python subprocess
-      const escapedText = text
-        .replace(/\\/g, '\\\\')
-        .replace(/"/g, '\\"')
-        .replace(/\n/g, '\\n');
-
+      // Pass model and text via stdin to avoid shell injection
+      const input = JSON.stringify({ model, text });
       const pythonScript = `
 import json, sys
 try:
     import litellm
-    result = litellm.token_counter(model="${model}", text="${escapedText}")
+    data = json.loads(sys.stdin.read())
+    result = litellm.token_counter(model=data["model"], text=data["text"])
     print(json.dumps({"tokens": result}))
 except Exception as e:
     print(json.dumps({"error": str(e)}))
 `;
-      const result = execSync(`python3 -c "${pythonScript}"`, {
+      const proc = spawnSync('python3', ['-c', pythonScript], {
         encoding: 'utf-8',
         timeout: 10000,
-        stdio: ['pipe', 'pipe', 'pipe'],
+        input,
       });
+      if (proc.status !== 0 || proc.error) return null;
+      const result = proc.stdout;
 
       const data = JSON.parse(result);
       if (data?.tokens !== undefined) {

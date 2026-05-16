@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd /Users/rudraneeldas/Desktop/mcp-guardian
+cd "$(dirname "$0")/.." || exit 1
 rm -f ~/.mcp-guardian/history.db
 
 echo "=== Starting proxy ==="

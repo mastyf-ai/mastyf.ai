@@ -93,19 +93,23 @@ function redact(value: string): string {
 export function scanForSecrets(target: string, context: string): SecretFinding[] {
   const findings: SecretFinding[] = [];
   for (const rule of getRules()) {
-    const match = rule.regex.exec(target);
-    if (!match) continue;
-    const matchedValue = match[1] ?? match[0];
-    if (rule.entropy !== undefined && shannonEntropy(matchedValue) < rule.entropy) continue;
-    if (rule.exclusions?.some(fp => fp.test(target))) continue;
-    findings.push({
-      type: rule.id,
-      location: context,
-      severity: rule.severity as any,
-      redacted: redact(matchedValue),
-      context,
-      method: 'regex',
-    });
+    // Use matchAll to find all occurrences, not just the first
+    const globalRegex = new RegExp(rule.regex.source, rule.regex.flags + (rule.regex.flags.includes('g') ? '' : 'g'));
+    const matches = target.matchAll(globalRegex);
+    for (const match of matches) {
+      const matchedValue = match[1] ?? match[0];
+      if (rule.entropy !== undefined && shannonEntropy(matchedValue) < rule.entropy) continue;
+      // Test exclusions against the matched substring, not the entire target
+      if (rule.exclusions?.some(fp => fp.test(matchedValue))) continue;
+      findings.push({
+        type: rule.id,
+        location: context,
+        severity: rule.severity as any,
+        redacted: redact(matchedValue),
+        context,
+        method: 'regex',
+      });
+    }
   }
   return findings;
 }
@@ -114,7 +118,14 @@ export function scanAdjacentFiles(configDir: string): SecretFinding[] {
   const targets = [join(configDir, '.env'), join(configDir, '.env.local'), join(configDir, '.env.production'), join(configDir, 'docker-compose.yml'), join(configDir, 'docker-compose.yaml')];
   const findings: SecretFinding[] = [];
   for (const t of targets) {
-    if (existsSync(t)) findings.push(...scanForSecrets(readFileSync(t, 'utf8'), t));
+    if (existsSync(t)) {
+      try {
+        findings.push(...scanForSecrets(readFileSync(t, 'utf8'), t));
+      } catch (err) {
+        // Log and continue — don't fail entire scan if one file is unreadable
+        console.warn(`Failed to scan ${t}:`, err);
+      }
+    }
   }
   return findings;
 }

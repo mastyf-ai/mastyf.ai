@@ -47,7 +47,7 @@ export class CostAuditor {
         return this.buildReportFromRecords(server.name, records);
       }
     } catch (err: any) {
-      Logger.debug(`Cost audit: DB read failed for ${server.name}: ${err?.message}`);
+      Logger.warn(`Cost audit: DB read failed for ${server.name}: ${err?.message}`);
     }
 
     return {

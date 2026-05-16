@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ~1.0.0
+        specifier: ~1.0.4
         version: 1.0.4
       '@opentelemetry/api':
         specifier: ^1.9.1

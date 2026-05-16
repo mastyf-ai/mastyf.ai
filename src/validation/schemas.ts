@@ -6,7 +6,22 @@ export const McpServerConfigSchema = z.object({
   env: z.record(z.string()).optional(),
   url: z.string().url().optional(),
   transport: z.enum(['stdio', 'sse']).optional(),
-});
+}).refine(
+  (config) => {
+    const hasCommand = !!config.command;
+    const hasUrl = !!config.url;
+    return hasCommand !== hasUrl;
+  },
+  { message: "Must specify either 'command' (for stdio) or 'url' (for sse), but not both" }
+).refine(
+  (config) => {
+    if (!config.transport) return true;
+    if (config.transport === 'stdio') return !!config.command && !config.url;
+    if (config.transport === 'sse') return !!config.url && !config.command;
+    return true;
+  },
+  { message: "Transport type must match connection method (stdio requires command, sse requires url)" }
+);
 
 export const PolicyRuleSchema = z.object({
   name: z.string(),

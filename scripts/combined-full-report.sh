@@ -1,6 +1,6 @@
 #!/bin/bash
-cd /Users/rudraneeldas/Desktop/mcp-guardian
-OUT=/Users/rudraneeldas/Desktop/MCP_Guardian_v2.3.3_Combined_Full_Report.txt
+cd "$(dirname "$0")/.." || exit 1
+OUT="${OUT:-./MCP_Guardian_Combined_Full_Report.txt}"
 
 CFG="$HOME/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
 

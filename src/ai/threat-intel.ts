@@ -125,7 +125,8 @@ export class ThreatIntel {
             description: desc.slice(0, 500),
             remediation: 'Update affected packages to patched versions',
             publishedAt: cve.published || new Date().toISOString(),
-            signature: `CVE-${cve.id}`,
+            // cve.id is already in CVE-YYYY-NNNN format; no need to prepend
+            signature: cve.id,
           });
         }
       }
@@ -157,14 +158,33 @@ export class ThreatIntel {
         const vulns = data?.vulns || [];
 
         for (const vuln of vulns) {
+          // OSV severity[].score is a CVSS vector string, not a number.
+          // Extract numeric score from database_specific or compute from the vector.
+          const cvssSev = vuln.severity?.find((s: any) => s.type === 'CVSS_V3');
+          let numericScore: number | null = null;
+          if (cvssSev) {
+            // Try numeric score from database_specific first
+            const dbScore = parseFloat(cvssSev.database_specific?.cvss?.score);
+            if (!isNaN(dbScore)) {
+              numericScore = dbScore;
+            } else {
+              // Parse CVSS vector string for base score if present
+              const scoreMatch = cvssSev.score?.match?.(/^CVSS:3\.\d\/(?:[^/]*\/)*?AV:[NALP]\/(?:[^/]*\/)*?AC:[LH]\/.*$/);
+              // Fallback: try direct parseFloat — if it's NaN, score stays null
+              const parsed = parseFloat(cvssSev.score);
+              numericScore = isNaN(parsed) ? null : parsed;
+            }
+          }
+          const severity = numericScore !== null
+            ? (numericScore >= 9 ? 'CRITICAL' :
+               numericScore >= 7 ? 'HIGH' :
+               numericScore >= 4 ? 'MEDIUM' : 'LOW')
+            : 'MEDIUM';
+
           entries.push({
             id: `osv-${vuln.id}`,
             source: 'OSV',
-            severity: vuln.severity?.[0]?.type === 'CVSS_V3'
-              ? (parseFloat(vuln.severity[0].score) >= 9 ? 'CRITICAL' :
-                 parseFloat(vuln.severity[0].score) >= 7 ? 'HIGH' :
-                 parseFloat(vuln.severity[0].score) >= 4 ? 'MEDIUM' : 'LOW')
-              : 'MEDIUM',
+            severity,
             affectedPackage: pkg,
             affectedPattern: pkg,
             description: vuln.summary || vuln.details?.slice(0, 500) || 'OSV vulnerability',

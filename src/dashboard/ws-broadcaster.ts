@@ -16,6 +16,7 @@ export class WsBroadcaster {
   private auditSync?: AuditTrailSync;
   private telemetryCollector?: TelemetryCollector;
   private logShipper?: LogShipper;
+  private pushInterval?: ReturnType<typeof setInterval>;
 
   /** Live data providers (set externally before starting broadcast loop) */
   private dataProviders: {
@@ -93,19 +94,34 @@ export class WsBroadcaster {
     for (const client of this.clients) {
       const subs = this.clientSubscriptions.get(client);
       if (subs && subs.has(channel) && client.readyState === WebSocket.OPEN) {
-        client.send(payload);
+        try {
+          client.send(payload);
+        } catch (err) {
+          Logger.debug(`[dashboard] WS send failed: ${err instanceof Error ? err.message : 'unknown'}`);
+        }
       }
     }
   }
 
   /** Start periodic data push loop for AI, metrics, audit, and logs */
   startDataPushLoop(intervalMs: number = 5000): ReturnType<typeof setInterval> {
+    if (this.pushInterval) return this.pushInterval;
     Logger.info(`[dashboard] WS data push loop started (${intervalMs}ms)`);
-    return setInterval(() => {
+    this.pushInterval = setInterval(() => {
+      if (this.clients.size === 0) return; // Skip if no clients connected
       this.pushLiveData().catch(err => {
         Logger.warn(`[dashboard] WS push error: ${err?.message}`);
       });
     }, intervalMs);
+    return this.pushInterval;
+  }
+
+  stopDataPushLoop(): void {
+    if (this.pushInterval) {
+      clearInterval(this.pushInterval);
+      this.pushInterval = undefined;
+      Logger.info('[dashboard] WS data push loop stopped');
+    }
   }
 
   /** Push all live data to subscribed clients */

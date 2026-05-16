@@ -81,6 +81,8 @@ export class BaselineLearner {
         stddevLatencyMs: baseline.stddevLatencyMs,
         hourlyDistribution: baseline.hourlyDistribution,
         argumentKeys: baseline.argumentKeys,
+        firstSeen: baseline.firstSeen,
+        lastUpdated: baseline.lastUpdated,
       });
     } catch {
       // Silently fail — persistence is best-effort
@@ -97,7 +99,9 @@ export class BaselineLearner {
     }
 
     for (const [key, recs] of grouped) {
-      const [serverName, toolName] = key.split(':');
+      // Use first record's fields to avoid fragile split (names may contain colons)
+      const serverName = recs[0].serverName;
+      const toolName = recs[0].toolName;
       const avgT = this.mean(recs.map(r => r.totalTokens));
       const stdT = this.stddev(recs.map(r => r.totalTokens), avgT);
       const avgL = this.mean(recs.map(r => r.durationMs));
@@ -128,6 +132,11 @@ export class BaselineLearner {
         firstSeen: existing?.firstSeen || firstSeen,
         lastUpdated,
       });
+    }
+
+    // Persist updated baselines to shared store
+    for (const [, baseline] of this.baselines) {
+      void this.persistToShared(baseline);
     }
 
     Logger.info(`[BaselineLearner] Learned baselines for ${this.baselines.size} tool/servers`);
@@ -190,7 +199,15 @@ export class BaselineLearner {
       }
 
       // Rate limit suggestion for high-frequency tools
-      const callRate = recs.length / Math.max(1, (Date.now() - new Date(baseline.firstSeen).getTime()) / 60000);
+      // Compute rate from actual record span, not baseline.firstSeen (which may be days/weeks old)
+      const recTimestamps = recs
+        .map(r => new Date(r.timestamp).getTime())
+        .filter(t => !isNaN(t))
+        .sort((a, b) => a - b);
+      const timeSpanMinutes = recTimestamps.length > 1
+        ? (recTimestamps[recTimestamps.length - 1] - recTimestamps[0]) / 60000
+        : 1;
+      const callRate = recs.length / Math.max(1, timeSpanMinutes);
       if (callRate > 60) {
         suggestions.push({
           rule: {

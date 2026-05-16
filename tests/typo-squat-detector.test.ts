@@ -47,9 +47,8 @@ describe('TypoSquatDetector', () => {
     expect(results).toHaveLength(0);
   });
 
-  it('detects distance-2 typo', () => {
-    // '@modelcontextprotocol/server-fileystem' — missing 's' + extra 'e'?
-    // Actually 'fileystem' vs 'filesystem' = 1 deletion ('s')
+  it('detects distance-1 typo (missing character)', () => {
+    // 'fileystem' vs 'filesystem' = 1 deletion ('s')
     const results = detector.detect('@modelcontextprotocol/server-fileystem');
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].distance).toBe(1);

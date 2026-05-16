@@ -17,9 +17,9 @@ export async function initTracing(): Promise<void> {
     // Use OTLP HTTP exporter instead of deprecated gRPC
     const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
 
-    const exporter = new OTLPTraceExporter({
-      url: `${process.env['OTEL_EXPORTER_OTLP_ENDPOINT']}/v1/traces`,
-    }) as any;
+    const endpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT']!;
+    const url = endpoint.endsWith('/v1/traces') ? endpoint : `${endpoint}/v1/traces`;
+    const exporter = new OTLPTraceExporter({ url }) as any;
 
     const instruments = getNodeAutoInstrumentations({
       '@opentelemetry/instrumentation-http': { enabled: true },

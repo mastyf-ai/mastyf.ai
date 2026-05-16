@@ -197,8 +197,9 @@ export class DashboardAuth {
     }
 
     if (
-      body.username === expectedUsername &&
+      body.username &&
       body.password &&
+      this.timingSafeCompare(body.username, expectedUsername) &&
       this.timingSafeCompare(body.password, expectedPassword)
     ) {
       const token = this.createSessionToken();
@@ -310,10 +311,15 @@ ${errorHtml}
    * Timing-safe string comparison to prevent timing attacks on API keys.
    */
   private timingSafeCompare(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
     const bufA = Buffer.from(a, 'utf-8');
     const bufB = Buffer.from(b, 'utf-8');
-    return timingSafeEqual(bufA, bufB);
+    // Pad to same length to avoid timing leak from length difference
+    const maxLen = Math.max(bufA.length, bufB.length);
+    const paddedA = Buffer.alloc(maxLen, 0);
+    const paddedB = Buffer.alloc(maxLen, 0);
+    bufA.copy(paddedA);
+    bufB.copy(paddedB);
+    return timingSafeEqual(paddedA, paddedB);
   }
 
   /**

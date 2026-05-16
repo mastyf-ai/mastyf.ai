@@ -96,6 +96,8 @@ export class ComprehensiveReporter {
     }));
 
     const totalCost = costReports.reduce((s, c) => s + c.cost, 0);
+    // Assumes snapshot covers one day; scale to 30-day monthly projection.
+    // If the snapshot window differs, adjust the multiplier accordingly.
     const projectedMonthly = totalCost * 30;
     const budgetAlerts: string[] = [];
 

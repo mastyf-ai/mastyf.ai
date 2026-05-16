@@ -20,12 +20,39 @@ export interface DPoPProof {
 }
 
 export class DPoPValidator {
-  private usedNonces: Set<string> = new Set();
+  /** nonce → timestamp (ms) for TTL-based expiry */
+  private usedNonces: Map<string, number> = new Map();
   private readonly nonceTtlMs: number;
   private lastCleanup: number = Date.now();
 
   constructor(nonceTtlMs: number = 10 * 60 * 1000) {
     this.nonceTtlMs = nonceTtlMs;
+  }
+
+  /** Derive algorithm from JWK */
+  private inferAlgorithm(jwk: jose.JWK): string {
+    if (jwk.alg) return jwk.alg;
+    if (jwk.kty === 'EC') {
+      return jwk.crv === 'P-384' ? 'ES384' : 'ES256';
+    } else if (jwk.kty === 'RSA') {
+      return 'RS256';
+    } else if (jwk.kty === 'OKP') {
+      return 'EdDSA';
+    }
+    return 'ES256';
+  }
+
+  /** Clean expired nonces BEFORE validation */
+  private cleanupExpiredNonces(): void {
+    const now = Date.now();
+    if (now - this.lastCleanup < 60000) return;
+    const expiry = now - this.nonceTtlMs;
+    for (const [nonce, timestamp] of this.usedNonces) {
+      if (timestamp < expiry) {
+        this.usedNonces.delete(nonce);
+      }
+    }
+    this.lastCleanup = now;
   }
 
   /**
@@ -35,7 +62,8 @@ export class DPoPValidator {
   async validate(proofToken: string, jwk: jose.JWK, httpMethod: string, httpUri: string, accessToken?: string): Promise<{ valid: boolean; error?: string }> {
     try {
       // Verify the proof JWT is signed by the client's private key matching the JWK
-      const publicKey = await jose.importJWK(jwk, 'ES256');
+      const alg = this.inferAlgorithm(jwk);
+      const publicKey = await jose.importJWK(jwk, alg);
       const { payload } = await jose.jwtVerify(proofToken, publicKey, {
         algorithms: ['ES256', 'RS256', 'EdDSA'],
         clockTolerance: 10,
@@ -62,12 +90,15 @@ export class DPoPValidator {
         return { valid: false, error: 'DPoP: proof from the future' };
       }
 
+      // Cleanup old nonces BEFORE validation (not after)
+      this.cleanupExpiredNonces();
+
       // Validate nonce (jti) for replay detection
       if (this.usedNonces.has(proof.jti)) {
         Logger.warn(`[dpop] Replay detected: jti ${proof.jti}`);
         return { valid: false, error: 'DPoP: nonce already used (replay detected)' };
       }
-      this.usedNonces.add(proof.jti);
+      this.usedNonces.set(proof.jti, Date.now());
 
       // Validate ath (access token hash) if access token provided
       if (accessToken && proof.ath) {
@@ -75,12 +106,6 @@ export class DPoPValidator {
         if (proof.ath !== expectedAth) {
           return { valid: false, error: 'DPoP: ath mismatch (access token hash does not match)' };
         }
-      }
-
-      // Periodic cleanup of old nonces
-      if (Date.now() - this.lastCleanup > 60000) {
-        this.usedNonces.clear();
-        this.lastCleanup = Date.now();
       }
 
       return { valid: true };

@@ -107,6 +107,9 @@ async function benchmarkBaseline(): Promise<number[]> {
   }
   await new Promise(r => setTimeout(r, 500));
 
+  // Discard warmup latencies before measurement
+  latencies.length = 0;
+
   // Measurement
   for (let i = WARMUP + 1; i <= WARMUP + ITERATIONS; i++) {
     pending.set(String(i), Date.now());
@@ -149,12 +152,19 @@ async function benchmarkProxy(policyConfig?: PolicyConfig): Promise<number[]> {
   // Wait for proxy startup
   await new Promise(r => setTimeout(r, 300));
 
+  // Initialize proxy (matching baseline)
+  proxy.handleClientInput(createInitializeCall(0).trim());
+  await new Promise(r => setTimeout(r, 200));
+
   // Warmup through proxy
   for (let i = 1; i <= WARMUP; i++) {
     pending.set(String(i), Date.now());
     proxy.handleClientInput(createEchoCall(i).trim());
   }
   await new Promise(r => setTimeout(r, 500));
+
+  // Discard warmup latencies before measurement
+  latencies.length = 0;
 
   // Measurement through proxy
   for (let i = WARMUP + 1; i <= WARMUP + ITERATIONS; i++) {

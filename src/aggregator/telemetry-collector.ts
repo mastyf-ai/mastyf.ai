@@ -139,7 +139,9 @@ export class TelemetryCollector {
   private async scrapeInstance(endpoint: InstanceEndpoint): Promise<void> {
     let metricsText: string;
     try {
-      const response = await fetch(endpoint.metricsUrl + '/metrics', {
+      const baseUrl = endpoint.metricsUrl.replace(/\/+$/, ''); // strip trailing slashes
+      const scrapeUrl = baseUrl.endsWith('/metrics') ? baseUrl : `${baseUrl}/metrics`;
+      const response = await fetch(scrapeUrl, {
         signal: AbortSignal.timeout(5000),
       });
       if (!response.ok) {
@@ -189,13 +191,21 @@ export class TelemetryCollector {
       // Skip comments and blank lines
       if (line.startsWith('#') || !line.trim()) continue;
 
-      // Prometheus format: metric_name{labels} value timestamp
-      const spaceIdx = line.lastIndexOf(' ');
-      if (spaceIdx === -1) continue;
-      const value = parseFloat(line.slice(spaceIdx + 1));
+      // Prometheus format: metric_name{labels} value [optional timestamp]
+      // Split on whitespace and extract metric + value (ignore optional timestamp)
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 2) continue;
+
+      // Try last token as value; if NaN, try second-to-last (timestamp present)
+      let value = parseFloat(parts[parts.length - 1]);
+      let valueTokenIdx = parts.length - 1;
+      if (isNaN(value) && parts.length >= 3) {
+        value = parseFloat(parts[parts.length - 2]);
+        valueTokenIdx = parts.length - 2;
+      }
       if (isNaN(value)) continue;
 
-      const metricPart = line.slice(0, spaceIdx);
+      const metricPart = parts.slice(0, valueTokenIdx).join(' ');
       const bracketIdx = metricPart.indexOf('{');
       const metricName = bracketIdx >= 0 ? metricPart.slice(0, bracketIdx) : metricPart;
 
@@ -232,11 +242,21 @@ export class TelemetryCollector {
           else if (metricPart.includes('quantile="0.99"')) metrics.p99LatencyMs = value;
           break;
         // Request duration
+        case 'mcp_guardian_request_duration_seconds_count':
+          (metrics as any)._requestCount = ((metrics as any)._requestCount || 0) + value;
+          break;
         case 'mcp_guardian_request_duration_seconds_sum':
-          // Accumulate for avg calculation
-          metrics.avgLatencyMs += value * 1000; // Convert seconds → ms
+          (metrics as any)._requestDurationSumMs = ((metrics as any)._requestDurationSumMs || 0) + value * 1000;
+          break;
+        case 'mcp_guardian_token_usage_total':
+          metrics.tokenUsageTotal += value;
           break;
       }
+    }
+
+    // Compute average latency from sum / count
+    if ((metrics as any)._requestCount > 0) {
+      metrics.avgLatencyMs = (metrics as any)._requestDurationSumMs / (metrics as any)._requestCount;
     }
 
     // Derive passed/flagged: passed = total - blocked - flagged (flagged not directly tracked in counters)

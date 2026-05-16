@@ -99,7 +99,7 @@ export class TypoSquatDetector {
 
       if (dist === 1) {
         results.push({ suspiciousName: name, similarityTo: trusted, distance: dist });
-      } else if (dist === 2 && name.length > 8) {
+      } else if (dist === 2 && cleaned.length > 8) {
         results.push({ suspiciousName: name, similarityTo: trusted, distance: dist });
       }
     }

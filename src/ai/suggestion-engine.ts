@@ -168,7 +168,8 @@ export class SuggestionEngine {
     allSuggestions.sort((a, b) => b.confidence - a.confidence);
 
     // ── 6. Auto-apply high-confidence suggestions ────────
-    const threshold = this.selfImprovement.getAdaptiveThreshold();
+    // Use config.autoApplyThreshold as fallback when adaptive threshold is not yet tuned
+    const threshold = this.selfImprovement.getAdaptiveThreshold() || this.config.autoApplyThreshold;
     const autoApply = allSuggestions.filter(s => s.confidence >= threshold);
     if (autoApply.length > 0) {
       this.autoApplyRules(autoApply);
@@ -288,8 +289,12 @@ export class SuggestionEngine {
           lines.push(`    action: ${s.rule.action}`);
           if (s.rule.maxTokens) lines.push(`    maxTokens: ${s.rule.maxTokens}`);
           if (s.rule.maxCallsPerMinute) lines.push(`    maxCallsPerMinute: ${s.rule.maxCallsPerMinute}`);
-          if (s.rule.tools?.deny?.length) lines.push(`    tools:\n      deny: [${s.rule.tools.deny.join(', ')}]`);
-          if (s.rule.tools?.allow?.length) lines.push(`    tools:\n      allow: [${s.rule.tools.allow.join(', ')}]`);
+          if (s.rule.tools?.deny?.length || s.rule.tools?.allow?.length) {
+            const toolLines: string[] = ['    tools:'];
+            if (s.rule.tools?.deny?.length) toolLines.push(`      deny: [${s.rule.tools.deny.join(', ')}]`);
+            if (s.rule.tools?.allow?.length) toolLines.push(`      allow: [${s.rule.tools.allow.join(', ')}]`);
+            lines.push(toolLines.join('\n'));
+          }
           return lines.join('\n');
         })
         .join('\n');
@@ -353,7 +358,7 @@ export async function initializeAiEngine(
   );
   engine.setServers(servers);
 
-  // Start periodic analysis (every 60s for real-time updates)
+  // Start periodic analysis (default: every 15 minutes, controlled by DEFAULT_CONFIG.analysisIntervalMs)
   engine.startPeriodicAnalysis();
 
   // Start live threat feed polling

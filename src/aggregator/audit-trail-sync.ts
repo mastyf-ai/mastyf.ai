@@ -31,10 +31,6 @@ export class AuditTrailSync {
   private pgPool: Pool;
   private config: SyncConfig;
   private syncTimer: ReturnType<typeof setInterval> | null = null;
-  private lastSyncedId = 0;
-  private lastSecurityId = 0;
-  private lastCostId = 0;
-  private lastHealthId = 0;
 
   constructor(localDb: HistoryDatabase, config?: Partial<SyncConfig>) {
     this.localDb = localDb;
@@ -124,11 +120,14 @@ export class AuditTrailSync {
         try {
           await client.query('BEGIN');
           for (const record of records) {
+            // ProxyCallRecord lacks action/severity fields — call records are
+            // informational and default to 'pass'/'info'; policy decisions use
+            // recordPolicyDecision() which stores real action/severity values.
             await client.query(
               `INSERT INTO unified_audit_trail
                (instance_id, server_name, tool_name, action, request_tokens, response_tokens, total_tokens, duration_ms, severity)
                VALUES ($1, $2, $3, 'pass', $4, $5, $6, $7, 'info')
-               ON CONFLICT DO NOTHING`,
+               ON CONFLICT (id) DO NOTHING`,
               [
                 this.config.instanceId,
                 record.serverName,
@@ -170,7 +169,8 @@ export class AuditTrailSync {
           await client.query(
             `INSERT INTO unified_security_scans
              (instance_id, server_name, score, cve_count, details)
-             VALUES ($1, $2, $3, $4, $5)`,
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (id) DO NOTHING`,
             [
               this.config.instanceId,
               serverName,
@@ -209,7 +209,8 @@ export class AuditTrailSync {
           await client.query(
             `INSERT INTO unified_cost_records
              (instance_id, server_name, tokens_used, input_tokens, output_tokens, cost_usd)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (id) DO NOTHING`,
             [
               this.config.instanceId,
               serverName,
@@ -238,17 +239,21 @@ export class AuditTrailSync {
 
         const client = await this.pgPool.connect();
         try {
+          // latency_ms and tool_count are placeholders (0) — HistoryDatabase
+          // doesn't currently persist latency/tool-count per server; these
+          // fields are populated when real metrics become available.
           await client.query(
             `INSERT INTO unified_health_checks
              (instance_id, server_name, latency_ms, success, success_rate, tool_count)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (id) DO NOTHING`,
             [
               this.config.instanceId,
               serverName,
-              0, // latency from latest scan
+              0, // latency_ms: placeholder (no per-server latency data available)
               successRate > 0.5,
               successRate,
-              0, // tool count from scan
+              0, // tool_count: placeholder (no per-server tool count available)
             ]
           );
         } finally {

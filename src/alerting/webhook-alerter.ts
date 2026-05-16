@@ -27,13 +27,12 @@ export class WebhookAlerter {
       .filter((cfg) => severityRank[payload.severity] >= (severityRank[cfg.minSeverity] ?? 0))
       .map((cfg) => this.send(cfg, payload));
 
-    Promise.allSettled(promises).then((results) => {
-      for (const r of results) {
-        if (r.status === 'rejected') {
-          Logger.warn(`Alert webhook delivery failed: ${r.reason}`);
-        }
+    const results = await Promise.allSettled(promises);
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        Logger.warn(`Alert webhook delivery failed: ${r.reason}`);
       }
-    });
+    }
   }
 
   private async send(cfg: WebhookConfig, payload: AlertPayload): Promise<void> {
@@ -54,13 +53,14 @@ export class WebhookAlerter {
         }],
       });
     } else if (cfg.type === 'pagerduty') {
-      headers['Authorization'] = `Token token=${cfg.token}`;
       body = JSON.stringify({
         routing_key:  cfg.token,
         event_action: 'trigger',
         payload: {
           summary:   `MCP Guardian: ${payload.title}`,
-          severity:  payload.severity === 'medium' ? 'warning' : payload.severity,
+          // Map to PagerDuty accepted severity values: critical, error, warning, info
+          severity:  payload.severity === 'critical' ? 'critical' :
+                     payload.severity === 'high' || payload.severity === 'medium' ? 'warning' : 'info',
           timestamp: payload.timestamp,
           custom_details: payload,
         },
@@ -80,7 +80,13 @@ export class WebhookAlerter {
 // Global singleton — configured via env vars
 function createAlerterFromEnv(): WebhookAlerter | null {
   const configs: WebhookConfig[] = [];
-  const minSev = (process.env['ALERT_MIN_SEVERITY'] || 'high') as 'critical' | 'high' | 'medium';
+  const validSeverities = ['critical', 'high', 'medium'] as const;
+  const envSev = process.env['ALERT_MIN_SEVERITY'] || 'high';
+  const minSev: 'critical' | 'high' | 'medium' =
+    validSeverities.includes(envSev as any) ? (envSev as 'critical' | 'high' | 'medium') : 'high';
+  if (!validSeverities.includes(envSev as any)) {
+    Logger.warn(`[WebhookAlerter] Invalid ALERT_MIN_SEVERITY: ${envSev}, defaulting to 'high'`);
+  }
 
   if (process.env['ALERT_SLACK_WEBHOOK']) {
     configs.push({ url: process.env['ALERT_SLACK_WEBHOOK'], type: 'slack', minSeverity: minSev });

@@ -43,10 +43,21 @@ export async function startDashboardServer(
 
   const dashboardHtml = readFileSync(resolve(__dirname, '..', '..', 'deploy', 'dashboard.html'), 'utf-8');
 
+  const MAX_BODY_SIZE = 1024 * 1024; // 1 MB
+
   async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       let data = '';
-      req.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+      let size = 0;
+      req.on('data', (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > MAX_BODY_SIZE) {
+          req.destroy();
+          reject(new Error('Request body too large'));
+          return;
+        }
+        data += chunk.toString();
+      });
       req.on('end', () => {
         try { resolve(data ? JSON.parse(data) : {}); } catch { resolve({}); }
       });
@@ -141,9 +152,10 @@ export async function startDashboardServer(
         if (result.success) {
           loginRateLimiter.delete(ip);
           if (req.headers['content-type']?.includes('form')) {
-            res.writeHead(302, { 'Location': `/?api_key=${encodeURIComponent(result.token!)}`, 'Set-Cookie': `mcp_guardian_session=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600` });
+            // Set session cookie only; do not expose token in URL
+            res.writeHead(302, { 'Location': '/', 'Set-Cookie': `mcp_guardian_session=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600` });
             res.end();
-          } else { writeJson(res, 200, { success: true, token: result.token }); }
+          } else { writeJson(res, 200, { success: true }); }
         } else { writeJson(res, 401, { success: false, error: result.error }); }
         return;
       }
@@ -321,8 +333,13 @@ export async function startDashboardServer(
     } catch (err: any) { setCors(); writeJson(res, 500, { error: err?.message || 'Internal error' }); }
   });
 
-  server.listen(port, () => {
-    Logger.info(`[dashboard] Dashboard available at http://localhost:${port}${authEnabled ? ' (auth enabled)' : ''}`);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, () => {
+      server.removeListener('error', reject);
+      Logger.info(`[dashboard] Dashboard available at http://localhost:${port}${authEnabled ? ' (auth enabled)' : ''}`);
+      resolve();
+    });
   });
 
   return { auth, server };

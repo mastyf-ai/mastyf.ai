@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /Users/rudraneeldas/Desktop/mcp-guardian
+cd "$(dirname "$0")/.." || exit 1
 
 # Use /private/tmp (not /tmp) to avoid macOS symlink issues with proper-lockfile
 DB_DIR="/private/tmp"

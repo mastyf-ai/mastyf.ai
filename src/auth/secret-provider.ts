@@ -76,7 +76,9 @@ export class HashiCorpVaultProvider implements SecretProvider {
       const res = await fetch(`${this.vaultAddr}/v1/sys/health`, {
         signal: AbortSignal.timeout(3_000),
       });
-      return res.ok;
+      // Vault returns 200 (active), 429 (standby), 472/473 (DR/perf standby)
+      // All indicate a healthy, unsealed node
+      return res.ok || [429, 472, 473].includes(res.status);
     } catch {
       return false;
     }

@@ -264,5 +264,5 @@ ls -lh /data/mcp-guardian/history.db
 | **Block accuracy** | 100% (no false negatives) | `tool_blocked` events vs known-bad payloads |
 | **False positive rate** | < 0.1% | Flagged-then-passed ratio per server |
 | **Auth availability** | 99.95% | OIDC discovery success rate |
-| **Dashboard availability** | 99.9% | HTTP 200/401 rate (401 = auth success, just unauthenticated) |
+| **Dashboard availability** | 99.9% | HTTP 200/401 rate (401 = auth system working, rejecting unauthenticated) |
 | **Audit completeness** | 100% | Every `tools/call` has a corresponding `policy_decision` event |

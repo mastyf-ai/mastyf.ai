@@ -140,12 +140,19 @@ export class LogShipper {
   async flush(): Promise<void> {
     if (this.buffer.length === 0) return;
 
-    const batch = this.buffer.splice(0, this.buffer.length);
-    if (batch.length === 0) return;
+    // Take a shallow copy — only remove from buffer after successful commit
+    const batch = this.buffer.slice(0, this.buffer.length);
+    const batchSize = batch.length;
+    if (batchSize === 0) return;
 
     const client = await this.pgPool.connect();
     try {
       await client.query('BEGIN');
+
+      // Build multi-value INSERT for efficiency
+      const placeholders: string[] = [];
+      const values: unknown[] = [];
+      let paramIdx = 1;
 
       for (const entry of batch) {
         const levelName = LEVEL_NAMES[entry.level] || 'info';
@@ -168,30 +175,37 @@ export class LogShipper {
           }
         }
 
-        await client.query(
-          `INSERT INTO guardian_logs
-           (instance_id, timestamp, level, level_name, message, module,
-            server_name, tool_name, request_id, error, stack, metadata)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-          [
-            this.config.instanceId,
-            new Date(entry.time || Date.now()).toISOString(),
-            entry.level,
-            levelName,
-            entry.msg,
-            module,
-            serverName,
-            toolName,
-            requestId,
-            errorMsg,
-            errorStack,
-            JSON.stringify(metadata),
-          ]
+        placeholders.push(
+          `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`
+        );
+        values.push(
+          this.config.instanceId,
+          new Date(entry.time || Date.now()).toISOString(),
+          entry.level,
+          levelName,
+          entry.msg,
+          module,
+          serverName,
+          toolName,
+          requestId,
+          errorMsg,
+          errorStack,
+          JSON.stringify(metadata),
         );
       }
 
+      await client.query(
+        `INSERT INTO guardian_logs
+         (instance_id, timestamp, level, level_name, message, module,
+          server_name, tool_name, request_id, error, stack, metadata)
+         VALUES ${placeholders.join(', ')}`,
+        values
+      );
+
       await client.query('COMMIT');
-      Logger.debug(`[LogShipper] Shipped ${batch.length} logs`);
+      // Only remove successfully shipped entries from buffer
+      this.buffer.splice(0, batchSize);
+      Logger.debug(`[LogShipper] Shipped ${batchSize} logs`);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;

@@ -14,7 +14,7 @@ async function safeRun<T>(
     return await fn();
   } catch (err) {
     Logger.warn(`[Scanner:${name}] Failed: ${err instanceof Error ? err.message : String(err)}`);
-    throw err; // Let Promise.all handle — but this way we can log which scanner failed
+    throw err; // Re-throw so Promise.allSettled captures the rejection; logging identifies which scanner failed
   }
 }
 

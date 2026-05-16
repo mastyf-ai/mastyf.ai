@@ -51,7 +51,7 @@ export class CostOptimizer {
     for (const [, group] of grouped) {
       const inputTokens = group.records.reduce((s, r) => s + r.requestTokens, 0);
       const outputTokens = group.records.reduce((s, r) => s + r.responseTokens, 0);
-      const cost = inputTokens * inputPricePerM + outputTokens * outputPricePerM;
+      const cost = (inputTokens * inputPricePerM + outputTokens * outputPricePerM) / 1_000_000;
       totalCost += cost;
 
       // Token trend detection (compare first half vs second half)
@@ -89,20 +89,23 @@ export class CostOptimizer {
   /** Detect burst patterns — tools with high variance in call frequency */
   async detectBurstPatterns(records: ProxyCallRecord[]): Promise<Map<string, number>> {
     const bursty = new Map<string, number>();
-    const timeBuckets = new Map<string, number[]>();
+    const callsPerBucket = new Map<string, Map<number, number>>();
 
     for (const r of records) {
       const key = `${r.serverName}:${r.toolName}`;
-      if (!timeBuckets.has(key)) timeBuckets.set(key, []);
+      if (!callsPerBucket.has(key)) callsPerBucket.set(key, new Map());
       // Bucket by 1-minute intervals and count calls per bucket
       const minuteBucket = Math.floor(new Date(r.timestamp).getTime() / 60000);
-      const existing = timeBuckets.get(key)!;
-      // Count calls in this bucket
-      const count = existing.filter(v => v === minuteBucket).length;
-      if (count > 0) {
-        bursty.set(key, count);
+      const buckets = callsPerBucket.get(key)!;
+      buckets.set(minuteBucket, (buckets.get(minuteBucket) || 0) + 1);
+    }
+
+    // Find peak call count for each tool
+    for (const [key, buckets] of callsPerBucket) {
+      const peakCount = Math.max(...buckets.values());
+      if (peakCount > 1) {
+        bursty.set(key, peakCount);
       }
-      existing.push(minuteBucket);
     }
 
     return bursty;
@@ -157,6 +160,7 @@ export class CostOptimizer {
             name: `cost-budget-${p.toolName}`,
             description: `Auto-generated: ${p.toolName} exceeds 50% of daily budget ($${this.budgetCap.toFixed(2)})`,
             action: 'block' as PolicyAction,
+            // Budget cap is a daily limit; compute per-minute rate from 24h window
             maxCallsPerMinute: Math.max(Math.round(p.callCount * 0.3 / (24 * 60)), 1),
           },
           confidence: Math.min(p.totalCost / this.budgetCap, 0.95),

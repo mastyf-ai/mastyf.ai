@@ -1,6 +1,3 @@
-import type { SecurityRecord } from '../database/history-db.js';
-import type { CostRecord } from '../database/history-db.js';
-import type { HealthRecord } from '../database/history-db.js';
 import type { SecurityReport, CostReport, HealthReport, McpServerConfig } from '../types.js';
 import type { PolicyAction } from '../policy/policy-types.js';
 

@@ -45,19 +45,20 @@ function createInitialize(id: number): string {
   }) + '\n';
 }
 
-describe('E2E: Real MCP Server with Proxy', () => {
-  let db: HistoryDatabase;
-  let policyEngine: PolicyEngine;
-  let proxy: McpProxyServer;
-  let responses: Map<string, any> = new Map();
+  describe('E2E: Real MCP Server with Proxy', () => {
+    let db: HistoryDatabase;
+    let policyEngine: PolicyEngine;
+    let proxy: McpProxyServer;
+    let responses: Map<string, any> = new Map();
+    let origWrite: typeof process.stdout.write;
 
-  beforeAll(async () => {
-    db = new HistoryDatabase(':memory:');
-    policyEngine = new PolicyEngine(BLOCKING_POLICY);
-    proxy = new McpProxyServer('node', [ECHO_SERVER], {}, db, 'integration-echo', policyEngine);
+    beforeAll(async () => {
+      db = new HistoryDatabase(':memory:');
+      policyEngine = new PolicyEngine(BLOCKING_POLICY);
+      proxy = new McpProxyServer('node', [ECHO_SERVER], {}, db, 'integration-echo', policyEngine);
 
-    // Capture proxy responses
-    const origWrite = process.stdout.write.bind(process.stdout);
+      // Capture proxy responses
+      origWrite = process.stdout.write.bind(process.stdout);
     process.stdout.write = function(chunk: any, ...args: any[]): boolean {
       try {
         const msg = JSON.parse(String(chunk));
@@ -69,10 +70,11 @@ describe('E2E: Real MCP Server with Proxy', () => {
     await new Promise(r => setTimeout(r, 300));
   });
 
-  afterAll(() => {
-    proxy.kill();
-    db.close();
-  });
+    afterAll(() => {
+      process.stdout.write = origWrite;
+      proxy.kill();
+      db.close();
+    });
 
   it('should pass a safe tools/call', async () => {
     proxy.handleClientInput(createCall(1, 'tools/call', 'search', { query: 'hello' }).trim());

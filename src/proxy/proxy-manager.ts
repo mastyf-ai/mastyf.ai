@@ -46,8 +46,8 @@ export class ProxyManager {
   }
 
   async startAll(configs: McpServerConfig[]): Promise<void> {
-    const sseServers = configs.filter((c) => c.transport === 'sse' || (c.url && !c.command));
-    const stdioServers = configs.filter((c) => c.command);
+const stdioServers = configs.filter((c) => c.command);
+const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' || c.url));
 
     let stdioStarted = 0;
     let sseStarted = 0;

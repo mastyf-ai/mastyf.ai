@@ -47,7 +47,7 @@ await db.addCostRecord(serverName, 250000, 0.035);
 await db.addHealthCheck(serverName, 45, true, 3);
 
 // Seed AI learning state
-const aiStatePath = '/Users/rudraneeldas/.mcp-guardian/.ai-learning.json';
+const aiStatePath = path.join(require('os').homedir(), '.mcp-guardian', '.ai-learning.json');
 try {
   mkdirSync(dirname(aiStatePath), { recursive: true });
 } catch {}
@@ -66,7 +66,7 @@ writeFileSync(aiStatePath, JSON.stringify({
 console.log('AI learning state seeded');
 
 // Seed threat state with realistic data
-const threatPath = '/Users/rudraneeldas/.mcp-guardian/.threat-state.json';
+const threatPath = path.join(require('os').homedir(), '.mcp-guardian', '.threat-state.json');
 try { mkdirSync(dirname(threatPath), { recursive: true }); } catch {}
 writeFileSync(threatPath, JSON.stringify({
   ids: [

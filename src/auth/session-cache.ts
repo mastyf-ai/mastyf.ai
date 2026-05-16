@@ -21,15 +21,27 @@ export interface SessionEntry {
 
 export class SessionCache {
   private sessions: Map<string, SessionEntry> = new Map();
-  private usedNonces: Set<string> = new Set();
+  /** nonce → timestamp (ms) for TTL-based expiry */
+  private usedNonces: Map<string, number> = new Map();
   protected readonly sessionTtlMs: number;
   protected readonly nonceTtlMs: number;
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(sessionTtlMs: number = 5 * 60 * 1000, nonceTtlMs: number = 10 * 60 * 1000) {
     this.sessionTtlMs = sessionTtlMs;
     this.nonceTtlMs = nonceTtlMs;
     // Cleanup expired entries every 60s
-    setInterval(() => this.cleanup(), 60000);
+    this.cleanupInterval = setInterval(() => this.cleanup(), 60000);
+  }
+
+  /** Dispose of the cleanup timer and clear all state */
+  dispose(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    this.sessions.clear();
+    this.usedNonces.clear();
   }
 
   /**
@@ -42,11 +54,12 @@ export class SessionCache {
   createSession(identity: AgentIdentity, jwtNonce?: string): SessionEntry {
     const nonce = jwtNonce || `${identity.sub}:${Date.now()}:${randomUUID()}`;
 
-    // Prevent nonce replay
+    // Prevent nonce replay — reject immediately
     if (this.usedNonces.has(nonce)) {
       Logger.warn(`[session-cache] Replay detected: nonce ${nonce}`);
+      throw new Error('Nonce replay detected');
     }
-    this.usedNonces.add(nonce);
+    this.usedNonces.set(nonce, Date.now());
 
     const token = `mcp_guardian_session_${randomUUID()}`;
     const now = Date.now();
@@ -98,16 +111,12 @@ export class SessionCache {
         this.sessions.delete(token);
       }
     }
-    // Clean expired nonces (keep for nonceTtlMs to detect replays)
-    // This is simplified — in production, use a time-sorted structure
-    if (this.usedNonces.size > 10000) {
-      // Full sweep
-      const entries = Array.from(this.sessions.values());
-      const validTokens = new Set(entries.map(e => e.token));
-      for (const token of this.sessions.keys()) {
-        if (!validTokens.has(token)) this.sessions.delete(token);
+    // Clean expired nonces based on nonceTtlMs
+    const nonceExpiry = now - this.nonceTtlMs;
+    for (const [nonce, timestamp] of this.usedNonces) {
+      if (timestamp < nonceExpiry) {
+        this.usedNonces.delete(nonce);
       }
-      this.usedNonces.clear();
     }
   }
 

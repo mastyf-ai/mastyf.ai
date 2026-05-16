@@ -86,7 +86,13 @@ export class PostgresDatabase implements IDatabase {
         await client.query(migrationSql);
         Logger.info('PostgreSQL unified aggregation schema applied');
       } catch (migErr: any) {
-        Logger.warn(`PostgreSQL aggregation migration skipped: ${migErr?.message}`);
+        // PostgreSQL error code 42P07 = "duplicate_table" (relation already exists)
+        if (migErr?.code === '42P07') {
+          Logger.debug('PostgreSQL aggregation migration already applied');
+        } else {
+          Logger.error(`PostgreSQL aggregation migration failed: ${migErr?.message}`);
+          throw migErr;
+        }
       }
 
       this.initialized = true;
@@ -98,7 +104,12 @@ export class PostgresDatabase implements IDatabase {
 
   async getRecentSuccessRate(serverName: string): Promise<number | null> {
     const result = await this.pool.query(
-      'SELECT AVG(success) as avg FROM health_checks WHERE server_name = $1 ORDER BY timestamp DESC LIMIT 10',
+      `SELECT AVG(success) as avg FROM (
+         SELECT success FROM health_checks
+         WHERE server_name = $1
+         ORDER BY timestamp DESC
+         LIMIT 10
+       ) AS recent`,
       [serverName]
     );
     if (result.rows.length > 0 && result.rows[0].avg !== null) {
@@ -166,11 +177,11 @@ export class PostgresDatabase implements IDatabase {
     }));
   }
 
-  async transaction<T>(fn: () => Promise<T>): Promise<T> {
+  async transaction<T>(fn: (client: any) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      const result = await fn();
+      const result = await fn(client);
       await client.query('COMMIT');
       return result;
     } catch (err) {

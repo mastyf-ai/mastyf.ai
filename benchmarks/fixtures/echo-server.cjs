@@ -41,7 +41,7 @@ rl.on('line', (line) => {
   } catch (e) {
     process.stdout.write(JSON.stringify({
       jsonrpc: '2.0',
-      id: (msg && msg.id) || 'unknown',
+      id: (typeof msg !== 'undefined' && msg && msg.id) || 'unknown',
       error: { code: -32700, message: 'Parse error: ' + e.message },
     }) + '\n');
   }

@@ -11,7 +11,7 @@
 import Database from 'better-sqlite3';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, rmdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, rmSync } from 'fs';
 import { Logger } from '../utils/logger.js';
 import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from './database-interface.js';
@@ -82,7 +82,7 @@ function acquireLock(dbPath: string): { lockPath: string; cleanup: () => void } 
     // Also clean any leftover directory lock from proper-lockfile
     const oldLockDir = dbPath + '.lock';
     try {
-      if (existsSync(oldLockDir)) rmdirSync(oldLockDir, { recursive: true } as any);
+      if (existsSync(oldLockDir)) rmSync(oldLockDir, { recursive: true, force: true });
     } catch {}
   }
 
@@ -310,7 +310,15 @@ export class HistoryDatabase implements IDatabase {
 
   async getRecentSuccessRate(serverName: string): Promise<number | null> {
     const row = this.db
-      .prepare('SELECT AVG(success) as avg FROM health_checks WHERE server_name = ? ORDER BY id DESC LIMIT 10')
+      .prepare(
+        `SELECT AVG(success) as avg
+         FROM (
+           SELECT success FROM health_checks
+           WHERE server_name = ?
+           ORDER BY id DESC
+           LIMIT 10
+         )`
+      )
       .get(serverName) as { avg: number | null } | undefined;
     return row?.avg ?? null;
   }

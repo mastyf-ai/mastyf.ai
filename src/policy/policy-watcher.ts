@@ -28,8 +28,12 @@ export class PolicyWatcher {
       const yaml = readFileSync(this.policyPath, 'utf-8');
       const config = load(yaml) as PolicyConfig;
       const oldMode = this.current?.getMode();
-      this.current = new PolicyEngine(config);
-      Logger.info(`[policy-watcher] Policy loaded (mode: ${config.policy.mode}, rules: ${config.policy.rules.length})${oldMode && oldMode !== config.policy.mode ? ` (mode changed from ${oldMode})` : ''}`);
+        this.current = new PolicyEngine(config);
+        Logger.info(`[policy-watcher] Policy loaded (mode: ${config.policy.mode}, rules: ${config.policy.rules.length})${oldMode && oldMode !== config.policy.mode ? ` (mode changed from ${oldMode})` : ''}`);
+        // Notify external components of successful reload
+        if (this.onReload) {
+          this.onReload();
+        }
     } catch (err: any) {
       Logger.error(`[policy-watcher] Failed to load policy: ${err?.message}`);
       // Don't replace the current policy on parse failure

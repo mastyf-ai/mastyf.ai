@@ -5,6 +5,6 @@ declare module 'proper-lockfile' {
       minTimeout: number;
     };
   }
-  export function lockSync(file: string, options?: LockOptions): () => Promise<void>;
+  export function lockSync(file: string, options?: LockOptions): () => void;
   export function lock(file: string, options?: LockOptions): Promise<() => Promise<void>>;
 }

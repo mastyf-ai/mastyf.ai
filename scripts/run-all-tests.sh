@@ -1,6 +1,6 @@
 #!/bin/bash
-cd /Users/rudraneeldas/Desktop/mcp-guardian
-OUT=/Users/rudraneeldas/Desktop/MCP_Guardian_v2.3.3_Test_Results.txt
+cd "$(dirname "$0")/.." || exit 1
+OUT="${OUT:-./MCP_Guardian_Test_Results.txt}"
 
 # Helper: run command, capture output, print banner
 run_test() {

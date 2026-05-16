@@ -77,13 +77,14 @@ export class WebhookAlerter {
             'Content-Length': Buffer.byteLength(payload),
           },
         },
-        (res) => {
-          if ((res.statusCode ?? 0) >= 400) {
-            reject(new Error(`Webhook returned ${res.statusCode}`));
-          } else {
-            resolve();
-          }
+      (res) => {
+        res.resume(); // Drain response body to free socket
+        if ((res.statusCode ?? 0) >= 400) {
+          reject(new Error(`Webhook returned ${res.statusCode}`));
+        } else {
+          resolve();
         }
+      }
       );
       req.on('error', reject);
       req.setTimeout(10_000, () => {

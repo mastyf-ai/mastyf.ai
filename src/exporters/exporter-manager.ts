@@ -45,9 +45,13 @@ export class ExporterManager {
   }
 
   async start(): Promise<void> {
+    this.exporters = [];
     let count = 0;
 
     if (this.config.splunk?.enabled) {
+      if (!this.config.splunk.hecUrl || !this.config.splunk.hecToken) {
+        Logger.warn('[ExporterManager] Splunk enabled but missing hecUrl or hecToken, skipping');
+      } else {
       this.exporters.push({
         name: 'splunk',
         send: async (event) => {
@@ -55,6 +59,7 @@ export class ExporterManager {
         },
       });
       count++;
+      } // end else (credentials present)
     }
 
     if (this.config.elastic?.enabled) {
@@ -107,7 +112,7 @@ export class ExporterManager {
   private async sendToSplunk(event: any): Promise<void> {
     const cfg = this.config.splunk!;
     try {
-      await fetch(`${cfg.hecUrl}/services/collector/event`, {
+      const response = await fetch(`${cfg.hecUrl}/services/collector/event`, {
         method: 'POST',
         headers: {
           'Authorization': `Splunk ${cfg.hecToken}`,
@@ -123,6 +128,9 @@ export class ExporterManager {
         }),
         signal: AbortSignal.timeout(5000),
       });
+      if (!response.ok) {
+        Logger.debug(`[SplunkExporter] Send failed: HTTP ${response.status}`);
+      }
     } catch (err: any) {
       Logger.debug(`[SplunkExporter] Send failed: ${err?.message}`);
     }

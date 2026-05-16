@@ -41,7 +41,7 @@ export class SseProxyServer extends EventEmitter {
         serverName: this.opts.serverName,
         toolName: (jsonRpcRequest.params as any)?.name || 'unknown',
         arguments: (jsonRpcRequest.params as any)?.arguments,
-        requestId: (jsonRpcRequest.id as string) || 'sse-request',
+        requestId: String(jsonRpcRequest.id ?? 'sse-request'),
         requestTokens: this.tokenCounter.count(JSON.stringify(jsonRpcRequest)),
         timestamp: new Date().toISOString(),
       };
@@ -78,8 +78,11 @@ export class SseProxyServer extends EventEmitter {
         timestamp: new Date().toISOString(),
       };
       try {
-        this.opts.db.addCallRecord(record);
-      } catch { /* best-effort */ }
+        // Fire-and-forget best-effort; errors are logged but non-critical
+        this.opts.db.addCallRecord(record).catch(err => {
+          Logger.warn(`[sse-proxy:${this.opts.serverName}] Failed to record call: ${err?.message}`);
+        });
+      } catch { /* best-effort — only catches synchronous errors in record construction */ }
     }
 
     return response;
