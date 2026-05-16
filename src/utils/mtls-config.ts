@@ -12,6 +12,9 @@
  *   MCP_TLS_CERT=/path/to/client-cert.pem   (required — proxy's client cert)
  *   MCP_TLS_KEY=/path/to/client-key.pem     (required — proxy's client key)
  *   MCP_TLS_REJECT_UNAUTHORIZED=true|false  (default: true — strict mode)
+ *
+ * Certificate rotation requires process/pod restart until hot-reload ships
+ * (see docs/MTLS.md and src/utils/mtls-watcher.ts).
  */
 import { readFileSync } from 'fs';
 import { Agent as HttpsAgent } from 'https';

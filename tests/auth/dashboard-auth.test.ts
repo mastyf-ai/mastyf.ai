@@ -60,4 +60,45 @@ describe('DashboardAuth', () => {
     expect(session.authenticated).toBe(true);
     expect(session.identity).toBe('session');
   });
+
+  it('issues new session on each login and revokes prior session', () => {
+    process.env['DASHBOARD_USERNAME'] = 'admin';
+    process.env['DASHBOARD_PASSWORD'] = 'secret';
+    const auth = new DashboardAuth({
+      enabled: true,
+      jwtSecret: 'jwt-secret-for-sessions',
+      allowedOrigins: ['http://localhost:4000'],
+    });
+
+    const first = auth.login({
+      body: { username: 'admin', password: 'secret' },
+      ip: '127.0.0.1',
+    });
+    expect(first.success).toBe(true);
+
+    const second = auth.login({
+      body: { username: 'admin', password: 'secret' },
+      ip: '127.0.0.1',
+      existingSessionToken: first.token,
+    });
+    expect(second.success).toBe(true);
+    expect(second.token).not.toBe(first.token);
+
+    const oldSession = auth.authenticate({
+      url: '/api/health',
+      method: 'GET',
+      headers: { authorization: `Bearer ${first.token}` },
+    });
+    expect(oldSession.authenticated).toBe(false);
+
+    const newSession = auth.authenticate({
+      url: '/api/health',
+      method: 'GET',
+      headers: { authorization: `Bearer ${second.token}` },
+    });
+    expect(newSession.authenticated).toBe(true);
+
+    delete process.env['DASHBOARD_USERNAME'];
+    delete process.env['DASHBOARD_PASSWORD'];
+  });
 });

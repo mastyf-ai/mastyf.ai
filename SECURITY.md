@@ -35,7 +35,7 @@ MCP Guardian's security posture is modeled against the STRIDE framework for each
 | Threat | Mitigation |
 |---|---|
 | Hardcoded API keys, tokens, passwords in MCP config | Secret scanner (6 regex patterns) |
-| Unauthenticated dashboard access | DashboardAuth (v1.2) — JWT sessions, API keys, CSRF protection, rate-limited login |
+| Unauthenticated dashboard access | DashboardAuth — JWT sessions, API keys, double-submit CSRF (`X-CSRF-Token` + `SameSite=Strict`), rate-limited login, session regeneration on login |
 | Unencrypted transport | Auth prober flags unencrypted transports |
 | Sensitive data in generated reports | Reports use config names, not raw secrets |
 
@@ -113,6 +113,10 @@ Response timeline:
 2. Include package name, installed version, advisory ID (GHSA/CVE), and whether it is runtime or dev-only.
 3. For **`better-sqlite3` / SQLite**, include output of `select sqlite_version()` from a built install if relevant.
 4. We aim to triage dependency reports on the same timeline as code vulnerabilities (ack within 24h).
+
+## DPoP (RFC 9449)
+
+Sender-constrained tokens use proof JWT `jti` replay protection with check-and-set semantics (in-process; Redis `SETNX` equivalent when `REDIS_URL` is used for multi-replica HA). Replay rejection is covered by `tests/auth/dpop.test.ts`. DPoP is optional and not enabled by default on MCP proxy traffic.
 
 ## Security Design Principles
 

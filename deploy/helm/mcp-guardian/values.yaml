@@ -124,6 +124,12 @@ nodeSelector: {}
 affinity: {}
 tolerations: []
 
+# mTLS (placeholder) — proxy upstream mutual TLS is configured via MCP_TLS_* env vars.
+# Cert rotation requires a pod restart until src/utils/mtls-watcher.ts hot-reload ships.
+# mtls:
+#   enabled: false
+#   existingSecret: ""  # Secret with ca.pem, tls.crt, tls.key
+
 backup:
   enabled: false
   schedule: "0 2 * * *"

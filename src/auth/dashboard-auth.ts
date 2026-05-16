@@ -5,7 +5,7 @@
  * Supports:
  * - API key authentication (simple, internal deployments)
  * - JWT session tokens (for multi-user deployments)
- * - CSRF protection via Origin/Referer validation
+ * - CSRF protection (double-submit cookie + Origin/Referer + X-CSRF-Token)
  * - Rate limiting on auth endpoints
  * - Login endpoint with configurable credential source
  *
@@ -54,6 +54,10 @@ interface LoginRateEntry {
  * 1. API Key: Set DASHBOARD_API_KEY, pass as ?api_key=<key> or Authorization: Bearer <key>
  * 2. JWT Sessions: Set DASHBOARD_JWT_SECRET, POST /api/login with credentials
  */
+export const CSRF_COOKIE_NAME = 'mcp_guardian_csrf';
+export const SESSION_COOKIE_NAME = 'mcp_guardian_session';
+export const CSRF_HEADER_NAME = 'x-csrf-token';
+
 export class DashboardAuth {
   private config: DashboardAuthConfig;
   private loginRateMap: Map<string, LoginRateEntry> = new Map();
@@ -98,7 +102,8 @@ export class DashboardAuth {
    * Checks multiple sources:
    * 1. ?api_key=<key> query parameter
    * 2. Authorization: Bearer <token> header
-   * 3. X-API-Key: <key> header
+   * 3. Session cookie (browser login)
+   * 4. X-API-Key header
    */
   authenticate(req: {
     url?: string;
@@ -119,9 +124,9 @@ export class DashboardAuth {
     const url = req.url || '/';
     const headers = this.normalizeHeaders(req.headers || {});
 
-    // ── CSRF check for mutating requests ──
-    if (req.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
-      const csrfResult = this.validateCsrf(headers);
+    // ── CSRF check for mutating requests (skipped when auth disabled) ──
+    if (req.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method) && this.isCsrfEnforced()) {
+      const csrfResult = this.validateCsrfRequest(headers);
       if (!csrfResult.authenticated) return csrfResult;
     }
 
@@ -151,10 +156,17 @@ export class DashboardAuth {
         }
 
         // Check if it's a valid session token
-        if (this.activeTokens.has(token)) {
+        if (this.isActiveSession(token)) {
           return { authenticated: true, identity: 'session' };
         }
       }
+    }
+
+    // ── Check session cookie (browser login) ──
+    const cookies = this.parseCookies(headers['cookie']);
+    const sessionCookie = cookies[SESSION_COOKIE_NAME];
+    if (sessionCookie && this.isActiveSession(sessionCookie)) {
+      return { authenticated: true, identity: 'session' };
     }
 
     // ── Check X-API-Key header ──
@@ -177,6 +189,8 @@ export class DashboardAuth {
     headers?: Record<string, string | string[] | undefined>;
     body?: { username?: string; password?: string; api_key?: string };
     ip?: string;
+    /** Prior session cookie value — revoked on successful login (session fixation mitigation). */
+    existingSessionToken?: string;
   }): { success: boolean; token?: string; error?: string } {
     if (!this.config.enabled || !this.config.jwtSecret) {
       return { success: false, error: 'JWT auth not configured. Set DASHBOARD_JWT_SECRET.' };
@@ -193,6 +207,11 @@ export class DashboardAuth {
     }
 
     const body = req.body || {};
+
+    // Invalidate pre-login session (session fixation mitigation)
+    if (req.existingSessionToken) {
+      this.activeTokens.delete(req.existingSessionToken);
+    }
 
     // Check API key shortcut
     if (body.api_key && this.config.apiKey && this.timingSafeCompare(body.api_key, this.config.apiKey)) {
@@ -240,11 +259,90 @@ export class DashboardAuth {
     this.activeTokens.delete(token);
   }
 
+  /** Whether mutating requests require CSRF validation (auth on and configured). */
+  isCsrfEnforced(): boolean {
+    return this.requiresAuthentication() && this.isConfigured();
+  }
+
+  /** Issue a new CSRF token for double-submit cookie pattern. */
+  issueCsrfToken(): string {
+    return randomBytes(32).toString('hex');
+  }
+
+  /** Set-Cookie header value for the CSRF double-submit cookie. */
+  csrfSetCookieHeader(token: string): string {
+    return `${CSRF_COOKIE_NAME}=${token}; Path=/; SameSite=Strict; Max-Age=3600`;
+  }
+
+  /** Set-Cookie header value for the HttpOnly session cookie. */
+  sessionSetCookieHeader(token: string): string {
+    return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${this.config.sessionTtlSeconds}`;
+  }
+
+  /**
+   * Validate CSRF on mutating requests: allowed Origin/Referer + X-CSRF-Token matches cookie.
+   */
+  validateCsrfRequest(headers: Record<string, string | string[] | undefined>): AuthResult {
+    if (!this.isCsrfEnforced()) {
+      return { authenticated: true };
+    }
+
+    const normalized = this.normalizeHeaders(headers);
+    const originResult = this.validateOriginReferer(normalized);
+    if (!originResult.authenticated) return originResult;
+
+    const cookies = this.parseCookies(normalized['cookie']);
+    const cookieToken = cookies[CSRF_COOKIE_NAME];
+    const headerToken = normalized[CSRF_HEADER_NAME];
+
+    if (!cookieToken || !headerToken) {
+      return { authenticated: false, reason: 'CSRF token required (cookie and X-CSRF-Token header)' };
+    }
+
+    if (!this.timingSafeCompare(headerToken, cookieToken)) {
+      return { authenticated: false, reason: 'CSRF token mismatch' };
+    }
+
+    return { authenticated: true };
+  }
+
+  parseCookies(cookieHeader?: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    if (!cookieHeader) return result;
+    for (const part of cookieHeader.split(';')) {
+      const trimmed = part.trim();
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq);
+      const value = trimmed.slice(eq + 1);
+      try {
+        result[key] = decodeURIComponent(value);
+      } catch {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Build request headers for CSRF validation from form body _csrf field.
+   */
+  csrfHeadersFromForm(
+    baseHeaders: Record<string, string | string[] | undefined>,
+    csrfFromBody?: string,
+  ): Record<string, string | string[] | undefined> {
+    if (!csrfFromBody) return baseHeaders;
+    return { ...baseHeaders, [CSRF_HEADER_NAME]: csrfFromBody };
+  }
+
   /**
    * Generate login page HTML (serves at /login when JWT auth is enabled).
    */
-  getLoginPageHtml(error?: string): string {
+  getLoginPageHtml(error?: string, csrfToken?: string): string {
     const errorHtml = error ? `<div style="color:#f85149;margin-bottom:16px;padding:8px;background:#3d1f1f;border-radius:6px;">${error}</div>` : '';
+    const csrfField = csrfToken
+      ? `<input type="hidden" name="_csrf" value="${csrfToken}">`
+      : '';
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -272,6 +370,7 @@ button:hover { background: #2ea043; }
 <h2>Dashboard Authentication</h2>
 ${errorHtml}
 <form method="POST" action="/api/login">
+${csrfField}
 <label for="username">Username</label>
 <input type="text" id="username" name="username" required autofocus>
 <label for="password">Password</label>
@@ -309,7 +408,7 @@ ${errorHtml}
   }
 
   /**
-   * Create a signed HMAC session token.
+   * Create a signed HMAC session token (fresh jti on every login).
    */
   private createSessionToken(): string {
     const payload = Buffer.from(JSON.stringify({
@@ -345,15 +444,21 @@ ${errorHtml}
     return timingSafeEqual(paddedA, paddedB);
   }
 
+  private isActiveSession(token: string): boolean {
+    return this.activeTokens.has(token);
+  }
+
   /**
-   * Validate CSRF protection via Origin/Referer headers.
+   * Validate Origin/Referer on mutating requests (required when CSRF is enforced).
    */
-  private validateCsrf(headers: Record<string, string>): AuthResult {
+  private validateOriginReferer(headers: Record<string, string>): AuthResult {
     const origin = headers['origin'];
     const referer = headers['referer'];
 
-    // If both are missing and we're strict, could block
-    // For now, only validate when present
+    if (!origin && !referer) {
+      return { authenticated: false, reason: 'Origin or Referer header required' };
+    }
+
     if (origin) {
       if (!this.isAllowedOrigin(origin)) {
         return { authenticated: false, reason: `Origin '${origin}' not allowed` };
@@ -367,7 +472,7 @@ ${errorHtml}
           return { authenticated: false, reason: `Referer origin '${refererOrigin}' not allowed` };
         }
       } catch {
-        // Malformed referer — allow through
+        return { authenticated: false, reason: 'Malformed Referer header' };
       }
     }
 

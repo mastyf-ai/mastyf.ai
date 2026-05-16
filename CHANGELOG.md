@@ -2,6 +2,14 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.5.9] - 2026-05-16
+
+### Security (OWASP ASVS dashboard auth)
+- **CSRF** — Double-submit cookie (`mcp_guardian_csrf`) + `X-CSRF-Token` + Origin/Referer validation on POST/PUT/DELETE/PATCH; `GET /api/auth/csrf`; skipped when `DASHBOARD_AUTH_DISABLED=true`.
+- **Session fixation** — Login revokes prior `mcp_guardian_session`, always issues fresh token with new `jti`; cookie + Bearer session auth.
+- **mTLS** — [docs/MTLS.md](docs/MTLS.md) (honest hot-reload status); `mtls-watcher.ts` skeleton; Helm placeholder comment (pod restart until reload ships).
+- **DPoP** — Documented `jti` replay protection; `tests/auth/dpop.test.ts`.
+
 ## [2.5.8] - 2026-05-16
 
 ### Security (supply chain hardening)

@@ -6,7 +6,10 @@ import helmet from 'helmet';
 import { LRUCache } from 'lru-cache';
 import { Logger } from './logger.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
-import { DashboardAuth } from '../auth/dashboard-auth.js';
+import {
+  DashboardAuth,
+  SESSION_COOKIE_NAME,
+} from '../auth/dashboard-auth.js';
 import { Registry } from 'prom-client';
 import { WsBroadcaster } from '../dashboard/ws-broadcaster.js';
 import { setWsBroadcaster } from './dashboard-events.js';
@@ -163,7 +166,7 @@ export async function startDashboardServer(
       applyCors(req, res);
       res.writeHead(204, {
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Tenant-ID',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Tenant-ID, X-CSRF-Token',
       });
       res.end(); return;
     }
@@ -171,11 +174,29 @@ export async function startDashboardServer(
     const setCors = () => applyCors(req, res);
 
     try {
+      if (url === '/api/auth/csrf' && method === 'GET') {
+        setCors();
+        if (!auth.isCsrfEnforced()) {
+          writeJson(res, 200, { csrfEnforced: false });
+          return;
+        }
+        const csrfToken = auth.issueCsrfToken();
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Set-Cookie': auth.csrfSetCookieHeader(csrfToken),
+        });
+        res.end(JSON.stringify({ csrfToken, csrfEnforced: true }));
+        return;
+      }
+
       if (url === '/login' && method === 'GET') {
         setCors();
         if (auth.isEnabled() && auth.hasJwtSessionAuth()) {
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(auth.getLoginPageHtml());
+          const csrfToken = auth.isCsrfEnforced() ? auth.issueCsrfToken() : undefined;
+          const headers: Record<string, string> = { 'Content-Type': 'text/html' };
+          if (csrfToken) headers['Set-Cookie'] = auth.csrfSetCookieHeader(csrfToken);
+          res.writeHead(200, headers);
+          res.end(auth.getLoginPageHtml(undefined, csrfToken));
         } else { res.writeHead(302, { 'Location': '/' }); res.end(); }
         return;
       }
@@ -191,18 +212,44 @@ export async function startDashboardServer(
         if (contentType.includes('application/x-www-form-urlencoded')) body = await readFormBody(req);
         else body = await readBody(req) as unknown as Record<string, string>;
 
+        if (auth.isCsrfEnforced()) {
+          const csrfHeaders = auth.csrfHeadersFromForm(req.headers as Record<string, string | string[] | undefined>, body['_csrf']);
+          const csrfCheck = auth.validateCsrfRequest(csrfHeaders);
+          if (!csrfCheck.authenticated) {
+            writeJson(res, 403, { success: false, error: csrfCheck.reason });
+            return;
+          }
+        }
+
+        const reqCookies = auth.parseCookies(
+          typeof req.headers.cookie === 'string' ? req.headers.cookie : undefined,
+        );
+        const existingSession = reqCookies[SESSION_COOKIE_NAME];
+
         const result = auth.login({
-          url, headers: req.headers as any,
-          body: { username: body.username, password: body.password, api_key: body.api_key }, ip,
+          url, headers: req.headers as Record<string, string | string[] | undefined>,
+          body: { username: body.username, password: body.password, api_key: body.api_key },
+          ip,
+          existingSessionToken: existingSession,
         });
 
         if (result.success) {
           loginRateLimiter.delete(ip);
+          const newCsrf = auth.issueCsrfToken();
+          const setCookies = [
+            auth.sessionSetCookieHeader(result.token!),
+            auth.csrfSetCookieHeader(newCsrf),
+          ];
           if (req.headers['content-type']?.includes('form')) {
-            // Set session cookie only; do not expose token in URL
-            res.writeHead(302, { 'Location': '/', 'Set-Cookie': `mcp_guardian_session=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600` });
+            res.writeHead(302, { 'Location': '/', 'Set-Cookie': setCookies });
             res.end();
-          } else { writeJson(res, 200, { success: true }); }
+          } else {
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Set-Cookie': setCookies,
+            });
+            res.end(JSON.stringify({ success: true, csrfToken: newCsrf }));
+          }
         } else { writeJson(res, 401, { success: false, error: result.error }); }
         return;
       }
@@ -290,7 +337,17 @@ export async function startDashboardServer(
 
       if (url === '/api/logout' && method === 'POST') {
         setCors();
-        const ah = req.headers['authorization']; if (ah) { const m = ah.match(/^Bearer\s+(.+)$/i); if (m) auth.logout(m[1]); }
+        const ah = req.headers['authorization'];
+        if (ah) {
+          const m = ah.match(/^Bearer\s+(.+)$/i);
+          if (m) auth.logout(m[1]);
+        }
+        const logoutCookies = auth.parseCookies(
+          typeof req.headers.cookie === 'string' ? req.headers.cookie : undefined,
+        );
+        if (logoutCookies[SESSION_COOKIE_NAME]) {
+          auth.logout(logoutCookies[SESSION_COOKIE_NAME]);
+        }
         writeJson(res, 200, { status: 'ok' }); return;
       }
 
