@@ -37,8 +37,8 @@ export async function createContainer(dbPath?: string): Promise<Container> {
   // ── Redis-not-configured warning (once per startup) ──────
   if (!startupWarningEmitted) {
     startupWarningEmitted = true;
-    const redisUrl = process.env['REDIS_URL'];
-    if (!redisUrl) {
+    const { isRedisConfigured } = await import('./utils/redis-client.js');
+    if (!isRedisConfigured()) {
       const replicaCount = parseInt(process.env['REPLICA_COUNT'] ?? '1', 10);
       const inK8s = !!process.env['KUBERNETES_SERVICE_HOST'];
       if (replicaCount > 1 || inK8s) {
@@ -48,7 +48,7 @@ export async function createContainer(dbPath?: string): Promise<Container> {
             `  • Session tokens issued by pod A are invalid on pod B\n` +
             `  • Replay protection is ineffective\n` +
             `  • Cross-region active-active is not supported (>80ms RTT breaks locks)\n` +
-            `  Set REDIS_URL (single-region). See docs/SCALE_AND_RESILIENCE.md.`
+            `  Set REDIS_URL, REDIS_SENTINELS, or REDIS_CLUSTER_NODES (single-region). See docs/REDIS_HA.md.`
         );
         if (process.env['GUARDIAN_STRICT_MODE'] === 'true') {
           process.exit(1);

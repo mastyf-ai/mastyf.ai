@@ -2,6 +2,23 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.6] - 2026-05-17
+
+### Added
+- **Cost governance template** — `policy-templates/enterprise-cost-governance.yaml` + `policy-templates/README.md` (rate limits, token budgets, `GUARDIAN_DAILY_BUDGET_USD`).
+- **DPoP enforcement** — `GUARDIAN_REQUIRE_DPOP=true` rejects requests without valid proof (`src/auth/dpop-enforcement.ts`); Helm `dpop.require`.
+- **Redis HA** — Sentinel (`REDIS_SENTINELS`, `REDIS_SENTINEL_MASTER_NAME`) and Cluster (`REDIS_CLUSTER_NODES`) via `src/utils/redis-client.ts`; [docs/REDIS_HA.md](docs/REDIS_HA.md).
+- **Production auth guide** — [docs/PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md) (DPoP + mTLS).
+- **Helm mTLS** — `templates/mtls-secret.yaml`, volume mounts, `mtls.enabled` values.
+- **Docker supply chain** — non-root `USER 1001`, `scripts/verify-docker-prebuilds.sh`, docker-publish smoke test as uid 1001.
+
+### Changed
+- `CostAuditor` — `getDailySpendUsd()`, `isDailyBudgetExceeded()`, `GUARDIAN_DAILY_BUDGET_USD` env.
+- DPoP nonce store, rate limiter, LLM cache, session cache use shared Redis client factory.
+
+### Tests
+- `tests/policy/cost-governance.test.ts`, `tests/auth/dpop-require.test.ts`, `tests/utils/redis-client.test.ts`, `tests/utils/mtls-config.test.ts`.
+
 ## [2.7.5] - 2026-05-17
 
 ### Added

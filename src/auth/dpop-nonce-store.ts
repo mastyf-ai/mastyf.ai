@@ -1,5 +1,6 @@
-import { Redis } from 'ioredis';
+import type { Redis, Cluster } from 'ioredis';
 import { Logger } from '../utils/logger.js';
+import { createRedisClient, getRedisConnectionLabel, isRedisConfigured } from '../utils/redis-client.js';
 
 /** Pluggable DPoP jti replay store (in-memory single instance or Redis HA). */
 export interface DPoPNonceStore {
@@ -33,16 +34,14 @@ export class InMemoryDPoPNonceStore implements DPoPNonceStore {
 }
 
 export class RedisDPoPNonceStore implements DPoPNonceStore {
-  private redis: Redis;
+  private redis: Redis | Cluster;
   private readonly prefix = 'mcp_guardian:dpop:jti:';
 
   constructor(
     private readonly ttlSeconds: number,
-    redisUrl?: string,
   ) {
-    const url = redisUrl || process.env['REDIS_URL'] || 'redis://localhost:6379';
-    this.redis = new Redis(url, { maxRetriesPerRequest: 3, lazyConnect: false });
-    Logger.info(`[dpop] Redis nonce store: ${url}`);
+    this.redis = createRedisClient({ maxRetriesPerRequest: 3, lazyConnect: false });
+    Logger.info(`[dpop] Redis nonce store (${getRedisConnectionLabel()})`);
   }
 
   async claim(jti: string): Promise<boolean> {
@@ -56,7 +55,7 @@ export class RedisDPoPNonceStore implements DPoPNonceStore {
 }
 
 export function createDPoPNonceStore(ttlMs: number): DPoPNonceStore {
-  if (process.env['REDIS_URL']) {
+  if (isRedisConfigured()) {
     return new RedisDPoPNonceStore(Math.ceil(ttlMs / 1000));
   }
   return new InMemoryDPoPNonceStore(ttlMs);

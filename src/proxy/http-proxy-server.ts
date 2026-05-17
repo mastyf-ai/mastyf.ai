@@ -15,6 +15,7 @@ import { CircuitBreaker } from '../utils/circuit-breaker.js';
 import { MtlsConfig, createMtlsAgent } from '../utils/mtls-config.js';
 import * as Metrics from '../utils/metrics.js';
 import { Logger } from '../utils/logger.js';
+import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
 
 /**
  * HTTP/SSE Proxy for remote MCP servers.
@@ -104,6 +105,37 @@ export class HttpProxyServer {
           res.end(JSON.stringify({ error: `Authentication failed: ${result.error}` }));
           return;
         }
+
+        if (result.valid && token) {
+          const dpopProof = extractDpopProof({ headerDpop: req.headers['dpop'] });
+          const requestUrl = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || 'localhost'}${req.url || '/'}`;
+          const dpopCheck = await validateRequiredDpop(
+            dpopProof,
+            req.method || 'POST',
+            requestUrl,
+            token,
+          );
+          if (!dpopCheck.valid) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: dpopCheck.error || 'DPoP validation failed' }));
+            return;
+          }
+        }
+      }
+    }
+
+    if (!this.authValidator) {
+      const dpopProof = extractDpopProof({ headerDpop: req.headers['dpop'] });
+      const requestUrl = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || 'localhost'}${req.url || '/'}`;
+      const dpopCheck = await validateRequiredDpop(
+        dpopProof,
+        req.method || 'POST',
+        requestUrl,
+      );
+      if (!dpopCheck.valid) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: dpopCheck.error || 'DPoP validation failed' }));
+        return;
       }
     }
 

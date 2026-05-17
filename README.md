@@ -617,8 +617,13 @@ Full LLM cache and config reference: [AI_LEARNING.md](docs/AI_LEARNING.md) · im
 | `DB_TYPE` | `sqlite` | `postgres` for shared store |
 | `DATABASE_URL` | — | Postgres URL; **use PgBouncer** for multi-replica |
 | `GUARDIAN_REQUIRE_PGBOUNCER` | `false` | Exit if URL is not pooler-shaped |
-| `REDIS_URL` | — | Multi-replica rate limits + LLM cache (single-region) |
+| `REDIS_URL` | — | Single Redis instance (multi-replica rate limits + LLM cache) |
+| `REDIS_SENTINELS` | — | Comma `host:port` list + `REDIS_SENTINEL_MASTER_NAME` for Sentinel HA |
+| `REDIS_CLUSTER_NODES` | — | Comma `host:port` list for Redis Cluster |
+| `REDIS_PASSWORD` | — | Redis auth (all modes) |
 | `GUARDIAN_STRICT_MODE` | `false` | Fail startup without Redis in K8s |
+| `GUARDIAN_REQUIRE_DPOP` | `false` | Reject requests without valid DPoP proof (RFC 9449) |
+| `GUARDIAN_DAILY_BUDGET_USD` | — | Daily spend cap tracked by CostAuditor (UTC midnight) |
 | `GUARDIAN_AUDIT_SYNC_ENABLED` | `false` | Sync SQLite → PostgreSQL |
 
 ### Windows
@@ -647,15 +652,17 @@ Short list before `default-policy.yaml` + block mode in production:
 1. **Policy** — Roll out `policy-audit.yaml` → `policy-warn.yaml` → `default-policy.yaml`; run `mcp-guardian policy test` on risky tools; set `GUARDIAN_WORKSPACE` or path prefixes ([POLICY.md](docs/POLICY.md)).
 2. **SSRF / browser tools** — Default policy blocks metadata IPs, dangerous schemes, and private/localhost URLs in `url`/`href`/`webhook`/`callback`; puppeteer tools get full-argument URL scan. If you add `http_request` or similar, add explicit YAML host/URL rules — allowlist alone is not enough.
 3. **Credential paths** — Semantic path guard blocks docker.sock, k8s tokens, terraform state, `.npmrc`, `.git-credentials`, `.vault-token`, and service-account JSON patterns; scope writes with `GUARDIAN_WORKSPACE`.
-4. **Auth** — `DASHBOARD_AUTH_DISABLED` must be **false** on any exposed dashboard; set `DASHBOARD_API_KEY` or JWT secret + credentials.
-5. **HA** — `REDIS_URL` + `GUARDIAN_STRICT_MODE=true` for multi-replica; `DATABASE_URL` through **PgBouncer**; `GUARDIAN_REQUIRE_PGBOUNCER=true` optional guardrail; single-region Redis only.
-6. **CVE** — Decide explicitly: `GUARDIAN_BLOCK_ON_CVE=true` or leave off (default).
-7. **AI** — Keep `GUARDIAN_AI_AUTO_APPLY=false`; configure quorum env vars if multiple operators label suggestions.
-8. **Verify** — `pnpm eval` (enterprise corpus gate) before deploy; `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`, shared `MCP_GUARDIAN_DB_PATH` for proxy + TUI; run `pnpm vitest run tests/policy/adversarial-scenarios.test.ts` after policy changes.
-9. **Fleet** — Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS` for `mcp-guardian fleet status` / TUI Fleet tab (aggregate only — not host discovery).
-10. **Plugins** — Audit `GUARDIAN_PLUGIN_PATH`; set `GUARDIAN_PLUGINS_ENABLED=false` on hosts that must not load third-party detectors.
-11. **HTTP tools** — Enable `GUARDIAN_HTTP_TOOLS_POLICY=true` when MCP servers expose outbound HTTP tools (merges `policy-templates/http-tools-policy.yaml`).
-12. **Dashboard SPA** — `DASHBOARD_ENABLED=true` with auth credentials; use `GUARDIAN_DASHBOARD_SPA=false` only to fall back to legacy `deploy/dashboard.html`.
+4. **Auth** — `DASHBOARD_AUTH_DISABLED` must be **false** on any exposed dashboard; set `DASHBOARD_API_KEY` or JWT secret + credentials; production OAuth + `GUARDIAN_REQUIRE_DPOP=true` — [PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md).
+5. **HA** — `REDIS_URL` or Sentinel/Cluster ([REDIS_HA.md](docs/REDIS_HA.md)) + `GUARDIAN_STRICT_MODE=true` for multi-replica; `DATABASE_URL` through **PgBouncer**; `GUARDIAN_REQUIRE_PGBOUNCER=true` optional guardrail; single-region Redis only.
+6. **Cost** — Merge `policy-templates/enterprise-cost-governance.yaml`; set `GUARDIAN_DAILY_BUDGET_USD` for daily USD tracking.
+7. **CVE** — Decide explicitly: `GUARDIAN_BLOCK_ON_CVE=true` or leave off (default).
+8. **AI** — Keep `GUARDIAN_AI_AUTO_APPLY=false`; configure quorum env vars if multiple operators label suggestions.
+9. **Verify** — `pnpm eval` (enterprise corpus gate) before deploy; `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`, shared `MCP_GUARDIAN_DB_PATH` for proxy + TUI; run `pnpm vitest run tests/policy/adversarial-scenarios.test.ts` after policy changes.
+10. **Fleet** — Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS` for `mcp-guardian fleet status` / TUI Fleet tab (aggregate only — not host discovery).
+11. **Plugins** — Audit `GUARDIAN_PLUGIN_PATH`; set `GUARDIAN_PLUGINS_ENABLED=false` on hosts that must not load third-party detectors.
+12. **HTTP tools** — Enable `GUARDIAN_HTTP_TOOLS_POLICY=true` when MCP servers expose outbound HTTP tools (merges `policy-templates/http-tools-policy.yaml`).
+13. **Dashboard SPA** — `DASHBOARD_ENABLED=true` with auth credentials; use `GUARDIAN_DASHBOARD_SPA=false` only to fall back to legacy `deploy/dashboard.html`.
+14. **mTLS** — `MCP_TLS_*` + Helm `mtls.enabled` for upstream mutual TLS ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)).
 
 ---
 

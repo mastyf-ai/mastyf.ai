@@ -28,6 +28,7 @@ import { onPolicyBlock, fingerprintArgs, ingestPolicyDecision } from '../ai/bloc
 import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semantic-audit.js';
 import type { HistoryDatabase } from '../database/history-db.js';
 import { resolveModelId } from '../config/llm-config.js';
+import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
 
 const MAX_PAYLOAD_BYTES = parseInt(
   process.env['MCP_GUARDIAN_MAX_PAYLOAD_BYTES'] ?? '10485760', // 10 MB default
@@ -546,6 +547,22 @@ export class McpProxyServer {
                 return;
               }
             } else {
+              const dpopProof = extractDpopProof({
+                metaAuth: msg.params?._meta?.auth as Record<string, unknown> | undefined,
+                messageDpop: typeof msg.DPoP === 'string' ? msg.DPoP : undefined,
+              });
+              const dpopUri = `mcp://${this.serverName}/tools/call`;
+              const dpopCheck = await validateRequiredDpop(
+                dpopProof,
+                'POST',
+                dpopUri,
+                token,
+              );
+              if (!dpopCheck.valid) {
+                this.sendError(msg.id, -32004, dpopCheck.error || 'DPoP validation failed');
+                return;
+              }
+
               if (this.sessionCache && result.identity) {
                 const session = this.sessionCache.createSession(result.identity);
                 StructuredLogger.info({

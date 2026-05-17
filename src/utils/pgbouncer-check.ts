@@ -89,7 +89,18 @@ export function checkPgBouncerAtStartup(): void {
     databaseUrl: process.env['DATABASE_URL'],
     replicaCount: parseInt(process.env['REPLICA_COUNT'] ?? '1', 10),
     inK8s: !!process.env['KUBERNETES_SERVICE_HOST'],
-    redisConfigured: !!process.env['REDIS_URL'],
+    redisConfigured: (() => {
+      try {
+        // lazy import avoided — duplicate env check
+        return !!(
+          process.env['REDIS_URL'] ||
+          process.env['REDIS_SENTINELS'] ||
+          process.env['REDIS_CLUSTER_NODES']
+        );
+      } catch {
+        return false;
+      }
+    })(),
     strictMode: process.env['GUARDIAN_STRICT_MODE'] === 'true',
     requirePgBouncer: process.env['GUARDIAN_REQUIRE_PGBOUNCER'] === 'true',
   };

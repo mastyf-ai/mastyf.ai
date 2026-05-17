@@ -54,7 +54,12 @@ spec:
                   key: database-url
                   optional: true
             {{- end }}
-            {{- if .Values.redis.enabled }}
+            {{- if and .Values.redis.sentinel.external .Values.redis.sentinel.sentinels }}
+            - name: REDIS_SENTINELS
+              value: {{ .Values.redis.sentinel.sentinels | quote }}
+            - name: REDIS_SENTINEL_MASTER_NAME
+              value: {{ .Values.redis.sentinel.masterName | quote }}
+            {{- else if .Values.redis.enabled }}
             - name: REDIS_URL
               value: redis://{{ .Release.Name }}-redis-master:6379
             {{- else if .Values.secrets.existingSecret }}
@@ -64,6 +69,20 @@ spec:
                   name: {{ .Values.secrets.existingSecret }}
                   key: redis-url
                   optional: true
+            {{- end }}
+            {{- if .Values.mtls.enabled }}
+            - name: MCP_TLS_ENABLED
+              value: "true"
+            - name: MCP_TLS_CA
+              value: /etc/mcp-guardian/tls/ca.pem
+            - name: MCP_TLS_CERT
+              value: /etc/mcp-guardian/tls/tls.crt
+            - name: MCP_TLS_KEY
+              value: /etc/mcp-guardian/tls/tls.key
+            {{- end }}
+            {{- if .Values.dpop.require }}
+            - name: GUARDIAN_REQUIRE_DPOP
+              value: "true"
             {{- end }}
             {{- range $key, $val := .Values.config.env }}
             - name: {{ $key }}
@@ -96,6 +115,11 @@ spec:
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
             {{- end }}
+            {{- if .Values.mtls.enabled }}
+            - name: mtls-certs
+              mountPath: /etc/mcp-guardian/tls
+              readOnly: true
+            {{- end }}
           livenessProbe:
             httpGet:
               path: {{ .Values.livenessProbe.httpGet.path }}
@@ -116,6 +140,11 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "mcp-guardian.fullname" . }}-data
+        {{- end }}
+        {{- if .Values.mtls.enabled }}
+        - name: mtls-certs
+          secret:
+            secretName: {{ .Values.mtls.existingSecret | default (printf "%s-mtls" (include "mcp-guardian.fullname" .)) }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

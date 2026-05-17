@@ -1,11 +1,12 @@
-import { Redis } from 'ioredis';
+import type { Redis, Cluster } from 'ioredis';
 import { Logger } from './logger.js';
 import { getGuardianRegion } from './region.js';
+import { createRedisClient, getRedisConnectionLabel, isRedisConfigured } from './redis-client.js';
 
 /**
  * Redis-backed rate limit counters for multi-replica HA.
  * Keys include GUARDIAN_REGION for observability and active-passive isolation.
- * Enable with: REDIS_URL=redis://localhost:6379
+ * Enable with REDIS_URL, REDIS_SENTINELS, or REDIS_CLUSTER_NODES (see docs/REDIS_HA.md).
  */
 let sharedLimiter: RedisRateLimiter | null = null;
 
@@ -17,23 +18,28 @@ export function getSharedRedisRateLimiter(): RedisRateLimiter {
 }
 
 export function resetRedisRateLimiterForTests(): void {
+  if (sharedLimiter) {
+    void sharedLimiter.close();
+  }
   sharedLimiter = null;
 }
 
 export class RedisRateLimiter {
-  private redis: Redis;
+  private redis: Redis | Cluster;
   private prefix: string;
   private lockPrefix: string;
   private region: string;
   private local: Map<string, { count: number; resetAt: number }> = new Map();
 
   constructor() {
-    const redisUrl = process.env['REDIS_URL'] || 'redis://localhost:6379';
+    if (!isRedisConfigured()) {
+      throw new Error('RedisRateLimiter requires REDIS_URL, REDIS_SENTINELS, or REDIS_CLUSTER_NODES');
+    }
     this.region = getGuardianRegion();
     this.prefix = `mcp_guardian:ratelimit:${this.region}:`;
     this.lockPrefix = `mcp_guardian:ratelimit_lock:${this.region}:`;
-    this.redis = new Redis(redisUrl, { maxRetriesPerRequest: 2, lazyConnect: false });
-    Logger.info(`[redis-rate-limiter] Connected to ${redisUrl} (region=${this.region})`);
+    this.redis = createRedisClient({ maxRetriesPerRequest: 2, lazyConnect: false });
+    Logger.info(`[redis-rate-limiter] Connected (${getRedisConnectionLabel()}, region=${this.region})`);
   }
 
   getRegion(): string {
@@ -50,8 +56,9 @@ export class RedisRateLimiter {
     try {
       const ok = await this.redis.set(lockKey, '1', 'PX', windowMs, 'NX');
       return ok === 'OK';
-    } catch (err: any) {
-      Logger.debug(`[redis-rate-limiter] lock acquire failed: ${err?.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      Logger.debug(`[redis-rate-limiter] lock acquire failed: ${message}`);
       return true;
     }
   }
@@ -87,12 +94,14 @@ export class RedisRateLimiter {
       this.local.set(key, localCounter);
 
       return { allowed: count <= maxRequests, count };
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (process.env['GUARDIAN_STRICT_MODE'] === 'true') {
-        Logger.error(`[redis-rate-limiter] Redis unavailable in strict mode: ${err?.message}`);
+        const message = err instanceof Error ? err.message : String(err);
+        Logger.error(`[redis-rate-limiter] Redis unavailable in strict mode: ${message}`);
         return { allowed: false, count: maxRequests + 1 };
       }
-      Logger.debug(`[redis-rate-limiter] Redis error, using local: ${err?.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      Logger.debug(`[redis-rate-limiter] Redis error, using local: ${message}`);
       const now = Date.now();
       let localCounter = this.local.get(key);
       if (!localCounter || now > localCounter.resetAt) {

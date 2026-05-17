@@ -1,4 +1,5 @@
-import { Redis } from 'ioredis';
+import type { Redis, Cluster } from 'ioredis';
+import { createRedisClient, getRedisConnectionLabel } from '../utils/redis-client.js';
 import { AgentIdentity } from './auth-types.js';
 import { SessionCache, SessionEntry } from './session-cache.js';
 import { Logger } from '../utils/logger.js';
@@ -9,18 +10,14 @@ import { Logger } from '../utils/logger.js';
  * Enable with: REDIS_URL=redis://localhost:6379
  */
 export class RedisSessionCache extends SessionCache {
-  private redis: Redis;
+  private redis: Redis | Cluster;
   private readonly prefix = 'mcp_guardian:session:';
   private readonly noncePrefix = 'mcp_guardian:nonce:';
 
   constructor(sessionTtlMs: number = 5 * 60 * 1000, nonceTtlMs: number = 10 * 60 * 1000) {
     super(sessionTtlMs, nonceTtlMs);
-    const redisUrl = process.env['REDIS_URL'] || 'redis://localhost:6379';
-    this.redis = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
-      lazyConnect: false,
-    });
-    Logger.info(`[redis-session-cache] Connected to ${redisUrl}`);
+    this.redis = createRedisClient({ maxRetriesPerRequest: 3, lazyConnect: false });
+    Logger.info(`[redis-session-cache] Connected (${getRedisConnectionLabel()})`);
   }
 
   override createSession(identity: AgentIdentity, jwtNonce?: string): SessionEntry {

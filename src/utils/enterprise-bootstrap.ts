@@ -6,7 +6,7 @@ import { HistoryDatabase } from '../database/history-db.js';
 import { IDatabase } from '../database/database-interface.js';
 import { registerReadinessCheck } from './readiness.js';
 import { Logger } from './logger.js';
-import { Redis } from 'ioredis';
+import { createRedisClient, isRedisConfigured } from './redis-client.js';
 
 let exporterManager: ExporterManager | null = null;
 let policyAuditor: PolicyAuditor | null = null;
@@ -58,9 +58,9 @@ export async function bootstrapCompliance(db: IDatabase): Promise<void> {
     Logger.info('[bootstrap] Audit trail sync to PostgreSQL started');
   }
 
-  if (process.env['REDIS_URL']) {
+  if (isRedisConfigured()) {
     registerReadinessCheck(async () => {
-      const redis = new Redis(process.env['REDIS_URL']!, {
+      const redis = createRedisClient({
         maxRetriesPerRequest: 1,
         connectTimeout: 2000,
         lazyConnect: true,

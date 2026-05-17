@@ -5,6 +5,14 @@ import { Logger } from '../utils/logger.js';
 import { getRuntimeModelPricing } from './runtime-model-pricing.js';
 import { resolveModelId } from '../config/llm-config.js';
 
+/** Daily spend cap from GUARDIAN_DAILY_BUDGET_USD (preferred) or MCP_GUARDIAN_COST_BUDGET. */
+export function getDailyBudgetCapUsd(): number {
+  const daily = process.env['GUARDIAN_DAILY_BUDGET_USD'] ?? process.env['MCP_GUARDIAN_COST_BUDGET'];
+  if (!daily) return 0;
+  const cap = parseFloat(daily);
+  return Number.isFinite(cap) && cap > 0 ? cap : 0;
+}
+
 export class CostAuditor {
   private tokenCounter: TokenCounter;
   private db: IDatabase | undefined;
@@ -12,6 +20,45 @@ export class CostAuditor {
   constructor(_pricingClient?: unknown, db?: IDatabase, _pricingModel?: string) {
     this.tokenCounter = new TokenCounter();
     this.db = db;
+  }
+
+  /** Sum costUsd for all servers since UTC midnight. */
+  async getDailySpendUsd(): Promise<number> {
+    if (!this.db) return 0;
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const cutoff = startOfDay.toISOString();
+    let total = 0;
+    try {
+      const names = await this.db.getDistinctActiveServers();
+      for (const name of names) {
+        const records = await this.db.getCallRecordsForServer(name);
+        for (const r of records) {
+          const ts = Date.parse(r.timestamp);
+          if (!Number.isNaN(ts) && ts >= startOfDay.getTime()) {
+            total += r.costUsd ?? 0;
+          }
+        }
+      }
+    } catch (err: unknown) {
+      Logger.warn(
+        `Cost audit: daily spend read failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return Math.round(total * 10000) / 10000;
+  }
+
+  async isDailyBudgetExceeded(): Promise<{
+    exceeded: boolean;
+    spentUsd: number;
+    capUsd: number;
+  }> {
+    const capUsd = getDailyBudgetCapUsd();
+    if (capUsd <= 0) {
+      return { exceeded: false, spentUsd: 0, capUsd: 0 };
+    }
+    const spentUsd = await this.getDailySpendUsd();
+    return { exceeded: spentUsd >= capUsd, spentUsd, capUsd };
   }
 
   async getPricingModel(): Promise<string> {

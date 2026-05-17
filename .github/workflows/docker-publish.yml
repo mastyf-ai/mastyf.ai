@@ -21,6 +21,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify better-sqlite3 prebuilds in Docker
+        run: chmod +x scripts/verify-docker-prebuilds.sh && ./scripts/verify-docker-prebuilds.sh
       - id: build
         uses: docker/build-push-action@v6
         with:
@@ -29,6 +31,10 @@ jobs:
           tags: |
             ghcr.io/rudraneel93/mcp-guardian:latest
             ghcr.io/rudraneel93/mcp-guardian:${{ github.ref_name }}
+      - name: Smoke test image as non-root user
+        run: |
+          docker run --rm --entrypoint sh ghcr.io/rudraneel93/mcp-guardian:${{ github.ref_name }} -c \
+            'id | grep -q uid=1001 && node -e "require(\"better-sqlite3\")" && node dist/cli.js --version'
       - name: Install cosign
         uses: sigstore/cosign-installer@v3.7.0
       - name: Sign container image

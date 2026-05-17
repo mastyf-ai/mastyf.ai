@@ -97,7 +97,8 @@ export class PolicyEngine {
     const opaDecision = await evaluateOpaPolicy(context);
 
     let yamlDecision: PolicyDecision;
-    if (process.env['REDIS_URL']) {
+    const { isRedisConfigured } = await import('../utils/redis-client.js');
+    if (isRedisConfigured()) {
       const { getSharedRedisRateLimiter } = await import('../utils/redis-rate-limiter.js');
       const rl = getSharedRedisRateLimiter();
       for (const rule of this.rules) {

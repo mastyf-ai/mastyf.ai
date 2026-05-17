@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { LRUCache } from 'lru-cache';
-import { Redis } from 'ioredis';
+import type { Redis, Cluster } from 'ioredis';
+import { createRedisClient, getRedisConnectionLabel, isRedisConfigured } from '../utils/redis-client.js';
 import { Counter } from 'prom-client';
 import { Logger } from '../utils/logger.js';
 import { registry } from '../utils/metrics.js';
@@ -32,7 +33,7 @@ let sharedCache: LlmCache | null = null;
 export function isLlmCacheEnabled(): boolean {
   if (process.env.GUARDIAN_LLM_CACHE === 'false') return false;
   if (process.env.GUARDIAN_LLM_CACHE === 'true') return true;
-  return Boolean(process.env.REDIS_URL);
+  return isRedisConfigured();
 }
 
 export function getLlmCache(): LlmCache {
@@ -66,7 +67,7 @@ export class LlmCache {
   private readonly ttlMs: number;
   private readonly region: string;
   private readonly redisPrefix: string;
-  private redis: Redis | null = null;
+  private redis: Redis | Cluster | null = null;
   private readonly lru: LRUCache<string, string>;
 
   constructor() {
@@ -76,12 +77,11 @@ export class LlmCache {
     this.redisPrefix = `mcp_guardian:llm_cache:${this.region}:`;
     this.lru = new LRUCache<string, string>({ max: LRU_MAX, ttl: this.ttlMs });
 
-    const redisUrl = process.env.REDIS_URL;
-    if (this.enabled && redisUrl) {
-      this.redis = new Redis(redisUrl, { maxRetriesPerRequest: 2, lazyConnect: false });
-      Logger.info(`[llm-cache] Redis backend ${redisUrl} (region=${this.region}, ttl=${ttlSec()}s)`);
+    if (this.enabled && isRedisConfigured()) {
+      this.redis = createRedisClient({ maxRetriesPerRequest: 2, lazyConnect: false });
+      Logger.info(`[llm-cache] Redis backend ${getRedisConnectionLabel()} (region=${this.region}, ttl=${ttlSec()}s)`);
     } else if (this.enabled) {
-      Logger.info('[llm-cache] In-memory LRU backend (no REDIS_URL)');
+      Logger.info('[llm-cache] In-memory LRU backend (Redis not configured)');
     }
   }
 

@@ -1,0 +1,25 @@
+{{- if .Values.redis.sentinel.external }}
+# External Redis Sentinel — disable subchart Redis and set env on the Deployment.
+# Example values:
+#   redis:
+#     enabled: false
+#     sentinel:
+#       external: true
+#       sentinels: "sentinel-0:26379,sentinel-1:26379,sentinel-2:26379"
+#       masterName: mymaster
+#   config:
+#     env:
+#       REDIS_SENTINELS: "sentinel-0:26379,sentinel-1:26379,sentinel-2:26379"
+#       REDIS_SENTINEL_MASTER_NAME: "mymaster"
+#       GUARDIAN_STRICT_MODE: "true"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mcp-guardian.fullname" . }}-redis-ha-notes
+  labels:
+    {{- include "mcp-guardian.labels" . | nindent 4 }}
+data:
+  README: |
+    Use REDIS_SENTINELS + REDIS_SENTINEL_MASTER_NAME instead of in-chart Redis.
+    See docs/REDIS_HA.md in the MCP Guardian repository.
+{{- end }}

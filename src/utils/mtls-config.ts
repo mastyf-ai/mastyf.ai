@@ -32,6 +32,7 @@ export interface MtlsConfig {
  * Load mTLS configuration from environment variables.
  */
 export function loadMtlsConfig(): MtlsConfig {
+  resolveMtlsEnvFromMounts();
   const enabled = process.env['MCP_TLS_ENABLED'] === 'true';
 
   if (!enabled) {
@@ -90,6 +91,38 @@ export function createMtlsAgent(config: MtlsConfig): HttpsAgent | undefined {
 /**
  * CLI flag names for mTLS configuration.
  */
+/** Default mount paths when using Helm mtls.existingSecret volume. */
+export const MTLS_HELM_MOUNT_PATHS = {
+  ca: '/etc/mcp-guardian/tls/ca.pem',
+  cert: '/etc/mcp-guardian/tls/tls.crt',
+  key: '/etc/mcp-guardian/tls/tls.key',
+} as const;
+
+/**
+ * Apply Helm-style mount paths when MCP_TLS_* are unset but files exist at defaults.
+ */
+export function resolveMtlsEnvFromMounts(): void {
+  if (process.env['MCP_TLS_ENABLED'] !== 'true') return;
+  if (!process.env['MCP_TLS_CA'] && fileExists(MTLS_HELM_MOUNT_PATHS.ca)) {
+    process.env['MCP_TLS_CA'] = MTLS_HELM_MOUNT_PATHS.ca;
+  }
+  if (!process.env['MCP_TLS_CERT'] && fileExists(MTLS_HELM_MOUNT_PATHS.cert)) {
+    process.env['MCP_TLS_CERT'] = MTLS_HELM_MOUNT_PATHS.cert;
+  }
+  if (!process.env['MCP_TLS_KEY'] && fileExists(MTLS_HELM_MOUNT_PATHS.key)) {
+    process.env['MCP_TLS_KEY'] = MTLS_HELM_MOUNT_PATHS.key;
+  }
+}
+
+function fileExists(path: string): boolean {
+  try {
+    readFileSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const MTL_CLI_FLAGS = {
   tlsEnabled: '--mtls',
   tlsCa: '--mtls-ca <path>',

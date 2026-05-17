@@ -1,0 +1,54 @@
+# Enterprise cost governance — rate limits + token budgets per tool/server
+#
+# Merge with base policy:
+#   mcp-guardian proxy --policy default-policy.yaml --policy policy-templates/enterprise-cost-governance.yaml
+# Or copy rules into your policy file.
+#
+# Daily USD cap (runtime, not YAML): set GUARDIAN_DAILY_BUDGET_USD on the proxy.
+# CostAuditor aggregates call_records.costUsd since UTC midnight.
+#
+version: '1.0'
+policy:
+  mode: block
+  rules:
+    - name: cost-rate-limit-global
+      description: Cluster-wide 200 tool calls/min per server+tool (use REDIS_URL or Sentinel)
+      action: block
+      maxCallsPerMinute: 200
+
+    - name: cost-rate-limit-expensive-tools
+      description: Stricter limit for high-cost MCP tools
+      action: block
+      tools:
+        allow:
+          - execute_command
+          - run_terminal_cmd
+          - browser_action
+          - web_search
+          - http_request
+      maxCallsPerMinute: 30
+
+    - name: cost-token-budget-default
+      description: Block single calls over 32K input tokens
+      action: block
+      maxTokens: 32000
+
+    - name: cost-token-budget-heavy-tools
+      description: Tighter token cap for embedding / batch tools
+      action: block
+      tools:
+        allow:
+          - embed
+          - batch
+          - index
+      maxTokens: 8000
+
+    # Per-server limits: duplicate a rule and scope with tools.allow for that MCP server's tools.
+    - name: cost-rate-limit-github-tools
+      description: Example throttle for GitHub MCP tools (adjust names to match tools/list)
+      action: flag
+      tools:
+        allow:
+          - search_repositories
+          - get_file_contents
+      maxCallsPerMinute: 60

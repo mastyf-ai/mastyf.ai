@@ -1,12 +1,13 @@
 import { SessionCache } from './session-cache.js';
 import { RedisSessionCache } from './redis-session-cache.js';
 import { Logger } from '../utils/logger.js';
+import { isRedisConfigured } from '../utils/redis-client.js';
 import type { AgentIdentity } from './auth-types.js';
 
 export type GuardianSessionCache = SessionCache | RedisSessionCache;
 
 export function createSessionCache(): GuardianSessionCache {
-  if (process.env['REDIS_URL']) {
+  if (isRedisConfigured()) {
     Logger.info('[session-factory] Using Redis-backed session cache');
     return new RedisSessionCache();
   }
