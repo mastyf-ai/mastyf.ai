@@ -30,3 +30,10 @@ export function resolveAiBaselinesPath(): string {
   }
   return join(GUARDIAN_DIR, '.ai-baselines.json');
 }
+
+export function resolveAttackLearningStatePath(): string {
+  if (process.env.GUARDIAN_AI_ATTACK_STATE_PATH) {
+    return process.env.GUARDIAN_AI_ATTACK_STATE_PATH;
+  }
+  return join(GUARDIAN_DIR, '.attack-learning-state.json');
+}

@@ -2,6 +2,27 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.8.1] - 2026-05-18
+
+### Added
+- **Per-block instant attack learning** — `recordBlockLearningEvent` updates rolling stats and `~/.mcp-guardian/.attack-learning-state.json` synchronously on every policy block; queues attack-pattern suggestions after N same (rule, tool) blocks within a sliding window (default 3 in 5 min).
+- **Optional instant LLM classifier** — `GUARDIAN_AI_INSTANT_LLM=true` runs a rate-limited small classifier on critical blocks (`semantic-shell-guard`, `secret-scan`, `path-guard`).
+- **Metrics** — `mcp_guardian_instant_learning_events_total`; structured log `instant_learning_event`.
+
+### Changed
+- **Proxy block path** — `recordDeniedCall` → `recordBlockLearningEvent` (instant stats + debounced full cycle).
+- **Attack pattern learner** — incremental `suggestFromBlockedGroup` for instant and batch paths.
+
+### Environment
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GUARDIAN_AI_INSTANT_LEARNING` | on (with AI) | Sync per-block stats + suggestion queue |
+| `GUARDIAN_AI_INSTANT_WINDOW_MS` | `300000` | Sliding window for repeat-block detection |
+| `GUARDIAN_AI_INSTANT_LLM` | `false` | LLM classifier on critical blocks |
+| `GUARDIAN_AI_INSTANT_LLM_RATE_MS` | `60000` | Global LLM rate limit per block path |
+| `GUARDIAN_AI_ATTACK_STATE_PATH` | `~/.mcp-guardian/.attack-learning-state.json` | Instant learning state file |
+| `GUARDIAN_AI_BLOCK_DEBOUNCE_MS` | `30000` | Set `0` for immediate full learning cycle after each block |
+
 ## [2.8.0] - 2026-05-18
 
 ### Production hardening bundle

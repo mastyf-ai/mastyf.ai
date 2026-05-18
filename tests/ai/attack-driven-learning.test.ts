@@ -8,9 +8,11 @@ import { learnAttackPatterns } from '../../src/ai/attack-pattern-learner.js';
 import {
   fingerprintArgs,
   onPolicyBlock,
+  recordBlockLearningEvent,
   resetBlockLearningDebounce,
   ingestPolicyDecision,
 } from '../../src/ai/block-learning.js';
+import { resetInstantAttackLearningState } from '../../src/ai/instant-attack-learning.js';
 import {
   registerDataCollector,
   DataCollector,
@@ -49,6 +51,7 @@ async function seedBlocked(
 describe('attack-driven learning', () => {
   beforeEach(() => {
     resetBlockLearningDebounce();
+    resetInstantAttackLearningState();
     process.env.GUARDIAN_AI_ENABLED = 'true';
     process.env.GUARDIAN_AI_USE_DB_SNAPSHOTS = 'true';
     process.env.GUARDIAN_AI_SKIP_INITIAL_CYCLE = 'true';
@@ -137,6 +140,23 @@ describe('attack-driven learning', () => {
     expect(existsSync(pendingPath)).toBe(true);
     const pending = JSON.parse(readFileSync(pendingPath, 'utf-8'));
     expect(pending.suggestions.some((s: { source: string }) => s.source === 'attack')).toBe(true);
+  });
+
+  it('recordBlockLearningEvent updates instant state synchronously', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'guardian-adl-instant-'));
+    process.env.GUARDIAN_AI_ATTACK_STATE_PATH = join(dir, '.attack-learning-state.json');
+    process.env.GUARDIAN_AI_INSTANT_LEARNING = 'true';
+
+    recordBlockLearningEvent({
+      block_rule: 'secret-scan',
+      block_reason: 'API key in args',
+      toolName: 'write_file',
+      serverName: 'filesystem',
+      argsFingerprint: 'abc',
+    });
+
+    const state = JSON.parse(readFileSync(join(dir, '.attack-learning-state.json'), 'utf-8'));
+    expect(state.totalEvents).toBe(1);
   });
 
   it('onPolicyBlock schedules debounced flush without throwing', async () => {

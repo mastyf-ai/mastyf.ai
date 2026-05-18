@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import type { PolicyDecisionRecord } from './data-collector.js';
 import { recordPolicyDecisionGlobal } from './data-collector.js';
 import { triggerLearningCycleIfEnabled } from './suggestion-engine.js';
+import { recordInstantBlockEvent } from './instant-attack-learning.js';
 import { isAiLearningEnabled } from '../utils/ai-enabled.js';
 import { Logger } from '../utils/logger.js';
 import type { HistoryDatabase } from '../database/history-db.js';
@@ -14,7 +15,14 @@ export interface PolicyBlockContext {
   argsFingerprint: string;
 }
 
+export interface BlockLearningEvent extends PolicyBlockContext {
+  block_reason: string;
+  argSnippets?: string[];
+}
+
 const DEFAULT_DEBOUNCE_MS = 30_000;
+
+const SENSITIVE_ARG_KEYS = /password|secret|token|api[_-]?key|credential|private/i;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingContext: PolicyBlockContext | null = null;
@@ -43,9 +51,63 @@ export function fingerprintArgs(args: unknown): string {
   }
 }
 
+/** Redacted string snippets from tool args for instant learning (no secrets). */
+export function redactArgSnippets(args: unknown, max = 5): string[] {
+  if (args === null || args === undefined) return [];
+  const snippets: string[] = [];
+
+  const visit = (value: unknown, keyPath: string): void => {
+    if (snippets.length >= max) return;
+    if (typeof value === 'string') {
+      if (SENSITIVE_ARG_KEYS.test(keyPath)) {
+        snippets.push(`${keyPath}=[REDACTED]`);
+      } else {
+        snippets.push(`${keyPath}=${value.slice(0, 80)}`);
+      }
+      return;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      snippets.push(`${keyPath}=${String(value)}`);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (let i = 0; i < Math.min(value.length, 3); i++) {
+        visit(value[i], `${keyPath}[${i}]`);
+      }
+      return;
+    }
+    if (value && typeof value === 'object') {
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        const path = keyPath ? `${keyPath}.${k}` : k;
+        if (SENSITIVE_ARG_KEYS.test(k)) {
+          snippets.push(`${path}=[REDACTED]`);
+        } else {
+          visit(v, path);
+        }
+      }
+    }
+  };
+
+  visit(args, '');
+  return snippets.slice(0, max);
+}
+
 function debounceMs(): number {
   const n = parseInt(process.env.GUARDIAN_AI_BLOCK_DEBOUNCE_MS || String(DEFAULT_DEBOUNCE_MS), 10);
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_DEBOUNCE_MS;
+}
+
+/**
+ * Per-block hook: immediate rolling stats + optional suggestion queue, then debounced full cycle.
+ */
+export function recordBlockLearningEvent(
+  event: BlockLearningEvent,
+  opts?: { db?: HistoryDatabase; servers?: McpServerConfig[] },
+): void {
+  if (isAiLearningEnabled()) {
+    recordInstantBlockEvent(event);
+  }
+  onPolicyBlock(event, opts);
 }
 
 /**

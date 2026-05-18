@@ -1,6 +1,24 @@
 # Enterprise AI learning
 
-MCP Guardian learns from blocked calls and scan history — not per-attack instant ML.
+MCP Guardian learns from blocked calls and scan history. **v2.8.1+** adds per-block instant attack learning on proxy blocks.
+
+## Instant learning (v2.8.1)
+
+On every policy block the proxy calls `recordBlockLearningEvent`:
+
+1. **Sync** — update `~/.mcp-guardian/.attack-learning-state.json` (rule+tool counts, reason n-grams).
+2. **Sliding window** — after `GUARDIAN_AI_ATTACK_MIN_BLOCKS` (default 3) of the same `(block_rule, tool)` within `GUARDIAN_AI_INSTANT_WINDOW_MS` (default 5 min), queue an attack-pattern suggestion to `.ai-pending-suggestions.json`.
+3. **Debounced cycle** — optional full `SuggestionEngine` cycle via `GUARDIAN_AI_BLOCK_DEBOUNCE_MS` (set `0` for immediate).
+
+Observability: `mcp_guardian_instant_learning_events_total`, structured log `instant_learning_event`.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GUARDIAN_AI_INSTANT_LEARNING` | on | Sync per-block stats + suggestion queue |
+| `GUARDIAN_AI_INSTANT_WINDOW_MS` | `300000` | Repeat-block detection window |
+| `GUARDIAN_AI_INSTANT_LLM` | `false` | LLM classifier on critical blocks |
+| `GUARDIAN_AI_INSTANT_LLM_RATE_MS` | `60000` | Global instant-LLM rate limit |
+| `GUARDIAN_AI_ATTACK_STATE_PATH` | `~/.mcp-guardian/.attack-learning-state.json` | Instant state file |
 
 ## Controls
 
@@ -10,6 +28,7 @@ MCP Guardian learns from blocked calls and scan history — not per-attack insta
 | `GUARDIAN_AI_AUTO_APPLY` | off | Auto-merge generated YAML rules (use quorum) |
 | `GUARDIAN_AI_ON_CLI` | off | Learning on `scan`/`audit`/`health` CLI |
 | `GUARDIAN_AI_SNAPSHOT_DIR` | `~/.mcp-guardian` | Persisted baselines / suggestions |
+| `GUARDIAN_AI_BLOCK_DEBOUNCE_MS` | `30000` | Full learning cycle debounce (`0` = immediate) |
 | `GUARDIAN_AI_ATTACK_MIN_BLOCKS` | `3` | Blocks before attack-pattern learning |
 | `GUARDIAN_AI_DRIFT_OVERRIDE` | off | Allow threshold changes during drift |
 

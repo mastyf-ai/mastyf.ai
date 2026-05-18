@@ -225,7 +225,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **mTLS** — Mutual TLS for proxy ↔ upstream via `MCP_TLS_*` env vars; Helm `mtls.enabled` + `mtls.existingSecret` mounts certs at `/etc/mcp-guardian/tls/` ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md), [MTLS.md](docs/MTLS.md))
 
 ### AI learning (honest scope)
-- **What it is** — Batch learning cycles plus **block-triggered** debounced runs (`GUARDIAN_AI_BLOCK_DEBOUNCE_MS`) after repeated policy blocks. It is **not** per-attack instant ML on every call.
+- **What it is** — **Instant per-block learning** (rolling stats + attack suggestions in a sliding window) plus debounced full learning cycles (`GUARDIAN_AI_BLOCK_DEBOUNCE_MS`). Suggestions queue to pending JSON; YAML apply still requires human accept or `GUARDIAN_AI_AUTO_APPLY=true` (quorum gates self-improvement tuning).
 - **Anti-poisoning** — Label quorum: `GUARDIAN_AI_MIN_DISTINCT_LABELERS` (default 2) or `GUARDIAN_AI_MIN_TOTAL_LABELS` (default 10); admin label weights; drift detection freezes auto threshold tuning until `GUARDIAN_AI_DRIFT_OVERRIDE=true`
 - **Rollback** — `mcp-guardian ai rollback` and `POST /api/ai/rollback` restore the last learning snapshot; auto-rollback if precision proxy drops >10%
 - **Human accept → policy** — TUI (`a` accept) or dashboard accept writes suggested rules to policy YAML (auto-apply off unless `GUARDIAN_AI_AUTO_APPLY=true`)
@@ -609,7 +609,12 @@ Full LLM cache and config reference: [AI_LEARNING.md](docs/AI_LEARNING.md) · im
 | `GUARDIAN_AI_ENABLED` | `true` | Learning in proxy/TUI (`false` to disable) |
 | `GUARDIAN_AI_AUTO_APPLY` | `false` | Auto-apply generated rules (`true` = risky) |
 | `GUARDIAN_AI_ON_CLI` | `false` | Learning on `scan`/`audit`/`health`/`report` |
-| `GUARDIAN_AI_BLOCK_DEBOUNCE_MS` | `30000` | Debounce after proxy blocks |
+| `GUARDIAN_AI_BLOCK_DEBOUNCE_MS` | `30000` | Debounce full learning cycle after blocks (`0` = immediate) |
+| `GUARDIAN_AI_INSTANT_LEARNING` | on | Per-block sync stats + instant suggestion queue |
+| `GUARDIAN_AI_INSTANT_WINDOW_MS` | `300000` | Sliding window for repeat (rule, tool) blocks |
+| `GUARDIAN_AI_INSTANT_LLM` | `false` | LLM classifier on critical blocks (rate-limited) |
+| `GUARDIAN_AI_INSTANT_LLM_RATE_MS` | `60000` | Global instant-LLM rate limit |
+| `GUARDIAN_AI_ATTACK_STATE_PATH` | `~/.mcp-guardian/.attack-learning-state.json` | Instant learning state |
 | `GUARDIAN_AI_ATTACK_MIN_BLOCKS` | `3` | Min blocks before attack suggestions |
 | `GUARDIAN_AI_MIN_DISTINCT_LABELERS` | `2` | Quorum: distinct labelers |
 | `GUARDIAN_AI_MIN_TOTAL_LABELS` | `10` | Quorum: weighted label total |

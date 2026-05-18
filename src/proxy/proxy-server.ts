@@ -25,7 +25,12 @@ import * as Metrics from '../utils/metrics.js';
 import { alertPolicyBlock } from '../alerting/webhook-alerter.js';
 import { evaluateCveGate } from '../utils/cve-gate.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
-import { onPolicyBlock, fingerprintArgs, ingestPolicyDecision } from '../ai/block-learning.js';
+import {
+  recordBlockLearningEvent,
+  fingerprintArgs,
+  redactArgSnippets,
+  ingestPolicyDecision,
+} from '../ai/block-learning.js';
 import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semantic-audit.js';
 import type { HistoryDatabase } from '../database/history-db.js';
 import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js';
@@ -448,12 +453,14 @@ export class McpProxyServer {
     persistCallRecord(this.db, record, undefined, this.spawnEnv, this.spawnArgs).catch((err) =>
       Logger.debug(`Proxy: failed to store denied call record: ${err?.message}`)
     );
-    onPolicyBlock(
+    recordBlockLearningEvent(
       {
         block_rule: blockRule,
+        block_reason: blockReason,
         toolName,
         serverName: this.serverName,
         argsFingerprint: fingerprintArgs(this.requestArguments),
+        argSnippets: redactArgSnippets(this.requestArguments),
       },
       { db: this.db as HistoryDatabase },
     );

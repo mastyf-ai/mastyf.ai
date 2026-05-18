@@ -96,6 +96,13 @@ export const tokenCostUsd = new Histogram({
   registers: [registry],
 });
 
+export const instantLearningEventsTotal = new Counter({
+  name: 'mcp_guardian_instant_learning_events_total',
+  help: 'Per-block instant attack learning events processed',
+  labelNames: ['block_rule', 'outcome'],
+  registers: [registry],
+});
+
 function ensureDefaultMetrics(): void {
   if (defaultMetricsRegistered) return;
   collectDefaultMetrics({ register: registry, prefix: 'mcp_guardian_' });

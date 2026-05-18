@@ -8,7 +8,14 @@ export interface AttackPatternSuggestion {
   source: 'attack';
 }
 
-const MIN_BLOCKS = parseInt(process.env.GUARDIAN_AI_ATTACK_MIN_BLOCKS || '3', 10) || 3;
+export function attackMinBlocks(): number {
+  const n = parseInt(process.env.GUARDIAN_AI_ATTACK_MIN_BLOCKS || '3', 10);
+  return Number.isFinite(n) && n > 0 ? n : 3;
+}
+
+export function attackGroupKey(blockRule: string, toolName: string): string {
+  return `${blockRule}:${toolName}`;
+}
 
 /** Extract path-like fragments from block reasons for argPattern heuristics. */
 function extractPathFragments(reasons: string[]): string[] {
@@ -52,16 +59,58 @@ function inferArgPatterns(reasons: string[], toolName: string): ArgPatternSpec[]
   return [{ field, patterns }];
 }
 
+/** Build one attack suggestion from a group of blocked records (same rule+tool). */
+export function suggestFromBlockedGroup(
+  blockRule: string,
+  toolName: string,
+  recs: ProxyCallRecord[],
+): AttackPatternSuggestion | null {
+  const minBlocks = attackMinBlocks();
+  if (recs.length < minBlocks) return null;
+
+  const reasons = recs.map((r) => r.blockReason || '').filter(Boolean);
+  const serverName = recs[0].serverName;
+  const argPatterns = inferArgPatterns(reasons, toolName);
+
+  if (argPatterns.length > 0) {
+    const slug = `${blockRule}-${toolName}`.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 48);
+    return {
+      rule: {
+        name: `attack-learned-${slug}`,
+        description: `Learned from ${recs.length} blocks (${blockRule} on ${toolName}@${serverName})`,
+        action: 'block' as PolicyAction,
+        argPatterns,
+      },
+      confidence: Math.min(0.5 + recs.length * 0.08, 0.95),
+      reason: `${recs.length} blocks by rule "${blockRule}" on tool "${toolName}" — common patterns: ${argPatterns[0].patterns.slice(0, 3).join(', ')}`,
+      source: 'attack',
+    };
+  }
+
+  const slug = `${blockRule}-${toolName}`.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 48);
+  return {
+    rule: {
+      name: `attack-learned-deny-${slug}`,
+      description: `Learned deny after ${recs.length} ${blockRule} blocks on ${toolName}`,
+      action: 'block' as PolicyAction,
+      tools: { deny: [toolName] },
+    },
+    confidence: Math.min(0.45 + recs.length * 0.07, 0.88),
+    reason: `${recs.length} blocks by "${blockRule}" on "${toolName}" (no shared path fragment; suggesting tool deny)`,
+    source: 'attack',
+  };
+}
+
 /**
  * Heuristic learner: repeated blocks on the same tool/rule → argPattern or deny rule suggestions.
  */
 export function learnAttackPatterns(records: ProxyCallRecord[]): AttackPatternSuggestion[] {
   const blocked = records.filter((r) => r.blocked && r.blockRule);
-  if (blocked.length < MIN_BLOCKS) return [];
+  if (blocked.length < attackMinBlocks()) return [];
 
   const groups = new Map<string, ProxyCallRecord[]>();
   for (const r of blocked) {
-    const key = `${r.blockRule}:${r.toolName}`;
+    const key = attackGroupKey(r.blockRule!, r.toolName);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(r);
   }
@@ -69,41 +118,9 @@ export function learnAttackPatterns(records: ProxyCallRecord[]): AttackPatternSu
   const suggestions: AttackPatternSuggestion[] = [];
 
   for (const [key, recs] of groups) {
-    if (recs.length < MIN_BLOCKS) continue;
     const [blockRule, toolName] = key.split(':');
-    const reasons = recs.map((r) => r.blockReason || '').filter(Boolean);
-    const serverName = recs[0].serverName;
-    const argPatterns = inferArgPatterns(reasons, toolName);
-
-    if (argPatterns.length > 0) {
-      const slug = `${blockRule}-${toolName}`.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 48);
-      suggestions.push({
-        rule: {
-          name: `attack-learned-${slug}`,
-          description: `Learned from ${recs.length} blocks (${blockRule} on ${toolName}@${serverName})`,
-          action: 'block' as PolicyAction,
-          argPatterns,
-        },
-        confidence: Math.min(0.5 + recs.length * 0.08, 0.95),
-        reason: `${recs.length} blocks by rule "${blockRule}" on tool "${toolName}" — common patterns: ${argPatterns[0].patterns.slice(0, 3).join(', ')}`,
-        source: 'attack',
-      });
-      continue;
-    }
-
-    // Fallback: repeated blocks without extractable paths → flag/deny tool
-    const slug = `${blockRule}-${toolName}`.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 48);
-    suggestions.push({
-      rule: {
-        name: `attack-learned-deny-${slug}`,
-        description: `Learned deny after ${recs.length} ${blockRule} blocks on ${toolName}`,
-        action: 'block' as PolicyAction,
-        tools: { deny: [toolName] },
-      },
-      confidence: Math.min(0.45 + recs.length * 0.07, 0.88),
-      reason: `${recs.length} blocks by "${blockRule}" on "${toolName}" (no shared path fragment; suggesting tool deny)`,
-      source: 'attack',
-    });
+    const suggestion = suggestFromBlockedGroup(blockRule, toolName, recs);
+    if (suggestion) suggestions.push(suggestion);
   }
 
   return suggestions;
