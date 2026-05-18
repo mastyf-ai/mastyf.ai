@@ -73,6 +73,11 @@ export class McpProxyServer {
    *  Compared on every subsequent tools/list to detect rug-pull attacks
    *  (OWASP MCP03 — server mutates tool descriptions mid-session). */
   private toolFingerprint: string | null = null;
+  /** When true, tools/call and mutated tools/list are blocked (rug-pull detected). */
+  private rugPullBlocked = false;
+  private pendingRequestTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Bearer token captured from initialize / env for the session (stdio OAuth). */
+  private sessionAuthHeader: string | undefined;
 
   private requestTimeoutMs: number;
   private restartCount: number = 0;
@@ -188,9 +193,9 @@ export class McpProxyServer {
             Logger.debug(`[proxy:${this.serverName}] Tool fingerprint registered: ${hash} (${msg.result.tools.length} tools)`);
           } else if (this.toolFingerprint !== hash) {
             const prev = this.toolFingerprint;
-            this.toolFingerprint = hash;
             const alert = `[proxy:${this.serverName}] 🚨 RUG-PULL DETECTED (OWASP MCP03): tool definitions changed mid-session. Previous fingerprint: ${prev}, New: ${hash}. Server may have been compromised.`;
             Logger.error(alert);
+            this.rugPullBlocked = true;
             StructuredLogger.info({
               event: 'rug_pull_detected' as any,
               serverName: this.serverName,
@@ -203,10 +208,12 @@ export class McpProxyServer {
               block_reason: 'rug_pull',
               rule: 'tool-fingerprint-mismatch',
             });
+            return;
           }
         }
 
         if (msg.id && msg.id === this.currentRequestId) {
+          this.clearRequestTimeout();
           const proxyLatencyMs = Date.now() - this.requestStartTime;
           const reqMsg = {
             params: { name: this.requestToolName, arguments: this.requestArguments },
@@ -358,12 +365,52 @@ export class McpProxyServer {
   }
 
   private sendError(id: string | number, code: number, message: string, data?: Record<string, unknown>): void {
+    this.clearRequestTimeout();
     const errorResponse = JSON.stringify({
       jsonrpc: '2.0',
       id,
       error: { code, message, data },
     });
     process.stdout.write(errorResponse + '\n');
+  }
+
+  private clearRequestTimeout(): void {
+    if (this.pendingRequestTimer) {
+      clearTimeout(this.pendingRequestTimer);
+      this.pendingRequestTimer = null;
+    }
+  }
+
+  private armRequestTimeout(requestId: string | number, toolName: string): void {
+    this.clearRequestTimeout();
+    this.pendingRequestTimer = setTimeout(() => {
+      if (this.currentRequestId !== requestId) return;
+      const durationMs = Date.now() - this.requestStartTime;
+      const reason = `Upstream request timed out after ${this.requestTimeoutMs}ms`;
+      this.recordDeniedCall(toolName, this.requestTokens, durationMs, 'request-timeout', reason);
+      this.circuitBreaker.recordFailure();
+      Metrics.blockedRequestsTotal.inc({
+        server_name: this.serverName,
+        block_reason: 'request_timeout',
+        rule: 'request-timeout',
+      });
+      Metrics.requestsTotal.inc({
+        server_name: this.serverName,
+        decision: 'block',
+        authn_success: 'true',
+      });
+      StructuredLogger.info({
+        event: 'request_denied',
+        serverName: this.serverName,
+        toolName,
+        requestId: String(requestId),
+        blockReason: 'request_timeout',
+        proxyLatencyMs: durationMs,
+      });
+      this.sendError(requestId, -32006, `MCP Guardian: ${reason}`, { rule: 'request-timeout' });
+      this.currentRequestId = null;
+      this.requestToolName = null;
+    }, this.requestTimeoutMs);
   }
 
   private recordDeniedCall(
@@ -425,7 +472,34 @@ export class McpProxyServer {
 
     try {
       const msg = JSON.parse(raw);
+
+      if (msg.method === 'initialize') {
+        const initAuth = OAuthValidator.extractAuthFromMcpMessage(msg);
+        if (initAuth) this.sessionAuthHeader = initAuth;
+      }
+
       if (msg.method === 'tools/call' && msg.id) {
+        if (this.rugPullBlocked) {
+          const toolName = msg.params?.name || 'unknown';
+          this.recordDeniedCall(
+            toolName,
+            this.requestTokens,
+            Date.now() - proxyStartTime,
+            'tool-fingerprint-mismatch',
+            'Tool definitions changed mid-session (rug-pull detected)',
+          );
+          this.sendError(msg.id, -32001, 'Blocked by MCP Guardian policy: tool definitions changed mid-session (rug-pull)', {
+            rule: 'tool-fingerprint-mismatch',
+            policy: this.policyEngine?.getMode() ?? 'block',
+          });
+          Metrics.blockedRequestsTotal.inc({
+            server_name: this.serverName,
+            block_reason: 'rug_pull',
+            rule: 'tool-fingerprint-mismatch',
+          });
+          return;
+        }
+
         this.requestStartTime = proxyStartTime;
         this.currentRequestId = msg.id;
         this.requestToolName = msg.params?.name || 'unknown';
@@ -504,10 +578,9 @@ export class McpProxyServer {
 
         // ── OAuth 2.1 JWT validation ────────────────────────
         if (this.authValidator) {
-          const authHeader = msg.params?._meta?.auth?.Authorization
-            || msg.Authorization
-            || msg.params?.Authorization
-            || undefined;
+          const authHeader =
+            OAuthValidator.extractAuthFromMcpMessage(msg) ||
+            this.sessionAuthHeader;
 
           const token = OAuthValidator.extractToken(authHeader);
 
@@ -710,7 +783,9 @@ export class McpProxyServer {
 
           // Per-client rate limiting
           if (agentIdentity) {
-            const rateKey = `${agentIdentity.sub}:${toolName}`;
+            const tenant = process.env['GUARDIAN_TENANT_ID'] || msg.params?._meta?.tenantId || 'default';
+            const clientKey = agentIdentity.clientId || agentIdentity.sub;
+            const rateKey = `${tenant}:${this.serverName}:${toolName}:${clientKey}`;
             const now = Date.now();
             let counter = this.clientRateCounters.get(rateKey);
             if (!counter || now > counter.resetAt) {
@@ -752,6 +827,16 @@ export class McpProxyServer {
     } catch {
       // Non-JSON input — forward as-is
     }
+
+    try {
+      const fwd = JSON.parse(raw);
+      if (fwd.method === 'tools/call' && fwd.id && this.currentRequestId === fwd.id) {
+        this.armRequestTimeout(fwd.id, this.requestToolName || 'unknown');
+      }
+    } catch {
+      // non-JSON — no timeout arm
+    }
+
     this.child.stdin?.write(raw + '\n');
   }
 
@@ -775,6 +860,7 @@ export class McpProxyServer {
   }
 
   kill(): void {
+    this.clearRequestTimeout();
     try {
       this.child.kill();
     } catch {

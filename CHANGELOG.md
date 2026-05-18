@@ -2,6 +2,23 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.8] - 2026-05-18
+
+### Fixed (security review P0/P1)
+- **Request timeout** — `tools/call` upstream waits enforce `requestTimeoutMs`; hung upstream returns JSON-RPC `-32006`, records denied call, clears pending slot (`src/proxy/proxy-server.ts`).
+- **Redis rate-limit failover** — On Redis errors, log `redis_rate_limit_degraded` and fall back to in-process LRU limiter (never skip rate limits entirely) (`src/policy/policy-engine.ts`).
+- **Rug-pull blocking** — Tool fingerprint mismatch blocks subsequent `tools/call` and rejects mutated `tools/list` notifications (OWASP MCP03).
+- **Subdomain squatting** — Registrable-domain (eTLD+1) checks block trusted-domain suffix squats like `nvd.nist.gov.attacker.io` (`src/utils/registrable-domain.ts`, `url-guard`, prompt-injection exfiltration).
+- **Multi-tool-chaining FP** — Tighter regex avoids flagging numbered search result lists (`src/scanners/prompt-injection-detector.ts`).
+
+### Added
+- **OAuth stdio token paths** — `OAuthValidator.extractAuthFromMcpMessage()` reads initialize metadata, JSON-RPC root `Authorization`, `_meta.auth`, and env tokens (`src/auth/oauth.ts`).
+- **Corpus CI gates** — Minimum entry count from `corpus/manifest.yaml`, F1 floor (`CORPUS_MIN_F1`, default 85%), minimum attack sample count (`CORPUS_MIN_ATTACK_SAMPLES`, default 50).
+- **Per-client rate limit keys** — `tenant:server:tool:clientId` when identity is present (`policy-engine`, proxy per-client limiter).
+
+### Tests
+- `tests/proxy/request-timeout.test.ts`, `tests/proxy/rug-pull-block.test.ts`, `tests/policy/redis-rate-limit-fallback.test.ts`, `tests/auth/oauth-stdio-extract.test.ts`, `tests/policy/subdomain-squatting.test.ts`, `tests/scanners/multi-tool-chaining-fp.test.ts`, `tests/utils/registrable-domain.test.ts`.
+
 ## [2.7.7] - 2026-05-17
 
 ### Fixed

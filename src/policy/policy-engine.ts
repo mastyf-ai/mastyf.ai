@@ -6,6 +6,7 @@ import { evaluateSemanticGuards } from './semantic-guards.js';
 import { ShellTokenizer, CommandRisk } from './shell-tokenizer.js';
 import { LRUCache } from 'lru-cache';
 import { resolvePolicyPrecedence } from './policy-precedence.js';
+import { StructuredLogger } from '../utils/structured-logger.js';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
@@ -98,27 +99,44 @@ export class PolicyEngine {
 
     let yamlDecision: PolicyDecision;
     const { isRedisConfigured } = await import('../utils/redis-client.js');
+    let skipLocalRateLimit = false;
+
     if (isRedisConfigured()) {
-      const { getSharedRedisRateLimiter } = await import('../utils/redis-rate-limiter.js');
-      const rl = getSharedRedisRateLimiter();
-      for (const rule of this.rules) {
-        if (!rule.maxCallsPerMinute) continue;
-        const tenant = context.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
-        const key = `${tenant}:${context.serverName}:${context.toolName}:${rule.name}`;
-        const { allowed } = await rl.checkAndIncrement(key, rule.maxCallsPerMinute);
-        if (!allowed) {
-          yamlDecision = {
-            action: this.resolveAction(rule.action),
-            rule: rule.name,
-            reason: `Rate limit exceeded: ${rule.maxCallsPerMinute} calls per minute (cluster)`,
-          };
-          return resolvePolicyPrecedence(opaDecision, yamlDecision);
+      try {
+        const { getSharedRedisRateLimiter } = await import('../utils/redis-rate-limiter.js');
+        const rl = getSharedRedisRateLimiter();
+        for (const rule of this.rules) {
+          if (!rule.maxCallsPerMinute) continue;
+          const tenant = context.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
+          const clientId = context.agentIdentity?.clientId || context.agentIdentity?.sub;
+          const key = clientId
+            ? `${tenant}:${context.serverName}:${context.toolName}:${clientId}:${rule.name}`
+            : `${tenant}:${context.serverName}:${context.toolName}:${rule.name}`;
+          const { allowed } = await rl.checkAndIncrement(key, rule.maxCallsPerMinute);
+          if (!allowed) {
+            yamlDecision = {
+              action: this.resolveAction(rule.action),
+              rule: rule.name,
+              reason: `Rate limit exceeded: ${rule.maxCallsPerMinute} calls per minute (cluster)`,
+            };
+            return resolvePolicyPrecedence(opaDecision, yamlDecision);
+          }
         }
+        skipLocalRateLimit = true;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        Logger.warn(`[policy] redis_rate_limit_degraded: ${message}`);
+        StructuredLogger.info({
+          event: 'redis_rate_limit_degraded' as const,
+          serverName: context.serverName,
+          toolName: context.toolName,
+          error: message,
+        });
+        skipLocalRateLimit = false;
       }
-      yamlDecision = this.evaluate(context, { skipLocalRateLimit: true });
-    } else {
-      yamlDecision = this.evaluate(context);
     }
+
+    yamlDecision = this.evaluate(context, { skipLocalRateLimit });
     return resolvePolicyPrecedence(opaDecision, yamlDecision);
   }
 
@@ -315,7 +333,11 @@ export class PolicyEngine {
 
     // Rate limiting (LRU-backed, prevents memory leaks) — skipped when Redis cluster limiter is active
     if (rule.maxCallsPerMinute && !skipLocalRateLimit) {
-      const key = `${ctx.serverName}:${ctx.toolName}`;
+      const tenant = ctx.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
+      const clientId = ctx.agentIdentity?.clientId || ctx.agentIdentity?.sub;
+      const key = clientId
+        ? `${tenant}:${ctx.serverName}:${ctx.toolName}:${clientId}`
+        : `${ctx.serverName}:${ctx.toolName}`;
       const now = Date.now();
       let counter = this.callCounters.get(key);
       if (!counter || now > counter.resetAt) {

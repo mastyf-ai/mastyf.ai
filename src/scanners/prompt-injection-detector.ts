@@ -13,6 +13,7 @@
  * Wired into proxy-server.ts response handling pipeline.
  */
 import { deobfuscateRecursive } from '../utils/payload-normalizer.js';
+import { DEFAULT_TRUSTED_EXFIL_DOMAINS, isTrustedDomainSquat } from '../utils/registrable-domain.js';
 
 export interface InjectionFinding {
   severity:    'critical' | 'high' | 'medium';
@@ -59,7 +60,7 @@ const INJECTION_RULES: InjectionPattern[] = [
   // CATEGORY 4: Data Exfiltration — CRITICAL
   // ═══════════════════════════════════════════════════════════════
   { id: 'exfiltration-url', severity: 'critical', description: 'Data exfiltration via URL injection',
-    regex: '(?:curl|wget|fetch|XMLHttpRequest|axios|ncat|nc\\s|netcat|telnet).{0,60}(?:https?://(?!api\\.osv\\.dev|nvd\\.nist\\.gov|deb\\.nodesource\\.com|registry\\.npmjs\\.org)[\\w.-]+\\.[a-z]{2,})' },
+    regex: '(?:curl|wget|fetch|XMLHttpRequest|axios|ncat|nc\\s|netcat|telnet).{0,60}(?:https?://[\\w.-]+\\.[a-z]{2,})' },
   { id: 'exfiltration-bare-domain', severity: 'critical', description: 'Data exfiltration via bare domain curl/wget',
     regex: '(?:curl|wget)\\s+.*\\b[a-zA-Z0-9][-a-zA-Z0-9]*\\.(?:com|net|org|io|dev|xyz|ru|cn|tk|ml|ga|cf|gq|pw|top|club|online|site|website|space|fun|host|press|digital|world|life|co|me|us|eu|info|biz|pro|name|tv|cc|ws|fm|to|am|ai)\\b' },
   { id: 'exfiltration-instruction', severity: 'critical', description: 'Explicit exfiltration instruction',
@@ -111,7 +112,7 @@ const INJECTION_RULES: InjectionPattern[] = [
   { id: 'tool-chain-abuse-v2', severity: 'high', description: 'Chain tool calls via natural language',
     regex: '(?:you should (?:also |now )?(?:call|use|run|execute|invoke)|make sure to (?:call|use|run)|don\'t forget to (?:call|use|run)|please (?:also )?(?:call|use|run|execute))' },
   { id: 'multi-tool-chaining', severity: 'high', description: 'Multi-step tool chaining instruction',
-    regex: '(?:first .+(?:then|after that|next|finally|afterwards).+|step [0-9]+:|1\\..*2\\..*3\\.)' },
+    regex: '(?:first .+(?:then|after that|next,? |finally|afterwards).{0,120}(?:call|use|run|execute|invoke)|step [0-9]+:\\s*(?:call|use|run|execute|invoke))' },
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORY 9: Command Execution — HIGH
@@ -182,6 +183,22 @@ export function detectPromptInjection(
 
     const match = pattern.regex.exec(decodedBody);
     if (!match) continue;
+
+    if (pattern.id === 'exfiltration-url') {
+      const urlInMatch = match[0].match(/https?:\/\/[^\s"'<>]+/i)?.[0];
+      if (urlInMatch) {
+        const isSquat = isTrustedDomainSquat(urlInMatch, DEFAULT_TRUSTED_EXFIL_DOMAINS);
+        const isBenignTrusted = DEFAULT_TRUSTED_EXFIL_DOMAINS.some((t) => {
+          try {
+            const host = new URL(urlInMatch).hostname.toLowerCase();
+            return host === t || (host.endsWith(`.${t}`) && !isSquat);
+          } catch {
+            return false;
+          }
+        });
+        if (isBenignTrusted && !isSquat) continue;
+      }
+    }
 
     // Deduplicate patterns (same category + similar match location)
     const dedupKey = `${pattern.id}:${match.index}`;

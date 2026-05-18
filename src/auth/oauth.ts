@@ -98,8 +98,50 @@ export class OAuthValidator {
    */
   static extractToken(authorizationHeader?: string): string | null {
     if (!authorizationHeader) return null;
-    const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
-    return match ? match[1] : null;
+    const trimmed = authorizationHeader.trim();
+    const match = trimmed.match(/^Bearer\s+(.+)$/i);
+    if (match) return match[1];
+    if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(trimmed)) {
+      return trimmed;
+    }
+    return null;
+  }
+
+  /**
+   * Extract Authorization from MCP JSON-RPC message (stdio and HTTP transports).
+   * Supports: root Authorization, params._meta.auth, initialize clientInfo headers, env tokens.
+   */
+  static extractAuthFromMcpMessage(msg: Record<string, unknown>): string | undefined {
+    if (typeof msg.Authorization === 'string') return msg.Authorization;
+
+    const params = msg.params as Record<string, unknown> | undefined;
+    const meta = params?._meta as Record<string, unknown> | undefined;
+    const metaAuth = meta?.auth as Record<string, unknown> | undefined;
+
+    if (typeof metaAuth?.Authorization === 'string') return metaAuth.Authorization;
+    if (typeof metaAuth?.authorization === 'string') return metaAuth.authorization;
+    if (typeof metaAuth?.access_token === 'string') {
+      return `Bearer ${metaAuth.access_token}`;
+    }
+
+    if (typeof params?.Authorization === 'string') return params.Authorization;
+
+    if (msg.method === 'initialize' && params) {
+      const clientInfo = params.clientInfo as Record<string, unknown> | undefined;
+      const headers = (clientInfo?.headers ?? params.headers) as Record<string, unknown> | undefined;
+      if (typeof headers?.Authorization === 'string') return headers.Authorization;
+      if (typeof headers?.authorization === 'string') return headers.authorization;
+    }
+
+    const envToken =
+      process.env['MCP_GUARDIAN_BEARER_TOKEN'] ||
+      process.env['GUARDIAN_BEARER_TOKEN'] ||
+      process.env['MCP_ACCESS_TOKEN'];
+    if (envToken) {
+      return envToken.startsWith('Bearer ') ? envToken : `Bearer ${envToken}`;
+    }
+
+    return undefined;
   }
 
   getConfig(): AuthConfig {

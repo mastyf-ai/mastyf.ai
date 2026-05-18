@@ -14,7 +14,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const CORPUS_ROOT = __dirname;
 const POLICY_PATH = join(__dirname, '..', 'default-policy.yaml');
+const MANIFEST_PATH = join(__dirname, 'manifest.yaml');
 const REPORT_PATH = join(__dirname, '..', 'corpus-eval-report.json');
+
+const DEFAULT_MIN_ENTRIES = 200;
+const DEFAULT_MIN_F1 = 0.85;
+const DEFAULT_MIN_ATTACK_SAMPLES = 50;
 
 export interface CorpusEntry {
   toolName: string;
@@ -112,12 +117,28 @@ function finalizeCategory(m: CategoryMetrics): void {
   m.recall = m.tp / (m.tp + m.fn) || 0;
 }
 
+function loadMinimumEntries(): number {
+  try {
+    const manifest = load(readFileSync(MANIFEST_PATH, 'utf8')) as { minimum_entries?: number };
+    return manifest.minimum_entries ?? DEFAULT_MIN_ENTRIES;
+  } catch {
+    return DEFAULT_MIN_ENTRIES;
+  }
+}
+
 export async function runEval(): Promise<EvalReport> {
   const policy = load(readFileSync(POLICY_PATH, 'utf8')) as PolicyConfig;
   const engine = new PolicyEngine(policy);
   const files = loadCorpusFiles(CORPUS_ROOT).filter(
     (f) => !f.relPath.endsWith('run-eval.ts') && f.relPath !== 'manifest.yaml',
   );
+
+  const minimumEntries = loadMinimumEntries();
+  if (files.length < minimumEntries) {
+    throw new Error(
+      `Corpus has ${files.length} entries but manifest requires at least ${minimumEntries}`,
+    );
+  }
 
   const byCategory = new Map<string, CategoryMetrics>();
   let tp = 0,
@@ -216,6 +237,27 @@ Per category:`);
 
 async function main() {
   const report = await runEval();
+  const minF1 = parseFloat(process.env['CORPUS_MIN_F1'] ?? String(DEFAULT_MIN_F1));
+  const minAttackSamples = parseInt(
+    process.env['CORPUS_MIN_ATTACK_SAMPLES'] ?? String(DEFAULT_MIN_ATTACK_SAMPLES),
+    10,
+  );
+  const attackSamples = report.overall.tp + report.overall.fn;
+
+  if (attackSamples < minAttackSamples) {
+    console.error(
+      `\nCorpus evaluation FAILED — only ${attackSamples} attack samples (minimum ${minAttackSamples})`,
+    );
+    process.exit(1);
+  }
+
+  if (report.overall.f1 < minF1) {
+    console.error(
+      `\nCorpus evaluation FAILED — F1 ${(report.overall.f1 * 100).toFixed(1)}% below minimum ${(minF1 * 100).toFixed(1)}%`,
+    );
+    process.exit(1);
+  }
+
   if (!report.passed) {
     console.error('\nCorpus evaluation FAILED — fix missed attacks or false positives');
     process.exit(1);

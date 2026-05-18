@@ -752,9 +752,19 @@ Typically **5–25ms** per call for regex/schema policy (JWT +5–15ms). LLM sem
 
 Use `policy-audit.yaml` or set `mode: audit` in your policy file.
 
-### Cline and OAuth?
+### Cline, Cursor, and OAuth on stdio?
 
-Clients don’t send JWTs natively. Use audit mode, `AUTH_TOKEN` in `guardian-configs/*.json`, or an API gateway in front of Guardian.
+MCP clients differ in how they attach credentials. MCP Guardian extracts bearer tokens from (in order):
+
+| Source | Example | Cursor | Cline |
+|--------|---------|--------|-------|
+| `initialize` → `params.clientInfo.headers.Authorization` | HTTP-style metadata on handshake | Supported when client sends headers | Varies by transport |
+| JSON-RPC root `Authorization` | `{ "Authorization": "Bearer …", "method": "tools/call" }` | Some HTTP bridges | Rare on stdio |
+| `params._meta.auth.Authorization` | MCP auth extension in tool calls | Common for authenticated MCP | Check server card |
+| `params._meta.auth.access_token` | Raw token in `_meta.auth` | Supported | Supported |
+| Env `MCP_GUARDIAN_BEARER_TOKEN` / `GUARDIAN_BEARER_TOKEN` | Set in proxy wrapper `env` | **Recommended** for stdio | **Recommended** for stdio |
+
+For stdio-only setups without JWT infrastructure, set `MCP_GUARDIAN_BEARER_TOKEN` in the Guardian proxy `env` block (or use audit mode). For production OIDC, configure `OAuthValidator` with issuer/audience and optional `GUARDIAN_REQUIRE_DPOP=true` — see [docs/PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md).
 
 ### TUI vs Docker database?
 

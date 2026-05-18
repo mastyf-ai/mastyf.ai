@@ -1,6 +1,7 @@
 /**
  * URL guard — blocks SSRF-prone, local, and dangerous-scheme URLs in tool arguments.
  */
+import { isTrustedDomainSquat } from '../utils/registrable-domain.js';
 
 const URL_ARG_FIELDS = new Set(['url', 'href', 'target', 'webhook', 'callback']);
 
@@ -185,6 +186,12 @@ export interface UrlGuardResult {
 
 export function evaluateUrlGuard(urls: string[]): UrlGuardResult {
   for (const raw of urls) {
+    if (isTrustedDomainSquat(raw)) {
+      return {
+        block: true,
+        reason: `Blocked trusted-domain subdomain squat: ${raw.slice(0, 80)}`,
+      };
+    }
     const check = isDangerousUrl(raw);
     if (check.block) {
       return { block: true, reason: check.reason ?? `Dangerous URL blocked: ${raw.slice(0, 80)}` };
