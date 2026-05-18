@@ -4,6 +4,10 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+## [2.8.4] - 2026-05-19
+
+Enterprise hardening, tiered concurrent benchmarks, and proxy/SSE/WebSocket improvements (see `172abcd`).
+
 ### Fixed
 - **SSE proxy** — `evaluateAsync()` for Redis rate limits and OPA; mTLS upstream via `createMtlsAgent()`.
 - **Multi-replica attack learning** — PostgreSQL `ai_attack_learning_state_shared` via `AuditTrailSync`; file fallback when DB sync disabled.
