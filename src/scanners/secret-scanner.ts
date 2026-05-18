@@ -60,6 +60,22 @@ function entropyCheckSubject(match: RegExpMatchArray): string {
   return captured;
 }
 
+/** Postmark tokens are UUID-shaped — require postmark context to avoid generic UUID FPs. */
+function isPostmarkTokenContext(
+  target: string,
+  scanContext: string,
+  matchIndex?: number,
+): boolean {
+  const haystack = `${scanContext}\n${target}`.toLowerCase();
+  if (/postmark|server[_-]?token|x-postmark/i.test(haystack)) return true;
+  if (matchIndex !== undefined) {
+    const windowStart = Math.max(0, matchIndex - 80);
+    const window = target.slice(windowStart, matchIndex + 80).toLowerCase();
+    if (/postmark|pm[_-]?token|server[_-]?token/.test(window)) return true;
+  }
+  return false;
+}
+
 function displaySubject(match: RegExpMatchArray): string {
   const full = match[0];
   const captured = match[1];
@@ -79,6 +95,9 @@ export function scanForSecrets(target: string, context: string): SecretFinding[]
       const entropySubject = entropyCheckSubject(match);
       if (rule.entropy !== undefined && shannonEntropy(entropySubject) < rule.entropy) continue;
       const matchedValue = displaySubject(match);
+      if (rule.id === 'postmark-api-token' && !isPostmarkTokenContext(target, context, match.index)) {
+        continue;
+      }
       // Test exclusions against the matched substring, not the entire target
       if (rule.exclusions?.some(fp => fp.test(matchedValue))) continue;
       if (isFpWhitelisted('secret-scan', rule.id)) continue;

@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "2.8.2",
+  "version": "2.8.3",
   "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
@@ -72,6 +72,11 @@
     "eval:attack-learning": "tsx scripts/simulate-attack-learning-stream.ts",
     "eval:attack-learning:long": "tsx scripts/long-attack-learning-eval.ts",
     "eval:attack-learning:charts": "tsx scripts/generate-attack-learning-charts.ts",
+    "benchmark:concurrent": "tsx benchmarks/concurrent-tool-calls.ts",
+    "benchmark:concurrent-proxy": "tsx benchmarks/concurrent-proxy-tool-calls.ts",
+    "benchmark:proxy-tiers": "tsx benchmarks/proxy-slo-by-concurrency.ts",
+    "benchmark:multi-proxy": "tsx benchmarks/concurrent-multi-proxy.ts",
+    "benchmark:proxy-slo": "tsx benchmarks/run.ts",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "lint": "tsc --noEmit",

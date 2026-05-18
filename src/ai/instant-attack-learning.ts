@@ -18,6 +18,7 @@ import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
 import { broadcastDashboardEvent } from '../utils/dashboard-events.js';
+import { resolveTenantId } from '../tenant/resolve-tenant.js';
 
 export interface InstantBlockEvent {
   serverName: string;
@@ -73,6 +74,19 @@ const RULE_TO_ATTACK_CLASS: Record<string, string> = {
 let stateCache: AttackLearningState | null = null;
 let lastLlmInstantAt = 0;
 let suggestionCounter = 0;
+/** PostgreSQL-backed store (AuditTrailSync); falls back to local JSON file when unset. */
+let sharedStore: {
+  getAttackLearningState?: (tenantId: string) => Promise<AttackLearningState | null>;
+  persistAttackLearningState?: (state: AttackLearningState, tenantId: string) => Promise<void>;
+} | null = null;
+
+export function setAttackLearningSharedStore(store: typeof sharedStore): void {
+  sharedStore = store;
+}
+
+function attackLearningTenantId(): string {
+  return resolveTenantId();
+}
 
 function instantLearningEnabled(): boolean {
   if (process.env.GUARDIAN_AI_INSTANT_LEARNING === 'false') return false;
@@ -123,9 +137,47 @@ export function loadAttackLearningState(): AttackLearningState {
   }
 }
 
+/** Load from PostgreSQL shared store (call at bootstrap when GUARDIAN_AUDIT_SYNC_ENABLED). */
+export async function loadAttackLearningFromSharedStore(): Promise<void> {
+  if (!sharedStore?.getAttackLearningState) return;
+  try {
+    const remote = await sharedStore.getAttackLearningState(attackLearningTenantId());
+    if (!remote) return;
+    const local = loadAttackLearningState();
+    const remoteTs = Date.parse(remote.updatedAt || '0');
+    const localTs = Date.parse(local.updatedAt || '0');
+    if (remoteTs >= localTs) {
+      stateCache = { ...emptyState(), ...remote, version: 1 };
+      saveAttackLearningState(stateCache);
+    }
+    Logger.info('[instant-learning] Loaded attack learning state from shared PostgreSQL store');
+  } catch (err: unknown) {
+    Logger.warn(
+      `[instant-learning] Shared store load failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 export function saveAttackLearningState(state: AttackLearningState): void {
   state.updatedAt = new Date().toISOString();
   stateCache = state;
+  const tenantId = attackLearningTenantId();
+  if (sharedStore?.persistAttackLearningState) {
+    try {
+      const p = sharedStore.persistAttackLearningState(state, tenantId);
+      if (p && typeof (p as Promise<void>).catch === 'function') {
+        void (p as Promise<void>).catch((err: unknown) => {
+          Logger.debug(
+            `[instant-learning] Shared PG persist failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+      }
+    } catch (err: unknown) {
+      Logger.debug(
+        `[instant-learning] Shared PG persist failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
   try {
     const path = resolveAttackLearningStatePath();
     const dir = dirname(path);
@@ -389,4 +441,5 @@ export function resetInstantAttackLearningState(): void {
   stateCache = null;
   lastLlmInstantAt = 0;
   suggestionCounter = 0;
+  sharedStore = null;
 }

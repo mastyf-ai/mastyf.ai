@@ -7,6 +7,7 @@ import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from './database-interface.js';
 import { Logger } from '../utils/logger.js';
 import { loadPg, type PgPoolType } from './pg-loader.js';
+import { runMigrations } from './migration-runner.js';
 
 export class PostgresDatabase implements IDatabase {
   private pool!: PgPoolType;
@@ -83,26 +84,7 @@ export class PostgresDatabase implements IDatabase {
       await client.query('ALTER TABLE call_records ADD COLUMN IF NOT EXISTS pricing_source TEXT');
       await client.query('ALTER TABLE call_records ADD COLUMN IF NOT EXISTS token_source TEXT');
 
-      // Run unified aggregation migration
-      const { readFileSync } = await import('fs');
-      const { resolve, dirname } = await import('path');
-      const { fileURLToPath } = await import('url');
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      const migrationPath = resolve(__dirname, 'migrations', '002-unified-aggregation.sql');
-      try {
-        const migrationSql = readFileSync(migrationPath, 'utf-8');
-        await client.query(migrationSql);
-        Logger.info('PostgreSQL unified aggregation schema applied');
-      } catch (migErr: any) {
-        // PostgreSQL error code 42P07 = "duplicate_table" (relation already exists)
-        if (migErr?.code === '42P07') {
-          Logger.debug('PostgreSQL aggregation migration already applied');
-        } else {
-          Logger.error(`PostgreSQL aggregation migration failed: ${migErr?.message}`);
-          throw migErr;
-        }
-      }
+      await runMigrations(this.pool);
 
       this.initialized = true;
       Logger.info('PostgreSQL database initialized');

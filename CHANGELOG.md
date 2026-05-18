@@ -4,6 +4,36 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **SSE proxy** — `evaluateAsync()` for Redis rate limits and OPA; mTLS upstream via `createMtlsAgent()`.
+- **Multi-replica attack learning** — PostgreSQL `ai_attack_learning_state_shared` via `AuditTrailSync`; file fallback when DB sync disabled.
+- **Semantic layer visibility** — `semantic_layer_degraded` structured log + dashboard `logs:alert`; `GUARDIAN_SEMANTIC_STRICT` blocks when LLM unavailable.
+- **Per-request proxy state** — `ProxyRequestContextStore` keyed by JSON-RPC id (concurrent `tools/call` safe).
+- **GDPR erasure** — `eraseAllAuditData()` already purges `cost_records`, `security_scans`, `health_checks` (tests retained).
+- **Postmark secret FP** — context-aware `postmark-api-token` matching.
+- **PowerShell guards** — `Invoke-Expression`, `-EncodedCommand`, `[Convert]::FromBase64String` in shell tokenizer + policy path.
+- **HTML entity normalization** — tests for `&lt;` / numeric entities in payload normalizer.
+
+### Added
+- **Migration runner** — `schema_migrations` table; ordered SQL in `src/database/migrations/`; wired into `postgres-db` and `AuditTrailSync`.
+- **WebSocket MCP proxy** — foundational `WebSocketProxyServer` (JSON-RPC forward + policy on `tools/call`).
+- **Dashboard API rate limiting** — Redis or in-process LRU (`GUARDIAN_DASHBOARD_API_RATE_LIMIT`, default 120/min).
+- **Per-tenant circuit breakers** — `getCircuitBreaker(tenantId, serverName)` registry.
+- **Load smoke test** — `benchmarks/concurrent-tool-calls.ts`.
+
+### Environment
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GUARDIAN_SEMANTIC_STRICT` | `false` | Block `tools/call` when async semantic LLM unavailable |
+| `GUARDIAN_DASHBOARD_API_RATE_LIMIT` | `120` | Dashboard REST API requests per minute per IP |
+| `GUARDIAN_TENANT_ID` | `default` | Tenant isolation for circuit breakers, rate limits, attack learning PG row |
+
+## [2.8.3] - 2026-05-18
+
+### Documentation
+- **Fig 4 omitted** from README — `fig4-cdf-time-to-suggestion.png` is a degenerate CDF (one point per category); use median time-to-suggestion in the metrics table instead.
+- Removed **synthetic ROI** narrative and **CHART_10** references from README and related docs (prefer repo `reports/attack-learning-eval/metrics.json` for CI-aligned numbers).
+
 ## [2.8.2] - 2026-05-18
 
 ### Documentation

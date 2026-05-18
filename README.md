@@ -99,6 +99,7 @@ Details, verification commands, and Helm defaults: **[docs/PRODUCTION_BLOCKERS.m
   - [Repo evaluation (reproducible CI)](#repo-evaluation-reproducible-ci)
   - [Extended attack simulation (sca collateral)](#extended-attack-simulation-sca-collateral)
 - [Development](#development)
+  - [Performance & benchmarks](#performance--benchmarks)
 - [FAQ](#faq)
 - [Roadmap](#roadmap)
 - [License](#license)
@@ -865,9 +866,53 @@ pnpm install && pnpm build && pnpm test
 pnpm run dogfood          # sandboxed multi-server scenario (CI)
 pnpm run live:tui-demo    # write shared ~/.mcp-guardian/history.db for TUI smoke test
 pnpm eval                 # enterprise corpus (226 entries, PolicyEngine + default-policy)
-pnpm exec tsx benchmarks/run.ts   # proxy latency benchmarks
+pnpm benchmark:proxy-slo  # pipelined proxy RTT (CI gate); see Performance & benchmarks below
 node scripts/generate-pen-test-report.cjs   # docs/PEN_TEST_REPORT.md from eval output
 ```
+
+### Performance & benchmarks
+
+Load tests use three layers — do not mix them when quoting latency. Full comparison table and artifact paths: **[benchmarks/results/concurrent-tool-calls-summary.md](benchmarks/results/concurrent-tool-calls-summary.md)** (also [proxy tiers](benchmarks/results/proxy-slo-by-concurrency-summary.md), [multi-proxy](benchmarks/results/concurrent-multi-proxy-summary.md)).
+
+| Layer | Command | Measures |
+|-------|---------|----------|
+| **Policy-only** | `pnpm benchmark:concurrent` | In-process `PolicyEngine.evaluateAsync` — rule tuning, not proxy RTT |
+| **Proxy tiers** | `pnpm benchmark:proxy-tiers` | Stdio `McpProxyServer` → echo at 1 / 10 / 25 / 50 in-flight per instance |
+| **Multi-replica** | `pnpm benchmark:multi-proxy` | K forked proxies (default 10×100) vs single-proxy 1k burst |
+
+**Latest runs (2026-05-18, darwin arm64, Node 23):**
+
+| Scenario | Correctness | p95 | SLO |
+|----------|-------------|-----|-----|
+| Policy 1k concurrent | 100% | ~100 ms | PASS (p95 &lt; 500 ms) |
+| Proxy @ 10 in-flight | 100% | ~420 ms | PASS (p95 &lt; 500 ms) |
+| Single proxy 1k burst (`benchmark:concurrent-proxy`) | 100% | ~37 s | Correct, but **not** a deployment SLO — stdio contention |
+| 10 replicas × 100 calls | 100% | ~11.7 s global | ~3× lower p95 than single-proxy 1k burst |
+
+**Tiered proxy SLO gates** (per-pod in-flight; env `BENCH_PROXY_CONCURRENCY_TIERS`):
+
+| In-flight | p95 gate | Latest |
+|-----------|----------|--------|
+| 1 | &lt; 150 ms | FAIL (~155 ms) — matches strict CI `benchmark:proxy-slo` intent |
+| 10 | &lt; 500 ms | **PASS** (~420 ms) |
+| 25 | &lt; 1500 ms | FAIL (~1953 ms) |
+| 50 | &lt; 3000 ms | **PASS** (~2906 ms) |
+
+```bash
+pnpm benchmark:concurrent         # policy-only 1k-way
+pnpm benchmark:proxy-tiers          # deployment SLO tiers
+pnpm benchmark:multi-proxy          # horizontal scale (default K=10, 1000 total)
+pnpm benchmark:concurrent-proxy     # worst-case single-proxy 1k burst
+pnpm benchmark:proxy-slo            # pipelined CI gate (default p95 < 150 ms)
+```
+
+**Guidance**
+
+- **Policy-only** — tune YAML/semantic rules and in-process policy latency; safe to run 1000-way.
+- **Proxy tiers** — set per-pod deployment SLOs at realistic queue depth (~**10** in-flight, not 1000 on one process).
+- **Scale horizontally** — shard clients across replicas; one stdio proxy serializes under burst load.
+- **Do not claim sub-150 ms at 1k concurrent** on the proxy path; that gate applies to pipelined/sequential CI (`benchmark:proxy-slo`), not concurrent burst.
+- **HTTP/SSE transport** — no in-repo HTTP MCP echo fixture yet; tiered stdio proxy benchmarks are the deployment reference until SSE session bootstrap lands.
 
 ### Test & evidence depth (v2.8.1)
 
@@ -880,7 +925,7 @@ node scripts/generate-pen-test-report.cjs   # docs/PEN_TEST_REPORT.md from eval 
 | Enterprise corpus | **226** JSON fixtures (`corpus/`) |
 | Corpus categories | benign (55), prompt-injection (32), credential-exfil (23), sql-nosql (26), ssrf-url (26), shell-obfuscation (26), cross-tool-chain (16), edge-cases (22) |
 | CI corpus eval | `pnpm eval` on every PR; artifact `corpus-eval-report.json` |
-| CI benchmarks | p95 policy-eval gate (150ms, 100 iterations) |
+| CI benchmarks | `benchmark:proxy-slo` pipelined gate (150 ms p95); tiered proxy SLOs via `benchmark:proxy-tiers` |
 | E2E proxy tests | `proxy-with-policy.e2e` + `adversarial-proxy.e2e` (10 attacks) |
 | Pen-test docs | [docs/PEN_TEST_REPORT.md](docs/PEN_TEST_REPORT.md), [security/ATTACK_MATRIX.md](security/ATTACK_MATRIX.md) |
 

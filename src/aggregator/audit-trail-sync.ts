@@ -7,8 +7,10 @@
  */
 import { HistoryDatabase } from '../database/history-db.js';
 import { loadPg, type PgPoolType } from '../database/pg-loader.js';
+import { runMigrations } from '../database/migration-runner.js';
 import { Logger } from '../utils/logger.js';
 import { ProxyCallRecord } from '../types.js';
+import type { AttackLearningState } from '../ai/instant-attack-learning.js';
 
 export interface SyncConfig {
   instanceId: string;
@@ -45,18 +47,10 @@ export class AuditTrailSync {
       idleTimeoutMillis: 30000,
     });
 
+    await runMigrations(this.pgPool);
+
     const client = await this.pgPool.connect();
     try {
-      // Run migration
-      const { readFileSync } = await import('fs');
-      const { resolve, dirname } = await import('path');
-      const { fileURLToPath } = await import('url');
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      const sqlPath = resolve(__dirname, '..', 'database', 'migrations', '002-unified-aggregation.sql');
-      const migrationSql = readFileSync(sqlPath, 'utf-8');
-      await client.query(migrationSql);
-
       // Register this instance
       await client.query(
         `INSERT INTO guardian_instances (instance_id, instance_name, hostname, version, started_at, last_heartbeat, status)
@@ -483,6 +477,49 @@ export class AuditTrailSync {
     } catch (err: any) {
       Logger.warn(`[AuditTrailSync] Get metrics failed: ${err?.message}`);
       return { totalInstances: 0, activeInstances: 0, totalRequests: 0, totalBlocked: 0, totalCost: 0, instances: [] };
+    }
+  }
+
+  /** Load shared instant attack learning state (multi-replica). */
+  async getAttackLearningState(tenantId = 'default'): Promise<AttackLearningState | null> {
+    try {
+      const client = await this.pgPool.connect();
+      try {
+        const result = await client.query(
+          'SELECT state_json, updated_at FROM ai_attack_learning_state_shared WHERE tenant_id = $1',
+          [tenantId],
+        );
+        if (result.rows.length === 0) return null;
+        return result.rows[0].state_json as AttackLearningState;
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      Logger.warn(`[AuditTrailSync] Get attack learning state failed: ${err?.message}`);
+      return null;
+    }
+  }
+
+  /** Persist shared instant attack learning state. */
+  async persistAttackLearningState(
+    state: AttackLearningState,
+    tenantId = 'default',
+  ): Promise<void> {
+    try {
+      const client = await this.pgPool.connect();
+      try {
+        await client.query(
+          `INSERT INTO ai_attack_learning_state_shared (tenant_id, state_json, updated_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (tenant_id) DO UPDATE
+           SET state_json = $2, updated_at = NOW()`,
+          [tenantId, JSON.stringify(state)],
+        );
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      Logger.warn(`[AuditTrailSync] Attack learning persist failed: ${err?.message}`);
     }
   }
 

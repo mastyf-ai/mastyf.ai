@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-05-18T19:17:23.396Z",
+  "configuration": {
+    "concurrency": 1000,
+    "achievedConcurrent": 1000,
+    "test": "in-process McpProxyServer + echo-server (deny eval when i%10===0)",
+    "echoServer": "/Users/rudraneeldas/Desktop/mcp-guardian/benchmarks/fixtures/echo-server.cjs",
+    "slo": {
+      "p95Ms": 5000,
+      "p99Ms": 10000
+    },
+    "sequentialProxyP95GateMs": 150
+  },
+  "correctness": {
+    "total": 1000,
+    "passed": 1000,
+    "failed": 0,
+    "correctnessPct": 100,
+    "expectedBlocked": 100,
+    "blocked": 100,
+    "expectedAllowed": 900,
+    "allowed": 900,
+    "timeouts": 0
+  },
+  "latencyMs": {
+    "p50": 27006.111874999995,
+    "p95": 37025.202792,
+    "p99": 38110.176,
+    "max": 49374.93,
+    "avg": 26168.51
+  },
+  "throughput": {
+    "wallMs": 54030,
+    "callsPerSecond": 19
+  },
+  "sloResults": {
+    "p95Ms": 5000,
+    "p99Ms": 10000,
+    "p95Pass": false,
+    "p99Pass": false,
+    "correctnessPass": true,
+    "overallPass": false
+  },
+  "errors": [],
+  "machine": {
+    "hostname": "Rudraneels-Mac-mini.local",
+    "platform": "darwin arm64",
+    "cpuCount": 10,
+    "node": "v23.11.0"
+  }
+}

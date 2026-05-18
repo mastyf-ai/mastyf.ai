@@ -1,0 +1,171 @@
+{
+  "timestamp": "2026-05-18T19:41:38.994Z",
+  "configuration": {
+    "tiers": [
+      1,
+      10,
+      25,
+      50
+    ],
+    "tieredP95GatesMs": {
+      "1": 150,
+      "10": 500,
+      "25": 1500,
+      "50": 3000
+    },
+    "echoServer": "/Users/rudraneeldas/Desktop/mcp-guardian/benchmarks/fixtures/echo-server.cjs",
+    "policyOnly1kGatesMs": {
+      "p95": 500,
+      "p99": 1000
+    },
+    "concurrentProxy1kGatesMs": {
+      "p95": 5000,
+      "p99": 10000
+    }
+  },
+  "tiers": [
+    {
+      "concurrency": 1,
+      "p95SloMs": 150,
+      "correctness": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "correctnessPct": 100,
+        "expectedBlocked": 1,
+        "blocked": 1,
+        "expectedAllowed": 1,
+        "allowed": 0,
+        "timeouts": 0
+      },
+      "latencyMs": {
+        "p50": 155.49170800000002,
+        "p95": 155.49170800000002,
+        "p99": 155.49170800000002,
+        "max": 155.49170800000002,
+        "avg": 155.49
+      },
+      "throughput": {
+        "wallMs": 156,
+        "callsPerSecond": 6
+      },
+      "sloResults": {
+        "p95Ms": 150,
+        "p95Pass": false,
+        "correctnessPass": true,
+        "overallPass": false
+      },
+      "errors": []
+    },
+    {
+      "concurrency": 10,
+      "p95SloMs": 500,
+      "correctness": {
+        "total": 10,
+        "passed": 10,
+        "failed": 0,
+        "correctnessPct": 100,
+        "expectedBlocked": 1,
+        "blocked": 1,
+        "expectedAllowed": 9,
+        "allowed": 9,
+        "timeouts": 0
+      },
+      "latencyMs": {
+        "p50": 368.140167,
+        "p95": 420.2830829999998,
+        "p99": 420.2830829999998,
+        "max": 420.2830829999998,
+        "avg": 356.85
+      },
+      "throughput": {
+        "wallMs": 583,
+        "callsPerSecond": 17
+      },
+      "sloResults": {
+        "p95Ms": 500,
+        "p95Pass": true,
+        "correctnessPass": true,
+        "overallPass": true
+      },
+      "errors": []
+    },
+    {
+      "concurrency": 25,
+      "p95SloMs": 1500,
+      "correctness": {
+        "total": 25,
+        "passed": 25,
+        "failed": 0,
+        "correctnessPct": 100,
+        "expectedBlocked": 3,
+        "blocked": 3,
+        "expectedAllowed": 23,
+        "allowed": 22,
+        "timeouts": 0
+      },
+      "latencyMs": {
+        "p50": 1418.1965000000005,
+        "p95": 1953.3417919999997,
+        "p99": 1982.4950840000001,
+        "max": 1982.4950840000001,
+        "avg": 1413.88
+      },
+      "throughput": {
+        "wallMs": 2063,
+        "callsPerSecond": 12
+      },
+      "sloResults": {
+        "p95Ms": 1500,
+        "p95Pass": false,
+        "correctnessPass": true,
+        "overallPass": false
+      },
+      "errors": []
+    },
+    {
+      "concurrency": 50,
+      "p95SloMs": 3000,
+      "correctness": {
+        "total": 50,
+        "passed": 50,
+        "failed": 0,
+        "correctnessPct": 100,
+        "expectedBlocked": 5,
+        "blocked": 5,
+        "expectedAllowed": 45,
+        "allowed": 45,
+        "timeouts": 0
+      },
+      "latencyMs": {
+        "p50": 2336.074375,
+        "p95": 2905.9901659999996,
+        "p99": 2948.146417,
+        "max": 2948.146417,
+        "avg": 2216.03
+      },
+      "throughput": {
+        "wallMs": 3055,
+        "callsPerSecond": 16
+      },
+      "sloResults": {
+        "p95Ms": 3000,
+        "p95Pass": true,
+        "correctnessPass": true,
+        "overallPass": true
+      },
+      "errors": []
+    }
+  ],
+  "overallPass": false,
+  "httpSseVariant": {
+    "status": "BLOCKED",
+    "reason": "No local HTTP MCP echo fixture or session bootstrap in-repo; SseProxyServer/HttpProxyServer need live upstream + SSE handshake. Use stdio proxy tiers for deployment SLOs."
+  },
+  "machine": {
+    "hostname": "Rudraneels-Mac-mini.local",
+    "platform": "darwin arm64",
+    "cpuCount": 10,
+    "node": "v23.11.0"
+  }
+}

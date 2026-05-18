@@ -9,6 +9,9 @@ import { persistCallRecord } from '../utils/call-record-cost.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
 import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js';
+import { MtlsConfig, createMtlsAgent, loadMtlsConfig } from '../utils/mtls-config.js';
+import type { Agent as HttpsAgent } from 'https';
+import { resolveTenantId } from '../tenant/resolve-tenant.js';
 
 interface SseProxyOptions {
   upstreamUrl: string;
@@ -16,6 +19,7 @@ interface SseProxyOptions {
   policy?: PolicyEngine;
   db: import('../database/database-interface.js').IDatabase;
   authHeader?: string;
+  mtlsConfig?: MtlsConfig;
 }
 
 /**
@@ -27,11 +31,17 @@ interface SseProxyOptions {
 export class SseProxyServer extends EventEmitter {
   private opts: SseProxyOptions;
   private tokenCounter: TokenCounter;
+  private httpsAgent: HttpsAgent | undefined;
 
   constructor(opts: SseProxyOptions) {
     super();
     this.opts = opts;
     this.tokenCounter = new TokenCounter();
+    const mtls = opts.mtlsConfig ?? loadMtlsConfig();
+    this.httpsAgent = createMtlsAgent(mtls);
+    if (this.httpsAgent) {
+      Logger.info(`[sse-proxy:${opts.serverName}] mTLS enabled for upstream connection`);
+    }
   }
 
   async interceptAndForward(
@@ -41,15 +51,19 @@ export class SseProxyServer extends EventEmitter {
 
     // Policy check
     if (isToolCall && this.opts.policy) {
+      const tenantId = resolveTenantId({
+        meta: (jsonRpcRequest.params as Record<string, unknown> | undefined)?._meta,
+      });
       const context = {
         serverName: this.opts.serverName,
-        toolName: (jsonRpcRequest.params as any)?.name || 'unknown',
-        arguments: (jsonRpcRequest.params as any)?.arguments,
+        toolName: (jsonRpcRequest.params as { name?: string })?.name || 'unknown',
+        arguments: (jsonRpcRequest.params as { arguments?: Record<string, unknown> })?.arguments,
         requestId: String(jsonRpcRequest.id ?? 'sse-request'),
         requestTokens: this.tokenCounter.count(JSON.stringify(jsonRpcRequest)),
         timestamp: new Date().toISOString(),
+        tenantId,
       };
-      const decision = this.opts.policy.evaluate(context);
+      const decision = await this.opts.policy.evaluateAsync(context);
       if (decision.action === 'block') {
         this.emit('blocked', { serverName: this.opts.serverName, reason: decision.reason });
         return {
@@ -102,11 +116,10 @@ export class SseProxyServer extends EventEmitter {
         model,
       };
       try {
-        // Fire-and-forget best-effort; errors are logged but non-critical
         persistCallRecord(this.opts.db, record, jsonRpcRequest).catch((err: Error) => {
           Logger.warn(`[sse-proxy:${this.opts.serverName}] Failed to record call: ${err?.message}`);
         });
-      } catch { /* best-effort — only catches synchronous errors in record construction */ }
+      } catch { /* best-effort */ }
     }
 
     return response;
@@ -180,24 +193,29 @@ export class SseProxyServer extends EventEmitter {
   ): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const url = new URL(this.opts.upstreamUrl);
-      const client = url.protocol === 'https:' ? https : http;
+      const isHttps = url.protocol === 'https:';
+      const client = isHttps ? https : http;
       const payload = JSON.stringify(body);
 
-      const req = client.request(
-        {
-          hostname: url.hostname,
-          port: url.port || (url.protocol === 'https:' ? 443 : 80),
-          path: url.pathname + url.search,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(payload),
-            ...(this.opts.authHeader
-              ? { Authorization: this.opts.authHeader }
-              : {}),
-          },
+      const reqOpts: https.RequestOptions = {
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          ...(this.opts.authHeader
+            ? { Authorization: this.opts.authHeader }
+            : {}),
         },
-        (res) => {
+      };
+
+      if (isHttps && this.httpsAgent) {
+        reqOpts.agent = this.httpsAgent;
+      }
+
+      const req = client.request(reqOpts, (res) => {
           let data = '';
           res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
           res.on('end', () => {

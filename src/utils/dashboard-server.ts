@@ -218,6 +218,37 @@ export async function startDashboardServer(
     updateAgeOnGet: false,
   });
 
+  const apiRateLimiter: LRUCache<string, number> = new LRUCache({
+    max: 10000,
+    ttl: 60000,
+    updateAgeOnGet: false,
+  });
+
+  const dashboardApiRateLimit = (): number => {
+    const n = parseInt(process.env.GUARDIAN_DASHBOARD_API_RATE_LIMIT || '120', 10);
+    return Number.isFinite(n) && n > 0 ? n : 120;
+  };
+
+  async function checkDashboardApiRateLimit(ip: string): Promise<boolean> {
+    const limit = dashboardApiRateLimit();
+    const key = `dashboard-api:${ip}`;
+    try {
+      const { isRedisConfigured } = await import('./redis-client.js');
+      if (isRedisConfigured()) {
+        const { getSharedRedisRateLimiter } = await import('./redis-rate-limiter.js');
+        const rl = getSharedRedisRateLimiter();
+        const { allowed } = await rl.checkAndIncrement(key, limit);
+        return allowed;
+      }
+    } catch {
+      /* fall back to in-process limiter */
+    }
+    const attempts = apiRateLimiter.get(ip) ?? 0;
+    if (attempts >= limit) return false;
+    apiRateLimiter.set(ip, attempts + 1);
+    return true;
+  }
+
   const server = createServer(async (req, res) => {
     const url = (req.url || '/').split('?')[0] || '/';
     const method = req.method || 'GET';
@@ -352,6 +383,19 @@ export async function startDashboardServer(
       if (tryServeDashboardSpa(url, res)) return;
 
       if (url === '/' || url === '/dashboard.html') { setCors(); res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(dashboardHtml); return; }
+
+      if (
+        url.startsWith('/api/')
+        && url !== '/api/login'
+        && url !== '/api/auth/csrf'
+      ) {
+        const apiAllowed = await checkDashboardApiRateLimit(getClientIp(req));
+        if (!apiAllowed) {
+          setCors();
+          writeJson(res, 429, { error: 'Too many API requests' });
+          return;
+        }
+      }
 
       if (url === '/api/policy' && method === 'GET') {
         setCors();

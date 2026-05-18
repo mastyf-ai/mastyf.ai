@@ -157,6 +157,15 @@ export class PolicyEngine {
       : { hasCommandSubstitution: false, hasPipes: false, hasRedirects: false, hasLogicalChains: false, dangerousCommands: [], shellMetacharacters: [] };
 
     // Semantic shell analysis runs once per request (not per rule)
+    const psReason = this.shellTokenizer.detectPowerShellRisk(argsStr);
+    if (psReason) {
+      return {
+        action: this.resolveAction('block'),
+        rule: 'semantic-shell-guard',
+        reason: psReason,
+      };
+    }
+
     const semanticDecision = this.evaluateSemanticShell(shellRisk, context.toolName);
     if (semanticDecision) return semanticDecision;
 

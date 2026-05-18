@@ -77,7 +77,17 @@ export class ShellTokenizer {
     'ssh', 'scp', 'rsync',
     'kill', 'pkill', 'reboot', 'shutdown', 'halt',
     'tcpdump', 'nmap', 'traceroute',
+    'invoke-expression', 'iex',
   ]);
+
+  /** PowerShell-specific dangerous patterns (checked on full input string). */
+  private readonly POWERSHELL_DANGEROUS = [
+    /\binvoke-expression\b/i,
+    /\biex\b/i,
+    /-encodedcommand\b/i,
+    /-enc\b/i,
+    /\[convert\]::frombase64string/i,
+  ];
 
   /**
    * Tokenize a string that may contain shell syntax.
@@ -354,12 +364,26 @@ export class ShellTokenizer {
     return risk;
   }
 
+  /** Detect PowerShell-specific execution patterns in raw argument text. */
+  detectPowerShellRisk(input: string): string | null {
+    for (const pattern of this.POWERSHELL_DANGEROUS) {
+      if (pattern.test(input)) {
+        return `PowerShell dangerous pattern detected: ${pattern.source}`;
+      }
+    }
+    return null;
+  }
+
   /**
    * Full semantic analysis: tokenize + assess risk.
    */
   analyze(input: string): { ast: ShellAST; risk: CommandRisk } {
     const ast = this.tokenize(input);
     const risk = this.analyzeRisk(ast.commands);
+    const psReason = this.detectPowerShellRisk(input);
+    if (psReason && !risk.dangerousCommands.includes('powershell-pattern')) {
+      risk.dangerousCommands.push('powershell-pattern');
+    }
     return { ast, risk };
   }
 }

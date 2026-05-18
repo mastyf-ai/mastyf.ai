@@ -7,6 +7,10 @@ import { IDatabase } from '../database/database-interface.js';
 import { registerReadinessCheck } from './readiness.js';
 import { Logger } from './logger.js';
 import { createRedisClient, isRedisConfigured } from './redis-client.js';
+import {
+  setAttackLearningSharedStore,
+  loadAttackLearningFromSharedStore,
+} from '../ai/instant-attack-learning.js';
 
 let exporterManager: ExporterManager | null = null;
 let policyAuditor: PolicyAuditor | null = null;
@@ -54,6 +58,8 @@ export async function bootstrapCompliance(db: IDatabase): Promise<void> {
   ) {
     auditTrailSync = new AuditTrailSync(db);
     await auditTrailSync.initialize();
+    setAttackLearningSharedStore(auditTrailSync);
+    await loadAttackLearningFromSharedStore();
     auditTrailSync.start();
     Logger.info('[bootstrap] Audit trail sync to PostgreSQL started');
   }
@@ -103,6 +109,10 @@ export async function bootstrapCompliance(db: IDatabase): Promise<void> {
 
 export function getPolicyAuditor(): PolicyAuditor | null {
   return policyAuditor;
+}
+
+export function getAuditTrailSync(): AuditTrailSync | null {
+  return auditTrailSync;
 }
 
 export function getExporterManager(): ExporterManager | null {

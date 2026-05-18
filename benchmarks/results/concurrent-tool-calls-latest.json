@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-05-18T19:11:40.269Z",
+  "configuration": {
+    "concurrency": 1000,
+    "achievedConcurrent": 1000,
+    "test": "in-process PolicyEngine.evaluateAsync (deny eval when i%10===0)",
+    "slo": {
+      "p95Ms": 500,
+      "p99Ms": 1000
+    }
+  },
+  "correctness": {
+    "total": 1000,
+    "passed": 1000,
+    "failed": 0,
+    "correctnessPct": 100,
+    "expectedBlocked": 100,
+    "blocked": 100,
+    "allowed": 900
+  },
+  "latencyMs": {
+    "p50": 96.32320800000001,
+    "p95": 100.262708,
+    "p99": 100.71729199999999,
+    "max": 100.95720899999999,
+    "avg": 96.09
+  },
+  "throughput": {
+    "wallMs": 101,
+    "evaluationsPerSecond": 9901
+  },
+  "sloResults": {
+    "p95Ms": 500,
+    "p99Ms": 1000,
+    "p95Pass": true,
+    "p99Pass": true,
+    "correctnessPass": true,
+    "overallPass": true
+  },
+  "errors": [],
+  "machine": {
+    "hostname": "Rudraneels-Mac-mini.local",
+    "platform": "darwin arm64",
+    "cpuCount": 10,
+    "node": "v23.11.0"
+  }
+}

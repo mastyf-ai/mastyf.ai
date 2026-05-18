@@ -8,6 +8,10 @@ import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { registry } from '../utils/metrics.js';
 import { getGuardianRegionLabels } from '../utils/region.js';
+import {
+  isSemanticLlmConfigured,
+  reportSemanticDegradation,
+} from '../utils/semantic-layer.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
 
 export interface SemanticAuditJob {
@@ -88,7 +92,13 @@ function getLlm(): LlmAssistant {
 /** Enqueue async semantic audit (debounced batch drain). Never blocks the caller. */
 export function enqueueSemanticAudit(job: SemanticAuditJob): void {
   if (!isSemanticAsyncEnabled()) return;
-  if (!getLlm().isAvailable()) return;
+  if (!getLlm().isAvailable() || !isSemanticLlmConfigured()) {
+    reportSemanticDegradation('llm_unavailable', {
+      serverName: job.serverName,
+      toolName: job.toolName,
+    });
+    return;
+  }
 
   if (queue.length >= MAX_QUEUE) {
     stats.dropped++;

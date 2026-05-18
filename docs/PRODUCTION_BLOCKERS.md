@@ -2,6 +2,8 @@
 
 Status as of **2.8.0** (production hardening bundle). Each item was verified with automated tests and Helm defaults.
 
+**2.8.4+ enterprise fixes:** SSE `evaluateAsync`, shared attack-learning PG (`GUARDIAN_AUDIT_SYNC_ENABLED` + `DATABASE_URL`), `GUARDIAN_SEMANTIC_STRICT`, migration runner (`schema_migrations`), `GUARDIAN_TENANT_ID` for multi-tenant isolation.
+
 | # | Blocker | Priority | Was | Now | Evidence |
 |---|---------|----------|-----|-----|----------|
 | 1 | PgBouncer pool exhaustion | P0 | Direct `:5432` could exhaust Postgres under HA | Fail-fast + Helm enforcement | `src/utils/pgbouncer-check.ts` (`checkPgBouncerAtStartup` in `src/container.ts`); `GUARDIAN_REQUIRE_PGBOUNCER`; Helm `pgbouncer.requireGuardianEnforcement: true` → `deploy/helm/mcp-guardian/values.yaml`, `templates/deployment.yaml`; `tests/utils/pgbouncer-check.test.ts` |
