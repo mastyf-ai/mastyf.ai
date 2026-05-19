@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  getInstantLlmTimeoutMs,
   getSemanticTimeoutMs,
   withSemanticTimeout,
 } from '../../src/utils/semantic-timeout.js';
@@ -20,6 +21,16 @@ describe('semantic-timeout', () => {
   it('defaults to 500ms', () => {
     delete process.env.GUARDIAN_SEMANTIC_TIMEOUT_MS;
     expect(getSemanticTimeoutMs()).toBe(500);
+  });
+
+  it('instant LLM timeout defaults to 500ms', () => {
+    delete process.env.GUARDIAN_AI_INSTANT_LLM_TIMEOUT_MS;
+    expect(getInstantLlmTimeoutMs()).toBe(500);
+  });
+
+  it('respects GUARDIAN_AI_INSTANT_LLM_TIMEOUT_MS', () => {
+    process.env.GUARDIAN_AI_INSTANT_LLM_TIMEOUT_MS = '250';
+    expect(getInstantLlmTimeoutMs()).toBe(250);
   });
 
   it('respects GUARDIAN_SEMANTIC_TIMEOUT_MS', () => {

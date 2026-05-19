@@ -66,6 +66,38 @@ async function request(
   return { status: res.status, text: await res.text(), headers: res.headers };
 }
 
+/** Raw HTTP for headers fetch forbids (Host, CRLF). */
+function rawRequest(
+  proxyPort: number,
+  options: { path?: string; method?: string; headers?: http.OutgoingHttpHeaders; body?: string },
+): Promise<{ status: number; text: string; headers: http.IncomingHttpHeaders }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: proxyPort,
+        path: options.path ?? '/mcp',
+        method: options.method ?? 'GET',
+        headers: options.headers,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          resolve({
+            status: res.statusCode || 0,
+            text: Buffer.concat(chunks).toString(),
+            headers: res.headers,
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    if (options.body !== undefined) req.write(options.body);
+    req.end();
+  });
+}
+
 describe('integration: HttpProxyServer HTTP API', () => {
   const prevDpop = process.env.GUARDIAN_LEGACY_NO_DPOP;
 
@@ -473,6 +505,102 @@ describe('integration: HttpProxyServer HTTP API', () => {
       );
       expect(results.every((r) => r.status === 200)).toBe(true);
       await proxy.stop();
+    });
+  });
+
+  describe('HTTP security hardening', () => {
+    let proxy: HttpProxyServer;
+    let proxyPort = 0;
+    const prevMaxBody = process.env.GUARDIAN_HTTP_MAX_BODY_BYTES;
+
+    beforeEach(async () => {
+      process.env.GUARDIAN_HTTP_MAX_BODY_BYTES = '2048';
+      proxy = await startProxy(new PolicyEngine(blockPolicy));
+      proxyPort = proxy.getPort();
+    });
+
+    afterEach(async () => {
+      await proxy.stop();
+      if (prevMaxBody === undefined) delete process.env.GUARDIAN_HTTP_MAX_BODY_BYTES;
+      else process.env.GUARDIAN_HTTP_MAX_BODY_BYTES = prevMaxBody;
+    });
+
+    it('forwards query string with shell metacharacters encoded', async () => {
+      await request(proxyPort, {
+        method: 'GET',
+        path: '/mcp?q=%3Brm%20-rf',
+      });
+      expect(echoState.url).toMatch(/%3Brm|;\s*rm/i);
+    });
+
+    it('preserves unicode in query string', async () => {
+      await request(proxyPort, {
+        method: 'GET',
+        path: '/mcp?q=%E2%9C%85%E6%B8%AC%E8%AF%95',
+      });
+      expect(echoState.url).toContain('%E2%9C%85');
+    });
+
+    it('rejects path traversal in URL path', async () => {
+      const res = await rawRequest(proxyPort, {
+        method: 'GET',
+        path: '/mcp/../../../etc/passwd',
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('does not echo evil.com Origin into Access-Control-Allow-Origin', async () => {
+      const res = await request(proxyPort, {
+        method: 'GET',
+        headers: { Origin: 'https://evil.com' },
+      });
+      expect(res.headers.get('access-control-allow-origin')).not.toBe('https://evil.com');
+    });
+
+    it('allows localhost Origin for safe CORS', async () => {
+      const res = await request(proxyPort, {
+        method: 'GET',
+        headers: { Origin: 'http://127.0.0.1:3000' },
+      });
+      expect(res.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:3000');
+    });
+
+    it('rejects Host header with invalid characters', async () => {
+      const res = await rawRequest(proxyPort, {
+        method: 'GET',
+        headers: { host: 'evil.com/extra' },
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 413 for oversized body', async () => {
+      const big = 'x'.repeat(3000);
+      const res = await request(proxyPort, {
+        method: 'POST',
+        body: big,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+      expect(res.status).toBe(413);
+    });
+
+    it('rejects deeply nested JSON (JSON bomb)', async () => {
+      let nested = '1';
+      for (let i = 0; i < 40; i++) nested = `{"a":${nested}}`;
+      const res = await request(proxyPort, {
+        method: 'POST',
+        body: nested,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects XXE-style XML body', async () => {
+      const res = await request(proxyPort, {
+        method: 'POST',
+        body: '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>',
+        headers: { 'Content-Type': 'application/xml' },
+      });
+      expect(res.status).toBe(415);
     });
   });
 

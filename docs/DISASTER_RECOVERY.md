@@ -118,6 +118,60 @@ Document erasure in your ROPA; retention default 30 days (`HistoryDatabase` purg
 
 ---
 
+## Kubernetes backup CronJob (SQLite)
+
+When the proxy stores audit data on a PVC, schedule hot backups with `sqlite3 .backup` (WAL-safe):
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mcp-guardian-sqlite-backup
+  namespace: mcp-guardian
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: alpine:3.20
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  apk add --no-cache sqlite
+                  ts=$(date +%Y%m%d-%H%M)
+                  sqlite3 "$MCP_GUARDIAN_DB_PATH" ".backup /backups/guardian-${ts}.db"
+              env:
+                - name: MCP_GUARDIAN_DB_PATH
+                  value: /data/guardian.db
+                - name: GUARDIAN_DB_ENCRYPTION_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: mcp-guardian-secrets
+                      key: db-encryption-key
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: mcp-guardian-data
+            - name: backups
+              persistentVolumeClaim:
+                claimName: mcp-guardian-backups
+```
+
+Mount the same `GUARDIAN_DB_ENCRYPTION_KEY` used by the proxy Deployment. Restore per [SQLite backup and restore](#sqlite-backup-and-restore) above.
+
+---
+
 ## Verification after recovery
 
 ```bash

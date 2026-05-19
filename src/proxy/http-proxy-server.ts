@@ -17,6 +17,17 @@ import * as Metrics from '../utils/metrics.js';
 import { Logger } from '../utils/logger.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
 import { resolveTenantContext, InvalidTenantIdError, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
+import {
+  applySafeCorsHeaders,
+  getHttpMaxBodyBytes,
+  isXmlContentType,
+  looksLikeXmlBody,
+  parseJsonWithDepthLimit,
+  sanitizeResponseHeaders,
+  validateHostHeader,
+  validateRequestHeaders,
+  validateRequestUrlPath,
+} from './http-proxy-security.js';
 
 /**
  * HTTP/SSE Proxy for remote MCP servers.
@@ -96,6 +107,27 @@ export class HttpProxyServer {
 
     const tenantBreaker = this.breakerFor(requestTenantId);
 
+    const pathError = validateRequestUrlPath(req.url);
+    if (pathError) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: pathError }));
+      return;
+    }
+
+    const headerError = validateRequestHeaders(req.headers);
+    if (headerError) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: headerError }));
+      return;
+    }
+
+    const hostError = validateHostHeader(req.headers.host);
+    if (hostError) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: hostError }));
+      return;
+    }
+
     // ── Auth check ───────────────────────────────────────────
     let agentIdentity: AgentIdentity | undefined;
     let authnSuccess = false;
@@ -172,7 +204,7 @@ export class HttpProxyServer {
     }
 
     // ── Read body ────────────────────────────────────────────
-    const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
+    const MAX_BODY_SIZE = getHttpMaxBodyBytes();
     const chunks: Buffer[] = [];
     let totalSize = 0;
     for await (const chunk of req) {
@@ -186,10 +218,35 @@ export class HttpProxyServer {
     }
     const body = Buffer.concat(chunks).toString();
 
+    const contentType = req.headers['content-type'];
+    const ct = Array.isArray(contentType) ? contentType[0] : contentType;
+    if (isXmlContentType(ct) || (body.length > 0 && looksLikeXmlBody(body))) {
+      res.writeHead(415, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'XML payloads are not supported' }));
+      return;
+    }
+
+    if (ct?.toLowerCase().includes('application/json') && body.length > 0) {
+      const parsed = parseJsonWithDepthLimit(body);
+      if (!parsed.ok) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: parsed.error }));
+        return;
+      }
+    }
+
     // ── Policy evaluation (if tools/call) ────────────────────
     if (this.policyEngine) {
       try {
-        const msg = JSON.parse(body);
+        const parsed = parseJsonWithDepthLimit(body);
+        if (!parsed.ok) {
+          throw new Error(parsed.error);
+        }
+        const msg = parsed.value as {
+          method?: string;
+          id?: unknown;
+          params?: { name?: string; arguments?: Record<string, unknown> };
+        };
         if (msg.method === 'tools/call') {
           const toolName = msg.params?.name || 'unknown';
           const tokens = this.tokenCounter.count(body);
@@ -247,7 +304,9 @@ export class HttpProxyServer {
       }
 
       const proxyReq = (isHttps ? httpsReq : httpReq)(reqOpts, (upstreamRes) => {
-        res.writeHead(upstreamRes.statusCode || 200, upstreamRes.headers);
+        const safeHeaders = sanitizeResponseHeaders(upstreamRes.headers);
+        applySafeCorsHeaders(req.headers, safeHeaders);
+        res.writeHead(upstreamRes.statusCode || 200, safeHeaders);
         upstreamRes.pipe(res);
         // Record success on 'end', not when headers arrive — avoids false success on mid-stream drops
         upstreamRes.on('end', () => {

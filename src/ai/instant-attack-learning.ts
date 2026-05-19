@@ -19,6 +19,7 @@ import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
 import { broadcastDashboardEvent } from '../utils/dashboard-events.js';
 import { resolveTenantId, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
+import { getInstantLlmTimeoutMs, withSemanticTimeout } from '../utils/semantic-timeout.js';
 
 export interface InstantBlockEvent {
   serverName: string;
@@ -327,7 +328,12 @@ async function maybeRunInstantLlm(
     snippets: event.argSnippets?.slice(0, 3),
   });
 
-  const result = await assistant.generate(systemPrompt, userPrompt);
+  const result = await withSemanticTimeout(
+    'instant-attack-llm',
+    () => assistant.generate(systemPrompt, userPrompt),
+    null,
+    getInstantLlmTimeoutMs(),
+  );
   if (!result?.text) return 0;
 
   try {
