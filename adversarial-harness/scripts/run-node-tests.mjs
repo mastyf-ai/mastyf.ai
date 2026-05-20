@@ -18,6 +18,7 @@ const tests = [
   'adversarial-harness/node/streaming-race.test.mjs',
   'adversarial-harness/node/secret-scanner.test.mjs',
   'adversarial-harness/node/proxy-pipeline.test.mjs',
+  'adversarial-harness/node/concurrency-latency.test.mjs',
 ];
 
 mkdirSync(REPORT_DIR, { recursive: true });

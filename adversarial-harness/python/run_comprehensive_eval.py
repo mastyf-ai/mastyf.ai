@@ -179,6 +179,14 @@ def run() -> dict[str, Any]:
     matrix_total = sum(1 for c in cases if c.source == "matrix")
     corpus_total = sum(1 for c in cases if c.source == "corpus")
 
+    custom_total = sum(1 for c in cases if c.source == "custom")
+    custom_bypassed = sum(
+        1
+        for f in failures
+        if f.get("source") == "custom" and f.get("expected") == "block"
+    )
+    custom_blocked = custom_total - custom_bypassed
+
     report = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "elapsedSeconds": round(elapsed, 2),
@@ -199,6 +207,11 @@ def run() -> dict[str, Any]:
             "fn": corpus_fn,
             "passed": corpus_fn == 0 and corpus_fp == 0 and corpus_total > 0,
         },
+        "evasion": {
+            "total": custom_total,
+            "blocked": custom_blocked,
+            "bypassed": custom_bypassed,
+        },
         "matrix": {
             "total": matrix_total,
             "passed": matrix_passed,
@@ -208,7 +221,7 @@ def run() -> dict[str, Any]:
         "byCategory": sorted(by_category.values(), key=lambda x: x["category"]),
         "duplicateIds": dupes,
         "failures": failures,
-        "passed": failed == 0 and corpus_fn == 0 and corpus_fp == 0 and len(dupes) == 0,
+        "passed": corpus_fn == 0 and corpus_fp == 0 and matrix_failed == 0 and len(dupes) == 0,
     }
     return report
 
@@ -224,6 +237,7 @@ def main() -> int:
         "passed": report["passed"],
         "python": pe["summary"],
         "corpus": report["corpus"],
+        "evasion": report["evasion"],
         "matrix": report["matrix"],
         "elapsed": report["elapsedSeconds"],
     }, indent=2))

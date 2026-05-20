@@ -59,7 +59,7 @@ describe('Adversarial harness: MCP proxy pipeline', () => {
     expect(true).toBe(true);
   });
 
-  it('serializes concurrent handleClientInput through AsyncSerialQueue', async () => {
+  it('serializes same request id via RequestIdLock (per-id queue)', async () => {
     const order = [];
     vi.spyOn(proxy, 'processClientInput').mockImplementation(async (raw) => {
       const msg = JSON.parse(raw);
@@ -71,21 +71,47 @@ describe('Adversarial harness: MCP proxy pipeline', () => {
       }
     });
 
+    const sameId = 'dup-1';
+    await Promise.all([
+      proxy.handleClientInput(mkCall(sameId, 'echo', { n: '1' })),
+      proxy.handleClientInput(mkCall(sameId, 'echo', { n: '2' })),
+      proxy.handleClientInput(mkCall(sameId, 'echo', { n: '3' })),
+    ]);
+
+    expect(order).toEqual([
+      'start:dup-1',
+      'end:dup-1',
+      'start:dup-1',
+      'end:dup-1',
+      'start:dup-1',
+      'end:dup-1',
+    ]);
+    vi.restoreAllMocks();
+  });
+
+  it('allows concurrent handleClientInput for distinct request ids', async () => {
+    const order = [];
+    vi.spyOn(proxy, 'processClientInput').mockImplementation(async (raw) => {
+      const msg = JSON.parse(raw);
+      if (msg.method === 'tools/call' && msg.id) {
+        order.push(`start:${msg.id}`);
+        await new Promise((r) => setTimeout(r, 40));
+        order.push(`end:${msg.id}`);
+      }
+    });
+
     await Promise.all([
       proxy.handleClientInput(mkCall('a', 'echo', { n: 'a' })),
       proxy.handleClientInput(mkCall('b', 'echo', { n: 'b' })),
       proxy.handleClientInput(mkCall('c', 'echo', { n: 'c' })),
     ]);
 
-    expect(order.filter((x) => x.startsWith('end:'))).toHaveLength(3);
-    expect(order).toEqual([
-      'start:a',
-      'end:a',
-      'start:b',
-      'end:b',
-      'start:c',
-      'end:c',
-    ]);
+    const starts = order.filter((x) => x.startsWith('start:'));
+    const ends = order.filter((x) => x.startsWith('end:'));
+    expect(starts).toHaveLength(3);
+    expect(ends).toHaveLength(3);
+    // Overlap: all starts before any end when ids differ (RequestIdLock per key)
+    expect(order.indexOf('end:a')).toBeGreaterThan(order.indexOf('start:b'));
     vi.restoreAllMocks();
   });
 });

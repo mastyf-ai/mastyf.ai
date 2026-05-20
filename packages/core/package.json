@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/core",
-  "version": "2.8.4",
+  "version": "2.8.6",
   "description": "Detection engine: regex + schema + semantic analysis for MCP tool definitions",
   "type": "module",
   "main": "./dist/index.js",
@@ -33,6 +33,11 @@
     "vitest": "^3.2.4",
     "@types/node": "^20.0.0"
   },
-  "keywords": ["mcp", "security", "prompt-injection", "detection"],
+  "keywords": [
+    "mcp",
+    "security",
+    "prompt-injection",
+    "detection"
+  ],
   "license": "MIT"
 }

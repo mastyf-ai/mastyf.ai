@@ -71,11 +71,12 @@ function main() {
 
   const pyInput = fixtures.map((f) => ({ ...f, id: f.id }));
 
-  const py = spawnSync('python3', [join(ROOT, 'python', 'parity_batch.py')], {
+  const pyBin = process.env['HARNESS_PYTHON'] || 'python3';
+  const py = spawnSync(pyBin, [join(ROOT, 'python', 'parity_batch.py')], {
     input: JSON.stringify(pyInput),
     encoding: 'utf-8',
     cwd: join(ROOT, 'python'),
-    env: { ...process.env, PYTHONPATH: join(ROOT, 'python') },
+    env: { ...process.env, PYTHONPATH: join(ROOT, 'python'), GUARDIAN_DISABLE_SEMANTIC: 'true' },
   });
   if (py.status !== 0) {
     console.error(py.stderr || py.stdout);

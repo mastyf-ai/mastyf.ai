@@ -10,13 +10,22 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-## Proven under attack (v2.8.1)
+## Proven under attack (v2.8.6)
 
-**v2.8.1** ships **per-block instant attack learning** on proxy policy blocks — rolling stats and attack-pattern suggestions in a sliding window while traffic is active (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`; debounced batch cycles remain for full AI review). **Repo eval** numbers below come from [`reports/attack-learning-eval/metrics.json`](reports/attack-learning-eval/metrics.json) (reproducible CI). **[sca/](sca/)** adds a separate **synthetic** 180-minute escalation sim — use repo metrics when numbers must match CI.
+Evidence is split into four layers — use the right source when quoting numbers:
 
-### Instant vs batch (long-run, verified)
+| Layer | Harness | Trust for CI / procurement |
+|-------|---------|----------------------------|
+| **Repo eval** | `pnpm eval:attack-learning:long` → [`reports/attack-learning-eval/metrics.json`](reports/attack-learning-eval/metrics.json) | **Primary** — reproducible, same code path as `instant-attack-learning` tests |
+| **Adversarial harness** | [`adversarial-harness/run-all.sh`](adversarial-harness/run-all.sh) → [`reports/adversarial-harness/`](reports/adversarial-harness/) | **Primary (live proxy + parity)** — **154/154** corpus attacks, **84/85** evasion, **26/26** Node stdio integration; Python offline mirror of TS sync pipeline ([`POLICY_PORT_GAPS.md`](adversarial-harness/python/POLICY_PORT_GAPS.md)) |
+| **Enterprise 5-scenario sim** | [`reports/enterprise-attack-sim/`](reports/enterprise-attack-sim/) (`enterprise-attack-simulator.ts`) | **Synthetic** — 330 modeled attacks, May 2026 package; open [dashboard HTML](reports/enterprise-attack-sim/attack-simulation-dashboard.html) |
+| **180-min SCA sim** | [`sca/`](sca/) (`live-proxy-attack-simulator.ts`, `CHART_*.png`) | **Synthetic** — 349k+ request escalation narrative; not `metrics.json` |
 
-`pnpm eval:attack-learning:long` — **5003** simulated blocked `tools/call` events, **~4.9h** attack stream (2–5s inter-arrival, 30s batch debounce). Source: [`metrics.json`](reports/attack-learning-eval/metrics.json).
+**v2.8.6** continues **per-block instant attack learning** on proxy blocks, adds **bounded audit write queue** (`GUARDIAN_AUDIT_QUEUE_MAX`), **dashboard RBAC**, **streaming response inspection**, and **comprehensive adversarial harness** coverage. See [CHANGELOG.md](CHANGELOG.md).
+
+### Instant vs batch (long-run, repo eval — verified)
+
+`pnpm eval:attack-learning:long` — **5003** simulated blocked `tools/call` events, **~4.9h** attack stream (2–5s inter-arrival, 30s batch debounce).
 
 | Metric | Instant learning | Batch-only (debounced) |
 |--------|------------------|-------------------------|
@@ -24,7 +33,7 @@
 | Avg blocks to first suggestion | **3.0** | **1000.6** |
 | Median time-to-suggestion | **41 s** | **~4.9 h** |
 
-**Verdict:** Same suggestion throughput, but **instant** discovers repeat `(rule, tool)` clusters during the stream; **batch-only** defers until debounce quiet periods, pushing median discovery toward session end. Deep dive: [Attack learning evaluation](#attack-learning-evaluation) · [summary.md](reports/attack-learning-eval/summary.md) · [docs/AI_LEARNING.md](docs/AI_LEARNING.md).
+**Verdict:** Same suggestion throughput, but **instant** discovers repeat `(rule, tool)` clusters during the stream; **batch-only** defers until debounce quiet periods (~**428×** slower median discovery: 4.87h ÷ 41s). Deep dive: [Attack learning evaluation](#attack-learning-evaluation) · [summary.md](reports/attack-learning-eval/summary.md) · [docs/AI_LEARNING.md](docs/AI_LEARNING.md).
 
 ```mermaid
 flowchart LR
@@ -37,18 +46,71 @@ flowchart LR
   S --> P[Human accept or auto-apply → policy YAML]
 ```
 
-### Hero charts (repo eval + synthetic sim)
+### Enterprise five-scenario sim (synthetic — May 2026)
+
+**330** modeled attacks across finance / SaaS / cost / DPoP / healthcare scenarios. Source: [`attack-simulation-metrics.json`](reports/enterprise-attack-sim/attack-simulation-metrics.json) (not CI-gated).
+
+| Scenario | Attacks | Block rate | Avg detection latency |
+|----------|---------|------------|------------------------|
+| A — Credential exfiltration | 80 | 95.0% | 36.2 ms |
+| B — Prompt injection | 100 | 94.0% | 29.9 ms |
+| C — Token amplification | 50 | 88.0% | 47.8 ms |
+| D — DPoP replay | 25 | 88.0% | 70.1 ms |
+| E — SQL injection | 75 | 96.0% | 36.9 ms |
+| **Aggregate** | **330** | **93.33%** (308 blocked) | **38.8 ms** |
+
+**0** false positives in sim · **8.9 MB** peak memory · Interactive charts: [attack-simulation-dashboard.html](reports/enterprise-attack-sim/attack-simulation-dashboard.html). Full index: [reports/enterprise-attack-sim/README.md](reports/enterprise-attack-sim/README.md).
+
+### Adversarial test harness (live proxy + policy parity — May 2026)
+
+Full run: `./adversarial-harness/run-all.sh` or `node adversarial-harness/run-harness.mjs`. Reports: [`reports/adversarial-harness/summary.md`](reports/adversarial-harness/summary.md) · [`analysis.md`](reports/adversarial-harness/analysis.md) · [`results.json`](reports/adversarial-harness/results.json). Harness docs: [`adversarial-harness/README.md`](adversarial-harness/README.md).
+
+| Suite | Result | Notes |
+|-------|--------|-------|
+| **Corpus** (`default-policy.yaml`) | **154/154** attacks blocked · **74/74** benign + edge pass · **0** false positives | **228** fixtures on disk (151 attack + 55 benign + edge-cases under [`corpus/`](corpus/)) |
+| **Evasion probes** | **84/85** blocked · **1** bypass | [`evasion-attacks.json`](adversarial-harness/evasion-attacks.json) — encoding, unicode, SSRF, shell/SQL obfuscation, tool-chain |
+| **Node live integration** | **26/26** passed | Real mock MCP **stdio** + `McpProxyServer` proxy pipeline (not mocked policy) |
+| **Python ↔ TypeScript parity** | **400/402** (99.5%) · **0** corpus mismatches | Python port mirrors TS **sync** `evaluate()` for offline eval; live Node tests use subprocess proxy |
+| **Streaming race** | **3/3** pass | Chunk-boundary injection, concurrent writers, full-response jailbreak (`streaming-inspector`) |
+| **Secret scanner** | **14/14** pass | AWS, GitHub, Slack, Stripe, OpenAI, JWT, npm, generic API keys (live `scanForSecrets`) |
+| **Overall harness** | **PASS** | [`results.json`](reports/adversarial-harness/results.json) (2026-05-20) |
+
+**Known gap (documented):** evasion probe **adv-066** — base64 obfuscation in the `search` tool (`note` field) — **bypasses** policy today (`expected=block`, `actual=pass`, `rule=allowlist`). Treat as a tracked finding, not a hidden regression.
+
+**Proxy concurrency (measured on harness run):**
+
+| Component | p50 | p95 |
+|-----------|-----|-----|
+| `AsyncSerialQueue` (CLI stdin — serializes all lines) | 2.32 ms | 2.41 ms |
+| `McpProxyServer.handleClientInput` (live mock MCP stdio) | 19.37 ms | 37.01 ms |
+
+**Design note:** CLI stdin uses a global **`AsyncSerialQueue`** (one line at a time). The proxy uses **`RequestIdLock`**: same MCP `id` serializes; distinct ids may overlap by design. The Python port is **not** identical to production TypeScript — intentional offline-eval gaps (OPA async, Redis rate limit, FP whitelist, response-body eval, shadow policy) are listed in [`adversarial-harness/python/POLICY_PORT_GAPS.md`](adversarial-harness/python/POLICY_PORT_GAPS.md). Narrative: [analysis.md](reports/adversarial-harness/analysis.md).
+
+```bash
+./adversarial-harness/run-all.sh
+# or
+node adversarial-harness/run-harness.mjs
+pnpm exec tsx adversarial-harness/scripts/compare-node-python.ts   # parity by fixture id
+```
+
+### Security assessment (static review + sim)
+
+May 2026 enterprise package: **8.6/10** production readiness score ([`MCP_GUARDIAN_EXECUTIVE_SUMMARY.md`](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md)) — **3 HIGH**, **5 MEDIUM**, **7 LOW** documented in [`MCP_GUARDIAN_FINDINGS.md`](reports/enterprise-attack-sim/MCP_GUARDIAN_FINDINGS.md). Several items are **addressed in v2.8.4+** (e.g. bounded `GUARDIAN_AUDIT_QUEUE_MAX`, DPoP Redis `SET NX` + lock, PgBouncer fail-fast); treat findings as a remediation checklist, not open CVEs. **No ROI / dollar-value charts** in README — those narratives were removed from primary docs in v2.8.3.
+
+### Hero charts (repo eval + synthetic sims)
 
 | Instant vs batch — repo eval | Stage 1 → 2 detection — synthetic 180 min sim |
 |:---:|:---:|
 | ![Instant vs batch cumulative suggestions](reports/attack-learning-eval/figures/fig2-cumulative-suggestions.png) | ![Detection accuracy by attack type](sca/CHART_1_Detection_Accuracy.png) |
 
-*Instant curve rises in the first minutes; batch stays flat until ~4.9h debounce quiet — same 5 suggestions, different discovery latency (median **~41s** instant vs **~4.87h** batch in metrics table above).*
+*Instant curve rises in the first minutes; batch stays flat until ~4.9h debounce quiet — median **~41s** instant vs **~4.87h** batch ([`metrics.json`](reports/attack-learning-eval/metrics.json)).*
 
-*Synthetic sim ([sca/](sca/)): Stage 2 detection **+8.8pp** avg vs Stage 1 across 12 escalating attack types (not `metrics.json`).*
+*Synthetic [sca/](sca/) sim: Stage 2 detection **+8.8pp** avg vs Stage 1 across 12 escalating attack types.*
 
 ```bash
-pnpm eval:attack-learning:long && pnpm eval:attack-learning:charts   # refresh fig1–fig7 + metrics.json
+pnpm eval:attack-learning:long && pnpm eval:attack-learning:charts   # repo fig1–fig7 + metrics.json
+./adversarial-harness/run-all.sh                                       # adversarial harness → reports/adversarial-harness/
+npx tsx reports/enterprise-attack-sim/enterprise-attack-simulator.ts  # refresh enterprise sim JSON
 ```
 
 ---
@@ -57,10 +119,10 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Version 2.8.1** adds **per-block instant attack learning** on proxy policy blocks — synchronous rolling stats and attack-pattern suggestions in a sliding window (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`); optional rate-limited LLM classifier on critical blocks (`GUARDIAN_AI_INSTANT_LLM`). **2.8.0** is the **production hardening bundle** — all five production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are **resolved** (PgBouncer fail-fast, LRU/session memory caps, DPoP `jti` + Redis distributed lock, honest cost audit defaults, npm `@mcp-guardian/plugin-sdk`). **2.7.11** separates **actual** proxy costs from **model-only** audit previews and opt-in **estimated** simulation (`GUARDIAN_COST_ALLOW_ESTIMATES`). **2.7.9** adds heap/RSS **memory monitor** on long-running proxies (`GUARDIAN_MEMORY_MONITOR=false` to disable). **2.7.6** ships enterprise cost governance, mandatory DPoP, Redis HA, Helm mTLS, and non-root Docker. **2.7.5** adds the enterprise corpus (226 fixtures), CI eval, benchmarks, and adversarial E2E. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+**Version 2.8.6** ships the **enterprise test package** (five-scenario attack sim, security assessment reports, adversarial harness), **dashboard RBAC**, **streaming response inspection**, **bounded audit queue**, and **distributed policy eval cache**. **2.8.1** added **per-block instant attack learning** (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`; optional `GUARDIAN_AI_INSTANT_LLM`). **2.8.0** is the **production hardening bundle** — all five production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are **resolved** (PgBouncer fail-fast, LRU/session memory caps, DPoP `jti` + Redis distributed lock, honest cost audit defaults, npm `@mcp-guardian/plugin-sdk`). **2.7.11** separates **actual** proxy costs from **model-only** audit previews and opt-in **estimated** simulation (`GUARDIAN_COST_ALLOW_ESTIMATES`). **2.7.9** adds heap/RSS **memory monitor** on long-running proxies (`GUARDIAN_MEMORY_MONITOR=false` to disable). **2.7.6** ships enterprise cost governance, mandatory DPoP, Redis HA, Helm mTLS, and non-root Docker. **2.7.5** adds the enterprise corpus (226 fixtures), CI eval, benchmarks, and adversarial E2E. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 > **Experimental vs shipped (honest)**  
-> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence, dashboard auth (fail-closed), **browser SPA** (`deploy/dashboard-spa/`), **cost auditor** (`costSource`: `actual` | `model-only` | `estimated` | `none`), **enterprise cost template** (`GUARDIAN_DAILY_BUDGET_USD`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA** ([REDIS_HA.md](docs/REDIS_HA.md)), **PgBouncer enforcement** (`GUARDIAN_REQUIRE_PGBOUNCER`, `REPLICA_COUNT`), bounded **session/nonce/LLM LRU caches** (`updateAgeOnGet: false`), **memory monitor** on proxy, **DPoP + Redis jti lock** ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)), **Helm mTLS**, **non-root Docker** (uid 1001), **detector Plugin SDK** (`@mcp-guardian/plugin-sdk` on npm), fleet CLI, HTTP tools template, multi-region labeling (active-passive), async semantic audit, Redis LLM cache + `getLlmConfig()`, secret scanner DLP (150+ patterns), enterprise corpus + `pnpm eval`, pen-test + attack matrix, adversarial proxy E2E, **instant + batch AI learning** (quorum/drift/rollback), [production blockers doc](docs/PRODUCTION_BLOCKERS.md), Windows `guardian-proxy.ps1`.  
+> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence (lazy when off), dashboard auth (fail-closed) + **RBAC**, **browser SPA** (`deploy/dashboard-spa/`), **streaming response inspection**, **cost auditor** (`costSource`: `actual` | `model-only` | `estimated` | `none`), **enterprise cost template** (`GUARDIAN_DAILY_BUDGET_USD`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA** ([REDIS_HA.md](docs/REDIS_HA.md)), **PgBouncer enforcement** (`GUARDIAN_REQUIRE_PGBOUNCER`, `REPLICA_COUNT`), bounded **session/nonce/LLM LRU caches** + **audit write queue** (`GUARDIAN_AUDIT_QUEUE_MAX`), **memory monitor** on proxy, **DPoP + Redis jti lock** ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)), **Helm mTLS**, **non-root Docker** (uid 1001), **detector Plugin SDK** (`@mcp-guardian/plugin-sdk` on npm), fleet CLI, HTTP tools template, multi-region labeling (active-passive), async semantic audit + **local semantic fallback**, Redis LLM cache + `getLlmConfig()`, secret scanner DLP (150+ patterns), enterprise corpus + `pnpm eval`, pen-test + attack matrix, adversarial proxy E2E + **comprehensive harness**, **instant + batch AI learning** (quorum/drift/rollback), [enterprise attack sim](reports/enterprise-attack-sim/README.md) (synthetic), [production blockers doc](docs/PRODUCTION_BLOCKERS.md), Windows `guardian-proxy.ps1`.  
 > **Roadmap:** multi-region **active-active** SQLite/Postgres replication, signed plugin marketplace, production MSI code-signing pipeline.
 
 ### Production blockers (v2.8.0 — all resolved)
@@ -79,7 +141,8 @@ Details, verification commands, and Helm defaults: **[docs/PRODUCTION_BLOCKERS.m
 
 ## Table of Contents
 
-- [Proven under attack (v2.8.1)](#proven-under-attack-v281)
+- [Proven under attack (v2.8.6)](#proven-under-attack-v286)
+  - [Adversarial test harness](#adversarial-test-harness-live-proxy--policy-parity--may-2026)
 - [Production blockers (v2.8.0)](#production-blockers-v280--all-resolved)
 - [Quick Start](#quick-start)
 - [Real-World Integration (Cline, Cursor, Claude Code)](#real-world-integration-cline-cursor-claude-code)
@@ -97,6 +160,8 @@ Details, verification commands, and Helm defaults: **[docs/PRODUCTION_BLOCKERS.m
 - [Architecture](#architecture)
 - [Attack learning evaluation](#attack-learning-evaluation)
   - [Repo evaluation (reproducible CI)](#repo-evaluation-reproducible-ci)
+  - [Adversarial test harness](#adversarial-test-harness-live-proxy--policy-parity--may-2026)
+  - [Enterprise five-scenario simulation](#enterprise-five-scenario-simulation-may-2026-package)
   - [Extended attack simulation (sca collateral)](#extended-attack-simulation-sca-collateral)
 - [Development](#development)
   - [Performance & benchmarks](#performance--benchmarks)
@@ -247,7 +312,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Fail-closed production default** — `default-policy.yaml` sets `default_action: block` (tools not on the allowlist are blocked). Onboarding uses `policy-demo.yaml` (`default_action: pass`, `mode: audit`) — not for production.
 - **Semantic guards** (sync, before YAML rules) — path guard (expanded credential paths: docker.sock, k8s service-account tokens, `terraform.tfstate`, `.npmrc`, `.git-credentials`, `.vault-token`, service-account JSON), **URL/SSRF guard** (`url-guard.ts`: metadata IPs `169.254.*`, `file://` / `javascript:` / `data:`, private RFC1918, decimal-IP localhost, `[::1]`, webhook/callback fields), SQL/NoSQL/GraphQL/LDAP exfil patterns, SSTI markers (`{{`, `${`, `<%`), GitHub write-tool deny, PowerShell guard, zero-width–stripped prompt-injection in tool **arguments** (`semantic-guards.ts`). See evaluation order in [POLICY.md](docs/POLICY.md).
 - **Puppeteer / browser tools** — `puppeteer_navigate` and `puppeteer_screenshot` scan **all string leaves** for URLs, not only allowlisted tool names; blocks localhost/metadata/private targets while allowing benign public URLs (e.g. `https://example.com/`).
-- **Adversarial regression** — 34 tests in [`tests/policy/adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts) exercise the 58-scenario report against `default-policy.yaml` (no mocks); `tests/policy/url-guard.test.ts` covers URL parsing edge cases.
+- **Adversarial regression** — 34 tests in [`tests/policy/adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts) exercise the 58-scenario report against `default-policy.yaml` (no mocks); `tests/policy/url-guard.test.ts` covers URL parsing edge cases. **Comprehensive harness** — 228 corpus fixtures + 85 evasion probes + 26 live Node integration tests ([`adversarial-harness/`](adversarial-harness/), [`reports/adversarial-harness/`](reports/adversarial-harness/)); **1** known bypass (**adv-066**, base64 in `search`).
 - **Honest limits (v2.6.8)** — Security depth improved, but orgs that add custom outbound tools (e.g. `http_request`) must add YAML URL/host rules or keep them off the allowlist. Built-in URL guard keys on `url` / `href` / `target` / `webhook` / `callback` plus full puppeteer argument trees — not every possible argument name.
 - **Unicode / TR39** — `unicode_strict: true` loads `assets/confusables.txt` and folds confusables before regex (disable for literal Unicode in i18n teams)
 - **Three-layer detection** — Regex → schema/shell tokenizer → optional async LLM semantic audit (not on the hot path)
@@ -338,10 +403,11 @@ See **[docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md)** for an hone
 - **Graceful shutdown** — WAL checkpoint, connection flush
 
 ### Testing
-- **546 tests** — `pnpm vitest run` (96 files, 546 passed + 1 skipped; unit, integration, E2E proxy + adversarial proxy, fleet, policy-merge, plugin-sdk, llm-cache, llm-config, cost-auditor, dpop-redis-lock, policy-engine-memory, pgbouncer-check, memory-monitor, instant-attack-learning, secret-scanner coverage)
-- **Enterprise corpus** — **226** JSON fixtures ([`corpus/`](corpus/README.md)); `pnpm eval` via `PolicyEngine` + `default-policy.yaml` — **100% F1** on latest eval (see [`corpus-eval-report.json`](corpus-eval-report.json))
+- **768+ tests** — `pnpm vitest run` (**140** files; unit, integration, E2E proxy + adversarial proxy + harness node suite, fleet, policy-merge, plugin-sdk, llm-cache, llm-config, cost-auditor, dpop-redis-lock, policy-engine-memory, pgbouncer-check, memory-monitor, instant-attack-learning, dashboard-rbac, secret-scanner coverage)
+- **Adversarial harness** — `./adversarial-harness/run-all.sh` or `node adversarial-harness/run-harness.mjs` → [`reports/adversarial-harness/`](reports/adversarial-harness/) — **154/154** corpus attacks blocked, **0** FP on **74** benign + edge fixtures, **84/85** evasion blocked (**adv-066** documented bypass), **26/26** live Node integration, **400/402** Python/TS parity
+- **Enterprise corpus** — **228** JSON fixtures on disk (151 attack + 55 benign + edge-cases; [`corpus/`](corpus/README.md)); `pnpm eval` via `PolicyEngine` + `default-policy.yaml` — **100%** attack recall on latest eval (see [`corpus-eval-report.json`](corpus-eval-report.json))
 - **Pen-test evidence** — [`docs/PEN_TEST_REPORT.md`](docs/PEN_TEST_REPORT.md), OWASP MCP/LLM mapping in [`security/ATTACK_MATRIX.md`](security/ATTACK_MATRIX.md)
-- **Adversarial scenarios** — 58+ inline regression tests ([`adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts)); **10** corpus attacks through live proxy ([`adversarial-proxy.e2e.test.ts`](tests/e2e/adversarial-proxy.e2e.test.ts))
+- **Adversarial scenarios** — 58+ inline regression tests ([`adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts)); **10** corpus attacks through live proxy ([`adversarial-proxy.e2e.test.ts`](tests/e2e/adversarial-proxy.e2e.test.ts)); full matrix in [`adversarial-harness/README.md`](adversarial-harness/README.md)
 - **CI** — `corpus-eval` + `benchmarks` jobs in [`.github/workflows/ci.yml`](.github/workflows/ci.yml); nightly [`.github/workflows/corpus-eval.yml`](.github/workflows/corpus-eval.yml) uploads `corpus-eval-report.json`
 - **Coverage gates** — 70% lines in CI
 
@@ -752,7 +818,7 @@ Short list before `default-policy.yaml` + block mode in production. All five blo
 8. **Cost** — Merge `policy-templates/enterprise-cost-governance.yaml`; set `GUARDIAN_DAILY_BUDGET_USD`; do **not** set `GUARDIAN_COST_ALLOW_ESTIMATES` unless you need legacy simulation — default audit is **model-only** ($0 measured without proxy traffic).
 9. **CVE** — Decide explicitly: `GUARDIAN_BLOCK_ON_CVE=true` or leave off (default).
 10. **AI** — Keep `GUARDIAN_AI_AUTO_APPLY=false`; configure quorum env vars if multiple operators label suggestions.
-11. **Verify** — `pnpm test` (546 tests); `pnpm eval` before deploy; `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`; adversarial scenarios after policy changes.
+11. **Verify** — `pnpm test` (**768+** tests); `pnpm eval` before deploy; `./adversarial-harness/run-all.sh` for full adversarial harness; `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`; adversarial scenarios after policy changes.
 12. **Fleet** — Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS` for `mcp-guardian fleet status` / TUI Fleet tab (aggregate only).
 13. **Plugins** — Use published `@mcp-guardian/plugin-sdk`; audit `GUARDIAN_PLUGIN_PATH`; `GUARDIAN_PLUGINS_ENABLED=false` on hosts that must not load third-party detectors.
 14. **HTTP tools** — `GUARDIAN_HTTP_TOOLS_POLICY=true` when MCP servers expose outbound HTTP tools.
@@ -788,7 +854,7 @@ Short list before `default-policy.yaml` + block mode in production. All five blo
 
 ## Attack learning evaluation
 
-See **[Proven under attack (v2.8.1)](#proven-under-attack-v281)** for headline metrics and hero charts. Below: embedded figures with captions; full galleries in collapsible blocks.
+See **[Proven under attack (v2.8.6)](#proven-under-attack-v286)** for headline metrics and hero charts. Adversarial harness (corpus + live proxy): [summary.md](reports/adversarial-harness/summary.md). Below: embedded figures with captions; full galleries in collapsible blocks.
 
 ### Repo evaluation (reproducible CI)
 
@@ -820,9 +886,28 @@ Regenerate: `pnpm eval:attack-learning:long` then `pnpm eval:attack-learning:cha
 
 </details>
 
+### Adversarial test harness (live proxy + policy parity — May 2026)
+
+**CI-gated** corpus + evasion + live stdio proxy validation — full metrics in [Proven under attack (v2.8.6)](#adversarial-test-harness-live-proxy--policy-parity--may-2026) above. Key numbers: **154/154** corpus attacks blocked, **0** FP on **74** benign + edge fixtures (**228** JSON evaluated; **151** attack + **55** benign on disk), **84/85** evasion blocked (**adv-066** base64-in-`search` bypass documented), **26/26** Node integration, **400/402** (99.5%) Python/TS parity with **0** corpus mismatches, streaming **3/3**, secret scanner **14/14**. Reports: [`reports/adversarial-harness/`](reports/adversarial-harness/). Python port caveats: [`POLICY_PORT_GAPS.md`](adversarial-harness/python/POLICY_PORT_GAPS.md).
+
+```bash
+./adversarial-harness/run-all.sh
+node adversarial-harness/run-harness.mjs
+pnpm exec tsx adversarial-harness/scripts/compare-node-python.ts
+```
+
+### Enterprise five-scenario simulation (May 2026 package)
+
+**Synthetic** harness: **330** requests, **93.33%** block rate, **0** false positives, **38.8 ms** avg simulated detection latency ([`attack-simulation-metrics.json`](reports/enterprise-attack-sim/attack-simulation-metrics.json)). Open [attack-simulation-dashboard.html](reports/enterprise-attack-sim/attack-simulation-dashboard.html) for inline SVG charts. Reports: [enterprise-attack-sim/README.md](reports/enterprise-attack-sim/README.md) · [MCP_GUARDIAN_FINDINGS.md](reports/enterprise-attack-sim/MCP_GUARDIAN_FINDINGS.md). **Not** CI-gated; prefer repo eval above for learning latency claims.
+
+```bash
+npx tsx reports/enterprise-attack-sim/enterprise-attack-simulator.ts
+npx tsx reports/enterprise-attack-sim/generate-dashboard.ts
+```
+
 ### Extended attack simulation (sca collateral)
 
-**Synthetic** 180-minute live-proxy escalation ([sca/README.md](sca/README.md)): **349,200** requests, **95.6%** overall detection, Stage 2 **+8.8pp** vs Stage 1, latency **189ms → 111ms** (~58% faster) per [LIVE_PROXY_ATTACK_SUMMARY.md](sca/LIVE_PROXY_ATTACK_SUMMARY.md). **Not** the same dataset as `metrics.json`.
+**Synthetic** 180-minute live-proxy escalation ([sca/README.md](sca/README.md)): **349,200** requests, **95.6%** overall detection, Stage 2 **+8.8pp** vs Stage 1, latency **189ms → 111ms** (~58% faster) per [LIVE_PROXY_ATTACK_SUMMARY.md](sca/LIVE_PROXY_ATTACK_SUMMARY.md). **Not** the same dataset as repo `metrics.json` or enterprise-attack-sim JSON.
 
 | Detection latency (Stage 1 → 2) | 180-min attack timeline | Two-stage learning architecture |
 |:---:|:---:|:---:|
@@ -872,7 +957,10 @@ pnpm install && pnpm build && pnpm test
 ./scripts/verify-live-integration.sh
 pnpm run dogfood          # sandboxed multi-server scenario (CI)
 pnpm run live:tui-demo    # write shared ~/.mcp-guardian/history.db for TUI smoke test
-pnpm eval                 # enterprise corpus (226 entries, PolicyEngine + default-policy)
+pnpm eval                 # enterprise corpus (228 entries, PolicyEngine + default-policy)
+./adversarial-harness/run-all.sh   # full adversarial harness → reports/adversarial-harness/
+node adversarial-harness/run-harness.mjs
+pnpm exec tsx adversarial-harness/scripts/compare-node-python.ts   # Node/Python parity by fixture id
 pnpm benchmark:proxy-slo  # pipelined proxy RTT (CI gate); see Performance & benchmarks below
 node scripts/generate-pen-test-report.cjs   # docs/PEN_TEST_REPORT.md from eval output
 ```
@@ -921,19 +1009,23 @@ pnpm benchmark:proxy-slo            # pipelined CI gate (default p95 < 150 ms)
 - **Do not claim sub-150 ms at 1k concurrent** on the proxy path; that gate applies to pipelined/sequential CI (`benchmark:proxy-slo`), not concurrent burst.
 - **HTTP/SSE transport** — no in-repo HTTP MCP echo fixture yet; tiered stdio proxy benchmarks are the deployment reference until SSE session bootstrap lands.
 
-### Test & evidence depth (v2.8.1)
+### Test & evidence depth (v2.8.6)
 
 | Asset | Count / scope |
 |-------|----------------|
-| Vitest suite | **546** tests (**96** files, 546 passed + 1 skipped; `pnpm vitest run`) |
+| Vitest suite | **768+** tests (**140** files; `pnpm vitest run`) |
+| **Adversarial harness** | **154/154** corpus attacks · **0** FP (**74** benign + edge) · **84/85** evasion (**1** bypass: adv-066) · **26/26** Node live integration · **400/402** Python/TS parity — [reports/adversarial-harness/](reports/adversarial-harness/) |
+| v2.8.6 regressions | adversarial harness (corpus + evasion + proxy/streaming/scanner), dashboard-rbac, streaming inspector |
 | v2.8.1 regressions | `instant-attack-learning` |
+| Enterprise attack sim | **330** synthetic scenarios — [reports/enterprise-attack-sim/](reports/enterprise-attack-sim/) |
+| Security assessment | **8.6/10** static review — [MCP_GUARDIAN_EXECUTIVE_SUMMARY.md](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md) |
 | v2.8.0 regressions | `policy-engine-memory`, `pgbouncer-check`, `dpop-redis-lock`, `cost-auditor-audit-mode`, `memory-monitor` |
 | v2.7.6 regressions | `cost-governance`, `dpop-require`, `redis-client`, `mtls-config` |
-| Enterprise corpus | **226** JSON fixtures (`corpus/`) |
+| Enterprise corpus | **228** JSON fixtures on disk (`corpus/`) — **151** attack + **55** benign + edge-cases |
 | Corpus categories | benign (55), prompt-injection (32), credential-exfil (23), sql-nosql (26), ssrf-url (26), shell-obfuscation (26), cross-tool-chain (16), edge-cases (22) |
 | CI corpus eval | `pnpm eval` on every PR; artifact `corpus-eval-report.json` |
 | CI benchmarks | `benchmark:proxy-slo` pipelined gate (150 ms p95); tiered proxy SLOs via `benchmark:proxy-tiers` |
-| E2E proxy tests | `proxy-with-policy.e2e` + `adversarial-proxy.e2e` (10 attacks) |
+| E2E proxy tests | `proxy-with-policy.e2e` + `adversarial-proxy.e2e` (10 attacks) + harness `node/` (26 tests, mock MCP stdio) |
 | Pen-test docs | [docs/PEN_TEST_REPORT.md](docs/PEN_TEST_REPORT.md), [security/ATTACK_MATRIX.md](security/ATTACK_MATRIX.md) |
 
 Monorepo layout: [packages/PACKAGING.md](packages/PACKAGING.md)
@@ -1009,6 +1101,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 
 ## Roadmap
 
+### Shipped in v2.8.6
+- **Enterprise test package** — five-scenario attack sim + security assessment under [reports/enterprise-attack-sim/](reports/enterprise-attack-sim/)
+- **Comprehensive adversarial harness** — [`adversarial-harness/`](adversarial-harness/) + [`reports/adversarial-harness/`](reports/adversarial-harness/): **154/154** corpus attacks, **84/85** evasion (adv-066 bypass tracked), **26/26** live Node proxy tests, **400/402** Python/TS parity, streaming **3/3**, secret scanner **14/14**
+- **Dashboard RBAC** — `viewer` / `analyst` / `operator` / `admin` / `tenant-admin`; `GUARDIAN_DASHBOARD_ROLES`
+- **Streaming response inspection** — 64KB windows + overlap (`GUARDIAN_SKIP_RESPONSE_SCAN`)
+- **Bounded audit queue** — `GUARDIAN_AUDIT_QUEUE_MAX` (default 5000), batch drain
+- **Distributed policy eval cache** — Redis + LRU (`GUARDIAN_POLICY_EVAL_CACHE`)
+- **Local semantic fallback** — heuristic classifier when no LLM API key (`GUARDIAN_LOCAL_SEMANTIC`)
+
 ### Shipped in v2.8.1
 - **Per-block instant attack learning** — `recordInstantBlockEvent` on every proxy block; rolling stats in `GUARDIAN_AI_ATTACK_STATE_PATH` (`~/.mcp-guardian/.attack-learning-state.json`)
 - **Sliding-window suggestions** — after `GUARDIAN_AI_ATTACK_MIN_BLOCKS` (default 3) same `(block_rule, tool)` within `GUARDIAN_AI_INSTANT_WINDOW_MS` (default 5 min)
@@ -1033,7 +1134,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 - **Docker supply chain** — non-root `USER 1001`, [`scripts/verify-docker-prebuilds.sh`](scripts/verify-docker-prebuilds.sh), docker-publish smoke as uid 1001
 
 ### Shipped in v2.7.5
-- **Enterprise corpus** — 226 attack/benign/edge fixtures under `corpus/`; [`corpus/README.md`](corpus/README.md), [`corpus/manifest.yaml`](corpus/manifest.yaml)
+- **Enterprise corpus** — 228 attack/benign/edge fixtures under `corpus/`; [`corpus/README.md`](corpus/README.md), [`corpus/manifest.yaml`](corpus/manifest.yaml)
+- **Adversarial harness** — [`adversarial-harness/`](adversarial-harness/README.md), Python policy port + Node live proxy tests; reports under [`reports/adversarial-harness/`](reports/adversarial-harness/)
 - **Corpus eval** — `corpus/run-eval.ts`, `pnpm eval`, per-category precision/recall; CI fails on missed attacks; artifact `corpus-eval-report.json`
 - **Benchmarks in CI** — `benchmarks/run.ts` job; p95 gate via `BENCH_P95_THRESHOLD_MS` ([`benchmarks/README.md`](benchmarks/README.md))
 - **Adversarial E2E** — `tests/e2e/adversarial-proxy.e2e.test.ts` (live proxy + 10 corpus attacks)
@@ -1082,6 +1184,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
+**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [Adversarial harness](reports/adversarial-harness/summary.md) · [Adversarial harness README](adversarial-harness/README.md) · [Python port gaps](adversarial-harness/python/POLICY_PORT_GAPS.md) · [Enterprise attack sim](reports/enterprise-attack-sim/README.md) · [Security assessment](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
 
 **Built with** TypeScript, better-sqlite3 12.10+, pino, prom-client, jose 6.x, commander, chalk, tiktoken, and the MCP SDK.

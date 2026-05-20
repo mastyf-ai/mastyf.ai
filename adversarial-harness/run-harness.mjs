@@ -54,15 +54,23 @@ run('node', ['adversarial-harness/scripts/generate-matrix-fixtures.mjs'], {
   label: 'generate-matrix-fixtures',
 });
 
-run(
-  'python3',
-  ['-m', 'pip', 'install', '-q', '-r', 'adversarial-harness/python/requirements.txt'],
-  { label: 'pip-install' },
-);
+run('node', ['adversarial-harness/scripts/export-evasion-attacks.mjs'], {
+  label: 'export-evasion-attacks',
+});
 
-run('python3', ['adversarial-harness/python/run_comprehensive_eval.py'], {
+const venvSetup = run('node', ['adversarial-harness/scripts/setup-python-venv.mjs'], {
+  label: 'setup-python-venv',
+});
+const venvPython = (venvSetup.stdout || '').trim() || 'python3';
+
+run(venvPython, ['adversarial-harness/python/run_comprehensive_eval.py'], {
   label: 'python-comprehensive-eval',
-  env: { PYTHONPATH: join(__dir, 'python') },
+  env: { PYTHONPATH: join(__dir, 'python'), GUARDIAN_DISABLE_SEMANTIC: process.env.GUARDIAN_DISABLE_SEMANTIC || '' },
+});
+
+run(venvPython, ['adversarial-harness/python/run_corpus.py'], {
+  label: 'python-corpus-only',
+  env: { PYTHONPATH: join(__dir, 'python'), GUARDIAN_DISABLE_SEMANTIC: 'true' },
 });
 
 run('pnpm', ['build'], { label: 'pnpm-build' });
@@ -71,11 +79,22 @@ run('node', ['adversarial-harness/scripts/run-node-tests.mjs'], {
   label: 'node-harness-tests',
 });
 
-run('pnpm', ['exec', 'tsx', 'corpus/run-eval.ts'], { label: 'node-corpus-eval' });
+run('pnpm', ['exec', 'tsx', 'corpus/run-eval.ts'], {
+  label: 'node-corpus-eval',
+  env: { GUARDIAN_DISABLE_SEMANTIC: process.env.GUARDIAN_DISABLE_SEMANTIC || '' },
+});
 
 run('pnpm', ['exec', 'tsx', 'adversarial-harness/scripts/compare-node-python.ts'], {
   label: 'node-python-parity',
-  env: { PYTHONPATH: join(__dir, 'python') },
+  env: {
+    PYTHONPATH: join(__dir, 'python'),
+    GUARDIAN_DISABLE_SEMANTIC: 'true',
+    HARNESS_PYTHON: venvPython,
+  },
+});
+
+run('node', ['adversarial-harness/scripts/generate-adversarial-report.mjs'], {
+  label: 'generate-adversarial-report',
 });
 
 const comprehensive = loadJson(join(REPORT_DIR, 'comprehensive-eval.json'));
@@ -87,10 +106,13 @@ const required = [
   'export-harness-rules',
   'generate-custom-attacks',
   'generate-matrix-fixtures',
+  'export-evasion-attacks',
+  'setup-python-venv',
   'python-comprehensive-eval',
   'node-harness-tests',
   'node-corpus-eval',
   'node-python-parity',
+  'generate-adversarial-report',
 ];
 const allOk = required.every((name) => steps.find((s) => s.label === name)?.ok);
 

@@ -91,6 +91,22 @@ All notable changes to MCP Guardian will be documented in this file.
 | `GUARDIAN_LEGACY_NO_DPOP` | `false` | Disable DPoP requirement for legacy clients |
 | `GUARDIAN_SPIFFE_SOCKET_PATH` | — | SPIFFE Workload API Unix socket |
 
+## [2.8.6] - 2026-05-20
+
+Post-2.8.4 enterprise hardening, security fixes, and adversarial harness coverage.
+
+### Added
+- **Comprehensive adversarial test harness** — enterprise eval matrix, parity-by-id suites, orchestrator node test gate.
+- **Policy strategies refactor** — HTTP API tests, semantic timeout tuning, disaster-recovery documentation.
+
+### Fixed
+- **P0–P3 full-stack review** — stdin serial queue, circuit breaker half-open probe, WebSocket proxy parity, JWT-authoritative tenant, OPA LRU cache.
+- **71/100 review headline gaps** — async audit hot path, static imports on policy path, multi-tenancy docs and RBAC.
+- **100% corpus attack block rate** — SQL/SSRF/prompt-injection/shell/path coverage gaps closed.
+- **Enterprise readiness** — dashboard RBAC, streaming response inspection, local semantic fallback without LLM keys.
+- **Enterprise spec alignment** — issues 1–6; secret scanner harness samples.
+- **Full-stack critical security analysis** — ten priority items from security review.
+
 ## [2.8.4] - 2026-05-19
 
 Enterprise hardening, tiered concurrent benchmarks, and proxy/SSE/WebSocket improvements (see `172abcd`).
