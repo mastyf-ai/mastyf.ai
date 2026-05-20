@@ -13,6 +13,32 @@ export function attackMinBlocks(): number {
   return Number.isFinite(n) && n > 0 ? n : 3;
 }
 
+/** Minimum confidence before a learned pattern may be auto-applied (default requires human review). */
+export function attackMinConfidence(): number {
+  const n = parseFloat(process.env.GUARDIAN_AI_ATTACK_MIN_CONFIDENCE || '0.85');
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : 0.85;
+}
+
+/** Fragments that must not become learned allow/deny patterns (feedback-loop poisoning defense). */
+const POISONING_FRAGMENT_DENY = new Set([
+  'pass',
+  'allow',
+  'allowed',
+  'benign',
+  'safe',
+  'whitelist',
+  'false positive',
+  'false-positive',
+  'not malicious',
+  'no threat',
+]);
+
+function isPoisonedFragment(fragment: string): boolean {
+  const lower = fragment.toLowerCase().trim();
+  if (POISONING_FRAGMENT_DENY.has(lower)) return true;
+  return [...POISONING_FRAGMENT_DENY].some((d) => lower.includes(d));
+}
+
 export function attackGroupKey(blockRule: string, toolName: string): string {
   return `${blockRule}:${toolName}`;
 }
@@ -38,7 +64,8 @@ function extractPathFragments(reasons: string[]): string[] {
   return [...counts.entries()]
     .filter(([, c]) => c >= 2)
     .sort((a, b) => b[1] - a[1])
-    .map(([frag]) => frag);
+    .map(([frag]) => frag)
+    .filter((frag) => !isPoisonedFragment(frag));
 }
 
 function escapeRegex(s: string): string {
@@ -74,28 +101,32 @@ export function suggestFromBlockedGroup(
 
   if (argPatterns.length > 0) {
     const slug = `${blockRule}-${toolName}`.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 48);
+    const confidence = Math.min(0.5 + recs.length * 0.08, 0.95);
+    if (confidence < attackMinConfidence()) return null;
     return {
       rule: {
         name: `attack-learned-${slug}`,
-        description: `Learned from ${recs.length} blocks (${blockRule} on ${toolName}@${serverName})`,
+        description: `Learned from ${recs.length} blocks (${blockRule} on ${toolName}@${serverName}) — pending approval`,
         action: 'block' as PolicyAction,
         argPatterns,
       },
-      confidence: Math.min(0.5 + recs.length * 0.08, 0.95),
+      confidence,
       reason: `${recs.length} blocks by rule "${blockRule}" on tool "${toolName}" — common patterns: ${argPatterns[0].patterns.slice(0, 3).join(', ')}`,
       source: 'attack',
     };
   }
 
   const slug = `${blockRule}-${toolName}`.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 48);
+  const confidence = Math.min(0.45 + recs.length * 0.07, 0.88);
+  if (confidence < attackMinConfidence()) return null;
   return {
     rule: {
       name: `attack-learned-deny-${slug}`,
-      description: `Learned deny after ${recs.length} ${blockRule} blocks on ${toolName}`,
+      description: `Learned deny after ${recs.length} ${blockRule} blocks on ${toolName} — pending approval`,
       action: 'block' as PolicyAction,
       tools: { deny: [toolName] },
     },
-    confidence: Math.min(0.45 + recs.length * 0.07, 0.88),
+    confidence,
     reason: `${recs.length} blocks by "${blockRule}" on "${toolName}" (no shared path fragment; suggesting tool deny)`,
     source: 'attack',
   };

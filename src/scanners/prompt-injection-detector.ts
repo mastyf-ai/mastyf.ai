@@ -57,6 +57,36 @@ export const INJECTION_RULES: InjectionPattern[] = [
     regex: '(?:before|prior to) (?:using|calling|invoking|running) (?:this|the|any) tool.{0,80}(?:ignore|disregard|forget|override|bypass|circumvent)' },
   { id: 'forget-training', severity: 'critical', description: 'Forget/release from training constraints',
     regex: '(?:forget (?:everything|all|your (?:training|instructions|guidelines|safety|ethics))|release yourself from|break free from|escape (?:your )?(?:constraints|limitations|programming))' },
+  { id: 'paraphrase-instruction-suppression', severity: 'critical', description: 'Paraphrased instruction override',
+    regex: '(?:set aside (?:your |all )?(?:prior|previous|earlier) (?:guidance|instructions|rules|directives)|put aside (?:your )?(?:prior|previous) (?:instructions|guidelines)|disregard (?:your )?(?:prior|previous) (?:guidance|training))' },
+  { id: 'newline-system-inject', severity: 'critical', description: 'Newline-delimited fake system block',
+    regex: '(?:^|\\n\\n)\\s*(?:SYSTEM|System|system)\\s*:\\s*(?:you are|ignore|override|your new)' },
+  { id: 'prompt-leak-polite', severity: 'high', description: 'Polite system prompt exfiltration request',
+    regex: '(?:share|reveal|disclose|provide|print|repeat|output).{0,40}(?:system prompt|hidden instructions|original instructions|developer message)' },
+  { id: 'indirect-goal-update', severity: 'high', description: 'Indirect primary goal reassignment',
+    regex: '(?:primary|main|core|true|real) goal (?:has been|is now|was) (?:updated|changed|revised|replaced|reset)' },
+
+  // ═══════════════════════════════════════════════════════════════
+  // CATEGORY 2b: Multilingual instruction suppression — CRITICAL
+  // ═══════════════════════════════════════════════════════════════
+  { id: 'ml-inject-fr', severity: 'critical', description: 'French instruction suppression',
+    regex: '(?:ignorez|oubliez|négligez).{0,40}(?:instructions|consignes|règles|directives)' },
+  { id: 'ml-inject-es', severity: 'critical', description: 'Spanish instruction suppression',
+    regex: '(?:ignora|olvida|desestima).{0,40}(?:instrucciones|reglas|directrices|indicaciones)' },
+  { id: 'ml-inject-de', severity: 'critical', description: 'German instruction suppression',
+    regex: '(?:ignorier|vergiss|missachte).{0,40}(?:anweisungen|regeln|vorgaben|direktiven)' },
+  { id: 'ml-inject-pt', severity: 'critical', description: 'Portuguese instruction suppression',
+    regex: '(?:ignore|esqueça|desconsidere).{0,40}(?:instruções|regras|diretrizes)' },
+  { id: 'ml-inject-it', severity: 'critical', description: 'Italian instruction suppression',
+    regex: '(?:ignora|dimentica|trascura).{0,40}(?:istruzioni|regole|direttive)' },
+  { id: 'ml-inject-ar', severity: 'critical', description: 'Arabic instruction suppression (transliterated)',
+    regex: '(?:تجاهل|تجاهلوا|انس|انسوا).{0,30}(?:التعليمات|القواعد)' },
+  { id: 'ml-inject-zh', severity: 'critical', description: 'Chinese instruction suppression',
+    regex: '(?:忽略|无视|不要遵守).{0,20}(?:之前|先前|所有|上面).{0,10}(?:指令|规则|说明|提示)' },
+  { id: 'ml-inject-ja', severity: 'critical', description: 'Japanese instruction suppression',
+    regex: '(?:無視|以前の|全ての).{0,15}(?:指示|命令|ルール)' },
+  { id: 'ml-inject-ko', severity: 'critical', description: 'Korean instruction suppression',
+    regex: '(?:무시|이전|모든).{0,15}(?:지시|명령|규칙)' },
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORY 3: Jailbreak / Unrestricted Mode — CRITICAL

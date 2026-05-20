@@ -14,16 +14,30 @@ export class OAuthValidator {
   private config: AuthConfig;
   private jwks: ReturnType<typeof jose.createRemoteJWKSet> | null = null;
   private cachedDiscovery: OIDCDiscovery | null = null;
+  private discoveryFetchedAt = 0;
+  private jwksUri: string | null = null;
 
   constructor(config: AuthConfig) {
     this.config = config;
   }
 
+  private discoveryTtlMs(): number {
+    const n = parseInt(process.env['GUARDIAN_OIDC_DISCOVERY_TTL_MS'] || '3600000', 10);
+    return Number.isFinite(n) && n > 60_000 ? n : 3_600_000;
+  }
+
   /**
-   * Perform OIDC discovery to fetch JWKS URI from issuer.
+   * Perform OIDC discovery to fetch JWKS URI from issuer (TTL-refreshed).
    */
-  async discover(): Promise<OIDCDiscovery> {
-    if (this.cachedDiscovery) return this.cachedDiscovery;
+  async discover(force = false): Promise<OIDCDiscovery> {
+    const ttl = this.discoveryTtlMs();
+    if (
+      !force &&
+      this.cachedDiscovery &&
+      Date.now() - this.discoveryFetchedAt < ttl
+    ) {
+      return this.cachedDiscovery;
+    }
 
     const discoveryUrl = `${this.config.issuer}/.well-known/openid-configuration`;
     try {
@@ -31,6 +45,11 @@ export class OAuthValidator {
       if (!res.ok) throw new Error(`OIDC discovery failed: HTTP ${res.status}`);
       const meta = (await res.json()) as OIDCDiscovery;
       this.cachedDiscovery = meta;
+      this.discoveryFetchedAt = Date.now();
+      this.jwksUri = meta.jwks_uri;
+      if (meta.jwks_uri) {
+        this.jwks = jose.createRemoteJWKSet(new URL(meta.jwks_uri));
+      }
       StructuredLogger.info({ event: 'oidc_discovery', issuer: this.config.issuer, jwks_uri: meta.jwks_uri });
       return meta;
     } catch (err: any) {
@@ -47,8 +66,13 @@ export class OAuthValidator {
     if (!jwksUri) {
       const discovery = await this.discover();
       jwksUri = discovery.jwks_uri;
+    } else {
+      this.jwksUri = jwksUri;
     }
-    this.jwks = jose.createRemoteJWKSet(new URL(jwksUri));
+    if (!this.jwks || this.jwksUri !== jwksUri) {
+      this.jwks = jose.createRemoteJWKSet(new URL(jwksUri));
+      this.jwksUri = jwksUri;
+    }
   }
 
   /**

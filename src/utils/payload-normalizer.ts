@@ -309,12 +309,12 @@ export class PayloadNormalizer {
     let depth = 0;
     while (depth < maxDepth) {
       const before = current;
-      current = this.decodeBase64Blobs(current);
       current = this.urlDecode(current);
       current = this.decodeHexEscapes(current);
       current = this.decodeUnicodeEscapes(current);
       current = this.decodeHtmlEntities(current);
       current = this.unwrapDoubleEscapes(current);
+      current = this.decodeBase64Blobs(current);
       if (current === before) break;
       depth++;
     }
@@ -327,18 +327,49 @@ export class PayloadNormalizer {
   }
 
   /**
-   * Decode inline base64 blobs (16+ chars) when UTF-8 decodes to printable text.
+   * Decode inline base64 blobs (12+ chars) when UTF-8 decodes to printable text.
+   * Also decodes whole-string base64 payloads (common prompt-injection evasion).
    */
   private decodeBase64Blobs(input: string): string {
-    return input.replace(/(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{16,}={0,2})/g, (full, b64: string) => {
+    const tryDecode = (b64: string): string | null => {
+      if (b64.length < 12 || b64.length % 4 === 1) return null;
       try {
         const decoded = Buffer.from(b64, 'base64').toString('utf-8');
-        if (decoded.length < 4 || !/^[\x20-\x7E\u00A0-\uFFFF\s]+$/.test(decoded)) return full;
-        return full.replace(b64, decoded);
+        if (decoded.length < 4 || !/^[\x20-\x7E\u00A0-\uFFFF\s]+$/.test(decoded)) return null;
+        if (
+          /\\x[0-9a-f]{2}/i.test(decoded) ||
+          /%[0-9a-f]{2}/i.test(decoded) ||
+          /^[A-Za-z0-9+/]{12,}={0,2}$/.test(decoded.trim())
+        ) {
+          return decoded;
+        }
+        if (!/[a-zA-Z]{3,}/.test(decoded)) return null;
+        return decoded;
       } catch {
-        return full;
+        return null;
       }
-    });
+    };
+
+    const looksLikeFurtherEncoding = (s: string): boolean =>
+      /\\x[0-9a-f]{2}/i.test(s) ||
+      /%[0-9a-f]{2}/i.test(s) ||
+      /^[A-Za-z0-9+/]{12,}={0,2}$/.test(s.trim());
+
+    if (!/\\x[0-9a-f]{2}/i.test(input)) {
+      const trimmed = input.trim();
+      if (/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed)) {
+        const whole = tryDecode(trimmed);
+        if (whole && !looksLikeFurtherEncoding(whole)) return whole;
+      }
+
+      return input.replace(/(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{12,}={0,2})/g, (full, b64: string) => {
+        const decoded = tryDecode(b64);
+        if (!decoded) return full;
+        return full.replace(b64, decoded);
+      });
+    }
+
+    return input;
   }
 }
 

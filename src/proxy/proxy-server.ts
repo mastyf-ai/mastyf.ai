@@ -21,7 +21,8 @@ import { ProxyRequestContextStore } from './proxy-request-context.js';
 import { resolveTenantContext, DEFAULT_TENANT_ID, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
 import { JwtTenantRequiredError, resolveProxyTenantId } from '../tenant/jwt-tenant-binding.js';
 import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
-import { AsyncSerialQueue } from '../utils/async-serial-queue.js';
+import { RequestIdLock } from '../utils/request-id-lock.js';
+import { scanMultimodalContent } from '../scanners/multimodal-content-scanner.js';
 import type { TenantPolicyRegistry } from '../policy/tenant-policy-registry.js';
 import {
   isSemanticLlmConfigured,
@@ -86,7 +87,7 @@ export class McpProxyServer {
   private tenantPolicyRegistry: TenantPolicyRegistry | null;
   private authValidator: OAuthValidator | null;
   private sessionCache: GuardianSessionCache | null;
-  private readonly clientInputQueue = new AsyncSerialQueue();
+  private readonly clientInputQueue = new RequestIdLock();
   private stopMemoryMonitor: (() => void) | null = null;
 
   /** P0 Week 2: SHA-256 fingerprint of the tools/list response at session init.
@@ -501,7 +502,14 @@ export class McpProxyServer {
    * Pipeline: Payload guard → Auth → Circuit Breaker → Policy + RBAC → Forward.
    */
   async handleClientInput(raw: string): Promise<void> {
-    return this.clientInputQueue.enqueue(() => this.processClientInput(raw));
+    let requestKey: string | undefined;
+    try {
+      const peek = JSON.parse(raw) as { id?: string | number; method?: string };
+      if (peek.method === 'tools/call' && peek.id != null) requestKey = String(peek.id);
+    } catch {
+      /* non-JSON handled in processClientInput */
+    }
+    return this.clientInputQueue.enqueue(requestKey, () => this.processClientInput(raw));
   }
 
   private async processClientInput(raw: string): Promise<void> {
@@ -576,34 +584,18 @@ export class McpProxyServer {
         const requestTokens = reqEstimate + imageTokens + audioTokens;
         const requestArguments = msg.params?.arguments;
 
-        const maxInflight = proxyMaxInflight();
-        if (this.requestContexts.size >= maxInflight) {
-          this.sendError(
-            msg.id,
-            -32005,
-            `MCP Guardian: proxy overloaded (${this.requestContexts.size}/${maxInflight} in flight)`,
-            { rule: 'proxy-max-inflight' },
-          );
-          Metrics.requestsTotal.inc({
-            server_name: this.serverName,
-            decision: 'block',
-            authn_success: 'false',
-          });
-          return;
-        }
-
-        this.requestContexts.set(msg.id, {
-          requestStartTime: proxyStartTime,
-          requestToolName: toolName,
-          requestTokens,
-          requestRaw: raw,
-          requestModel,
-          requestArguments,
-          tenantId: requestTenantId,
-        });
-
         // ── P0 Week 3: DLP on tool call arguments (runtime exfiltration) ──
         if (requestArguments) {
+          const multimodalFindings = scanMultimodalContent(requestArguments);
+          if (multimodalFindings.length > 0 && this.policyEngine?.getMode() === 'block') {
+            const mmReason = multimodalFindings.map((f) => f.description).slice(0, 3).join('; ');
+            this.recordDeniedCall(toolName, requestTokens, Date.now() - proxyStartTime, 'multimodal-injection', mmReason);
+            this.sendError(msg.id, -32001, `Blocked by MCP Guardian policy: ${mmReason}`, {
+              rule: 'multimodal-injection',
+              policy: 'block',
+            });
+            return;
+          }
           const argString = JSON.stringify(requestArguments);
           const secretFindings = scanForSecrets(argString, `proxy:${this.serverName}:${toolName}`);
           if (secretFindings.length > 0) {
@@ -666,9 +658,9 @@ export class McpProxyServer {
 
         // ── OAuth 2.1 JWT validation ────────────────────────
         if (this.authValidator) {
-          const authHeader =
-            OAuthValidator.extractAuthFromMcpMessage(msg) ||
-            this.sessionAuthHeader;
+          const msgAuth = OAuthValidator.extractAuthFromMcpMessage(msg);
+          const stickySessionAuth = process.env['GUARDIAN_STICKY_SESSION_AUTH'] === 'true';
+          const authHeader = msgAuth ?? (stickySessionAuth ? this.sessionAuthHeader : undefined);
 
           const token = OAuthValidator.extractToken(authHeader);
 
@@ -714,8 +706,7 @@ export class McpProxyServer {
                   jwtTenantId: agentIdentity?.tenantId,
                   authenticated: true,
                 });
-                const ctxEntry = this.requestContexts.get(msg.id);
-                if (ctxEntry) ctxEntry.tenantId = requestTenantId;
+                // tenant applied when context is registered after auth gates
               } catch (err) {
                 if (err instanceof JwtTenantRequiredError || err instanceof InvalidTenantIdError) {
                   this.sendError(msg.id, -32003, err.message);
@@ -926,6 +917,32 @@ export class McpProxyServer {
 
           enqueueSemanticAudit(buildSemanticAuditJob(context, decision));
         }
+
+        const maxInflight = proxyMaxInflight();
+        if (this.requestContexts.size >= maxInflight) {
+          this.sendError(
+            msg.id,
+            -32005,
+            `MCP Guardian: proxy overloaded (${this.requestContexts.size}/${maxInflight} in flight)`,
+            { rule: 'proxy-max-inflight' },
+          );
+          Metrics.requestsTotal.inc({
+            server_name: this.serverName,
+            decision: 'block',
+            authn_success: String(authnSuccess),
+          });
+          return;
+        }
+
+        this.requestContexts.set(msg.id, {
+          requestStartTime: proxyStartTime,
+          requestToolName: toolName,
+          requestTokens,
+          requestRaw: raw,
+          requestModel,
+          requestArguments,
+          tenantId: requestTenantId,
+        });
 
         // ── Log successful forwarding ───────────────────────
         StructuredLogger.info({

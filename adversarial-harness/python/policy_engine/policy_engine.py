@@ -183,14 +183,16 @@ class PolicyEngine:
         action = self._resolve_action(rule.get("action", "block"))
 
         tools = rule.get("tools") or {}
-        if tools.get("allow"):
-            if ctx.tool_name in tools["allow"]:
+        allow = tools.get("allow") or []
+        if allow:
+            if ctx.tool_name not in allow:
+                if tools.get("enforceAllowlist"):
+                    return PolicyDecision(
+                        action,
+                        name,
+                        f"Tool '{ctx.tool_name}' not in allowlist",
+                    )
                 return None
-            return PolicyDecision(
-                action,
-                name,
-                f"Tool '{ctx.tool_name}' not in allowlist",
-            )
         if tools.get("deny") and ctx.tool_name in tools["deny"]:
             return PolicyDecision(action, name, f"Tool '{ctx.tool_name}' is explicitly denied")
 

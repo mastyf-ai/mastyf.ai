@@ -10,8 +10,10 @@ import {
   isPolicyEvalCacheEnabled,
   policyEvalCacheKey,
   setCachedPolicyDecision,
+  shouldCachePolicyDecision,
 } from './policy-eval-cache.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
+import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
 import {
   SYNC_POLICY_STRATEGIES,
   evaluateIdempotency,
@@ -113,12 +115,6 @@ export class PolicyEngine {
   async evaluateAsync(context: CallContext): Promise<PolicyDecision> {
     runShadowPolicy(context);
 
-    if (isPolicyEvalCacheEnabled()) {
-      const cacheKey = policyEvalCacheKey(context);
-      const cached = await getCachedPolicyDecision(cacheKey);
-      if (cached) return cached;
-    }
-
     const idempotencyDecision = await evaluateIdempotency(context, this.mode);
     if (idempotencyDecision) return idempotencyDecision;
 
@@ -132,9 +128,15 @@ export class PolicyEngine {
       return resolvePolicyPrecedence(opaDecision, rateDecision);
     }
 
+    if (isPolicyEvalCacheEnabled()) {
+      const cacheKey = policyEvalCacheKey(context);
+      const cached = await getCachedPolicyDecision(cacheKey);
+      if (cached) return resolvePolicyPrecedence(opaDecision, cached);
+    }
+
     const yamlDecision = this.evaluate(context, { skipLocalRateLimit });
     const finalDecision = resolvePolicyPrecedence(opaDecision, yamlDecision);
-    if (isPolicyEvalCacheEnabled()) {
+    if (isPolicyEvalCacheEnabled() && shouldCachePolicyDecision(finalDecision)) {
       await setCachedPolicyDecision(policyEvalCacheKey(context), finalDecision);
     }
     return finalDecision;
@@ -190,10 +192,16 @@ export class PolicyEngine {
   ): PolicyDecision | null {
     if (rule.tools) {
       if (rule.tools.allow && rule.tools.allow.length > 0) {
-        if (rule.tools.allow.includes(ctx.toolName)) {
+        if (!rule.tools.allow.includes(ctx.toolName)) {
+          if (rule.tools.enforceAllowlist) {
+            return {
+              action: this.resolveAction(rule.action),
+              rule: rule.name,
+              reason: `Tool '${ctx.toolName}' not in allowlist: [${rule.tools.allow.join(', ')}]`,
+            };
+          }
           return null;
         }
-        return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Tool '${ctx.toolName}' not in allowlist: [${rule.tools.allow.join(', ')}]` };
       }
       if (rule.tools.deny && rule.tools.deny.length > 0) {
         if (rule.tools.deny.includes(ctx.toolName)) {
@@ -337,16 +345,6 @@ export class PolicyEngine {
     return this.rules.length;
   }
 
-  private static RESPONSE_INJECTION_PATTERNS: RegExp[] = [
-    /(?:ignore|disregard|forget)\s+(?:previous|all|above|your)\s+(?:instructions?|training|rules|constraints)/i,
-    /(?:system|assistant):\s*(?:you\s+are|your\s+new\s+role|override)/i,
-    /\b(jailbreak|DAN|developer\s*mode)\b/i,
-    /now\s+act\s+as/i,
-    /<\|(?:endoftext|im_start|im_end)\|>/,
-    /\[\[INJECT\]\]/i,
-    /\b(I\s*gnore|D\s*isregard|F\s*orget)\s+(?:previous|all|your)\s+(?:instructions?|training)/i,
-  ];
-
   private static RESPONSE_EXFILTRATION_PATTERNS: RegExp[] = [
     /\b(?:curl|wget|fetch|XMLHttpRequest|axios)\b.*\b(?:https?:\/\/[^\s"']+)/i,
     /\b(?:curl|wget)\b\s+.*(?:\b[a-zA-Z0-9][-a-zA-Z0-9]*\.(?:com|net|org|io|dev|xyz|ru|cn|tk|ml|ga|cf|gq|pw|top|club|online|site|website|space|fun|host|press|digital|world|life|co|me|us|eu|info|biz|pro|name|tv|cc|ws|fm|to|am|ai))/i,
@@ -361,7 +359,6 @@ export class PolicyEngine {
     serverName: string,
     responseBody: string | null | undefined,
   ): { clean: boolean; detections: string[] } {
-    void toolName;
     void serverName;
     const detections: string[] = [];
 
@@ -369,10 +366,9 @@ export class PolicyEngine {
       return { clean: true, detections };
     }
 
-    for (const pattern of PolicyEngine.RESPONSE_INJECTION_PATTERNS) {
-      if (pattern.test(responseBody)) {
-        detections.push(`Prompt injection: response matches '${pattern.source}'`);
-      }
+    const injectionFindings = detectPromptInjection(toolName, responseBody);
+    for (const f of injectionFindings) {
+      detections.push(`Prompt injection (${f.severity}): ${f.patternId} — ${f.description}`);
     }
 
     for (const pattern of PolicyEngine.RESPONSE_EXFILTRATION_PATTERNS) {

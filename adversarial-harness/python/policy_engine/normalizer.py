@@ -18,7 +18,54 @@ UNI_ESC_RE = re.compile(r"\\u([0-9A-Fa-f]{4})")
 UNI_LONG_ESC_RE = re.compile(r"\\U([0-9A-Fa-f]{8})")
 HTML_NUM_RE = re.compile(r"&#(\d+);")
 HTML_HEX_RE = re.compile(r"&#x([0-9A-Fa-f]+);", re.I)
-BASE64_BLOB_RE = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
+BASE64_BLOB_RE = re.compile(r"(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{12,}={0,2})")
+BASE64_WHOLE_RE = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
+
+
+def _try_decode_base64(b64: str) -> str | None:
+    import base64
+
+    if len(b64) < 12 or len(b64) % 4 == 1:
+        return None
+    try:
+        decoded = base64.b64decode(b64, validate=False).decode("utf-8", errors="strict")
+    except Exception:
+        return None
+    if len(decoded) < 4 or not re.match(r"^[\x20-\x7E\u00A0-\uFFFF\s]+$", decoded):
+        return None
+    if (
+        re.search(r"\\x[0-9a-f]{2}", decoded, re.I)
+        or re.search(r"%[0-9a-f]{2}", decoded, re.I)
+        or BASE64_WHOLE_RE.match(decoded.strip())
+    ):
+        return decoded
+    if not re.search(r"[a-zA-Z]{3,}", decoded):
+        return None
+    return decoded
+
+
+def _decode_base64_blobs(text: str) -> str:
+    def _further_encoding(s: str) -> bool:
+        return bool(
+            re.search(r"\\x[0-9a-f]{2}", s, re.I)
+            or re.search(r"%[0-9a-f]{2}", s, re.I)
+            or BASE64_WHOLE_RE.match(s.strip())
+        )
+
+    stripped = text.strip()
+    if BASE64_WHOLE_RE.match(stripped):
+        whole = _try_decode_base64(stripped)
+        if whole and not _further_encoding(whole):
+            return whole
+
+    def repl(m: re.Match[str]) -> str:
+        b64 = m.group(1)
+        decoded = _try_decode_base64(b64)
+        if decoded:
+            return m.group(0).replace(b64, decoded)
+        return m.group(0)
+
+    return BASE64_BLOB_RE.sub(repl, text)
 
 
 def strip_zero_width(text: str) -> str:
@@ -104,6 +151,7 @@ def deobfuscate_recursive(value: str, max_depth: int = 5, unicode_strict: bool =
         current = _unicode_decode(current)
         current = _html_decode(current)
         current = _unwrap_double_escapes(current)
+        current = _decode_base64_blobs(current)
         if current == before:
             break
         depth += 1
@@ -151,6 +199,7 @@ class PayloadNormalizer:
             current = _unicode_decode(current)
             current = _html_decode(current)
             current = _unwrap_double_escapes(current)
+            current = _decode_base64_blobs(current)
             if current == before:
                 break
             depth += 1

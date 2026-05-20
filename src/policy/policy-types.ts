@@ -22,10 +22,16 @@ export interface PolicyRule {
   name: string;
   description?: string;
   action: PolicyAction;
-  /** Tool name allowlist — if specified, only these tools are permitted */
+  /**
+   * Tool scoping for this rule.
+   * - `allow`: rule applies only to these tools (does not block other tools).
+   * - `enforceAllowlist: true`: legacy behavior — block tools not in `allow`.
+   * - `deny`: block listed tools when this rule matches.
+   */
   tools?: {
     allow?: string[];
     deny?: string[];
+    enforceAllowlist?: boolean;
   };
   /** Regex patterns for blocking malicious tool arguments */
   patterns?: string[];

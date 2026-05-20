@@ -101,5 +101,10 @@ export function createDPoPNonceStore(ttlMs: number): DPoPNonceStore {
   if (isRedisConfigured()) {
     return new RedisDPoPNonceStore(Math.ceil(ttlMs / 1000));
   }
+  if (process.env['GUARDIAN_CLUSTER_MODE'] === 'true' || process.env['KUBERNETES_SERVICE_HOST']) {
+    Logger.warn(
+      '[dpop] Using in-memory DPoP nonce store in clustered deployment — set Redis for replay protection across instances',
+    );
+  }
   return new InMemoryDPoPNonceStore(ttlMs);
 }

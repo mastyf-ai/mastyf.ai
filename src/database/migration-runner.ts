@@ -14,9 +14,15 @@ export async function runMigrations(
   pool: PgPoolType,
   migrationsDir: string = DEFAULT_MIGRATIONS_DIR,
 ): Promise<string[]> {
-  const files = readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
+  const all = readdirSync(migrationsDir);
+  const skippedTs = all.filter((f) => f.endsWith('.ts'));
+  if (skippedTs.length > 0) {
+    Logger.warn(
+      `[migrations] Skipping ${skippedTs.length} legacy SQLite .ts migration(s) — PostgreSQL uses .sql only: ${skippedTs.join(', ')}`,
+    );
+  }
+
+  const files = all.filter((f) => f.endsWith('.sql')).sort();
 
   const applied: string[] = [];
   const client = await pool.connect();
