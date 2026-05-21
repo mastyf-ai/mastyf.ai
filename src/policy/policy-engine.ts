@@ -33,6 +33,7 @@ import {
   waitPolicyTimingEnvelopeAsync,
   waitPolicyTimingEnvelopeSync,
 } from './policy-timing-envelope.js';
+import { KeyedAsyncLock } from '../utils/keyed-async-lock.js';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
@@ -61,6 +62,7 @@ export class PolicyEngine {
 
   private compiledPatterns: Map<string, { compiled: RegExp[]; rule: PolicyConfig['policy']['rules'][number] }[]> = new Map();
   private compiledArgPatterns: Map<string, { field: string; compiled: RegExp[]; rule: PolicyConfig['policy']['rules'][number] }[]> = new Map();
+  private readonly policyEvalLock = new KeyedAsyncLock();
 
   constructor(config: PolicyConfig) {
     this.rules = config.policy.rules;
@@ -121,6 +123,12 @@ export class PolicyEngine {
     return Math.max(ctx.requestTokens, byteEstimate);
   }
 
+  private policyEvalLockKey(ctx: CallContext): string {
+    const tenant = ctx.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
+    const clientId = ctx.agentIdentity?.clientId || ctx.agentIdentity?.sub || 'anon';
+    return `${tenant}:${ctx.serverName}:${ctx.toolName}:${clientId}`;
+  }
+
   private buildDeps(): PolicyEngineDeps {
     return {
       config: this.config,
@@ -168,10 +176,13 @@ export class PolicyEngine {
         if (cached) return resolvePolicyPrecedence(opaDecision, cached);
       }
 
-      const yamlDecision = this.evaluate(context, {
-        skipLocalRateLimit,
-        applyTimingEnvelope: false,
-      });
+      const evalKey = this.policyEvalLockKey(context);
+      const yamlDecision = await this.policyEvalLock.runExclusive(evalKey, () =>
+        this.evaluate(context, {
+          skipLocalRateLimit,
+          applyTimingEnvelope: false,
+        }),
+      );
       const finalDecision = resolvePolicyPrecedence(opaDecision, yamlDecision);
       if (isPolicyEvalCacheEnabled() && shouldCachePolicyDecision(finalDecision)) {
         await setCachedPolicyDecision(policyEvalCacheKey(context), finalDecision);

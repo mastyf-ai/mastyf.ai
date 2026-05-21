@@ -167,6 +167,17 @@ policy:
             - \bdelete\s+from\b
             - \bselect\s+\*\s+from\b.+\b(payments|transactions|credentials|users)\b
             - '\\$ne'
+    - name: block-encoding-evasion
+      description: Block base64 and raw hex blobs used to hide instructions (layered decode in encoding-guard)
+      action: block
+      patterns:
+        - (?:^|[^A-Za-z0-9+/])[A-Za-z0-9+/]{24,}={0,2}(?:[^A-Za-z0-9+/]|$)
+        - \b[0-9a-fA-F]{32,}\b
+      argPatterns:
+        - field: '*'
+          patterns:
+            - (?:^|[^A-Za-z0-9+/])[A-Za-z0-9+/]{20,}={0,2}
+            - \\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}
     - name: block-path-traversal
       description: Block tool calls with path traversal attempts
       action: block

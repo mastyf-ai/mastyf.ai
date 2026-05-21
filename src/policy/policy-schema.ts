@@ -13,6 +13,7 @@ const ToolCategorySchema = z.object({
 const RbacSchema = z.object({
   scopes: z.array(z.string()).optional(),
   clientIds: z.array(z.string()).optional(),
+  tenants: z.array(z.string()).optional(),
 });
 
 export const PolicyRuleSchema = z.object({

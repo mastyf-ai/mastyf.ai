@@ -56,6 +56,11 @@ export class PayloadNormalizer {
       transformations.push('truncated');
     }
 
+    current = stripZeroWidthCharacters(current);
+    if (current !== input) {
+      transformations.push('zero-width-strip');
+    }
+
     // ── Step 1: Homoglyph fold → TR39 confusables (optional) → NFKC ──
     const homoglyphFolded = foldHomoglyphs(current);
     if (homoglyphFolded !== current) {
@@ -84,6 +89,7 @@ export class PayloadNormalizer {
 
       // Hex escape decode (\x41, \x00, \x2F)
       current = this.decodeHexEscapes(current);
+      current = this.decodeRawHexStrings(current);
 
       // Unicode escape decode (\u0041, \U00000041)
       current = this.decodeUnicodeEscapes(current);
@@ -154,6 +160,20 @@ export class PayloadNormalizer {
       // Preserve null byte as marker for detection
       if (code === 0) return '\0';
       return String.fromCharCode(code);
+    });
+  }
+
+  /** Decode contiguous raw hex (e.g. 69676e6f7265 → ignore). */
+  private decodeRawHexStrings(input: string): string {
+    return input.replace(RAW_HEX_BLOB_RE, (match, hex: string) => {
+      if (hex.length < 16 || hex.length % 2 !== 0) return match;
+      try {
+        const decoded = Buffer.from(hex, 'hex').toString('utf8');
+        if (decoded.length >= 4 && /^[\x20-\x7E]+$/.test(decoded)) return decoded;
+      } catch {
+        // keep original
+      }
+      return match;
     });
   }
 
@@ -283,7 +303,7 @@ export class PayloadNormalizer {
     if (depth > 10) return value; // Recursion guard
 
     if (typeof value === 'string') {
-      return this.normalize(value).normalized;
+      return this.deobfuscateRecursive(value);
     }
 
     if (Array.isArray(value)) {
@@ -312,6 +332,7 @@ export class PayloadNormalizer {
       const before = current;
       current = this.urlDecode(current);
       current = this.decodeHexEscapes(current);
+      current = this.decodeRawHexStrings(current);
       current = this.decodeUnicodeEscapes(current);
       current = this.decodeHtmlEntities(current);
       current = this.unwrapDoubleEscapes(current);
@@ -383,6 +404,7 @@ export function deobfuscateRecursive(input: string, maxDepth = 5, unicodeStrict 
 const BASE64_SHELL_DECODE_RE =
   /\b(?:curl|wget|bash|sh\s|\/bin\/sh|rm\s+-rf|eval\s|exec\s|powershell|pwsh)\b/i;
 
+const RAW_HEX_BLOB_RE = /\b([0-9a-fA-F]{16,})\b/g;
 const INLINE_BASE64_BLOB_RE = /(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{16,}={0,2})/g;
 
 /**

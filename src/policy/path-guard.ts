@@ -75,9 +75,24 @@ export interface PathGuardResult {
   reason?: string;
 }
 
+/** Lowercase, slash-normalize, and collapse `..` segments for consistent matching. */
+export function normalizePathForGuard(raw: string): string {
+  let path = translatePath(translateWslPath(raw)).replace(/\\/g, '/').toLowerCase();
+  const parts: string[] = [];
+  for (const seg of path.split('/')) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') {
+      parts.pop();
+      continue;
+    }
+    parts.push(seg);
+  }
+  return parts.length ? `/${parts.join('/')}` : '/';
+}
+
 export function evaluatePathGuard(paths: string[]): PathGuardResult {
   for (const raw of paths) {
-    const path = translatePath(translateWslPath(raw)).replace(/\\/g, '/');
+    const path = normalizePathForGuard(raw);
 
     for (const pattern of SENSITIVE_PATH_PATTERNS) {
       if (pattern.test(path)) {

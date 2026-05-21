@@ -19,6 +19,7 @@ from .secrets_guard import scan_secrets_in_blob
 from .semantic_guards import evaluate_semantic_guards
 from .language_gadget_guard import evaluate_language_gadget_guard
 from .resource_guard import evaluate_resource_guard
+from .encoding_guard import evaluate_encoding_guard
 from .timing_guard import evaluate_timing_guard
 from .policy_timing_envelope import wait_policy_timing_envelope_sync
 from .session_flow_guard import (
@@ -379,6 +380,10 @@ class PolicyEngine:
             res = evaluate_resource_guard(norm_ctx, args_str)
             if res:
                 return PolicyDecision(self._resolve_action(res.action), res.rule, res.reason)
+
+            enc = evaluate_encoding_guard(norm_ctx)
+            if enc:
+                return PolicyDecision(self._resolve_action(enc.action), enc.rule, enc.reason)
 
             findings = scan_tool_call_arguments(norm_args)
             if findings:

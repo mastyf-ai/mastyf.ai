@@ -23,10 +23,14 @@ export interface StreamingInspectResult {
   truncated?: boolean;
 }
 
+export const STREAMING_INSPECTOR_MAX_CARRY_CHARS = 128 * 1024;
+
 export interface StreamingInspectorState {
   carry: string;
   findings: StreamingInspectFinding[];
   totalBytes: number;
+  /** Set when callers should pause upstream until buffer drains. */
+  backpressure?: boolean;
 }
 
 export function createStreamingInspectorState(): StreamingInspectorState {
@@ -75,10 +79,16 @@ export function inspectResponseChunk(
   if (!chunk) return [];
   state.totalBytes += utf8ByteLength(chunk);
   if (state.totalBytes > MAX_RESPONSE_DLP_BYTES) {
+    state.backpressure = true;
     return state.findings;
   }
 
   const combined = state.carry + chunk;
+  if (combined.length > STREAMING_INSPECTOR_MAX_CARRY_CHARS) {
+    state.backpressure = true;
+    state.carry = combined.slice(-STREAMING_INSPECTOR_OVERLAP_BYTES);
+    return state.findings;
+  }
   const chunkSize = STREAMING_INSPECTOR_CHUNK_BYTES;
   const newFindings: StreamingInspectFinding[] = [];
   const before = state.findings.length;
@@ -97,7 +107,13 @@ export function inspectResponseChunk(
   for (let i = before; i < state.findings.length; i++) {
     newFindings.push(state.findings[i]);
   }
+  state.backpressure = state.totalBytes > MAX_RESPONSE_DLP_BYTES * 0.9;
   return newFindings;
+}
+
+/** True when upstream should apply backpressure (pause reads) before sending more chunks. */
+export function streamingInspectorBackpressure(state: StreamingInspectorState): boolean {
+  return state.backpressure === true;
 }
 
 /** Inspect full response text using chunked windows (for stdio single-line responses). */
