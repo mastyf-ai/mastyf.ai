@@ -36,6 +36,15 @@ const SEVERITY_RANK: Record<string, number> = {
   info: 1,
 };
 
+const WEBHOOK_MAX_RETRIES = 3;
+const WEBHOOK_BASE_DELAY_MS = 200;
+const webhookCircuitOpenUntil = new Map<string, number>();
+
+function webhookBackoffMs(attempt: number): number {
+  const jitter = Math.floor(Math.random() * 50);
+  return WEBHOOK_BASE_DELAY_MS * 2 ** attempt + jitter;
+}
+
 export class WebhookAlerter {
   constructor(private configs: WebhookConfig[]) {}
 
@@ -108,13 +117,33 @@ export class WebhookAlerter {
       body = JSON.stringify(payload);
     }
 
-    const res = await fetch(cfg.url, {
-      method: 'POST',
-      headers,
-      body,
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) throw new Error(`Webhook returned ${res.status}`);
+    const openUntil = webhookCircuitOpenUntil.get(cfg.url) ?? 0;
+    if (Date.now() < openUntil) {
+      throw new Error('Webhook circuit open');
+    }
+
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < WEBHOOK_MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(cfg.url, {
+          method: 'POST',
+          headers,
+          body,
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) throw new Error(`Webhook returned ${res.status}`);
+        webhookCircuitOpenUntil.delete(cfg.url);
+        return;
+      } catch (err) {
+        lastErr = err instanceof Error ? err : new Error(String(err));
+        if (attempt < WEBHOOK_MAX_RETRIES - 1) {
+          await new Promise((r) => setTimeout(r, webhookBackoffMs(attempt)));
+        }
+      }
+    }
+
+    webhookCircuitOpenUntil.set(cfg.url, Date.now() + 60_000);
+    throw lastErr ?? new Error('Webhook delivery failed');
   }
 }
 

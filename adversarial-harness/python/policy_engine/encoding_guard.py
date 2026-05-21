@@ -15,11 +15,19 @@ BASE64_BLOB_RE = re.compile(r"(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{20,}={0,2})(?:[
 RAW_HEX_BLOB_RE = re.compile(r"\b([0-9a-fA-F]{16,})\b")
 PERCENT_ENCODED_RUN_RE = re.compile(r"(?:%[0-9a-fA-F]{2}){4,}", re.I)
 SUSPICIOUS_DECODED_RE = re.compile(
-    r"\b(?:ignore|disregard|override|bypass|jailbreak|delete|drop|exec|eval|curl|wget|"
+    r"\b(?:ignore|disregard|bypass|jailbreak|delete|drop|exec|eval|curl|wget|"
     r"rm\s+-rf|union\s+select|sleep\s*\(|benchmark\s*\(|/etc/passwd|bash|/bin/sh|"
     r"select\s+\*|\bselect\b|/dev/tcp)\b",
     re.I,
 )
+OVERRIDE_ATTACK_RE = re.compile(
+    r"\boverride\b.{0,80}\b(?:all|previous|prior|safety|instruction|rules|system|filter|restriction|guidance)\b",
+    re.I,
+)
+
+
+def _decoded_suspicious(text: str) -> bool:
+    return bool(SUSPICIOUS_DECODED_RE.search(text) or OVERRIDE_ATTACK_RE.search(text))
 
 
 def is_encoding_guard_enabled() -> bool:
@@ -55,25 +63,25 @@ def scan_encoding_evasion(blob: str) -> tuple[bool, str]:
         return False, ""
     deobfuscated = deobfuscate_recursive(blob)
     stripped_invisible = ZERO_WIDTH_RE.sub("", blob)
-    if deobfuscated and SUSPICIOUS_DECODED_RE.search(deobfuscated):
+    if deobfuscated and _decoded_suspicious(deobfuscated):
         if deobfuscated != blob or (
-            stripped_invisible != blob and SUSPICIOUS_DECODED_RE.search(stripped_invisible)
+            stripped_invisible != blob and _decoded_suspicious(stripped_invisible)
         ):
             return True, "multi-layer encoding reveals blocked content after decode"
-    if PERCENT_ENCODED_RUN_RE.search(blob) and SUSPICIOUS_DECODED_RE.search(deobfuscated):
+    if PERCENT_ENCODED_RUN_RE.search(blob) and _decoded_suspicious(deobfuscated):
         return True, "percent-encoded payload decodes to suspicious content"
     for match in BASE64_BLOB_RE.finditer(blob):
         decoded = _try_decode_base64(match.group(1))
-        if decoded and SUSPICIOUS_DECODED_RE.search(decoded):
+        if decoded and _decoded_suspicious(decoded):
             return True, "base64 blob decodes to suspicious instruction text"
     for match in RAW_HEX_BLOB_RE.finditer(blob):
         decoded = _try_decode_raw_hex(match.group(1))
-        if decoded and SUSPICIOUS_DECODED_RE.search(decoded):
+        if decoded and _decoded_suspicious(decoded):
             return True, "raw hex blob decodes to suspicious instruction text"
     trimmed = blob.strip()
     if re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", trimmed):
         whole = _try_decode_base64(trimmed)
-        if whole and SUSPICIOUS_DECODED_RE.search(whole):
+        if whole and _decoded_suspicious(whole):
             return True, "whole-string base64 decodes to suspicious content"
     return False, ""
 

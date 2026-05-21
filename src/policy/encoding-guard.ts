@@ -10,7 +10,9 @@ const BASE64_BLOB_RE = /(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{20,}={0,2})(?:[^A-Za-
 const RAW_HEX_BLOB_RE = /\b([0-9a-fA-F]{16,})\b/g;
 const PERCENT_ENCODED_RUN_RE = /(?:%[0-9a-fA-F]{2}){4,}/i;
 const SUSPICIOUS_DECODED_RE =
-  /\b(?:ignore|disregard|override|bypass|jailbreak|delete|drop|exec|eval|curl|wget|rm\s+-rf|union\s+select|sleep\s*\(|benchmark\s*\(|\/etc\/passwd|bash|\/bin\/sh|select\s+\*|\bselect\b|\/dev\/tcp)\b/i;
+  /\b(?:ignore|disregard|bypass|jailbreak|delete|drop|exec|eval|curl|wget|rm\s+-rf|union\s+select|sleep\s*\(|benchmark\s*\(|\/etc\/passwd|bash|\/bin\/sh|select\s+\*|\bselect\b|\/dev\/tcp)\b/i;
+const OVERRIDE_ATTACK_RE =
+  /\boverride\b.{0,80}\b(?:all|previous|prior|safety|instruction|rules|system|filter|restriction|guidance)\b/i;
 
 export function isEncodingGuardEnabled(): boolean {
   return process.env['GUARDIAN_ENCODING_GUARD'] !== 'false';
@@ -43,11 +45,14 @@ export function scanEncodingEvasion(blob: string): { matched: boolean; reason: s
 
   const deobfuscated = deobfuscateRecursive(blob);
   const strippedInvisible = stripZeroWidthCharacters(blob);
+  const decodedSuspicious =
+    SUSPICIOUS_DECODED_RE.test(deobfuscated) || OVERRIDE_ATTACK_RE.test(deobfuscated);
   if (
     deobfuscated.length > 0 &&
-    SUSPICIOUS_DECODED_RE.test(deobfuscated) &&
+    decodedSuspicious &&
     (deobfuscated !== blob ||
-      (strippedInvisible !== blob && SUSPICIOUS_DECODED_RE.test(strippedInvisible)))
+      (strippedInvisible !== blob &&
+        (SUSPICIOUS_DECODED_RE.test(strippedInvisible) || OVERRIDE_ATTACK_RE.test(strippedInvisible))))
   ) {
     return { matched: true, reason: 'multi-layer encoding reveals blocked content after decode' };
   }

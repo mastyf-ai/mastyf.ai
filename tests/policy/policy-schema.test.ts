@@ -37,4 +37,17 @@ describe('parsePolicyConfig', () => {
       PolicySchema.parse({ version: '1.0', policy: { mode: 'invalid', rules: [] } }),
     ).toThrow();
   });
+
+  it('rejects excessively nested policy YAML', () => {
+    let nested: Record<string, unknown> = { action: 'block', name: 'leaf' };
+    for (let i = 0; i < 25; i++) {
+      nested = { rules: [nested] };
+    }
+    expect(() =>
+      parsePolicyConfig({
+        version: '1.0',
+        policy: { mode: 'block', rules: [nested] },
+      }),
+    ).toThrow(/max nesting depth/i);
+  });
 });

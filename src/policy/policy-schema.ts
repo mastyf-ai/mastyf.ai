@@ -45,7 +45,24 @@ export const PolicySchema = z.object({
   }),
 });
 
+const MAX_POLICY_DEPTH = 20;
+
+function getObjectDepth(obj: unknown, current = 0): number {
+  if (current > MAX_POLICY_DEPTH) return current;
+  if (obj === null || typeof obj !== 'object') return current;
+
+  let max = current;
+  for (const value of Object.values(obj as Record<string, unknown>)) {
+    max = Math.max(max, getObjectDepth(value, current + 1));
+  }
+  return max;
+}
+
 /** Validate and parse policy YAML/JSON — throws ZodError on invalid config */
 export function parsePolicyConfig(raw: unknown): PolicyConfig {
+  const depth = getObjectDepth(raw);
+  if (depth > MAX_POLICY_DEPTH) {
+    throw new Error(`Policy config exceeds max nesting depth: ${depth} > ${MAX_POLICY_DEPTH}`);
+  }
   return PolicySchema.parse(raw) as PolicyConfig;
 }

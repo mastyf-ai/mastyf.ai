@@ -72,14 +72,38 @@ export function looksLikeXmlBody(body: string): boolean {
   return trimmed.startsWith('<?xml') || trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<');
 }
 
-export function jsonDepth(value: unknown, depth = 0, maxDepth = getHttpMaxJsonDepth()): boolean {
-  if (depth > maxDepth) return false;
-  if (value !== null && typeof value === 'object') {
-    for (const child of Object.values(value as Record<string, unknown>)) {
-      if (!jsonDepth(child, depth + 1, maxDepth)) return false;
+/** Iterative depth check — avoids stack overflow on deeply nested JSON. */
+export function jsonDepth(value: unknown, _depth = 0, maxDepth = getHttpMaxJsonDepth()): boolean {
+  const queue: Array<{ node: unknown; depth: number }> = [{ node: value, depth: 0 }];
+
+  while (queue.length > 0) {
+    const { node, depth } = queue.shift()!;
+    if (depth > maxDepth) return false;
+    if (node === null || typeof node !== 'object') continue;
+
+    for (const child of Object.values(node as Record<string, unknown>)) {
+      queue.push({ node: child, depth: depth + 1 });
     }
   }
+
   return true;
+}
+
+/** Reject upstream response headers containing CRLF (response-splitting). */
+export function validateResponseHeaders(
+  headers: Record<string, string | string[] | undefined>,
+): { ok: true } | { ok: false; error: string } {
+  for (const [key, val] of Object.entries(headers)) {
+    if (containsCrlf(key)) return { ok: false, error: `CRLF in header name: ${key}` };
+    if (val === undefined) continue;
+    const values = Array.isArray(val) ? val : [val];
+    for (const v of values) {
+      if (containsCrlf(String(v))) {
+        return { ok: false, error: `CRLF in header value: ${key}` };
+      }
+    }
+  }
+  return { ok: true };
 }
 
 export function parseJsonWithDepthLimit(

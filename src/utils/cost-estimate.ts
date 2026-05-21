@@ -48,6 +48,43 @@ export function allowsCostEstimates(): boolean {
   return process.env.GUARDIAN_COST_ALLOW_ESTIMATES === 'true';
 }
 
+export type CostSource = 'actual' | 'model-only' | 'estimated' | 'none';
+
+export function getCostSource(): CostSource {
+  const raw = process.env.GUARDIAN_COST_SOURCE ?? 'model-only';
+  if (raw === 'actual' || raw === 'model-only' || raw === 'estimated' || raw === 'none') {
+    return raw;
+  }
+  return 'model-only';
+}
+
+/** Reject misleading cost sources in production unless explicitly opted in. */
+export function validateCostSourceAtStartup(): void {
+  const source = process.env.GUARDIAN_COST_SOURCE;
+  if (!source) return;
+
+  if (source === 'simulated') {
+    throw new Error(
+      `Cost source 'simulated' is not allowed. Use 'actual' (proxy traffic) or 'model-only' (list rates). ` +
+        `For legacy tools/list simulation set GUARDIAN_COST_ALLOW_ESTIMATES=true and GUARDIAN_COST_SOURCE=estimated`,
+    );
+  }
+
+  if (source === 'estimated' && !allowsCostEstimates()) {
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd || process.env.GUARDIAN_STRICT_MODE === 'true') {
+      throw new Error(
+        `GUARDIAN_COST_SOURCE=estimated requires GUARDIAN_COST_ALLOW_ESTIMATES=true (not for production audit)`,
+      );
+    }
+  }
+
+  const allowed: CostSource[] = ['actual', 'model-only', 'estimated', 'none'];
+  if (!allowed.includes(source as CostSource)) {
+    throw new Error(`Unknown GUARDIAN_COST_SOURCE: ${source}`);
+  }
+}
+
 /** Official list rates for a resolved model — no simulated call volume. */
 export async function resolveModelListRates(modelId: string): Promise<ModelListRates> {
   const pricing = getRuntimeModelPricing();

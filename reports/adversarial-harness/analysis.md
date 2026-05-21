@@ -4,15 +4,15 @@
 
 - **Fixtures on disk:** 151 attacks + 55 benign (+ edge-cases in full corpus dir → 228 entries evaluated)
 - **Recall:** 100.0% attack block rate
-- **False positive rate:** 0 on benign fixtures
+- **False positive rate:** 3 on benign fixtures
 
-## Evasion suite (85 probes)
+## Evasion suite (120 probes)
 
-Crafted to stress encoding, unicode, zero-width, SSRF variants, shell obfuscation, SQL/Nosql, tool-chain, and indirect exfil paths. **Blocked:** 85, **Bypassed:** 0.
+Crafted to stress encoding, unicode, zero-width, SSRF variants, shell obfuscation, SQL/Nosql, tool-chain, and indirect exfil paths. **Blocked:** 120, **Bypassed:** 0.
 
 ## Python vs TypeScript parity
 
-Agreement 402/402 (100.0%). Corpus mismatches: 0. Delta: 0 fixtures.
+Agreement 435/437 (99.5%). Corpus mismatches: 1. Delta: 2 fixtures.
 
 ### Intentional Python port gaps (documented)
 

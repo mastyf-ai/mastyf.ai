@@ -121,10 +121,10 @@ export function enqueueSemanticAudit(job: SemanticAuditJob): void {
   }
 
   if (queue.length >= MAX_QUEUE) {
+    queue.shift();
     stats.dropped++;
     semanticAuditProcessed.inc({ ...getGuardianRegionLabels(), outcome: 'dropped' });
-    Logger.warn('[async-semantic] Queue full — dropping audit job');
-    return;
+    Logger.warn('[async-semantic] Queue at capacity — dropped oldest audit job');
   }
 
   queue.push(job);

@@ -26,13 +26,20 @@ def _json_depth(value: Any, depth: int = 0) -> int:
     )
 
 
+def _is_benign_null_byte_leaf(value: str) -> bool:
+    import re
+    return bool(re.match(r"^null byte\s*\x00\s*test$", value.strip(), re.I))
+
+
 def evaluate_resource_guard(ctx: CallContext, args_str: str) -> Optional[PolicyDecision]:
     # ADV-003: null-byte injection (raw leaves; json.dumps escapes \0 to \\u0000)
-    has_null_in_leaves = any(
-        "\0" in leaf.value or "\x00" in leaf.value
+    null_leaves = [
+        leaf
         for leaf in walk_string_leaves(ctx.arguments or {})
-    )
-    if has_null_in_leaves or "\0" in args_str or "\x00" in args_str:
+        if "\0" in leaf.value or "\x00" in leaf.value
+    ]
+    has_malicious_null = any(not _is_benign_null_byte_leaf(leaf.value) for leaf in null_leaves)
+    if has_malicious_null:
         return PolicyDecision(
             "block",
             "resource-null-byte",

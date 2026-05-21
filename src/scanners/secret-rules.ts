@@ -75,6 +75,7 @@ export const SECRET_RULES: SecretRule[] = [
   { id: 'amqp-url', provider: 'Database', severity: 'HIGH', flags: '', regex: 'amqps?://[^:]+:[^@\\s]+@[^\\s]+', entropy: 3 },
   { id: 'jdbc-url', provider: 'Database', severity: 'HIGH', flags: 'i', regex: 'jdbc:[a-z]+://[^\\s;]+(?:;[^\\s]*)?password=[^\\s;&]+', entropy: 3 },
   { id: 'db-url-generic', provider: 'Database', severity: 'HIGH', flags: 'i', regex: '(?:DATABASE_URL|DB_URL|DATABASE_URI)\\s*[=:]\\s*([a-z]+://[^@:\\s]+:[^@\\s]+@[^\\s]+)', entropy: 3 },
+  { id: 'private-key-base64', provider: 'Generic', severity: 'HIGH', flags: '', regex: 'MIIEvQI[A-Za-z0-9+/]{80,}={0,2}' },
   { id: 'generic-private-key', provider: 'Generic', severity: 'HIGH', flags: '', regex: '-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----' },
   { id: 'rsa_private', provider: 'Generic', severity: 'HIGH', flags: '', regex: '-----BEGIN RSA PRIVATE KEY-----' },
   { id: 'ec-private-key', provider: 'Generic', severity: 'HIGH', flags: '', regex: '-----BEGIN EC PRIVATE KEY-----' },

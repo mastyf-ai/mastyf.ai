@@ -11,6 +11,7 @@ import { PricingClient } from './clients/pricing-client.js';
 import { Logger } from './utils/logger.js';
 import { bootstrapSecrets } from './utils/enterprise-bootstrap.js';
 import { checkPgBouncerAtStartup } from './utils/pgbouncer-check.js';
+import { validateCostSourceAtStartup } from './utils/cost-estimate.js';
 
 export interface Container {
   db: IDatabase;
@@ -23,6 +24,7 @@ let startupWarningEmitted = false;
 
 export async function createContainer(dbPath?: string): Promise<Container> {
   await bootstrapSecrets();
+  validateCostSourceAtStartup();
   checkPgBouncerAtStartup();
   const db = await createDatabase(dbPath);
   const cveChecker = new CveChecker();

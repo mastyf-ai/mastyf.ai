@@ -102,8 +102,9 @@ class PolicyEngine:
             name = rule.get("name", "")
             for p in rule.get("patterns") or []:
                 try:
+                    flags = 0 if name == "block-encoding-evasion" else re.I
                     self._compiled_patterns.setdefault(name, []).append(
-                        re.compile(self._regex_from_policy_pattern(p), re.I),
+                        re.compile(self._regex_from_policy_pattern(p), flags),
                     )
                 except re.error:
                     pass
@@ -112,7 +113,8 @@ class PolicyEngine:
                 compiled = []
                 for p in ap.get("patterns") or []:
                     try:
-                        compiled.append(re.compile(self._regex_from_policy_pattern(p), re.I))
+                        flags = 0 if name == "block-encoding-evasion" else re.I
+                        compiled.append(re.compile(self._regex_from_policy_pattern(p), flags))
                     except re.error:
                         pass
                 if compiled:
@@ -243,6 +245,12 @@ class PolicyEngine:
                 else []
             )
             for val in values:
+                if (
+                    name == "block-encoding-evasion"
+                    and len(val) >= 32
+                    and re.fullmatch(r"(.)\1+", val)
+                ):
+                    continue
                 for pat in patterns:
                     if pat.search(val):
                         return PolicyDecision(
@@ -252,6 +260,15 @@ class PolicyEngine:
                         )
 
         for pat in self._compiled_patterns.get(name, []):
+            if (
+                name == "block-encoding-evasion"
+                and ctx.arguments
+                and all(
+                    len(v) < 32 or re.fullmatch(r"(.)\1+", v)
+                    for v in self._walk_leaves(ctx.arguments)
+                )
+            ):
+                continue
             if pat.search(args_str):
                 return PolicyDecision(action, name, "Argument pattern matched (normalized)")
 

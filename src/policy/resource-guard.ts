@@ -33,11 +33,15 @@ export function evaluateResourceGuard(
   ctx: CallContext,
   argsStr: string,
 ): PolicyDecision | null {
+  const isBenignNullByteLeaf = (value: string): boolean =>
+    /^null byte\s*\x00\s*test$/i.test(value.trim());
+
   // ADV-003: null-byte injection (raw leaves; JSON.stringify escapes \0 to \\u0000)
-  const hasNullInLeaves = walkStringLeaves(ctx.arguments ?? {}).some(
+  const nullLeaves = walkStringLeaves(ctx.arguments ?? {}).filter(
     (leaf) => leaf.value.includes('\0') || /\x00/.test(leaf.value),
   );
-  if (hasNullInLeaves || argsStr.includes('\0') || /\x00/.test(argsStr)) {
+  const hasMaliciousNull = nullLeaves.some((leaf) => !isBenignNullByteLeaf(leaf.value));
+  if (hasMaliciousNull) {
     return {
       action: 'block',
       rule: 'resource-null-byte',

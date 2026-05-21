@@ -1,38 +1,38 @@
 {
-  "generatedAt": "2026-05-21T09:05:30.976Z",
-  "harnessRoot": "/workspace/adversarial-harness",
+  "generatedAt": "2026-05-21T15:07:33.789Z",
+  "harnessRoot": "/Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness",
   "corpus": {
     "totalEntries": 228,
     "attacksOnDisk": 151,
     "benignOnDisk": 55,
     "attacksBlocked": 154,
     "attacksTotal": 154,
-    "benignPassed": 74,
+    "benignPassed": 71,
     "benignTotal": 74,
-    "falsePositives": 0,
+    "falsePositives": 3,
     "recall": 1,
-    "benignPassRate": 1,
-    "passed": true
+    "benignPassRate": 0.9594594594594594,
+    "passed": false
   },
   "evasion": {
-    "total": 85,
-    "blocked": 85,
+    "total": 120,
+    "blocked": 120,
     "bypassed": 0,
     "bundlePath": "adversarial-harness/evasion-attacks.json"
   },
   "pythonEval": {
-    "passed": 402,
-    "failed": 0,
-    "total": 402,
-    "passRate": 1,
-    "summary": "402/402 passed → 100.0%"
+    "passed": 433,
+    "failed": 4,
+    "total": 437,
+    "passRate": 0.9908466819221968,
+    "summary": "433/437 passed → 99.1%"
   },
   "parity": {
-    "agreement": 402,
-    "total": 402,
-    "agreementRate": 1,
-    "corpusMismatches": 0,
-    "delta": 0
+    "agreement": 435,
+    "total": 437,
+    "agreementRate": 0.9954233409610984,
+    "corpusMismatches": 1,
+    "delta": 2
   },
   "nodeIntegration": {
     "tests": {
@@ -45,16 +45,16 @@
     "concurrency": {
       "component": "AsyncSerialQueue",
       "samples": 50,
-      "p50Ms": 2.124221000000034,
-      "p95Ms": 3.1518169999999373,
-      "maxMs": 7.36842200000001,
+      "p50Ms": 2.3414160000000948,
+      "p95Ms": 3.011708999999996,
+      "maxMs": 3.3527500000000146,
       "note": "Serial queue — tasks run one at a time; latency includes prior queue depth",
       "proxy": {
         "component": "McpProxyServer.handleClientInput",
         "samples": 20,
-        "p50Ms": 16.664062999999942,
-        "p95Ms": 32.762281999999914,
-        "maxMs": 238.204256,
+        "p50Ms": 60.54837500000008,
+        "p95Ms": 88.84487499999989,
+        "maxMs": 171.160125,
         "integration": "real-mock-mcp-stdio"
       }
     },
@@ -72,63 +72,56 @@
       "label": "export-harness-rules",
       "ok": true,
       "status": 0,
-      "stdout": "Exported 76 injection rules and 267 secret rule metadata to /workspace/adversarial-harness/exported\n",
+      "stdout": "Exported 59 injection rules and 267 secret rule metadata to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/exported\n",
       "stderr": ""
     },
     {
       "label": "generate-custom-attacks",
       "ok": true,
       "status": 0,
-      "stdout": "Wrote 85 custom adversarial fixtures to /workspace/adversarial-harness/fixtures/custom-attacks\n",
-      "stderr": ""
-    },
-    {
-      "label": "generate-mcpg-catalog",
-      "ok": true,
-      "status": 0,
-      "stdout": "Wrote 100 MCPG catalog fixtures to /workspace/adversarial-harness/fixtures/mcpg-catalog\n",
+      "stdout": "Wrote 85 custom adversarial fixtures to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/fixtures/custom-attacks\n",
       "stderr": ""
     },
     {
       "label": "generate-matrix-fixtures",
       "ok": true,
       "status": 0,
-      "stdout": "Wrote 89 matrix fixtures to /workspace/adversarial-harness/fixtures/matrix\n",
+      "stdout": "Wrote 89 matrix fixtures to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/fixtures/matrix\n",
       "stderr": ""
     },
     {
       "label": "export-evasion-attacks",
       "ok": true,
       "status": 0,
-      "stdout": "Wrote 85 evasion attacks → /workspace/adversarial-harness/evasion-attacks.json\n",
+      "stdout": "Wrote 85 evasion attacks → /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/evasion-attacks.json\n",
       "stderr": ""
     },
     {
       "label": "setup-python-venv",
       "ok": true,
       "status": 0,
-      "stdout": "python3",
-      "stderr": "[setup-python-venv] pip install failed; using system python3 + PYTHONPATH\n"
+      "stdout": "/Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/.venv/bin/python3",
+      "stderr": ""
     },
     {
       "label": "python-comprehensive-eval",
       "ok": true,
       "status": 0,
-      "stdout": "{\n  \"passed\": true,\n  \"python\": \"402/402 passed \\u2192 100.0%\",\n  \"corpus\": {\n    \"attacks\": 151,\n    \"benign\": 55,\n    \"loaded\": 228,\n    \"tp\": 154,\n    \"fp\": 0,\n    \"tn\": 74,\n    \"fn\": 0,\n    \"passed\": true\n  },\n  \"evasion\": {\n    \"total\": 85,\n    \"blocked\": 85,\n    \"bypassed\": 0\n  },\n  \"matrix\": {\n    \"total\": 89,\n    \"passed\": 89,\n    \"failed\": 0\n  },\n  \"elapsed\": 0.34\n}\n",
+      "stdout": "{\n  \"passed\": true,\n  \"python\": \"401/402 passed \\u2192 99.8%\",\n  \"corpus\": {\n    \"attacks\": 151,\n    \"benign\": 55,\n    \"loaded\": 228,\n    \"tp\": 154,\n    \"fp\": 0,\n    \"tn\": 74,\n    \"fn\": 0,\n    \"passed\": true\n  },\n  \"evasion\": {\n    \"total\": 85,\n    \"blocked\": 84,\n    \"bypassed\": 1\n  },\n  \"matrix\": {\n    \"total\": 89,\n    \"passed\": 89,\n    \"failed\": 0\n  },\n  \"elapsed\": 0.07\n}\nFAIL custom:adv-066.json expected=block actual=pass rule=allowlist\n",
       "stderr": ""
     },
     {
       "label": "python-corpus-only",
       "ok": true,
       "status": 0,
-      "stdout": "{\n  \"timestamp\": \"2026-05-21T08:05:27.079282+00:00\",\n  \"semanticDisabled\": true,\n  \"attacksBlocked\": 154,\n  \"attacksTotal\": 154,\n  \"benignPassed\": 74,\n  \"benignTotal\": 74,\n  \"falsePositives\": 0,\n  \"missed\": 0,\n  \"passed\": true,\n  \"failures\": []\n}\n",
+      "stdout": "{\n  \"timestamp\": \"2026-05-20T17:24:50.835457+00:00\",\n  \"semanticDisabled\": true,\n  \"attacksBlocked\": 154,\n  \"attacksTotal\": 154,\n  \"benignPassed\": 74,\n  \"benignTotal\": 74,\n  \"falsePositives\": 0,\n  \"missed\": 0,\n  \"passed\": true,\n  \"failures\": []\n}\n",
       "stderr": ""
     },
     {
       "label": "pnpm-build",
       "ok": true,
       "status": 0,
-      "stdout": "\n> @mcp-guardian/server@2.9.0 build /workspace\n> pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && turbo run build\n\n\n> @mcp-guardian/plugin-sdk@3.0.0 build /workspace/packages/plugin-sdk\n> tsc --project tsconfig.json\n\n\n   • Packages in scope: @mcp-guardian/cli, @mcp-guardian/core, @mcp-guardian/plugin-sdk, @mcp-guardian/server\n   • Running build in 4 packages\n   • Remote caching disabled\n\n@mcp-guardian/core:build: cache hit, replaying logs 7958a4f35d8ab413\n@mcp-guardian/core:build: \n@mcp-guardian/core:build: > @mcp-guardian/core@2.9.0 build /workspace/packages/core\n@mcp-guardian/core:build: > tsc\n@mcp-guardian/core:build: \n@mcp-guardian/plugin-sdk:build: cache hit, replaying logs 6e28f0bef4fbe0f0\n@mcp-guardian/plugin-sdk:build: \n@mcp-guardian/plugin-sdk:build: > @mcp-guardian/plugin-sdk@3.0.0 build /workspace/packages/plugin-sdk\n@mcp-guardian/plugin-sdk:build: > tsc --project tsconfig.json\n@mcp-guardian/plugin-sdk:build: \n@mcp-guardian/server:build: cache hit, replaying logs 92ca9d8365511db1\n@mcp-guardian/server:build: \n@mcp-guardian/server:build: > @mcp-guardian/server@2.9.0 build /workspace/packages/server\n@mcp-guardian/server:build: > tsc\n@mcp-guardian/server:build: \n@mcp-guardian/cli:build: cache hit, replaying logs 8f3b6075382a78e7\n@mcp-guardian/cli:build: \n@mcp-guardian/cli:build: > @mcp-guardian/cli@2.9.0 build /workspace/packages/cli\n@mcp-guardian/cli:build: > tsc\n@mcp-guardian/cli:build: \n\n Tasks:    4 successful, 4 total\nCached:    4 cached, 4 total\n  Time:    38ms >>> FULL TURBO\n\n",
+      "stdout": "\n> @mcp-guardian/server@2.8.6 build /Users/rudraneeldas/Desktop/mcp-guardian\n> pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && turbo run build\n\n\n> @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\n> tsc --project tsconfig.json\n\n\n   • Packages in scope: @mcp-guardian/cli, @mcp-guardian/core, @mcp-guardian/plugin-sdk, @mcp-guardian/server\n   • Running build in 4 packages\n   • Remote caching disabled\n\n@mcp-guardian/core:build: cache hit, replaying logs bc2600889c797f9e\n@mcp-guardian/core:build: \n@mcp-guardian/core:build: > @mcp-guardian/core@2.8.6 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/core\n@mcp-guardian/core:build: > tsc\n@mcp-guardian/core:build: \n@mcp-guardian/server:build: cache hit, replaying logs bf9057a56145a6e8\n@mcp-guardian/server:build: \n@mcp-guardian/server:build: > @mcp-guardian/server@2.8.6 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/server\n@mcp-guardian/server:build: > tsc\n@mcp-guardian/server:build: \n@mcp-guardian/plugin-sdk:build: cache hit, replaying logs 6e28f0bef4fbe0f0\n@mcp-guardian/plugin-sdk:build: \n@mcp-guardian/plugin-sdk:build: > @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\n@mcp-guardian/plugin-sdk:build: > tsc --project tsconfig.json\n@mcp-guardian/plugin-sdk:build: \n@mcp-guardian/cli:build: cache hit, replaying logs c807c8ac2672c928\n@mcp-guardian/cli:build: \n@mcp-guardian/cli:build: > @mcp-guardian/cli@2.8.6 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/cli\n@mcp-guardian/cli:build: > tsc\n@mcp-guardian/cli:build: \n\n Tasks:    4 successful, 4 total\nCached:    4 cached, 4 total\n  Time:    39ms >>> FULL TURBO\n\n",
       "stderr": "• turbo 2.9.12\n"
     },
     {
@@ -142,21 +135,21 @@
       "label": "node-corpus-eval",
       "ok": true,
       "status": 0,
-      "stdout": "Running corpus evaluation (228 entries) against /workspace/default-policy.yaml\n\n  ✓ attacks/credential-exfil/cred-001.json\n  ✓ attacks/credential-exfil/cred-002.json\n  ✓ attacks/credential-exfil/cred-003.json\n  ✓ attacks/credential-exfil/cred-004.json\n  ✓ attacks/credential-exfil/cred-005.json\n  ✓ attacks/credential-exfil/cred-006.json\n  ✓ attacks/credential-exfil/cred-007.json\n  ✓ attacks/credential-exfil/cred-008.json\n  ✓ attacks/credential-exfil/cred-009.json\n  ✓ attacks/credential-exfil/cred-010.json\n  ✓ attacks/credential-exfil/cred-011.json\n  ✓ attacks/credential-exfil/cred-012.json\n  ✓ attacks/credential-exfil/cred-013.json\n  ✓ attacks/credential-exfil/cred-014.json\n  ✓ attacks/credential-exfil/cred-015.json\n  ✓ attacks/credential-exfil/cred-016.json\n  ✓ attacks/credential-exfil/cred-017.json\n  ✓ attacks/credential-exfil/cred-018.json\n  ✓ attacks/credential-exfil/cred-019.json\n  ✓ attacks/credential-exfil/cred-020.json\n  ✓ attacks/credential-exfil/cred-021.json\n  ✓ attacks/credential-exfil/cred-022.json\n  ✓ attacks/credential-exfil/cred-024.json\n  ✓ attacks/credential-exfil/cred-027.json\n  ✓ attacks/cross-tool-chain/chain-001.json\n  ✓ attacks/cross-tool-chain/chain-002.json\n  ✓ attacks/cross-tool-chain/chain-003.json\n  ✓ attacks/cross-tool-chain/chain-004.json\n  ✓ attacks/cross-tool-chain/chain-005.json\n  ✓ attacks/cross-tool-chain/chain-006.json\n  ✓ attacks/cross-tool-chain/chain-007.json\n  ✓ attacks/cross-tool-chain/chain-008.json\n  ✓ attacks/cross-tool-chain/chain-009.json\n  ✓ attacks/cross-tool-chain/chain-010.json\n  ✓ attacks/cross-tool-chain/chain-011.json\n  ✓ attacks/cross-tool-chain/chain-012.json\n  ✓ attacks/cross-tool-chain/chain-013.json\n  ✓ attacks/cross-tool-chain/chain-014.json\n  ✓ attacks/cross-tool-chain/chain-015.json\n  ✓ attacks/cross-tool-chain/chain-016.json\n  ✓ attacks/prompt-injection/pi-001.json\n  ✓ attacks/prompt-injection/pi-002.json\n  ✓ attacks/prompt-injection/pi-003.json\n  ✓ attacks/prompt-injection/pi-004.json\n  ✓ attacks/prompt-injection/pi-005.json\n  ✓ attacks/prompt-injection/pi-006.json\n  ✓ attacks/prompt-injection/pi-007.json\n  ✓ attacks/prompt-injection/pi-008.json\n  ✓ attacks/prompt-injection/pi-009.json\n  ✓ attacks/prompt-injection/pi-010.json\n  ✓ attacks/prompt-injection/pi-011.json\n  ✓ attacks/prompt-injection/pi-012.json\n  ✓ attacks/prompt-injection/pi-013.json\n  ✓ attacks/prompt-injection/pi-014.json\n  ✓ attacks/prompt-injection/pi-015.json\n  ✓ attacks/prompt-injection/pi-016.json\n  ✓ attacks/prompt-injection/pi-017.json\n  ✓ attacks/prompt-injection/pi-018.json\n  ✓ attacks/prompt-injection/pi-019.json\n  ✓ attacks/prompt-injection/pi-020.json\n  ✓ attacks/prompt-injection/pi-021.json\n  ✓ attacks/prompt-injection/pi-022.json\n  ✓ attacks/prompt-injection/pi-023.json\n  ✓ attacks/prompt-injection/pi-024.json\n  ✓ attacks/prompt-injection/pi-025.json\n  ✓ attacks/prompt-injection/pi-026.json\n  ✓ attacks/prompt-injection/pi-027.json\n  ✓ attacks/prompt-injection/pi-028.json\n  ✓ attacks/prompt-injection/pi-029.json\n  ✓ attacks/prompt-injection/pi-030.json\n  ✓ attacks/prompt-injection/pi-031.json\n  ✓ attacks/prompt-injection/pi-032.json\n  ✓ attacks/shell-obfuscation/shell-001.json\n  ✓ attacks/shell-obfuscation/shell-002.json\n  ✓ attacks/shell-obfuscation/shell-003.json\n  ✓ attacks/shell-obfuscation/shell-004.json\n  ✓ attacks/shell-obfuscation/shell-005.json\n  ✓ attacks/shell-obfuscation/shell-006.json\n  ✓ attacks/shell-obfuscation/shell-007.json\n  ✓ attacks/shell-obfuscation/shell-008.json\n  ✓ attacks/shell-obfuscation/shell-009.json\n  ✓ attacks/shell-obfuscation/shell-010.json\n  ✓ attacks/shell-obfuscation/shell-011.json\n  ✓ attacks/shell-obfuscation/shell-012.json\n  ✓ attacks/shell-obfuscation/shell-013.json\n  ✓ attacks/shell-obfuscation/shell-014.json\n  ✓ attacks/shell-obfuscation/shell-015.json\n  ✓ attacks/shell-obfuscation/shell-016.json\n  ✓ attacks/shell-obfuscation/shell-017.json\n  ✓ attacks/shell-obfuscation/shell-018.json\n  ✓ attacks/shell-obfuscation/shell-019.json\n  ✓ attacks/shell",
+      "stdout": "Running corpus evaluation (228 entries) against /Users/rudraneeldas/Desktop/mcp-guardian/default-policy.yaml\n\n  ✓ attacks/credential-exfil/cred-001.json\n  ✓ attacks/credential-exfil/cred-002.json\n  ✓ attacks/credential-exfil/cred-003.json\n  ✓ attacks/credential-exfil/cred-004.json\n  ✓ attacks/credential-exfil/cred-005.json\n  ✓ attacks/credential-exfil/cred-006.json\n  ✓ attacks/credential-exfil/cred-007.json\n  ✓ attacks/credential-exfil/cred-008.json\n  ✓ attacks/credential-exfil/cred-009.json\n  ✓ attacks/credential-exfil/cred-010.json\n  ✓ attacks/credential-exfil/cred-011.json\n  ✓ attacks/credential-exfil/cred-012.json\n  ✓ attacks/credential-exfil/cred-013.json\n  ✓ attacks/credential-exfil/cred-014.json\n  ✓ attacks/credential-exfil/cred-015.json\n  ✓ attacks/credential-exfil/cred-016.json\n  ✓ attacks/credential-exfil/cred-017.json\n  ✓ attacks/credential-exfil/cred-018.json\n  ✓ attacks/credential-exfil/cred-019.json\n  ✓ attacks/credential-exfil/cred-020.json\n  ✓ attacks/credential-exfil/cred-021.json\n  ✓ attacks/credential-exfil/cred-022.json\n  ✓ attacks/credential-exfil/cred-024.json\n  ✓ attacks/credential-exfil/cred-027.json\n  ✓ attacks/cross-tool-chain/chain-001.json\n  ✓ attacks/cross-tool-chain/chain-002.json\n  ✓ attacks/cross-tool-chain/chain-003.json\n  ✓ attacks/cross-tool-chain/chain-004.json\n  ✓ attacks/cross-tool-chain/chain-005.json\n  ✓ attacks/cross-tool-chain/chain-006.json\n  ✓ attacks/cross-tool-chain/chain-007.json\n  ✓ attacks/cross-tool-chain/chain-008.json\n  ✓ attacks/cross-tool-chain/chain-009.json\n  ✓ attacks/cross-tool-chain/chain-010.json\n  ✓ attacks/cross-tool-chain/chain-011.json\n  ✓ attacks/cross-tool-chain/chain-012.json\n  ✓ attacks/cross-tool-chain/chain-013.json\n  ✓ attacks/cross-tool-chain/chain-014.json\n  ✓ attacks/cross-tool-chain/chain-015.json\n  ✓ attacks/cross-tool-chain/chain-016.json\n  ✓ attacks/prompt-injection/pi-001.json\n  ✓ attacks/prompt-injection/pi-002.json\n  ✓ attacks/prompt-injection/pi-003.json\n  ✓ attacks/prompt-injection/pi-004.json\n  ✓ attacks/prompt-injection/pi-005.json\n  ✓ attacks/prompt-injection/pi-006.json\n  ✓ attacks/prompt-injection/pi-007.json\n  ✓ attacks/prompt-injection/pi-008.json\n  ✓ attacks/prompt-injection/pi-009.json\n  ✓ attacks/prompt-injection/pi-010.json\n  ✓ attacks/prompt-injection/pi-011.json\n  ✓ attacks/prompt-injection/pi-012.json\n  ✓ attacks/prompt-injection/pi-013.json\n  ✓ attacks/prompt-injection/pi-014.json\n  ✓ attacks/prompt-injection/pi-015.json\n  ✓ attacks/prompt-injection/pi-016.json\n  ✓ attacks/prompt-injection/pi-017.json\n  ✓ attacks/prompt-injection/pi-018.json\n  ✓ attacks/prompt-injection/pi-019.json\n  ✓ attacks/prompt-injection/pi-020.json\n  ✓ attacks/prompt-injection/pi-021.json\n  ✓ attacks/prompt-injection/pi-022.json\n  ✓ attacks/prompt-injection/pi-023.json\n  ✓ attacks/prompt-injection/pi-024.json\n  ✓ attacks/prompt-injection/pi-025.json\n  ✓ attacks/prompt-injection/pi-026.json\n  ✓ attacks/prompt-injection/pi-027.json\n  ✓ attacks/prompt-injection/pi-028.json\n  ✓ attacks/prompt-injection/pi-029.json\n  ✓ attacks/prompt-injection/pi-030.json\n  ✓ attacks/prompt-injection/pi-031.json\n  ✓ attacks/prompt-injection/pi-032.json\n  ✓ attacks/shell-obfuscation/shell-001.json\n  ✓ attacks/shell-obfuscation/shell-002.json\n  ✓ attacks/shell-obfuscation/shell-003.json\n  ✓ attacks/shell-obfuscation/shell-004.json\n  ✓ attacks/shell-obfuscation/shell-005.json\n  ✓ attacks/shell-obfuscation/shell-006.json\n  ✓ attacks/shell-obfuscation/shell-007.json\n  ✓ attacks/shell-obfuscation/shell-008.json\n  ✓ attacks/shell-obfuscation/shell-009.json\n  ✓ attacks/shell-obfuscation/shell-010.json\n  ✓ attacks/shell-obfuscation/shell-011.json\n  ✓ attacks/shell-obfuscation/shell-012.json\n  ✓ attacks/shell-obfuscation/shell-013.json\n  ✓ attacks/shell-obfuscation/shell-014.json\n  ✓ attacks/shell-obfuscation/shell-015.json\n  ✓ attacks/shell-obfuscation/shell-016.json\n  ✓ attacks/shell-obfuscation/shell-017.json\n  ✓ attacks/shell-obfuscation/shell-018.json\n  ✓ attacks/shell-obfuscation/sh",
       "stderr": ""
     },
     {
       "label": "node-python-parity",
       "ok": true,
       "status": 0,
-      "stdout": "Parity: 402/402 (100.0%) mismatches=0\n",
+      "stdout": "Parity: 400/402 (99.5%) mismatches=2\npattern-018 node=false(pass) py=true(block) rule=semantic-shell-guard\ncustom:adv-010.json node=false(pass) py=true(block) rule=block-sensitive-paths\n",
       "stderr": ""
     },
     {
       "label": "generate-adversarial-report",
       "ok": true,
       "status": 0,
-      "stdout": "Wrote /workspace/reports/adversarial-harness/{results.json,summary.md,analysis.md}\n",
+      "stdout": "Wrote /Users/rudraneeldas/Desktop/mcp-guardian/reports/adversarial-harness/{results.json,summary.md,analysis.md}\n",
       "stderr": ""
     }
   ]

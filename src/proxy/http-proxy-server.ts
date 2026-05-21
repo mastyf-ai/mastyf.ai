@@ -23,10 +23,10 @@ import {
   isXmlContentType,
   looksLikeXmlBody,
   parseJsonWithDepthLimit,
-  sanitizeResponseHeaders,
   validateHostHeader,
   validateRequestHeaders,
   validateRequestUrlPath,
+  validateResponseHeaders,
 } from './http-proxy-security.js';
 
 /**
@@ -304,7 +304,22 @@ export class HttpProxyServer {
       }
 
       const proxyReq = (isHttps ? httpsReq : httpReq)(reqOpts, (upstreamRes) => {
-        const safeHeaders = sanitizeResponseHeaders(upstreamRes.headers);
+        const headerCheck = validateResponseHeaders(
+          upstreamRes.headers as Record<string, string | string[] | undefined>,
+        );
+        if (!headerCheck.ok) {
+          Logger.error(`[http-proxy:${this.serverName}] Invalid upstream response headers: ${headerCheck.error}`);
+          if (!res.headersSent) {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: 'MCP Guardian: Invalid response headers from upstream',
+            }));
+          }
+          upstreamRes.resume();
+          tenantBreaker.recordFailure();
+          return;
+        }
+        const safeHeaders = { ...upstreamRes.headers } as Record<string, string | string[] | undefined>;
         applySafeCorsHeaders(req.headers, safeHeaders);
         res.writeHead(upstreamRes.statusCode || 200, safeHeaders);
         upstreamRes.pipe(res);

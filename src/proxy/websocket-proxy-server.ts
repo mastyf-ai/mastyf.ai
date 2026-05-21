@@ -24,6 +24,7 @@ import { inspectFullResponse, isResponseScanSkipped } from '../utils/streaming-i
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
 import type { AgentIdentity } from '../auth/auth-types.js';
+import { sanitizeProxyClientError, webSocketClientOptions } from '../utils/ws-tls-config.js';
 
 export interface WebSocketProxyOptions {
   listenPort: number;
@@ -83,7 +84,11 @@ export class WebSocketProxyServer {
   }
 
   private async handleClientConnection(clientWs: WebSocket, req: IncomingMessage): Promise<void> {
-    const upstream = new WebSocket(this.opts.upstreamWsUrl);
+    const upstream = new WebSocket(
+      this.opts.upstreamWsUrl,
+      undefined,
+      webSocketClientOptions(this.opts.upstreamWsUrl),
+    );
 
     upstream.on('open', () => {
       clientWs.on('message', (data) => {
@@ -96,7 +101,7 @@ export class WebSocketProxyServer {
 
     upstream.on('error', (err) => {
       Logger.warn(`[ws-proxy:${this.opts.serverName}] upstream error: ${err.message}`);
-      clientWs.close(1011, 'upstream error');
+      clientWs.close(1011, sanitizeProxyClientError('upstream error'));
     });
 
     clientWs.on('close', () => upstream.close());
