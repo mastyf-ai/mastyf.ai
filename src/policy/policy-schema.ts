@@ -29,6 +29,7 @@ export const PolicyRuleSchema = z.object({
   toolAllowExceptions: z.array(z.string()).optional(),
   maxTokens: z.number().positive().optional(),
   maxCallsPerMinute: z.number().positive().optional(),
+  maxCallsPer10Seconds: z.number().positive().optional(),
   rbac: RbacSchema.optional(),
 });
 

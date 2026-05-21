@@ -14,6 +14,7 @@ import {
 } from './policy-eval-cache.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
 import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
+import { scanForSecrets } from '../scanners/secret-scanner.js';
 import {
   SYNC_POLICY_STRATEGIES,
   evaluateIdempotency,
@@ -41,6 +42,11 @@ export class PolicyEngine {
   private callCounters: LRUCache<string, { count: number; resetAt: number }> = new LRUCache({
     max: 50000,
     ttl: 60000,
+    updateAgeOnGet: false,
+  });
+  private burstCounters: LRUCache<string, { count: number; resetAt: number }> = new LRUCache({
+    max: 50000,
+    ttl: 10_000,
     updateAgeOnGet: false,
   });
   private normalizer: ReturnType<typeof getNormalizer>;
@@ -164,6 +170,7 @@ export class PolicyEngine {
   /** Clear in-memory per-minute call counters (harness / isolated rate-limit suites). */
   resetRateCounters(): void {
     this.callCounters.clear();
+    this.burstCounters.clear();
   }
 
   evaluate(
@@ -331,22 +338,46 @@ export class PolicyEngine {
       }
     }
 
-    if (rule.maxCallsPerMinute && !skipLocalRateLimit) {
+    if (!skipLocalRateLimit) {
       const tenant = ctx.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
       const clientId = ctx.agentIdentity?.clientId || ctx.agentIdentity?.sub;
       const key = clientId
         ? `${tenant}:${ctx.serverName}:${ctx.toolName}:${clientId}`
         : `${tenant}:${ctx.serverName}:${ctx.toolName}`;
       const now = Date.now();
-      let counter = this.callCounters.get(key);
-      if (!counter || now > counter.resetAt) {
-        counter = { count: 1, resetAt: now + 60000 };
-      } else {
-        counter.count++;
+
+      if (rule.maxCallsPer10Seconds) {
+        let burst = this.burstCounters.get(key);
+        if (!burst || now > burst.resetAt) {
+          burst = { count: 1, resetAt: now + 10_000 };
+        } else {
+          burst.count++;
+        }
+        this.burstCounters.set(key, burst);
+        if (burst.count > rule.maxCallsPer10Seconds) {
+          return {
+            action: this.resolveAction(rule.action),
+            rule: rule.name,
+            reason: `Burst rate limit exceeded: ${burst.count}/${rule.maxCallsPer10Seconds} calls per 10s`,
+          };
+        }
       }
-      this.callCounters.set(key, counter);
-      if (counter.count > rule.maxCallsPerMinute) {
-        return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Rate limit exceeded: ${counter.count}/${rule.maxCallsPerMinute} calls per minute` };
+
+      if (rule.maxCallsPerMinute) {
+        let counter = this.callCounters.get(key);
+        if (!counter || now > counter.resetAt) {
+          counter = { count: 1, resetAt: now + 60000 };
+        } else {
+          counter.count++;
+        }
+        this.callCounters.set(key, counter);
+        if (counter.count > rule.maxCallsPerMinute) {
+          return {
+            action: this.resolveAction(rule.action),
+            rule: rule.name,
+            reason: `Rate limit exceeded: ${counter.count}/${rule.maxCallsPerMinute} calls per minute`,
+          };
+        }
       }
     }
 
@@ -395,6 +426,13 @@ export class PolicyEngine {
     const injectionFindings = detectPromptInjection(toolName, responseBody);
     for (const f of injectionFindings) {
       detections.push(`Prompt injection (${f.severity}): ${f.patternId} — ${f.description}`);
+    }
+
+    const secretFindings = scanForSecrets(responseBody, `response:${serverName}:${toolName}`);
+    for (const f of secretFindings) {
+      if (f.severity === 'HIGH' || f.severity === 'MEDIUM') {
+        detections.push(`Secret (${f.severity}): ${f.type} in tool response`);
+      }
     }
 
     for (const pattern of PolicyEngine.RESPONSE_EXFILTRATION_PATTERNS) {

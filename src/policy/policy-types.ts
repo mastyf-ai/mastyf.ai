@@ -45,6 +45,8 @@ export interface PolicyRule {
   maxTokens?: number;
   /** Max calls per minute per server */
   maxCallsPerMinute?: number;
+  /** Adaptive burst limit — max calls per 10-second window */
+  maxCallsPer10Seconds?: number;
   /** v0.5.1: RBAC — scope, client_id, and tenant constraints */
   rbac?: {
     /** Required scopes the agent must have */

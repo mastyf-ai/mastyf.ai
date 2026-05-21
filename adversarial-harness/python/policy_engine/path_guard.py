@@ -15,6 +15,10 @@ SENSITIVE_PATH_PATTERNS = [
     re.compile(r"^/etc(?:/|$)"),
     re.compile(r"^/root(?:/|$)"),
     re.compile(r"^/proc(?:/|$)"),
+    re.compile(r"/proc/self/environ"),
+    re.compile(r"link_to.*(?:aws|credential|secret|\.env)", re.I),
+    re.compile(r"&ref\s+/(?:etc|proc|root|\.)"),
+    re.compile(r"yaml\s*anchor", re.I),
     re.compile(r"^/sys(?:/|$)"),
     re.compile(r"/\.ssh(?:/|$)"),
     re.compile(r"/\.aws/credentials$"),
@@ -38,6 +42,16 @@ PATH_LIKE = re.compile(
 class PathGuardResult:
     block: bool
     reason: str = ""
+
+
+def extract_path_argument_values(args: dict[str, object] | None) -> list[str]:
+    if not args:
+        return []
+    out: list[str] = []
+    for key, val in args.items():
+        if key.lower() in PATH_ARG_FIELDS and isinstance(val, str):
+            out.append(val)
+    return out
 
 
 def evaluate_path_guard(paths: Iterable[str]) -> PathGuardResult:

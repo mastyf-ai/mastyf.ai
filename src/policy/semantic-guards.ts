@@ -89,6 +89,16 @@ const TOKEN_BUDGET_ABUSE_PATTERNS: RegExp[] = [
   /\b(?:fill|exhaust|maximize).{0,30}(?:context|token|window)/i,
 ];
 
+/** Language-specific deserialization gadgets (pickle, Java, PHP, Ruby). */
+const LANGUAGE_GADGET_PATTERNS: RegExp[] = [
+  /\b(?:pickle\.loads?|cPickle|__reduce__|PYCC)\b/i,
+  /\bObjectInputStream\b|\breadObject\s*\(\s*\)/i,
+  /\bjava\.io\.(?:Serializable|ObjectInputStream)\b/i,
+  /\b(?:node-serialize|unserialize\s*\(|__wakeup|__destruct)\b/i,
+  /\bMarshal\.load\b|\byaml\.unsafe_load\b/i,
+  /\br00t\.me\b.*\bpickle\b/i,
+];
+
 /** Log / audit trail injection (CRLF, fake log lines, ANSI escapes). */
 const LOG_INJECTION_PATTERNS: RegExp[] = [
   /\r\n[^\n]{0,120}\r\n/,
@@ -230,6 +240,16 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
         action: 'block',
         rule: 'semantic-ssti-guard',
         reason: 'Server-side template injection pattern detected in arguments',
+      };
+    }
+  }
+
+  for (const pattern of LANGUAGE_GADGET_PATTERNS) {
+    if (pattern.test(argsBlob)) {
+      return {
+        action: 'block',
+        rule: 'semantic-language-gadget',
+        reason: 'Language-specific deserialization gadget pattern in arguments',
       };
     }
   }

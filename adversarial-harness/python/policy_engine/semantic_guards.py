@@ -91,6 +91,14 @@ TOKEN_BUDGET_ABUSE = [
     re.compile(r"\b(?:fill|exhaust|maximize).{0,30}(?:context|token|window)", re.I),
 ]
 
+LANGUAGE_GADGET = [
+    re.compile(r"\b(?:pickle\.loads?|cPickle|__reduce__|PYCC)\b", re.I),
+    re.compile(r"\bObjectInputStream\b|\breadObject\s*\(\s*\)", re.I),
+    re.compile(r"\bjava\.io\.(?:Serializable|ObjectInputStream)\b", re.I),
+    re.compile(r"\b(?:node-serialize|unserialize\s*\(|__wakeup|__destruct)\b", re.I),
+    re.compile(r"\bMarshal\.load\b|\byaml\.unsafe_load\b", re.I),
+]
+
 LOG_INJECTION = [
     re.compile(r"\r\n[^\n]{0,120}\r\n"),
     re.compile(r"\n(?:INFO|WARN|ERROR|DEBUG|AUDIT|TRACE)\s*:\s*(?:user|admin|override|success)", re.I),
@@ -165,6 +173,14 @@ def evaluate_semantic_guards(ctx: CallContext) -> Optional[PolicyDecision]:
                 "block",
                 "semantic-ssti-guard",
                 "Server-side template injection pattern detected in arguments",
+            )
+
+    for pat in LANGUAGE_GADGET:
+        if pat.search(blob):
+            return PolicyDecision(
+                "block",
+                "semantic-language-gadget",
+                "Language-specific deserialization gadget pattern in arguments",
             )
 
     raw_log = "\n".join(leaf.value for leaf in walk_string_leaves(args))

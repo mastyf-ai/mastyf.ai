@@ -8,6 +8,7 @@ import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { load } from 'js-yaml';
 import { PolicyEngine } from '../src/policy/policy-engine.js';
+import { resetSessionFlowHistory } from '../src/policy/session-flow-guard.js';
 import type { CallContext, PolicyConfig, PolicyDecision } from '../src/policy/policy-types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -154,6 +155,7 @@ export async function runEval(): Promise<EvalReport> {
   console.log(`Running corpus evaluation (${files.length} entries) against ${POLICY_PATH}\n`);
 
   for (const { relPath, entry } of files) {
+    resetSessionFlowHistory();
     const decision = engine.evaluate(ctx(entry.toolName, entry.arguments ?? {}));
     const blocked = isBlocked(decision);
     const expected = entry.expected;

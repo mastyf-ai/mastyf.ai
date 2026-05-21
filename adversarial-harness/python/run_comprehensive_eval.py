@@ -15,6 +15,7 @@ from typing import Any
 
 from policy_engine import PolicyEngine
 from policy_engine.policy_engine import context_from_dict
+from policy_engine.session_flow_guard import reset_session_flow_history
 from policy_engine.types import PolicyDecision
 
 HARNESS_ROOT = Path(__file__).resolve().parents[1]
@@ -82,6 +83,7 @@ def _isolated_engine_key(case: TestCase) -> str:
 
 
 def evaluate_case(case: TestCase, engines: dict[str, PolicyEngine]) -> PolicyDecision:
+    reset_session_flow_history()
     data = case.raw
     if data.get("policyMode") == "isolated" and data.get("isolatedPolicy"):
         key = _isolated_engine_key(case)

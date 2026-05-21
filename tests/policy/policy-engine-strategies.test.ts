@@ -44,6 +44,7 @@ describe('policy-engine strategies', () => {
       'tool-definition',
       'secrets-in-args',
       'semantic-guards',
+      'session-flow',
       'yaml-rules',
     ]);
   });

@@ -188,6 +188,10 @@ policy:
         - \$\([^)]+\)
         - '`[^`]+`'
         - powershell|pwsh|-enc|-EncodedCommand
+    - name: burst-rate-limit
+      description: Block burst floods exceeding 40 calls per 10 seconds per server+tool
+      action: block
+      maxCallsPer10Seconds: 40
     - name: rate-limit-tool-calls
       description: Block tool calls exceeding 120 per minute per server+tool
       action: block

@@ -17,6 +17,10 @@ from .normalizer import PayloadNormalizer
 from .prompt_injection import scan_tool_call_arguments
 from .secrets_guard import scan_secrets_in_blob
 from .semantic_guards import evaluate_semantic_guards
+from .session_flow_guard import (
+    evaluate_session_flow_guard,
+    record_session_tool_call,
+)
 from .shell_tokenizer import ShellTokenizer
 from .tool_chain import evaluate_tool_chain_guard
 from .types import AgentIdentity, CallContext, PolicyAction, PolicyDecision, PolicyMode
@@ -68,6 +72,7 @@ class PolicyEngine:
         self._compiled_patterns: dict[str, list[re.Pattern[str]]] = {}
         self._compiled_arg: dict[str, list[tuple[str, list[re.Pattern[str]]]]] = {}
         self._call_counters: dict[str, tuple[int, float]] = {}
+        self._burst_counters: dict[str, tuple[int, float]] = {}
         self._compile_patterns()
 
     @classmethod
@@ -255,8 +260,7 @@ class PolicyEngine:
                     f"Token count {effective} exceeds max {max_tokens}",
                 )
 
-        max_cpm = rule.get("maxCallsPerMinute")
-        if max_cpm and not skip_rate:
+        if not skip_rate:
             tenant = ctx.tenant_id or os.environ.get("GUARDIAN_TENANT_ID", "default")
             client_id = (ctx.agent_identity.client_id if ctx.agent_identity else None) or (
                 ctx.agent_identity.sub if ctx.agent_identity else None
@@ -267,18 +271,36 @@ class PolicyEngine:
                 else f"{tenant}:{ctx.server_name}:{ctx.tool_name}"
             )
             now = time.time()
-            count, reset = self._call_counters.get(key, (0, now + 60))
-            if now > reset:
-                count, reset = 1, now + 60
-            else:
-                count += 1
-            self._call_counters[key] = (count, reset)
-            if count > max_cpm:
-                return PolicyDecision(
-                    action,
-                    name,
-                    f"Rate limit exceeded: {count}/{max_cpm}",
-                )
+
+            max_burst = rule.get("maxCallsPer10Seconds")
+            if max_burst:
+                count, reset = self._burst_counters.get(key, (0, now + 10))
+                if now > reset:
+                    count, reset = 1, now + 10
+                else:
+                    count += 1
+                self._burst_counters[key] = (count, reset)
+                if count > max_burst:
+                    return PolicyDecision(
+                        action,
+                        name,
+                        f"Burst rate limit exceeded: {count}/{max_burst} per 10s",
+                    )
+
+            max_cpm = rule.get("maxCallsPerMinute")
+            if max_cpm:
+                count, reset = self._call_counters.get(key, (0, now + 60))
+                if now > reset:
+                    count, reset = 1, now + 60
+                else:
+                    count += 1
+                self._call_counters[key] = (count, reset)
+                if count > max_cpm:
+                    return PolicyDecision(
+                        action,
+                        name,
+                        f"Rate limit exceeded: {count}/{max_cpm}",
+                    )
 
         return None
 
@@ -311,6 +333,7 @@ class PolicyEngine:
 
     def reset_rate_counters(self) -> None:
         self._call_counters.clear()
+        self._burst_counters.clear()
 
     def evaluate(
         self,
@@ -386,6 +409,11 @@ class PolicyEngine:
             if sem:
                 return PolicyDecision(self._resolve_action(sem.action), sem.rule, sem.reason)
 
+            flow = evaluate_session_flow_guard(norm_ctx)
+            if flow:
+                return PolicyDecision(self._resolve_action(flow.action), flow.rule, flow.reason)
+            record_session_tool_call(norm_ctx)
+
         permitted = False
         for rule in self.rules:
             if (rule.get("tools") or {}).get("allow") and norm_ctx.tool_name in rule["tools"]["allow"]:
@@ -402,3 +430,25 @@ class PolicyEngine:
             "default",
             f"default_action: {self.default_action}",
         )
+
+    def evaluate_response(
+        self,
+        tool_name: str,
+        server_name: str,
+        response_body: str | None,
+    ) -> dict[str, object]:
+        if response_body is None:
+            return {"clean": True, "detections": []}
+        detections: list[str] = []
+        findings = scan_tool_call_arguments({"body": response_body})
+        for f in findings:
+            detections.append(f"Prompt injection ({f.severity}): {f.pattern_id}")
+        for sid in scan_secrets_in_blob(response_body):
+            detections.append(f"Secret (HIGH): {sid} in tool response")
+        if re.search(
+            r"\b(?:curl|wget)\b.*https?://",
+            response_body,
+            re.I,
+        ):
+            detections.append("Data exfiltration: curl/wget in response")
+        return {"clean": len(detections) == 0, "detections": detections}

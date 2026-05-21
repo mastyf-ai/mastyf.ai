@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-21T08:06:01.489Z",
+  "generatedAt": "2026-05-21T09:05:30.976Z",
   "harnessRoot": "/workspace/adversarial-harness",
   "corpus": {
     "totalEntries": 228,
@@ -45,16 +45,16 @@
     "concurrency": {
       "component": "AsyncSerialQueue",
       "samples": 50,
-      "p50Ms": 2.1271279999999706,
-      "p95Ms": 2.714815000000044,
-      "maxMs": 5.302100999999993,
+      "p50Ms": 2.124221000000034,
+      "p95Ms": 3.1518169999999373,
+      "maxMs": 7.36842200000001,
       "note": "Serial queue — tasks run one at a time; latency includes prior queue depth",
       "proxy": {
         "component": "McpProxyServer.handleClientInput",
         "samples": 20,
-        "p50Ms": 17.167085000000043,
-        "p95Ms": 32.47958000000017,
-        "maxMs": 253.45452,
+        "p50Ms": 16.664062999999942,
+        "p95Ms": 32.762281999999914,
+        "maxMs": 238.204256,
         "integration": "real-mock-mcp-stdio"
       }
     },
@@ -80,6 +80,13 @@
       "ok": true,
       "status": 0,
       "stdout": "Wrote 85 custom adversarial fixtures to /workspace/adversarial-harness/fixtures/custom-attacks\n",
+      "stderr": ""
+    },
+    {
+      "label": "generate-mcpg-catalog",
+      "ok": true,
+      "status": 0,
+      "stdout": "Wrote 100 MCPG catalog fixtures to /workspace/adversarial-harness/fixtures/mcpg-catalog\n",
       "stderr": ""
     },
     {
@@ -114,7 +121,7 @@
       "label": "python-corpus-only",
       "ok": true,
       "status": 0,
-      "stdout": "{\n  \"timestamp\": \"2026-05-21T07:38:49.412174+00:00\",\n  \"semanticDisabled\": true,\n  \"attacksBlocked\": 154,\n  \"attacksTotal\": 154,\n  \"benignPassed\": 74,\n  \"benignTotal\": 74,\n  \"falsePositives\": 0,\n  \"missed\": 0,\n  \"passed\": true,\n  \"failures\": []\n}\n",
+      "stdout": "{\n  \"timestamp\": \"2026-05-21T08:05:27.079282+00:00\",\n  \"semanticDisabled\": true,\n  \"attacksBlocked\": 154,\n  \"attacksTotal\": 154,\n  \"benignPassed\": 74,\n  \"benignTotal\": 74,\n  \"falsePositives\": 0,\n  \"missed\": 0,\n  \"passed\": true,\n  \"failures\": []\n}\n",
       "stderr": ""
     },
     {
