@@ -8,9 +8,10 @@ import unicodedata
 from typing import Any
 
 from .confusables import fold_homoglyphs
+from .injection_preprocess import fold_extended_homoglyphs, preprocess_for_injection_match, strip_combining_marks
 
 ZERO_WIDTH_RE = re.compile(
-    r"[\u200B-\u200F\uFEFF\u00AD\u2060-\u2064\u061C\u180E\u034F\u17B4\u17B5\u202A-\u202E]"
+    r"[\u200B-\u200F\uFEFF\u00AD\u2060-\u2064\u061C\u180E\u034F\u17B4\u17B5\u202A-\u202E\u2800\uFE00-\uFE0F]"
 )
 URL_PCT_RE = re.compile(r"%([0-9A-Fa-f]{2})")
 HEX_ESC_RE = re.compile(r"\\x([0-9A-Fa-f]{2})")
@@ -131,17 +132,9 @@ def _shell_normalize(s: str) -> str:
 
 
 def deobfuscate_recursive(value: str, max_depth: int = 5, unicode_strict: bool = True) -> str:
-    current = strip_zero_width(value)
+    current = ZERO_WIDTH_RE.sub(" ", value)
     if len(current) > 1_000_000:
         current = current[:1_000_000]
-
-    folded = fold_homoglyphs(current)
-    if folded != current:
-        current = folded
-    if unicode_strict:
-        current = unicodedata.normalize("NFKC", current)
-    else:
-        current = unicodedata.normalize("NFKC", current)
 
     depth = 0
     while depth < max_depth:
@@ -156,9 +149,17 @@ def deobfuscate_recursive(value: str, max_depth: int = 5, unicode_strict: bool =
             break
         depth += 1
 
-    current = _shell_normalize(current)
-    current = re.sub(r"\s+", " ", current).strip()
-    return current
+    current = fold_extended_homoglyphs(current)
+    if unicode_strict:
+        try:
+            from .confusables import normalize_confusables
+
+            current = normalize_confusables(current)
+        except Exception:
+            pass
+    current = strip_combining_marks(current)
+    current = unicodedata.normalize("NFKC", current)
+    return preprocess_for_injection_match(current, unicode_strict)
 
 
 def detect_shell_in_base64_blobs(blob: str) -> bool:

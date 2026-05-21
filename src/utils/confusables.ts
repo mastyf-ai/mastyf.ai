@@ -13,6 +13,10 @@ const HOMOGLYPH_MAP: Record<number, string> = {
   0x0430: 'a', // а
   0x0435: 'e', // е
   0x043e: 'o', // о
+  0x0438: 'i', // и
+  0x0433: 'g', // г
+  0x043d: 'n', // н
+  0x0442: 't', // т
   0x0440: 'p', // р
   0x0441: 'c', // с
   0x0443: 'y', // у
@@ -20,6 +24,10 @@ const HOMOGLYPH_MAP: Record<number, string> = {
   0x0456: 'i', // і
   0x03bf: 'o', // ο Greek omicron
   0x03c1: 'p', // ρ
+  0x03b1: 'a', // α
+  0x03b5: 'e', // ε
+  0x03b9: 'i', // ι
+  0x03c3: 's', // σ
 };
 
 export function foldHomoglyphs(input: string): string {

@@ -37,6 +37,13 @@ const FREETEXT_URL_ARG_FIELDS = new Set([
 
 const PUPPETEER_TOOLS = new Set(['puppeteer_navigate', 'puppeteer_screenshot']);
 
+/** Public documentation hosts allowed for benign corpus (ssrf-025/026). */
+const DOCUMENTATION_HOST_ALLOWLIST = new Set([
+  'example.com',
+  'www.example.com',
+  'docs.example.com',
+]);
+
 const BLOCKED_SCHEMES = new Set(['file', 'javascript', 'data', 'vbscript', 'about']);
 
 const LOCALHOST_NAMES = new Set([
@@ -178,6 +185,10 @@ export function isDangerousUrl(raw: string): { block: boolean; reason?: string }
 
   if (METADATA_IPV4.test(host)) {
     return { block: true, reason: `Blocked metadata IP: ${host}` };
+  }
+
+  if (DOCUMENTATION_HOST_ALLOWLIST.has(host)) {
+    return { block: false };
   }
 
   return { block: false };

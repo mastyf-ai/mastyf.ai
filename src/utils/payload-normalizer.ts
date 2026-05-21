@@ -7,9 +7,10 @@
  * Architecture: normalize → denormalize → sanitize → evaluate
  */
 import { foldHomoglyphs, normalizeConfusables } from './confusables.js';
+import { foldExtendedHomoglyphs, preprocessForInjectionMatch, stripCombiningMarks } from './injection-preprocess.js';
 
 /** Zero-width / bidi controls stripped before prompt-injection and semantic regex. */
-const ZERO_WIDTH_RE = /[\u200B-\u200F\uFEFF\u00AD\u2060-\u2064\u061C\u180E\u034F\u17B4\u17B5\u202A-\u202E]/g;
+const ZERO_WIDTH_RE = /[\u200B-\u200F\uFEFF\u00AD\u2060-\u2064\u061C\u180E\u034F\u17B4\u17B5\u202A-\u202E\u2800\uFE00-\uFE0F]/g;
 
 export function stripZeroWidthCharacters(input: string): string {
   return input.replace(ZERO_WIDTH_RE, '');
@@ -305,7 +306,7 @@ export class PayloadNormalizer {
    * until stable or maxDepth reached. Used before prompt-injection / semantic regex.
    */
   deobfuscateRecursive(input: string, maxDepth = this.maxDepth): string {
-    let current = stripZeroWidthCharacters(input);
+    let current = input.replace(ZERO_WIDTH_RE, ' ');
     let depth = 0;
     while (depth < maxDepth) {
       const before = current;
@@ -318,12 +319,13 @@ export class PayloadNormalizer {
       if (current === before) break;
       depth++;
     }
-    // Unicode fold after decode layers (avoid corrupting base64/hex blobs mid-decode)
-    current = foldHomoglyphs(current);
+    current = foldExtendedHomoglyphs(current);
     if (this.unicodeStrict) {
       current = normalizeConfusables(current);
     }
-    return current.normalize('NFKC');
+    current = stripCombiningMarks(current);
+    current = current.normalize('NFKC');
+    return preprocessForInjectionMatch(current, this.unicodeStrict);
   }
 
   /**

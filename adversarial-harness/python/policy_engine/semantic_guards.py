@@ -7,6 +7,7 @@ import re
 from typing import Any, Optional
 
 from .arg_walker import walk_string_leaves
+from .injection_preprocess import preprocess_for_injection_match
 from .normalizer import deobfuscate_recursive, detect_shell_in_base64_blobs
 from .path_guard import PATH_LIKE, evaluate_path_guard
 from .types import CallContext, PolicyDecision
@@ -68,9 +69,19 @@ POWERSHELL_PATTERNS = [
 SSTI_PATTERNS = [re.compile(r"\{\{"), re.compile(r"\$\{"), re.compile(r"<%"), re.compile(r"#\{")]
 
 MULTILINE_INJECTION = [
-    re.compile(r"ignore[\s\S]{0,80}(?:previous|all|your)[\s\S]{0,80}instructions", re.I),
-    re.compile(r"(?:system|assistant)[\s\S]{0,40}:\s*you\s+are", re.I),
+    re.compile(
+        r"(?:ignore|disregard).{0,120}?(?:instructions|rules|guidelines|directives)",
+        re.I | re.M | re.S,
+    ),
+    re.compile(r"(?:system|assistant)[\s\S]{0,40}:\s*you\s+are", re.I | re.M | re.S),
     re.compile(r"<\|(?:endoftext|im_start|im_end)\|>", re.I),
+]
+
+RATE_IDENTITY_EVASION = [
+    re.compile(r"x-forwarded-for\s*[:=]\s*[\d.,\s]+", re.I),
+    re.compile(r"x-real-ip\s*[:=]\s*[\d.]+", re.I),
+    re.compile(r"(?:client[_-]?id|sub|tenant[_-]?id)\s*[:=]\s*['\"]?(?:admin|root|system|spoof)", re.I),
+    re.compile(r"(?:reveal|show|print|disclose).{0,40}(?:rate[- ]?limit|ratelimit).{0,30}key", re.I),
 ]
 
 REPO_FIELDS = frozenset({"repo", "repository", "owner"})
@@ -133,7 +144,9 @@ def evaluate_semantic_guards(ctx: CallContext) -> Optional[PolicyDecision]:
                 "Server-side template injection pattern detected in arguments",
             )
 
-    inj_blob = "\n".join(deobfuscate_recursive(leaf.value) for leaf in walk_string_leaves(args))
+    inj_blob = preprocess_for_injection_match(
+        "\n".join(deobfuscate_recursive(leaf.value) for leaf in walk_string_leaves(args))
+    )
     if inj_blob.strip():
         for pat in MULTILINE_INJECTION:
             if pat.search(inj_blob):
@@ -141,6 +154,13 @@ def evaluate_semantic_guards(ctx: CallContext) -> Optional[PolicyDecision]:
                     "block",
                     "semantic-prompt-injection",
                     "Multi-line prompt injection pattern in arguments",
+                )
+        for pat in RATE_IDENTITY_EVASION:
+            if pat.search(inj_blob):
+                return PolicyDecision(
+                    "block",
+                    "semantic-rate-limit-evasion",
+                    "Rate-limit or identity key evasion pattern in arguments",
                 )
 
     for leaf in walk_string_leaves(args):

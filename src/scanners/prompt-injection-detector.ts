@@ -20,6 +20,7 @@
  */
 import { walkStringLeaves } from '../policy/arg-leaf-walker.js';
 import { deobfuscateRecursive } from '../utils/payload-normalizer.js';
+import { injectionMatchVariants, shouldTryRot13Variant } from '../utils/injection-preprocess.js';
 import { DEFAULT_TRUSTED_EXFIL_DOMAINS, isTrustedDomainSquat } from '../utils/registrable-domain.js';
 
 export interface InjectionFinding {
@@ -52,7 +53,9 @@ export const INJECTION_RULES: InjectionPattern[] = [
   // CATEGORY 2: Instruction Suppression — CRITICAL
   // ═══════════════════════════════════════════════════════════════
   { id: 'ignore-instructions', severity: 'critical', description: 'Instruction suppression',
-    regex: '(?:ignore (?:all |previous |your |the |my |prior )?(?:instructions|rules|guidelines|system prompt|directives|constraints|limitations|restrictions|safety rules)|disregard (?:everything|all |previous )?(?:instructions|rules|above|before))' },
+    regex: '(?:ignore|disregard|forget).{0,120}?(?:instructions|rules|guidelines|system prompt|directives|constraints|limitations|restrictions|safety rules|previous rules|prior rules|all rules)' },
+  { id: 'ignore-mixed-script', severity: 'critical', description: 'Instruction suppression with non-Latin script',
+    regex: '(?:ignore|disregard|forget)\\s+[\\u0400-\\u04FF\\u0370-\\u03FF\\u0600-\\u06FF\\u4E00-\\u9FFF]{3,}' },
   { id: 'instruction-before-tool', severity: 'critical', description: 'Override instructions before tool use',
     regex: '(?:before|prior to) (?:using|calling|invoking|running) (?:this|the|any) tool.{0,80}(?:ignore|disregard|forget|override|bypass|circumvent)' },
   { id: 'forget-training', severity: 'critical', description: 'Forget/release from training constraints',
@@ -187,8 +190,12 @@ export const INJECTION_RULES: InjectionPattern[] = [
     regex: '(?:echo |printf |cat |base64 ).{0,40}[A-Za-z0-9+/]{40,}={0,2}(?:\\s*\\||\\s*>|\\s*&&|\\s*;|\\s*$)' },
   { id: 'hex-escape-injection', severity: 'medium', description: 'Hex-escaped injection string',
     regex: '(?:\\\\x[0-9a-fA-F]{2}){8,}' },
-  { id: 'rot13-obfuscation', severity: 'medium', description: 'Likely ROT13/ROT-encoded instruction (gibberish word patterns)',
-    regex: '\\b(?:vtabjre|juvfg|guvf|gung|lbh|ner|gur|sbe|jvgu|sebz|unir|jvyy|qba\'?g|bhg|zlfg|cebwrpg|qvpr)\\b' },
+  { id: 'rot13-obfuscation', severity: 'medium', description: 'Likely ROT13-encoded instruction suppression',
+    regex: '\\b(?:vtabjre|vtaber)\\b|\\bnyy\\b.{0,30}\\b(?:cerivbhf|cebivbhf|cebivbhf)\\b|\\b(?:disregard|ignore).{0,40}\\b(?:vtabjre|vtaber|nyy)\\b' },
+  { id: 'leetspeak-injection', severity: 'critical', description: 'Leetspeak instruction suppression',
+    regex: '(?:1gn0r3|1gn0re|d1sr3g4rd|f0rg3t|byp4ss).{0,80}?(?:1nstruct|rules|pr3v|pr1or|s4fety)' },
+  { id: 'rate-limit-key-probe', severity: 'high', description: 'Attempt to extract rate-limit or tenant cache key',
+    regex: '(?:reveal|show|print|output|disclose|what is).{0,60}(?:rate[- ]?limit|ratelimit).{0,40}(?:key|bucket|counter|namespace)' },
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORY 11: Social Engineering — MEDIUM
@@ -217,7 +224,7 @@ function getPatterns(): Array<{ id: string; severity: 'critical' | 'high' | 'med
       id: r.id,
       severity: r.severity,
       description: r.description,
-      regex: new RegExp(r.regex, 'i'),
+      regex: new RegExp(r.regex, 'ims'),
     }));
   }
   return compiledPatterns;
@@ -260,13 +267,21 @@ function matchInjectionPatterns(
   criticalOnly = false,
 ): InjectionFinding[] {
   const findings: InjectionFinding[] = [];
+  const baseBodies = injectionMatchVariants(decodedBody);
 
   for (const pattern of getPatterns()) {
     if (criticalOnly && pattern.severity !== 'critical') continue;
-    // Reset lastIndex for global regex
-    if (pattern.regex.global) pattern.regex.lastIndex = 0;
 
-    const match = pattern.regex.exec(decodedBody);
+    const bodies = shouldTryRot13Variant(pattern.id)
+      ? injectionMatchVariants(decodedBody, { includeRot13: true })
+      : baseBodies;
+
+    let match: RegExpExecArray | null = null;
+    for (const body of bodies) {
+      if (pattern.regex.global) pattern.regex.lastIndex = 0;
+      match = pattern.regex.exec(body);
+      if (match) break;
+    }
     if (!match) continue;
 
     if (pattern.id === 'exfiltration-url') {

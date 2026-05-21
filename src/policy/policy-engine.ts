@@ -89,6 +89,24 @@ export class PolicyEngine {
     return walkStringLeaves(obj).map((l) => l.value);
   }
 
+  /**
+   * Anti-evasion token budget: use reported count and UTF-8 byte inflation from arguments.
+   */
+  private effectiveRequestTokens(ctx: CallContext): number {
+    let inflated = 0;
+    if (ctx.arguments) {
+      for (const { value } of walkStringLeaves(ctx.arguments)) {
+        inflated += Buffer.byteLength(value, 'utf8');
+        for (const ch of value) {
+          const cp = ch.codePointAt(0)!;
+          if (cp > 0x7f) inflated += 2;
+        }
+      }
+    }
+    const byteEstimate = Math.ceil(inflated / 4);
+    return Math.max(ctx.requestTokens, byteEstimate);
+  }
+
   private buildDeps(): PolicyEngineDeps {
     return {
       config: this.config,
@@ -261,8 +279,15 @@ export class PolicyEngine {
       }
     }
 
-    if (rule.maxTokens && ctx.requestTokens > rule.maxTokens) {
-      return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Token count ${ctx.requestTokens} exceeds max ${rule.maxTokens}` };
+    if (rule.maxTokens) {
+      const effectiveTokens = this.effectiveRequestTokens(ctx);
+      if (effectiveTokens > rule.maxTokens) {
+        return {
+          action: this.resolveAction(rule.action),
+          rule: rule.name,
+          reason: `Token count ${effectiveTokens} exceeds max ${rule.maxTokens}`,
+        };
+      }
     }
 
     if (rule.rbac) {

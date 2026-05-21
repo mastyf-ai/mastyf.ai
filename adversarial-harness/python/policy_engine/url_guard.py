@@ -13,6 +13,14 @@ URL_ARG_FIELDS = frozenset(
     {"url", "href", "target", "webhook", "callback", "link", "message", "query", "body", "content", "text", "prompt"}
 )
 BLOCKED_SCHEMES = frozenset({"file", "javascript", "data", "vbscript", "about"})
+DOCUMENTATION_HOST_ALLOWLIST = frozenset(
+    {
+        "example.com",
+        "www.example.com",
+        "docs.example.com",
+    }
+)
+
 LOCALHOST_NAMES = frozenset(
     {
         "localhost",
@@ -121,6 +129,9 @@ def is_dangerous_url(raw: str) -> tuple[bool, str]:
 
     if METADATA_IPV4.search(host):
         return True, f"Blocked metadata IP: {host}"
+
+    if host in DOCUMENTATION_HOST_ALLOWLIST:
+        return False, ""
 
     return False, ""
 

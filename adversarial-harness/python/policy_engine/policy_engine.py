@@ -172,6 +172,19 @@ class PolicyEngine:
                 )
         return None
 
+    def _effective_request_tokens(self, ctx: CallContext) -> int:
+        inflated = 0
+        if ctx.arguments:
+            from .arg_walker import walk_string_leaves
+
+            for leaf in walk_string_leaves(ctx.arguments):
+                inflated += len(leaf.value.encode("utf-8"))
+                for ch in leaf.value:
+                    if ord(ch) > 0x7F:
+                        inflated += 2
+        byte_estimate = (inflated + 3) // 4
+        return max(ctx.request_tokens, byte_estimate)
+
     def _evaluate_rule(
         self,
         rule: dict[str, Any],
@@ -232,12 +245,14 @@ class PolicyEngine:
                 return PolicyDecision(action, name, "Argument pattern matched (normalized)")
 
         max_tokens = rule.get("maxTokens")
-        if max_tokens and ctx.request_tokens > max_tokens:
-            return PolicyDecision(
-                action,
-                name,
-                f"Token count {ctx.request_tokens} exceeds max {max_tokens}",
-            )
+        if max_tokens:
+            effective = self._effective_request_tokens(ctx)
+            if effective > max_tokens:
+                return PolicyDecision(
+                    action,
+                    name,
+                    f"Token count {effective} exceeds max {max_tokens}",
+                )
 
         max_cpm = rule.get("maxCallsPerMinute")
         if max_cpm and not skip_rate:

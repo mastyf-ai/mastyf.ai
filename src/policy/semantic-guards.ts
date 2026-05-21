@@ -1,4 +1,5 @@
 import { deobfuscateRecursive, detectShellInBase64Blobs } from '../utils/payload-normalizer.js';
+import { preprocessForInjectionMatch } from '../utils/injection-preprocess.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
 import { evaluatePathGuard } from './path-guard.js';
 import { evaluateUrlGuard, extractHttpUrlsFromLeaves } from './url-guard.js';
@@ -67,9 +68,17 @@ const SSTI_PATTERNS: RegExp[] = [
 ];
 
 const MULTILINE_INJECTION_PATTERNS: RegExp[] = [
-  /ignore[\s\S]{0,80}(?:previous|all|your)[\s\S]{0,80}instructions/i,
-  /(?:system|assistant)[\s\S]{0,40}:\s*you\s+are/i,
+  /(?:ignore|disregard).{0,120}?(?:instructions|rules|guidelines|directives)/ims,
+  /(?:system|assistant)[\s\S]{0,40}:\s*you\s+are/ims,
   /<\|(?:endoftext|im_start|im_end)\|>/i,
+];
+
+/** Header / identity spoofing in tool arguments (rate-limit bucket evasion). */
+const RATE_IDENTITY_EVASION_PATTERNS: RegExp[] = [
+  /x-forwarded-for\s*[:=]\s*[\d.,\s]+/i,
+  /x-real-ip\s*[:=]\s*[\d.]+/i,
+  /(?:client[_-]?id|sub|tenant[_-]?id)\s*[:=]\s*["']?(?:admin|root|system|spoof)/i,
+  /(?:reveal|show|print|disclose).{0,40}(?:rate[- ]?limit|ratelimit).{0,30}key/i,
 ];
 
 /** Heuristic: string leaf may be a filesystem path. */
@@ -202,7 +211,9 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
     }
   }
 
-  const injectionBlob = walkStringLeaves(args).map((l) => deobfuscateRecursive(l.value)).join('\n');
+  const injectionBlob = preprocessForInjectionMatch(
+    walkStringLeaves(args).map((l) => deobfuscateRecursive(l.value)).join('\n'),
+  );
   if (injectionBlob.trim()) {
     for (const pattern of MULTILINE_INJECTION_PATTERNS) {
       if (pattern.test(injectionBlob)) {
@@ -210,6 +221,15 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
           action: 'block',
           rule: 'semantic-prompt-injection',
           reason: 'Multi-line prompt injection pattern in arguments',
+        };
+      }
+    }
+    for (const pattern of RATE_IDENTITY_EVASION_PATTERNS) {
+      if (pattern.test(injectionBlob)) {
+        return {
+          action: 'block',
+          rule: 'semantic-rate-limit-evasion',
+          reason: 'Rate-limit or identity key evasion pattern in arguments',
         };
       }
     }

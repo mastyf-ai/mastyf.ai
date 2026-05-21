@@ -10,6 +10,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 
 from .arg_walker import walk_string_leaves
+from .injection_preprocess import injection_match_variants
 from .normalizer import deobfuscate_recursive
 
 EXPORTED_RULES = (
@@ -40,7 +41,7 @@ def _load_rules() -> list[tuple[str, str, str, re.Pattern[str]]]:
     out: list[tuple[str, str, str, re.Pattern[str]]] = []
     for r in data:
         out.append(
-            (r["id"], r["severity"], r["description"], re.compile(r["regex"], re.I)),
+            (r["id"], r["severity"], r["description"], re.compile(r["regex"], re.I | re.M | re.S)),
         )
     return out
 
@@ -76,7 +77,15 @@ def match_injection_patterns(
     for pid, severity, desc, regex in get_patterns():
         if critical_only and severity != "critical":
             continue
-        m = regex.search(decoded)
+        m = None
+        variants = injection_match_variants(
+            decoded,
+            include_rot13=pid in ("rot13-obfuscation", "ignore-instructions", "leetspeak-injection"),
+        )
+        for variant in variants:
+            m = regex.search(variant)
+            if m:
+                break
         if not m:
             continue
         if pid == "exfiltration-url":
