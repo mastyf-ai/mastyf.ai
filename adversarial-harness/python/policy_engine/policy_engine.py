@@ -20,6 +20,7 @@ from .semantic_guards import evaluate_semantic_guards
 from .language_gadget_guard import evaluate_language_gadget_guard
 from .resource_guard import evaluate_resource_guard
 from .timing_guard import evaluate_timing_guard
+from .policy_timing_envelope import wait_policy_timing_envelope_sync
 from .session_flow_guard import (
     evaluate_session_flow_guard,
     record_session_tool_call,
@@ -339,6 +340,18 @@ class PolicyEngine:
         self._burst_counters.clear()
 
     def evaluate(
+        self,
+        ctx: CallContext,
+        skip_local_rate_limit: bool = False,
+        sync_mode: SyncMode = "full",
+    ) -> PolicyDecision:
+        started_at = time.time()
+        try:
+            return self._evaluate_inner(ctx, skip_local_rate_limit, sync_mode)
+        finally:
+            wait_policy_timing_envelope_sync(started_at)
+
+    def _evaluate_inner(
         self,
         ctx: CallContext,
         skip_local_rate_limit: bool = False,

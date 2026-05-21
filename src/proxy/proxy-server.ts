@@ -11,6 +11,7 @@ import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from '../database/database-interface.js';
 import { Logger } from '../utils/logger.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
+import { waitProxyTimingNormalize } from '../policy/policy-timing-envelope.js';
 import { CallContext } from '../policy/policy-types.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { OAuthValidator } from '../auth/oauth.js';
@@ -846,6 +847,7 @@ export class McpProxyServer {
           };
 
           const decision = await engine.evaluateAsync(context);
+          await waitProxyTimingNormalize(proxyStartTime);
 
           ingestPolicyDecision({
             requestId,

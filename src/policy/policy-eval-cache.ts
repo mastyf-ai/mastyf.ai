@@ -35,13 +35,14 @@ export function isPolicyEvalCacheEnabled(): boolean {
   return process.env['GUARDIAN_POLICY_EVAL_CACHE'] === 'true' || isRedisConfigured();
 }
 
-const NON_CACHEABLE_RULE_PREFIXES = ['rate', 'idempotency', 'redis-rate'];
+const NON_CACHEABLE_RULE_PREFIXES = ['rate', 'idempotency', 'redis-rate', 'timing'];
 
 /** Stateful / time-varying decisions must not be cached. */
 export function shouldCachePolicyDecision(decision: PolicyDecision): boolean {
   const rule = decision.rule.toLowerCase();
   if (NON_CACHEABLE_RULE_PREFIXES.some((p) => rule.includes(p))) return false;
   if (decision.reason.toLowerCase().includes('rate limit')) return false;
+  if (decision.reason.toLowerCase().includes('timing')) return false;
   return true;
 }
 

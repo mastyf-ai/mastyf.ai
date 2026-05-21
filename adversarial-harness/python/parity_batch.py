@@ -9,6 +9,8 @@ from typing import Any
 
 from policy_engine import PolicyEngine
 from policy_engine.policy_engine import context_from_dict
+from policy_engine.session_flow_store import reset_session_flow_history
+from policy_engine.timing_guard import reset_timing_probe_counters
 from policy_engine.types import PolicyDecision
 
 
@@ -38,6 +40,8 @@ def evaluate_entry(entry: dict[str, Any], engines: dict[str, PolicyEngine]) -> d
             "arguments": entry.get("arguments") or {},
             **(entry.get("context") or {}),
         })
+        reset_session_flow_history()
+        reset_timing_probe_counters()
         dec = engines["default"].evaluate(ctx)
     return {
         "id": case_id,

@@ -29,6 +29,10 @@ import {
   evaluateResponseDlp,
   responseDlpToLegacyDetections,
 } from './response-dlp.js';
+import {
+  waitPolicyTimingEnvelopeAsync,
+  waitPolicyTimingEnvelopeSync,
+} from './policy-timing-envelope.js';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
@@ -141,33 +145,41 @@ export class PolicyEngine {
   }
 
   async evaluateAsync(context: CallContext): Promise<PolicyDecision> {
-    runShadowPolicy(context);
+    const startedAt = Date.now();
+    try {
+      runShadowPolicy(context);
 
-    const idempotencyDecision = await evaluateIdempotency(context, this.mode);
-    if (idempotencyDecision) return idempotencyDecision;
+      const idempotencyDecision = await evaluateIdempotency(context, this.mode);
+      if (idempotencyDecision) return idempotencyDecision;
 
-    const deps = this.buildDeps();
-    const opaDecision = this.isOpaEnabled()
-      ? await opaStrategy.evaluateAsync(context, deps)
-      : null;
+      const deps = this.buildDeps();
+      const opaDecision = this.isOpaEnabled()
+        ? await opaStrategy.evaluateAsync(context, deps)
+        : null;
 
-    const { decision: rateDecision, skipLocalRateLimit } = await evaluateRedisRateLimit(context, deps);
-    if (rateDecision) {
-      return resolvePolicyPrecedence(opaDecision, rateDecision);
+      const { decision: rateDecision, skipLocalRateLimit } = await evaluateRedisRateLimit(context, deps);
+      if (rateDecision) {
+        return resolvePolicyPrecedence(opaDecision, rateDecision);
+      }
+
+      if (isPolicyEvalCacheEnabled()) {
+        const cacheKey = policyEvalCacheKey(context);
+        const cached = await getCachedPolicyDecision(cacheKey);
+        if (cached) return resolvePolicyPrecedence(opaDecision, cached);
+      }
+
+      const yamlDecision = this.evaluate(context, {
+        skipLocalRateLimit,
+        applyTimingEnvelope: false,
+      });
+      const finalDecision = resolvePolicyPrecedence(opaDecision, yamlDecision);
+      if (isPolicyEvalCacheEnabled() && shouldCachePolicyDecision(finalDecision)) {
+        await setCachedPolicyDecision(policyEvalCacheKey(context), finalDecision);
+      }
+      return finalDecision;
+    } finally {
+      await waitPolicyTimingEnvelopeAsync(startedAt);
     }
-
-    if (isPolicyEvalCacheEnabled()) {
-      const cacheKey = policyEvalCacheKey(context);
-      const cached = await getCachedPolicyDecision(cacheKey);
-      if (cached) return resolvePolicyPrecedence(opaDecision, cached);
-    }
-
-    const yamlDecision = this.evaluate(context, { skipLocalRateLimit });
-    const finalDecision = resolvePolicyPrecedence(opaDecision, yamlDecision);
-    if (isPolicyEvalCacheEnabled() && shouldCachePolicyDecision(finalDecision)) {
-      await setCachedPolicyDecision(policyEvalCacheKey(context), finalDecision);
-    }
-    return finalDecision;
   }
 
   /** Clear in-memory per-minute call counters (harness / isolated rate-limit suites). */
@@ -178,8 +190,14 @@ export class PolicyEngine {
 
   evaluate(
     context: CallContext,
-    options?: { skipLocalRateLimit?: boolean; yamlOnly?: boolean },
+    options?: {
+      skipLocalRateLimit?: boolean;
+      yamlOnly?: boolean;
+      /** When false, caller applies async envelope (evaluateAsync). Default true. */
+      applyTimingEnvelope?: boolean;
+    },
   ): PolicyDecision {
+    const startedAt = Date.now();
     const normalizedArgs = context.arguments
       ? this.normalizer.normalizeJsonValue(context.arguments) as Record<string, unknown>
       : {};
@@ -202,15 +220,24 @@ export class PolicyEngine {
       : SYNC_POLICY_STRATEGIES;
     for (const strategy of strategies) {
       const decision = strategy.evaluate(syncCtx, deps);
-      if (decision) return decision;
+      if (decision) {
+        if (options?.applyTimingEnvelope !== false) {
+          waitPolicyTimingEnvelopeSync(startedAt);
+        }
+        return decision;
+      }
     }
 
     const defaultAction = this.config.policy.default_action ?? 'pass';
-    return {
+    const defaultDecision: PolicyDecision = {
       action: this.resolveAction(defaultAction),
       rule: 'default',
       reason: `No matching rule — applying default_action: ${defaultAction}`,
     };
+    if (options?.applyTimingEnvelope !== false) {
+      waitPolicyTimingEnvelopeSync(startedAt);
+    }
+    return defaultDecision;
   }
 
   private evaluateRule(

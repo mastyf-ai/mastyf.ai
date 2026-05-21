@@ -87,6 +87,25 @@ describe('enterprise five mitigations', () => {
       expect(d?.action).toBe('block');
       expect(d?.rule).toBe('timing-side-channel-guard');
     });
+
+    it('blocks timing enumeration after similar auth probes', () => {
+      const base = ctx('login', { username: 'u1' });
+      for (let i = 0; i < 21; i++) {
+        evaluateTimingGuard({ ...base, arguments: { username: `user${i}` } });
+      }
+      const d = evaluateTimingGuard({ ...base, arguments: { username: 'user99' } });
+      expect(d?.rule).toBe('timing-enumeration-guard');
+    });
+
+    it('PolicyEngine applies min-eval timing envelope on pass', () => {
+      const engine = new PolicyEngine({
+        version: '1.0',
+        policy: { mode: 'block', default_action: 'pass', rules: [] },
+      });
+      const t0 = Date.now();
+      engine.evaluate(ctx('noop', { x: 1 }));
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(20);
+    });
   });
 
   describe('5. resource exhaustion', () => {

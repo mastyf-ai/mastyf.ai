@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { load } from 'js-yaml';
 import { PolicyEngine } from '../../src/policy/policy-engine.js';
 import { resetSessionFlowHistory } from '../../src/policy/session-flow-store.js';
+import { resetTimingProbeCounters } from '../../src/policy/timing-guard.js';
 import type { CallContext, PolicyConfig } from '../../src/policy/policy-types.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -94,6 +95,7 @@ function evaluateEntry(
     agentIdentity: entry.context?.agentIdentity,
   };
   resetSessionFlowHistory();
+  resetTimingProbeCounters();
   const d = defaultEngine.evaluate(ctx);
   return {
     action: d.action,
