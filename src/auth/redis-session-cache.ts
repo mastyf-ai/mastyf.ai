@@ -1,4 +1,5 @@
 import type { Redis, Cluster } from 'ioredis';
+import { randomUUID } from 'crypto';
 import { createRedisClient, getRedisConnectionLabel } from '../utils/redis-client.js';
 import { AgentIdentity } from './auth-types.js';
 import { SessionCache, SessionEntry } from './session-cache.js';
@@ -58,16 +59,39 @@ export class RedisSessionCache extends SessionCache {
     return null;
   }
 
-  async validateSessionAsync(token: string, tenantId: string = DEFAULT_TENANT_ID): Promise<AgentIdentity | null> {
+  async validateSessionAsync(
+    token: string,
+    tenantId: string = DEFAULT_TENANT_ID,
+  ): Promise<import('./session-cache.js').SessionValidationResult | null> {
     const raw = await this.redis.get(this.redisSessionKey(tenantId, token));
     if (!raw) return null;
     try {
       const entry: SessionEntry = JSON.parse(raw);
       if (Date.now() > entry.expiresAt) {
-        this.redis.del(this.redisSessionKey(tenantId, token));
+        await this.redis.del(this.redisSessionKey(tenantId, token));
         return null;
       }
-      return entry.identity;
+
+      if (process.env['GUARDIAN_SESSION_ROTATE_ON_USE'] !== 'true') {
+        return { identity: entry.identity };
+      }
+
+      const newToken = `mcp_guardian_session_${randomUUID()}`;
+      const now = Date.now();
+      const newEntry: SessionEntry = {
+        ...entry,
+        token: newToken,
+        createdAt: now,
+        expiresAt: now + this.sessionTtlMs,
+      };
+      const ttlSeconds = Math.ceil(this.sessionTtlMs / 1000);
+      await this.redis.setex(
+        this.redisSessionKey(tenantId, newToken),
+        ttlSeconds,
+        JSON.stringify(newEntry),
+      );
+      await this.redis.del(this.redisSessionKey(tenantId, token));
+      return { identity: entry.identity, rotatedToken: newToken };
     } catch {
       return null;
     }

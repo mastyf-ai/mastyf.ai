@@ -2,6 +2,7 @@ import type { Redis, Cluster } from 'ioredis';
 import { Logger } from '../utils/logger.js';
 import { createRedisClient, getRedisConnectionLabel, isRedisConfigured } from '../utils/redis-client.js';
 import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
+import { claimDpopJtiQuorum, getDpopQuorumClients, retryDelayWithJitter } from './dpop-quorum.js';
 
 /** Pluggable DPoP jti replay store (in-memory single instance or Redis HA). */
 export interface DPoPNonceStore {
@@ -61,7 +62,7 @@ export async function claimDpopJtiOnRedis(
   for (let attempt = 0; attempt < DPOP_LOCK_MAX_ATTEMPTS; attempt++) {
     const locked = await redis.set(lockKey, '1', 'EX', 1, 'NX');
     if (locked !== 'OK') {
-      await sleep(DPOP_LOCK_BASE_DELAY_MS * 2 ** attempt);
+      await sleep(retryDelayWithJitter(attempt, DPOP_LOCK_BASE_DELAY_MS));
       continue;
     }
     try {
@@ -79,16 +80,26 @@ export async function claimDpopJtiOnRedis(
 export class RedisDPoPNonceStore implements DPoPNonceStore {
   private redis: Redis | Cluster;
   private readonly prefix = 'mcp_guardian:dpop:jti:';
+  private quorumMode = false;
 
   constructor(
     private readonly ttlSeconds: number,
     redis?: Redis | Cluster,
   ) {
     this.redis = redis ?? createRedisClient({ maxRetriesPerRequest: 3, lazyConnect: false });
-    Logger.info(`[dpop] Redis nonce store (${getRedisConnectionLabel()})`);
+    this.quorumMode = Boolean(process.env['GUARDIAN_DPOP_QUORUM_REDIS']?.trim());
+    Logger.info(
+      `[dpop] Redis nonce store (${getRedisConnectionLabel()}${this.quorumMode ? ', quorum' : ''})`,
+    );
   }
 
   async claim(jti: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    if (this.quorumMode) {
+      const clients = await getDpopQuorumClients();
+      if (clients.length > 0) {
+        return claimDpopJtiQuorum(clients, this.prefix, jti, this.ttlSeconds, tenantId);
+      }
+    }
     return claimDpopJtiOnRedis(this.redis, this.prefix, jti, this.ttlSeconds, tenantId);
   }
 

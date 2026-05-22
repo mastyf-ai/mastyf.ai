@@ -1,5 +1,21 @@
 import type { IDatabase } from '../database/database-interface.js';
 import type { ProxyCallRecord } from '../types.js';
+
+const MAX_BLOCK_REASON_CHARS = parseInt(process.env.GUARDIAN_AUDIT_MAX_BLOCK_REASON_CHARS || '4096', 10);
+
+/** Trim oversized audit fields before queue/DB write (L-2). */
+export function compactCallRecordForPersistence(record: ProxyCallRecord): ProxyCallRecord {
+  const maxReason = Number.isFinite(MAX_BLOCK_REASON_CHARS) && MAX_BLOCK_REASON_CHARS > 0
+    ? MAX_BLOCK_REASON_CHARS
+    : 4096;
+  if (!record.blockReason || record.blockReason.length <= maxReason) {
+    return record;
+  }
+  return {
+    ...record,
+    blockReason: `${record.blockReason.slice(0, maxReason)}…[truncated]`,
+  };
+}
 import { getRuntimeModelPricing } from '../services/runtime-model-pricing.js';
 import { resolveModelIdForServer } from '../config/llm-config.js';
 import * as Metrics from './metrics.js';
@@ -47,7 +63,9 @@ export async function persistCallRecord(
   serverArgs?: string[],
 ): Promise<ProxyCallRecord> {
   initAuditWriteQueue(db);
-  const enriched = await enrichCallRecord(record, msg, serverEnv, serverArgs);
+  const enriched = compactCallRecordForPersistence(
+    await enrichCallRecord(record, msg, serverEnv, serverArgs),
+  );
   const costJob =
     enriched.costUsd && enriched.costUsd > 0
       ? {

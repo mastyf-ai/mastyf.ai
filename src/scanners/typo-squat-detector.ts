@@ -1,8 +1,8 @@
-import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TypoSquatResult } from '../types.js';
 import { Logger } from '../utils/logger.js';
+import { BKTree } from './bk-tree.js';
 
 const TRUSTED_MCP_PACKAGES = [
   '@modelcontextprotocol/server-everything',
@@ -91,9 +91,24 @@ function levenshtein(a: string, b: string): number {
 
 export class TypoSquatDetector {
   private trustedPackages: string[];
+  /** BK-tree index: term → canonical trusted package name (L-1). */
+  private index = new BKTree();
+  private termToPackage = new Map<string, string>();
 
   constructor(trusted?: string[]) {
     this.trustedPackages = trusted ?? [...TRUSTED_MCP_PACKAGES];
+    this.buildIndex();
+  }
+
+  private buildIndex(): void {
+    for (const trusted of this.trustedPackages) {
+      const trustedName = trusted.toLowerCase();
+      for (const term of [trustedName, tailSegment(trustedName)]) {
+        if (!term || this.termToPackage.has(term)) continue;
+        this.index.insert(term);
+        this.termToPackage.set(term, trusted);
+      }
+    }
   }
 
   detect(name: string): TypoSquatResult[] {
@@ -112,17 +127,17 @@ export class TypoSquatDetector {
     }
 
     const candidates = [cleaned, tailSegment(cleaned)];
-    for (const trusted of this.trustedPackages) {
-      const trustedName = trusted.toLowerCase();
-      const trustedTails = [trustedName, tailSegment(trustedName)];
-
-      for (const candidate of candidates) {
-        for (const trustedTail of trustedTails) {
-          const dist = levenshtein(candidate, trustedTail);
-          if (dist === 1) {
-            results.push({ suspiciousName: name, similarityTo: trusted, distance: dist });
-          } else if (dist === 2 && candidate.length > 6) {
-            results.push({ suspiciousName: name, similarityTo: trusted, distance: dist });
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      for (const dist of [1, 2] as const) {
+        if (dist === 2 && candidate.length <= 6) continue;
+        for (const match of this.index.search(candidate, dist)) {
+          const trusted = this.termToPackage.get(match);
+          if (!trusted) continue;
+          const actualDist = levenshtein(candidate, match);
+          if (actualDist === 0) continue;
+          if (actualDist === 1 || (actualDist === 2 && candidate.length > 6)) {
+            results.push({ suspiciousName: name, similarityTo: trusted, distance: actualDist });
           }
         }
       }

@@ -21,6 +21,16 @@ export interface SessionEntry {
   expiresAt: number;
 }
 
+export interface SessionValidationResult {
+  identity: AgentIdentity;
+  /** Present when GUARDIAN_SESSION_ROTATE_ON_USE=true and session was validated. */
+  rotatedToken?: string;
+}
+
+function sessionRotationEnabled(): boolean {
+  return process.env['GUARDIAN_SESSION_ROTATE_ON_USE'] === 'true';
+}
+
 const SESSION_CACHE_MAX = 10_000;
 const NONCE_CACHE_MAX = 50_000;
 
@@ -102,13 +112,41 @@ export class SessionCache {
    * Returns the agent identity if valid, null if expired/not found.
    */
   validateSession(token: string, tenantId: string = DEFAULT_TENANT_ID): AgentIdentity | null {
-    const entry = this.sessions.get(this.scopedSessionKey(tenantId, token));
+    const result = this.validateSessionWithRotation(token, tenantId);
+    return result?.identity ?? null;
+  }
+
+  /**
+   * Validate session and optionally rotate token (L-6).
+   * When rotation is enabled, old token is revoked and a new one is issued.
+   */
+  validateSessionWithRotation(
+    token: string,
+    tenantId: string = DEFAULT_TENANT_ID,
+  ): SessionValidationResult | null {
+    const key = this.scopedSessionKey(tenantId, token);
+    const entry = this.sessions.get(key);
     if (!entry) return null;
     if (Date.now() > entry.expiresAt) {
-      this.sessions.delete(this.scopedSessionKey(tenantId, token));
+      this.sessions.delete(key);
       return null;
     }
-    return entry.identity;
+
+    if (!sessionRotationEnabled()) {
+      return { identity: entry.identity };
+    }
+
+    this.sessions.delete(key);
+    const newToken = `mcp_guardian_session_${randomUUID()}`;
+    const now = Date.now();
+    const rotated: SessionEntry = {
+      ...entry,
+      token: newToken,
+      createdAt: now,
+      expiresAt: now + this.sessionTtlMs,
+    };
+    this.sessions.set(this.scopedSessionKey(tenantId, newToken), rotated);
+    return { identity: entry.identity, rotatedToken: newToken };
   }
 
   /** Check if a JWT nonce has been used (replay detection). */

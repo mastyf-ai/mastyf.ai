@@ -92,8 +92,9 @@ export class RedisRateLimiter {
 
       const now = Date.now();
       let localCounter = this.local.get(scopedKey);
+      const windowJitterMs = Math.floor(Math.random() * Math.min(windowMs * 0.1, 500));
       if (!localCounter || now > localCounter.resetAt) {
-        localCounter = { count: 1, resetAt: now + windowMs };
+        localCounter = { count: 1, resetAt: now + windowMs + windowJitterMs };
       } else {
         localCounter.count++;
       }
@@ -110,8 +111,9 @@ export class RedisRateLimiter {
       Logger.debug(`[redis-rate-limiter] Redis error, using local: ${message}`);
       const now = Date.now();
       let localCounter = this.local.get(scopedKey);
+      const windowJitterMs = Math.floor(Math.random() * Math.min(windowMs * 0.1, 500));
       if (!localCounter || now > localCounter.resetAt) {
-        localCounter = { count: 1, resetAt: now + windowMs };
+        localCounter = { count: 1, resetAt: now + windowMs + windowJitterMs };
       } else {
         localCounter.count++;
       }

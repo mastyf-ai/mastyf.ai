@@ -409,6 +409,14 @@ export class McpProxyServer {
             }
           }
 
+          if (reqCtx.rotatedSessionToken && msg.result && typeof msg.result === 'object') {
+            const result = msg.result as Record<string, unknown>;
+            const meta = (result._meta as Record<string, unknown> | undefined) ?? {};
+            meta.sessionToken = reqCtx.rotatedSessionToken;
+            result._meta = meta;
+            line = JSON.stringify(msg);
+          }
+
           this.requestContexts.delete(msg.id);
           this.currentRequestId = null;
         }
@@ -676,6 +684,7 @@ export class McpProxyServer {
 
         let agentIdentity: AgentIdentity | undefined;
         let authnSuccess = false;
+        let pendingRotatedSessionToken: string | undefined;
 
         // ── OAuth 2.1 JWT validation ────────────────────────
         if (this.authValidator) {
@@ -700,9 +709,12 @@ export class McpProxyServer {
           } else {
             let result: AuthValidationResult = await this.authValidator.validate(token);
             if (!result.valid && this.sessionCache) {
-              const sessionIdentity = await validateSessionToken(this.sessionCache, token, requestTenantId);
-              if (sessionIdentity) {
-                result = { valid: true, identity: sessionIdentity };
+              const sessionResult = await validateSessionToken(this.sessionCache, token, requestTenantId);
+              if (sessionResult) {
+                result = { valid: true, identity: sessionResult.identity };
+                if (sessionResult.rotatedToken) {
+                  pendingRotatedSessionToken = sessionResult.rotatedToken;
+                }
               }
             }
             authnSuccess = result.valid;
@@ -966,6 +978,7 @@ export class McpProxyServer {
           requestArguments,
           tenantId: requestTenantId,
           agentIdentity,
+          rotatedSessionToken: pendingRotatedSessionToken,
         });
 
         // ── Log successful forwarding ───────────────────────

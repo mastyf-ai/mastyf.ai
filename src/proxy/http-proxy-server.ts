@@ -145,9 +145,12 @@ export class HttpProxyServer {
       if (token) {
         let result: AuthValidationResult = await this.authValidator.validate(token);
         if (!result.valid && this.sessionCache) {
-          const sessionIdentity = await validateSessionToken(this.sessionCache, token, requestTenantId);
-          if (sessionIdentity) {
-            result = { valid: true, identity: sessionIdentity };
+          const sessionResult = await validateSessionToken(this.sessionCache, token, requestTenantId);
+          if (sessionResult) {
+            result = { valid: true, identity: sessionResult.identity };
+            if (sessionResult.rotatedToken) {
+              res.setHeader('x-mcp-guardian-session-token', sessionResult.rotatedToken);
+            }
           }
         }
         authnSuccess = result.valid;
