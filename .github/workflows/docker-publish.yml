@@ -38,10 +38,11 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@v3.7.0
       - name: Sign container image
-        uses: sigstore/cosign-action@v3.8.0
-        with:
-          images: |
-            ghcr.io/rudraneel93/mcp-guardian:${{ github.ref_name }}
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          cosign sign --yes \
+            ghcr.io/rudraneel93/mcp-guardian:${{ github.ref_name }} \
             ghcr.io/rudraneel93/mcp-guardian:latest
       - uses: aquasecurity/trivy-action@master
         with:

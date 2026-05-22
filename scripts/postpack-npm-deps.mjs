@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /** Restore package.json after prepack-npm-deps.mjs */
 import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
-const ROOT_PKG = 'package.json';
-const BACKUP = '.package.prepack-backup.json';
+const pkgPath = process.env.PREPACK_PKG ?? join(process.cwd(), 'package.json');
+const backupPath = pkgPath + '.prepack-backup';
 
-if (existsSync(BACKUP)) {
-  writeFileSync(ROOT_PKG, readFileSync(BACKUP, 'utf8'));
-  unlinkSync(BACKUP);
-  console.log('[postpack] restored package.json workspace deps');
+if (existsSync(backupPath)) {
+  writeFileSync(pkgPath, readFileSync(backupPath, 'utf8'));
+  unlinkSync(backupPath);
+  console.log(`[postpack] restored ${pkgPath}`);
 }

@@ -4,6 +4,15 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+## [2.9.6] - 2026-05-22
+
+### Fixed
+- **Publish workflow** — use `pnpm run build` (turbo order) instead of `pnpm -r build` so `@mcp-guardian/cli` builds after `packages/server`.
+- **CLI package build** — `pnpm --dir ../server run build && tsc` for explicit dependency order.
+- **scan-mcp workflow** — scan from repo `dist/cli.js` instead of `npx @mcp-guardian/server@latest` (broken `workspace:*` on npm).
+- **Docker cosign** — use `cosign sign` CLI instead of unavailable `sigstore/cosign-action` repo.
+- **prepack** — rewrite all workspace deps (`plugin-sdk`, `core`, `server`) for npm tarballs; CLI package prepack/postpack hooks.
+
 ## [2.9.5] - 2026-05-22
 
 ### Fixed

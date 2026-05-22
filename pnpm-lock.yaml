@@ -139,10 +139,10 @@ importers:
   packages/cli:
     dependencies:
       '@mcp-guardian/core':
-        specifier: workspace:*
+        specifier: workspace:^2.9.6
         version: link:../core
       '@mcp-guardian/server':
-        specifier: workspace:*
+        specifier: workspace:^2.9.6
         version: link:../server
     devDependencies:
       '@types/node':
@@ -179,7 +179,7 @@ importers:
   packages/server:
     dependencies:
       '@mcp-guardian/core':
-        specifier: workspace:*
+        specifier: workspace:^2.9.6
         version: link:../core
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
