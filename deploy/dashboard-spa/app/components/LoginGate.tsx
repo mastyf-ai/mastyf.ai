@@ -40,8 +40,7 @@ export function LoginGate({ children, onAuthenticated }: Props) {
   }, [refresh]);
 
   const canShowDashboard =
-    status &&
-    (!status.authRequired || status.authenticated || !status.authConfigured);
+    status && (!status.authRequired || status.authenticated || !status.authConfigured);
 
   const onLogin = async (e: React.FormEvent) => {
     e.preventDefault();

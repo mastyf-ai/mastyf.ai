@@ -1,7 +1,9 @@
 import { PolicyRule, PolicyAction } from '../policy/policy-types.js';
 import { Logger } from '../utils/logger.js';
+import { isDemoThreatId } from '../utils/dashboard-live-data.js';
+import { resolveThreatStatePath } from './ai-paths.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { dirname } from 'path';
 
 export interface ThreatIntelEntry {
   id: string;
@@ -23,6 +25,42 @@ export interface ThreatSuggestion {
   entry: ThreatIntelEntry;
 }
 
+export type ThreatIntelCatalogEntry = ThreatIntelEntry & { firstSeenAt: string };
+
+export interface ThreatIntelStatus {
+  threats: number;
+  knownIds: string[];
+  entries: ThreatIntelCatalogEntry[];
+  updated: string | null;
+  lastPollAt: string | null;
+  pollingActive: boolean;
+  pollingDisabled: boolean;
+}
+
+let sharedThreatIntel: ThreatIntel | null = null;
+
+/** Shared ThreatIntel instance (proxy, dashboard, learning engine). */
+export function getSharedThreatIntel(statePath?: string): ThreatIntel {
+  if (!sharedThreatIntel) {
+    sharedThreatIntel = new ThreatIntel(statePath);
+  }
+  return sharedThreatIntel;
+}
+
+/** Start live NVD/OSV/GitHub polling unless explicitly disabled. */
+export function startThreatIntelPollingIfEnabled(): ThreatIntel {
+  const ti = getSharedThreatIntel();
+  if (process.env.GUARDIAN_AI_DISABLE_THREAT_POLL === 'true') {
+    return ti;
+  }
+  const intervalMs = parseInt(
+    process.env.GUARDIAN_AI_THREAT_POLL_MS || String(30 * 60 * 1000),
+    10,
+  );
+  ti.startLivePolling(intervalMs);
+  return ti;
+}
+
 /**
  * Threat intelligence integration — ingests MCP-specific threat feeds and
  * auto-generates blocking policy rules based on severity and applicability.
@@ -30,13 +68,15 @@ export interface ThreatSuggestion {
  */
 export class ThreatIntel {
   private lastSeenIds: Set<string> = new Set();
+  private knownEntries = new Map<string, ThreatIntelCatalogEntry>();
   private statePath: string;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private liveFeedSources: string[] = [];
+  private lastUpdated: string | null = null;
+  private lastPollAt: string | null = null;
   private nvdApiKey: string;
 
   constructor(statePath?: string) {
-    this.statePath = statePath || join(dirname(new URL(import.meta.url).pathname), '..', '..', '.threat-state.json');
+    this.statePath = statePath || resolveThreatStatePath();
     this.nvdApiKey = process.env['NVD_API_KEY'] || '';
     this.loadState();
   }
@@ -64,6 +104,7 @@ export class ThreatIntel {
 
   /** Poll all live threat feed sources */
   async pollLiveFeeds(): Promise<ThreatIntelEntry[]> {
+    this.lastPollAt = new Date().toISOString();
     const results = await Promise.allSettled([
       this.pollNvdFeed(),
       this.pollOsvFeed(),
@@ -83,7 +124,29 @@ export class ThreatIntel {
       return newEntries;
     }
 
+    this.saveState();
     return [];
+  }
+
+  isPollingActive(): boolean {
+    return this.pollTimer !== null;
+  }
+
+  /** Dashboard / API snapshot of known threat feed IDs and metadata. */
+  getStatus(): ThreatIntelStatus {
+    const entries = [...this.knownEntries.values()]
+      .filter((e) => !isDemoThreatId(e.id))
+      .sort((a, b) => (b.firstSeenAt || '').localeCompare(a.firstSeenAt || ''));
+    const knownIds = entries.map((e) => e.id);
+    return {
+      threats: knownIds.length,
+      knownIds,
+      entries,
+      updated: this.lastUpdated,
+      lastPollAt: this.lastPollAt,
+      pollingActive: this.isPollingActive(),
+      pollingDisabled: process.env.GUARDIAN_AI_DISABLE_THREAT_POLL === 'true',
+    };
   }
 
   /** Poll NVD API v2 for recent CVEs relevant to MCP ecosystem */
@@ -249,9 +312,31 @@ export class ThreatIntel {
       if (existsSync(this.statePath)) {
         const data = JSON.parse(readFileSync(this.statePath, 'utf-8'));
         if (Array.isArray(data.ids)) {
-          this.lastSeenIds = new Set(data.ids);
-          Logger.info(`[ThreatIntel] Loaded ${this.lastSeenIds.size} known threat entries`);
+          this.lastSeenIds = new Set(
+            data.ids.filter((id: string) => typeof id === 'string' && !isDemoThreatId(id)),
+          );
         }
+        if (typeof data.updated === 'string') {
+          this.lastUpdated = data.updated;
+        }
+        if (typeof data.lastPollAt === 'string') {
+          this.lastPollAt = data.lastPollAt;
+        }
+        const catalog = data.entries;
+        if (Array.isArray(catalog)) {
+          for (const entry of catalog) {
+            if (entry?.id && !isDemoThreatId(entry.id)) {
+              this.knownEntries.set(entry.id, entry as ThreatIntelCatalogEntry);
+            }
+          }
+        } else if (catalog && typeof catalog === 'object') {
+          for (const [id, entry] of Object.entries(catalog)) {
+            if (entry && typeof entry === 'object' && !isDemoThreatId(id)) {
+              this.knownEntries.set(id, entry as ThreatIntelCatalogEntry);
+            }
+          }
+        }
+        Logger.info(`[ThreatIntel] Loaded ${this.knownEntries.size} threat catalog entries`);
       }
     } catch {
       // Fresh state on first run
@@ -263,10 +348,25 @@ export class ThreatIntel {
     try {
       const dir = dirname(this.statePath);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      writeFileSync(this.statePath, JSON.stringify({ ids: [...this.lastSeenIds], updated: new Date().toISOString() }));
+      this.lastUpdated = new Date().toISOString();
+      writeFileSync(this.statePath, JSON.stringify({
+        ids: [...this.knownEntries.keys()],
+        updated: this.lastUpdated,
+        lastPollAt: this.lastPollAt,
+        entries: [...this.knownEntries.values()],
+      }, null, 2));
     } catch (err: any) {
       Logger.warn(`[ThreatIntel] Failed to save state: ${err?.message}`);
     }
+  }
+
+  private rememberEntry(entry: ThreatIntelEntry): void {
+    if (isDemoThreatId(entry.id)) return;
+    const existing = this.knownEntries.get(entry.id);
+    this.knownEntries.set(entry.id, {
+      ...entry,
+      firstSeenAt: existing?.firstSeenAt || new Date().toISOString(),
+    });
   }
 
   /** Fetch threat entries from a JSON feed file or in-memory array */
@@ -284,11 +384,14 @@ export class ThreatIntel {
 
   /** Diff new entries against last-seen state — returns only previously unseen */
   diffFeed(entries: ThreatIntelEntry[]): ThreatIntelEntry[] {
-    const new_ = entries.filter(e => !this.lastSeenIds.has(e.id));
-    // Mark all as seen
-    for (const e of entries) this.lastSeenIds.add(e.id);
+    const live = entries.filter((e) => !isDemoThreatId(e.id));
+    const new_ = live.filter(e => !this.lastSeenIds.has(e.id));
+    for (const e of live) {
+      this.lastSeenIds.add(e.id);
+      this.rememberEntry(e);
+    }
     this.saveState();
-    Logger.info(`[ThreatIntel] ${new_.length} new threat entries (${entries.length} total)`);
+    Logger.info(`[ThreatIntel] ${new_.length} new threat entries (${live.length} total)`);
     return new_;
   }
 

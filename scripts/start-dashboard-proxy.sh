@@ -36,11 +36,59 @@ export METRICS_ENABLED="${METRICS_ENABLED:-true}"
 export DASHBOARD_PORT="${DASHBOARD_PORT:-4000}"
 export METRICS_PORT="${METRICS_PORT:-9090}"
 
-CONFIG="${1:-deploy/dashboard-proxy-mcp.json}"
-POLICY="${2:-policy-demo.yaml}"
+CONFIG="${1:-}"
+POLICY="${2:-default-policy.yaml}"
+
+pick_single_server_config() {
+  node <<'NODE'
+const { readdirSync, readFileSync, existsSync } = require('fs');
+const { join } = require('path');
+const root = process.cwd();
+const candidates = [
+  join(root, 'guardian-configs', 'filesystem.json'),
+  ...(() => {
+    const dir = join(root, 'guardian-configs');
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => join(dir, f));
+  })(),
+];
+const seen = new Set();
+for (const p of candidates) {
+  if (seen.has(p) || !existsSync(p)) continue;
+  seen.add(p);
+  try {
+    const cfg = JSON.parse(readFileSync(p, 'utf8'));
+    const servers = Object.values(cfg.mcpServers || cfg.servers || {});
+    const stdioCount = servers.filter((s) => s && (s.command || s.transport === 'stdio')).length;
+    if (stdioCount === 1) {
+      process.stdout.write(p.replace(root + '/', ''));
+      process.exit(0);
+    }
+  } catch {
+    /* try next */
+  }
+}
+process.exit(1);
+NODE
+}
+
+if [ -z "$CONFIG" ]; then
+  if CONFIG=$(pick_single_server_config 2>/dev/null); then
+    :
+  else
+    echo "[dashboard-proxy] No single-server MCP config found." >&2
+    echo "  Pass a config path: pnpm dashboard:proxy -- guardian-configs/filesystem.json" >&2
+    echo "  Multi-server configs (e.g. scenarios/real-life/mcp-config.json) need one proxy per server — see docs/REAL_WORLD_INTEGRATION.md" >&2
+    exit 1
+  fi
+fi
+
+BLOCKING="${GUARDIAN_BLOCKING_MODE:-block}"
 
 echo "[dashboard-proxy] DB: $MCP_GUARDIAN_DB_PATH" >&2
 echo "[dashboard-proxy] Dashboard: http://localhost:${DASHBOARD_PORT}/" >&2
-echo "[dashboard-proxy] Config: $CONFIG  Policy: $POLICY" >&2
+echo "[dashboard-proxy] Config: $CONFIG  Policy: $POLICY  Mode: $BLOCKING" >&2
 
-exec node dist/cli.js proxy --config "$CONFIG" --policy "$POLICY" --blocking-mode audit
+exec node dist/cli.js proxy --config "$CONFIG" --policy "$POLICY" --blocking-mode "$BLOCKING"

@@ -21,6 +21,12 @@ import { WsBroadcaster } from '../dashboard/ws-broadcaster.js';
 import { setWsBroadcaster } from './dashboard-events.js';
 import { wireDashboardWsProviders } from './dashboard-ws-wire.js';
 import {
+  getLicenseClient,
+  isLicenseEnforcementEnabled,
+  loadLicenseClientConfig,
+} from '../license/license-client.js';
+import { mapCloudRoles, verifyCloudSessionToken } from '../license/cloud-session.js';
+import {
   getAllActiveServerNames,
   loadAllCallRecords,
   securityRowFromScan,
@@ -28,6 +34,7 @@ import {
 } from './db-aggregate.js';
 import { computeCostTrend, fetchCircuitBreakerStates } from './tui-sources.js';
 import { REPO_ROOT } from './security-swarm-runner.js';
+import { available, unavailable, defaultPolicyPath, parseCostBudgetUsd } from './dashboard-live-data.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -208,8 +215,26 @@ export async function startDashboardServer(
   policyWatcher?: PolicyWatcher,
   dashboardAuth?: DashboardAuth,
 ): Promise<{ auth: DashboardAuth; server: ReturnType<typeof createServer>; ws: WsBroadcaster | null }> {
-  const dashboardEnabled = process.env['DASHBOARD_ENABLED'] === 'true';
+  const licenseClient = getLicenseClient();
+  if (
+    process.env['DASHBOARD_AUTH_DISABLED'] === 'true'
+    && (licenseClient.requiresLicense() || isLicenseEnforcementEnabled())
+  ) {
+    Logger.error(
+      '[license] DASHBOARD_AUTH_DISABLED is not allowed when cloud license enforcement is enabled',
+    );
+  }
+
+  const licenseOk = await licenseClient.start();
+  const licenseRequired = isLicenseEnforcementEnabled() && licenseClient.requiresLicense();
+
+  let dashboardEnabled = process.env['DASHBOARD_ENABLED'] === 'true';
   const wsEnabled = process.env['GUARDIAN_WS_ENABLED'] !== 'false';
+
+  if (licenseRequired && !licenseOk) {
+    Logger.error('[license] Dashboard and WebSocket disabled — license enforcement failed');
+    dashboardEnabled = false;
+  }
 
   if (!dashboardEnabled && !wsEnabled) {
     Logger.debug('[dashboard] Dashboard/WS disabled (DASHBOARD_ENABLED or GUARDIAN_WS_ENABLED)');
@@ -219,6 +244,59 @@ export async function startDashboardServer(
       server: createServer((_req, res) => { res.writeHead(200); res.end(); }),
       ws: null,
     };
+  }
+
+  function licenseStatusPayload() {
+    const enforced = isLicenseEnforcementEnabled();
+    if (!enforced) {
+      return {
+        licensed: true,
+        licenseEnforced: false,
+        licenseRequired: false,
+        tenantSlug: licenseClient.getTenantSlug() ?? null,
+        licenseStatus: 'not_enforced',
+        cloudBillingUrl: null,
+        features: [] as string[],
+      };
+    }
+    const state = licenseClient.getState();
+    const licensed = licenseClient.isLicensed();
+    return {
+      licensed,
+      licenseEnforced: true,
+      licenseRequired,
+      tenantSlug: licenseClient.getTenantSlug() ?? null,
+      licenseStatus: state?.status ?? 'unknown',
+      cloudBillingUrl: licenseClient.getCloudBillingUrl() ?? null,
+      features: state?.features ?? [],
+    };
+  }
+
+  function isLicenseExemptPath(path: string): boolean {
+    return (
+      path === '/api/license/status'
+      || path === '/api/auth/cloud-exchange'
+      || path === '/api/auth/csrf'
+      || path === '/login'
+    );
+  }
+
+  function assertLicensedApi(path: string, res: ServerResponse, setCors: () => void): boolean {
+    if (!isLicenseEnforcementEnabled() || isLicenseExemptPath(path)) return true;
+    if (licenseClient.isLicensed()) return true;
+    setCors();
+    writeJson(res, 402, {
+      error: 'License required',
+      ...licenseStatusPayload(),
+    });
+    return false;
+  }
+
+  function assertFeature(_path: string, feature: string, res: ServerResponse, setCors: () => void): boolean {
+    if (!isLicenseEnforcementEnabled() || licenseClient.hasFeature(feature)) return true;
+    setCors();
+    writeJson(res, 402, { error: `Feature not licensed: ${feature}` });
+    return false;
   }
 
   const auth = dashboardAuth || new DashboardAuth();
@@ -314,6 +392,7 @@ export async function startDashboardServer(
     if (method !== 'GET') return false;
     return (
       path === '/api/auth/status'
+      || path === '/api/license/status'
       || path === '/api/auth/csrf'
       ||       path === '/api/security-swarm/status'
       || path === '/api/security-swarm/live-session'
@@ -413,6 +492,79 @@ export async function startDashboardServer(
     }
 
     try {
+      if (url === '/api/license/status' && method === 'GET') {
+        setCors();
+        writeJson(res, 200, licenseStatusPayload());
+        return;
+      }
+
+      if (url === '/api/auth/status' && method === 'GET' && dashboardEnabled) {
+        setCors();
+        const probe = auth.authenticate({
+          url: req.url,
+          headers: req.headers as Record<string, string | string[] | undefined>,
+          method,
+        });
+        if (!probe.authenticated) {
+          writeJson(res, 200, {
+            authenticated: false,
+            authRequired,
+            authConfigured: auth.isConfigured(),
+            ...licenseStatusPayload(),
+          });
+          return;
+        }
+      }
+
+      if (url === '/api/auth/cloud-exchange' && method === 'GET') {
+        setCors();
+        const fullUrl = new URL(req.url || '/', 'http://localhost');
+        const exchangeToken = fullUrl.searchParams.get('token')?.trim();
+        if (!exchangeToken) {
+          writeJson(res, 400, { error: 'token query parameter required' });
+          return;
+        }
+
+        if (!auth.hasJwtSessionAuth()) {
+          writeJson(res, 503, { error: 'DASHBOARD_JWT_SECRET required for cloud exchange' });
+          return;
+        }
+
+        let sessionToken: string | undefined;
+        let tenantSlug: string | undefined;
+
+        const controlPlaneUrl = loadLicenseClientConfig().controlPlaneUrl;
+        if (!controlPlaneUrl) {
+          writeJson(res, 503, { error: 'GUARDIAN_CONTROL_PLANE_URL not configured' });
+          return;
+        }
+        const exchanged = await licenseClient.exchangeCloudToken(exchangeToken);
+        if (!exchanged?.sessionToken) {
+          writeJson(res, 401, { error: 'Invalid or expired exchange token' });
+          return;
+        }
+        sessionToken = exchanged.sessionToken;
+        tenantSlug = exchanged.tenantSlug;
+
+        const cloudPayload = verifyCloudSessionToken(sessionToken);
+        if (!cloudPayload) {
+          writeJson(res, 401, { error: 'Invalid cloud session token' });
+          return;
+        }
+
+        const token = auth.createCloudSession(
+          tenantSlug ?? cloudPayload.tenantSlug,
+          cloudPayload.identity,
+          mapCloudRoles(cloudPayload.roles),
+        );
+        const csrfToken = auth.isCsrfEnforced() ? auth.issueCsrfToken() : undefined;
+        const cookies = [auth.sessionSetCookieHeader(token)];
+        if (csrfToken) cookies.push(auth.csrfSetCookieHeader(csrfToken));
+        res.writeHead(302, { Location: '/', 'Set-Cookie': cookies });
+        res.end();
+        return;
+      }
+
       if (url === '/api/auth/csrf' && method === 'GET') {
         setCors();
         if (!auth.isCsrfEnforced()) {
@@ -508,6 +660,10 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url.startsWith('/api/') && !assertLicensedApi(url, res, setCors)) {
+        return;
+      }
+
       const authResult = auth.authenticate({ url, headers: req.headers, method });
       if (!authResult.authenticated) {
         setCors();
@@ -561,10 +717,7 @@ export async function startDashboardServer(
 
       if (url === '/api/policy' && method === 'GET') {
         setCors();
-        const policyPath =
-          process.env['GUARDIAN_POLICY_PATH'] ||
-          process.env['MCP_GUARDIAN_POLICY_PATH'] ||
-          'policy-demo.yaml';
+        const policyPath = defaultPolicyPath();
         let yaml = '';
         if (existsSync(policyPath)) {
           try {
@@ -677,6 +830,7 @@ export async function startDashboardServer(
           sessionTenantId: authResult.sessionTenantId ?? requestTenantId,
           multiTenantMode: isMultiTenantModeEnabled(),
           tenantLocked: isMultiTenantModeEnabled() && !!authResult.sessionTenantId,
+          ...licenseStatusPayload(),
         });
         return;
       }
@@ -699,6 +853,7 @@ export async function startDashboardServer(
 
       // ── AI APIs (set GUARDIAN_AI_ENABLED=false to disable) ──
       if (url.startsWith('/api/ai/')) {
+        if (!assertFeature(url, 'ai', res, setCors)) return;
         const { isAiLearningEnabled } = await import('./ai-enabled.js');
         if (!isAiLearningEnabled()) {
           setCors();
@@ -714,11 +869,11 @@ export async function startDashboardServer(
           const engine = getAiEngine();
           if (engine) {
             const report = await engine.generateReport();
-            writeJson(res, 200, { suggestions: (report as any)?.suggestions || [], report });
+            writeJson(res, 200, available({ suggestions: (report as any)?.suggestions || [], report }));
             return;
           }
         } catch { /* fall through */ }
-        writeJson(res, 200, { suggestions: [] }); return;
+        writeJson(res, 200, unavailable({ suggestions: [] }, 'AI engine not initialized — start proxy with GUARDIAN_AI_ENABLED')); return;
       }
 
       if (url === '/api/ai/report' && method === 'GET') {
@@ -726,9 +881,13 @@ export async function startDashboardServer(
         try {
           const { getAiEngine } = await import('../ai/suggestion-engine.js');
           const engine = getAiEngine();
-          if (engine) { const report = await engine.generateReport(); writeJson(res, 200, { report }); return; }
+          if (engine) {
+            const report = await engine.generateReport();
+            writeJson(res, 200, available({ report }));
+            return;
+          }
         } catch { /* fall through */ }
-        writeJson(res, 200, { report: null }); return;
+        writeJson(res, 200, unavailable({ report: null }, 'AI engine not initialized')); return;
       }
 
       if (url === '/api/ai/state' && method === 'GET') {
@@ -738,10 +897,38 @@ export async function startDashboardServer(
           const engine = getAiEngine();
           if (engine) {
             const si = engine.getSelfImprovement();
-            if (si) { const s = si.getState(); writeJson(res, 200, { state: { adaptiveThreshold: s.adaptiveThreshold, truePositiveRate: s.truePositiveRate, falsePositiveRate: s.falsePositiveRate, moduleWeights: s.moduleWeights } }); return; }
+            const s = si.getState();
+            writeJson(res, 200, available({
+              initialized: true,
+              state: {
+                adaptiveThreshold: s.adaptiveThreshold,
+                truePositiveRate: s.truePositiveRate,
+                falsePositiveRate: s.falsePositiveRate,
+                moduleWeights: s.moduleWeights,
+                lastUpdated: s.lastUpdated ?? null,
+              },
+            }));
+            return;
+          }
+          const { resolveAiLearningStatePath } = await import('../ai/ai-paths.js');
+          const statePath = resolveAiLearningStatePath(requestTenantId);
+          if (existsSync(statePath)) {
+            const s = JSON.parse(readFileSync(statePath, 'utf-8')) as Record<string, unknown>;
+            writeJson(res, 200, available({
+              initialized: true,
+              state: {
+                adaptiveThreshold: s.adaptiveThreshold ?? null,
+                truePositiveRate: s.truePositiveRate ?? null,
+                falsePositiveRate: s.falsePositiveRate ?? null,
+                moduleWeights: s.moduleWeights ?? {},
+                lastUpdated: s.lastUpdated ?? null,
+              },
+            }));
+            return;
           }
         } catch { }
-        writeJson(res, 200, { state: { adaptiveThreshold: 0.85, truePositiveRate: 0, falsePositiveRate: 0, moduleWeights: {} } }); return;
+        writeJson(res, 200, unavailable({ initialized: false, state: null }, 'No AI learning state yet — proxy blocks populate learning'));
+        return;
       }
 
       if (url === '/api/ai/baselines' && method === 'GET') {
@@ -749,19 +936,60 @@ export async function startDashboardServer(
         try {
           const { getAiEngine } = await import('../ai/suggestion-engine.js');
           const engine = getAiEngine();
-          if (engine) { writeJson(res, 200, { baselines: engine.getBaselineLearner().getAllBaselines() }); return; }
+          if (engine) {
+            writeJson(res, 200, available({ baselines: engine.getBaselineLearner().getAllBaselines() }));
+            return;
+          }
+          const { resolveAiBaselinesPath } = await import('../ai/ai-paths.js');
+          const bp = resolveAiBaselinesPath(requestTenantId);
+          if (existsSync(bp)) {
+            const raw = JSON.parse(readFileSync(bp, 'utf-8')) as { baselines?: unknown[] };
+            writeJson(res, 200, available({ baselines: raw.baselines ?? [] }));
+            return;
+          }
         } catch { }
-        writeJson(res, 200, { baselines: [] }); return;
+        writeJson(res, 200, unavailable({ baselines: [] }, 'No baselines learned yet'));
+        return;
       }
 
       if (url === '/api/ai/threats' && method === 'GET') {
         setCors();
         try {
-          const { readFileSync: rf, existsSync: ex } = await import('fs');
-          const tp = resolve(__dirname, '..', '..', '.threat-state.json');
-          if (ex(tp)) { const st = JSON.parse(rf(tp, 'utf-8')); writeJson(res, 200, { threats: st.ids?.length || 0, knownIds: st.ids || [] }); return; }
+          const { getAiEngine } = await import('../ai/suggestion-engine.js');
+          const { startThreatIntelPollingIfEnabled } = await import('../ai/threat-intel.js');
+          const engine = getAiEngine();
+          const threatIntel = engine?.getThreatIntel() ?? startThreatIntelPollingIfEnabled();
+          writeJson(res, 200, threatIntel.getStatus());
+          return;
         } catch { }
-        writeJson(res, 200, { threats: 0 }); return;
+        writeJson(res, 200, {
+          threats: 0,
+          knownIds: [],
+          entries: [],
+          updated: null,
+          lastPollAt: null,
+          pollingActive: false,
+          pollingDisabled: process.env.GUARDIAN_AI_DISABLE_THREAT_POLL === 'true',
+        });
+        return;
+      }
+
+      if (url === '/api/ai/threats/poll' && method === 'POST') {
+        setCors();
+        try {
+          const { getAiEngine } = await import('../ai/suggestion-engine.js');
+          const { startThreatIntelPollingIfEnabled } = await import('../ai/threat-intel.js');
+          const engine = getAiEngine();
+          const threatIntel = engine?.getThreatIntel() ?? startThreatIntelPollingIfEnabled();
+          await threatIntel.pollLiveFeeds();
+          writeJson(res, 200, threatIntel.getStatus());
+          return;
+        } catch (err) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Threat intel poll failed',
+          });
+          return;
+        }
       }
 
       if (url === '/api/ai/rollback' && method === 'POST') {
@@ -781,20 +1009,30 @@ export async function startDashboardServer(
         setCors();
         try {
           const db = runtimeHistoryDb;
-          if (!db) { writeJson(res, 200, { totalInstances: 1, activeInstances: 1, totalRequests: 0 }); return; }
+          if (!db) {
+            writeJson(res, 200, unavailable({
+              totalInstances: 0, activeInstances: 0, totalRequests: 0,
+              blockedRequests: 0, passedRequests: 0, totalCost: 0, avgLatencyMs: 0,
+              activeServers: 0, passRate: null, burnRatePerHour: null, lastUpdated: null,
+            }, 'No history database — start proxy with MCP_GUARDIAN_DB_PATH'));
+            return;
+          }
           const srvs = await getAllActiveServerNames(db, requestTenantId);
           const records = await loadAllCallRecords(db, srvs, requestTenantId);
           const sum = summarizeRecords(records);
           const avgLatency = sum.total > 0 ? Math.round(sum.totalLatency / sum.total) : 0;
-          const passRate = sum.total > 0 ? Math.round((sum.passed / sum.total) * 100) : 100;
-          writeJson(res, 200, {
+          const passRate = sum.total > 0 ? Math.round((sum.passed / sum.total) * 100) : null;
+          writeJson(res, 200, available({
             totalInstances: 1, activeInstances: 1, totalRequests: sum.total,
             blockedRequests: sum.blocked, passedRequests: sum.passed, totalCost: sum.costUsd,
             avgLatencyMs: avgLatency, activeServers: srvs.length, passRate,
-            burnRatePerHour: sum.total > 0 ? (sum.costUsd / sum.total) * 100 : 0,
+            burnRatePerHour: sum.total > 0 ? (sum.costUsd / sum.total) * 100 : null,
             lastUpdated: new Date().toISOString(),
-          });
-        } catch { writeJson(res, 200, { totalInstances: 1, totalRequests: 0 }); } return;
+          }));
+        } catch {
+          writeJson(res, 200, unavailable({ totalRequests: 0 }, 'Failed to read metrics'));
+        }
+        return;
       }
 
       if (url === '/api/aggregate/audit' && method === 'GET') {
@@ -802,7 +1040,9 @@ export async function startDashboardServer(
         try {
           const db = runtimeHistoryDb;
           if (!db) {
-            writeJson(res, 200, { events: [], total: 0, blocked: 0, passed: 0, flagged: 0 });
+            writeJson(res, 200, unavailable({
+              events: [], total: 0, blocked: 0, passed: 0, flagged: 0,
+            }, 'No history database connected'));
             return;
           }
           const q = new URL(req.url || url, 'http://localhost').searchParams;
@@ -856,16 +1096,18 @@ export async function startDashboardServer(
             /* non-fatal */
           }
 
-          writeJson(res, 200, {
+          writeJson(res, 200, available({
             events: evts,
             total: records.length,
             blocked,
             passed: records.length - blocked,
             flagged,
             semanticAudit,
-          });
+          }));
         } catch {
-          writeJson(res, 200, { events: [], total: 0, blocked: 0, passed: 0, flagged: 0 });
+          writeJson(res, 200, unavailable({
+            events: [], total: 0, blocked: 0, passed: 0, flagged: 0,
+          }, 'Failed to read audit trail'));
         }
         return;
       }
@@ -873,26 +1115,59 @@ export async function startDashboardServer(
       if (url === '/api/security' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb; if (!db) { writeJson(res, 200, { serverReports: [], overallScore: 0, worstOffenders: [], activeThreats: 0 }); return; }
-          const srvs = await getAllActiveServerNames(db, requestTenantId); const reps: any[] = []; let ts = 0; let activeThreats = 0; let lastScan = 'N/A';
+          const db = runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({
+              serverReports: [], overallScore: null, worstOffenders: [], activeThreats: 0,
+            }, 'No history database connected'));
+            return;
+          }
+          const srvs = await getAllActiveServerNames(db, requestTenantId);
+          const reps: any[] = [];
+          let ts = 0;
+          let scanned = 0;
+          let activeThreats = 0;
+          let lastScan: string | null = null;
           for (const srv of srvs) {
             const sc = await db.getLatestSecurityScan(srv, requestTenantId);
             if (sc) {
               const row = securityRowFromScan(sc as Record<string, unknown>, srv);
-              reps.push(row); ts += row.score; activeThreats += row.critical + row.high;
+              reps.push({ ...row, scanned: true });
+              ts += row.score;
+              scanned += 1;
+              activeThreats += row.critical + row.high;
               const at = (sc as { created_at?: string }).created_at;
-              if (at && (lastScan === 'N/A' || at > lastScan)) lastScan = at;
-            } else { reps.push({ name: srv, score: 0, cves: 0, critical: 0, high: 0, auth: false }); }
+              if (at && (!lastScan || at > lastScan)) lastScan = at;
+            } else {
+              reps.push({ name: srv, scanned: false, score: null, cves: null, critical: null, high: null, auth: null });
+            }
           }
-          writeJson(res, 200, { serverReports: reps, overallScore: reps.length > 0 ? Math.round(ts / reps.length) : 0, worstOffenders: reps.filter((r: any) => r.score < 50).map((r: any) => r.name), activeThreats, lastScan });
-        } catch { writeJson(res, 200, { serverReports: [], overallScore: 0, worstOffenders: [], activeThreats: 0 }); } return;
+          writeJson(res, 200, available({
+            serverReports: reps,
+            overallScore: scanned > 0 ? Math.round(ts / scanned) : null,
+            worstOffenders: reps.filter((r: any) => r.scanned && r.score != null && r.score < 50).map((r: any) => r.name),
+            activeThreats,
+            lastScan,
+          }));
+        } catch {
+          writeJson(res, 200, unavailable({ serverReports: [], overallScore: null, worstOffenders: [], activeThreats: 0 }, 'Failed to read security scans'));
+        }
+        return;
       }
 
       if (url === '/api/cost' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb; if (!db) { writeJson(res, 200, { serverReports: [], totalCost: 0, projectedMonthly: 0 }); return; }
-          const srvs = await getAllActiveServerNames(db, requestTenantId); const reps: any[] = []; let totalCost = 0;
+          const db = runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({
+              serverReports: [], totalCost: null, projectedMonthly: null, budgetAlerts: [],
+            }, 'No history database connected'));
+            return;
+          }
+          const srvs = await getAllActiveServerNames(db, requestTenantId);
+          const reps: any[] = [];
+          let totalCost = 0;
           const { getRuntimeModelPricing } = await import('../services/runtime-model-pricing.js');
           const active = await getRuntimeModelPricing().getActivePricing();
           for (const srv of srvs) {
@@ -904,14 +1179,34 @@ export async function startDashboardServer(
           const pricingModel = active
             ? `${active.displayName} (${active.source})`
             : 'per-call stored rates';
-          writeJson(res, 200, { serverReports: reps, totalCost, projectedMonthly: totalCost * 30, budgetAlerts: totalCost > 5 ? ['Monthly spend exceeding $150 budget threshold'] : [], pricingModel });
-        } catch { writeJson(res, 200, { serverReports: [], totalCost: 0, projectedMonthly: 0 }); } return;
+          const budgetUsd = parseCostBudgetUsd();
+          const budgetAlerts: string[] = [];
+          if (budgetUsd != null && totalCost > budgetUsd) {
+            budgetAlerts.push(`Spend $${totalCost.toFixed(4)} exceeds budget $${budgetUsd.toFixed(2)}`);
+          }
+          writeJson(res, 200, available({
+            serverReports: reps,
+            totalCost,
+            projectedMonthly: totalCost > 0 ? totalCost * 30 : null,
+            budgetAlerts,
+            pricingModel,
+          }));
+        } catch {
+          writeJson(res, 200, unavailable({ serverReports: [], totalCost: null, projectedMonthly: null }, 'Failed to read cost data'));
+        }
+        return;
       }
 
       if (url === '/api/health' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb; if (!db) { writeJson(res, 200, { serverReports: [], atRisk: [], avgLatency: 0 }); return; }
+          const db = runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({
+              serverReports: [], atRisk: [], avgLatency: null, totalTools: 0,
+            }, 'No history database connected'));
+            return;
+          }
           const srvs = await getAllActiveServerNames(db, requestTenantId); const reps: any[] = []; let totalTools = 0; let latSum = 0; let latCount = 0;
           const cbStates = await fetchCircuitBreakerStates();
           for (const srv of srvs) {
@@ -929,12 +1224,24 @@ export async function startDashboardServer(
             }
             totalTools += tools;
             if (latency > 0) { latSum += latency; latCount++; }
-            reps.push({ name: srv, latency, successRate: (sr ?? 1) * 100, tools, circuitBreaker: cbStates.get(srv) ?? 'closed' });
+            reps.push({
+              name: srv,
+              latency,
+              successRate: sr != null ? sr * 100 : null,
+              tools,
+              circuitBreaker: cbStates.get(srv) ?? 'closed',
+              hasHealthData: sr != null || tools > 0,
+            });
           }
-          const avgLatency = latCount > 0 ? Math.round(latSum / latCount) : 0;
-          const atRisk = reps.filter((h: any) => h.latency > 200 || h.successRate < 70).map((h: any) => h.name);
-          writeJson(res, 200, { serverReports: reps, atRisk, avgLatency, totalTools });
-        } catch { writeJson(res, 200, { serverReports: [], atRisk: [], avgLatency: 0 }); } return;
+          const avgLatency = latCount > 0 ? Math.round(latSum / latCount) : null;
+          const atRisk = reps.filter((h: any) =>
+            (h.latency != null && h.latency > 200) || (h.successRate != null && h.successRate < 70),
+          ).map((h: any) => h.name);
+          writeJson(res, 200, available({ serverReports: reps, atRisk, avgLatency, totalTools }));
+        } catch {
+          writeJson(res, 200, unavailable({ serverReports: [], atRisk: [], avgLatency: null, totalTools: 0 }, 'Failed to read health data'));
+        }
+        return;
       }
 
       if (url === '/api/instances' && method === 'GET') {
@@ -1128,6 +1435,10 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url.startsWith('/api/security-swarm/')) {
+        if (!assertFeature(url, 'swarm', res, setCors)) return;
+      }
+
       if (url === '/api/security-swarm/run' && method === 'POST') {
         setCors();
         const body = await readBody(req).catch(() => ({}));
@@ -1198,15 +1509,15 @@ export async function startDashboardServer(
       if (url === '/api/visuals/live' && method === 'GET') {
         setCors();
         try {
-          const { readVisualsData } = await import('./swarm-artifacts.js');
           const { writeVisualsData } = await import('./export-visuals-data.js');
-          let data = readVisualsData(requestTenantId);
-          if (!data) {
-            data = await writeVisualsData({ tenantId: requestTenantId }) as unknown as Record<string, unknown>;
-          }
-          writeJson(res, 200, data);
+          const data = await writeVisualsData({
+            tenantId: requestTenantId,
+            historyDb: runtimeHistoryDb ?? undefined,
+          }) as unknown as Record<string, unknown>;
+          writeJson(res, 200, available(data));
         } catch (err: unknown) {
           writeJson(res, 500, {
+            available: false,
             error: err instanceof Error ? err.message : 'Failed to load visuals data',
           });
         }
@@ -1228,9 +1539,9 @@ export async function startDashboardServer(
       if (url === '/api/security-swarm/live-session' && method === 'GET') {
         setCors();
         const { readLiveFilesystemSession } = await import('./swarm-artifacts.js');
-        const live = readLiveFilesystemSession();
+        const live = readLiveFilesystemSession(requestTenantId);
         if (!live) {
-          writeJson(res, 404, { error: 'live-filesystem-session.json not found' });
+          writeJson(res, 404, { error: 'No live session from current analysis — run security analysis first' });
           return;
         }
         writeJson(res, 200, live);
@@ -1320,7 +1631,10 @@ export async function startDashboardServer(
     return { auth, server, ws: null };
   }
 
-  ws = new WsBroadcaster(server);
+  ws = new WsBroadcaster(server, {
+    dashboardAuth: auth,
+    requireLicense: isLicenseEnforcementEnabled(),
+  });
   setWsBroadcaster(ws);
   if (runtimeHistoryDb) {
     wireDashboardWsProviders(ws, runtimeHistoryDb);

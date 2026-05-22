@@ -475,7 +475,7 @@ export async function initializeAiEngine(
   const { DataCollector } = await import('./data-collector.js');
   const { BaselineLearner } = await import('./baseline-learner.js');
   const { CostOptimizer } = await import('./cost-optimizer.js');
-  const { ThreatIntel } = await import('./threat-intel.js');
+  const { getSharedThreatIntel, startThreatIntelPollingIfEnabled } = await import('./threat-intel.js');
   const { PolicyAssist } = await import('./policy-assist.js');
   const { PatternRecognizer } = await import('./pattern-recognizer.js');
   const { SelfImprovement } = await import('./self-improvement.js');
@@ -504,7 +504,7 @@ export async function initializeAiEngine(
   const baselineLearner = new BaselineLearner();
   baselineLearner.loadFromFile();
   const costOptimizer = new CostOptimizer(historyDb, costAuditor);
-  const threatIntel = new ThreatIntel();
+  const threatIntel = getSharedThreatIntel();
   const policyAssist = new PolicyAssist();
   const patternRecognizer = new PatternRecognizer();
   const { resolveAiLearningStatePath } = await import('./self-improvement.js');
@@ -528,9 +528,7 @@ export async function initializeAiEngine(
     engine.startPeriodicAnalysis();
   }
 
-  if (!useDbSnapshots && process.env.GUARDIAN_AI_DISABLE_THREAT_POLL !== 'true') {
-    threatIntel.startLivePolling();
-  }
+  startThreatIntelPollingIfEnabled();
 
   globalEngine = engine;
   Logger.info('[SuggestionEngine] AI Engine initialized with live data sources');

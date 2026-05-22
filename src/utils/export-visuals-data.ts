@@ -175,6 +175,8 @@ export async function buildVisualsData(opts: {
   windowDays?: number;
   dbPath?: string;
   tenantId?: string;
+  /** Reuse proxy/dashboard DB — avoids open/close churn on /api/visuals/live */
+  historyDb?: Awaited<ReturnType<typeof createDatabase>>;
 } = {}): Promise<VisualsDataBundle> {
   const windowDays = opts.windowDays ?? 7;
   const tenantId = opts.tenantId || DEFAULT_TENANT_ID;
@@ -184,14 +186,22 @@ export async function buildVisualsData(opts: {
   const emptyReasons: Record<string, string> = {};
 
   let allRecords: ProxyCallRecord[] = [];
+  let ownDb = false;
+  let db = opts.historyDb;
   try {
-    const db = await createDatabase(dbPath);
-    await db.initialize();
+    if (!db) {
+      db = await createDatabase(dbPath);
+      await db.initialize();
+      ownDb = true;
+    }
     const servers = await getAllActiveServerNames(db, tenantId);
     allRecords = await loadAllCallRecords(db, servers, tenantId);
-    await db.close();
   } catch (err) {
     emptyReasons.traffic = `history.db: ${err instanceof Error ? err.message : String(err)}`;
+  } finally {
+    if (ownDb && db?.close) {
+      await db.close();
+    }
   }
 
   const windowRecords = allRecords.filter((r) => {
@@ -278,23 +288,7 @@ export async function buildVisualsData(opts: {
       })),
     };
   } else {
-    const evalMetrics = loadJsonSafe<{
-      instant?: { blocksPerMinute?: Array<{ t: number; value: number }>; totalBlocks?: number };
-      generatedAt?: string;
-    }>(join(REPO_ROOT, 'reports', 'attack-learning-eval', 'metrics.json'));
-    if (evalMetrics?.instant?.blocksPerMinute?.length) {
-      instantLearning = {
-        source: 'simulated-eval',
-        totalEvents: evalMetrics.instant.totalBlocks ?? 0,
-        queuedSuggestions: 0,
-        blocksPerMinute: evalMetrics.instant.blocksPerMinute,
-        ruleToolPairs: [],
-        classConfidence: [],
-      };
-      emptyReasons.instantLearning = 'Using simulated eval metrics — live proxy blocks will replace this.';
-    } else {
-      emptyReasons.instantLearning = 'No ~/.mcp-guardian/.attack-learning-state.json yet.';
-    }
+    emptyReasons.instantLearning = 'No live attack-learning state yet — blocks from the proxy will populate ~/.mcp-guardian/.attack-learning-state.json.';
   }
 
   const cal = loadJsonSafe<{
@@ -405,6 +399,7 @@ export async function writeVisualsData(opts?: {
   windowDays?: number;
   dbPath?: string;
   tenantId?: string;
+  historyDb?: Awaited<ReturnType<typeof createDatabase>>;
 }): Promise<VisualsDataBundle> {
   const tenantId = opts?.tenantId || DEFAULT_TENANT_ID;
   const outDir = resolveTenantSwarmDir(tenantId);

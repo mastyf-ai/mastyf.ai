@@ -48,3 +48,11 @@ export function resolveAttackLearningStatePath(tenantId?: string): string {
     tenantId,
   );
 }
+
+export function resolveThreatStatePath(tenantId?: string): string {
+  return resolveTenantScopedPath(
+    'GUARDIAN_THREAT_STATE_PATH',
+    '.threat-state.json',
+    tenantId,
+  );
+}

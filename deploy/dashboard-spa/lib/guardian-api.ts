@@ -24,39 +24,65 @@ export type AuditResponse = {
 };
 
 export type AggregateMetrics = {
+  available?: boolean;
   totalRequests: number;
   blockedRequests: number;
   passedRequests: number;
   totalCost: number;
   avgLatencyMs: number;
-  /** 0–100 percent, not a 0–1 fraction */
-  passRate: number;
+  /** 0–100 percent, not a 0–1 fraction; null when no calls yet */
+  passRate: number | null;
   activeServers?: number;
   lastUpdated?: string;
-  burnRatePerHour?: number;
+  burnRatePerHour?: number | null;
+  error?: string;
 };
 
 export type CostResponse = {
-  totalCost: number;
-  projectedMonthly?: number;
+  available?: boolean;
+  totalCost: number | null;
+  projectedMonthly?: number | null;
   serverReports?: Array<{ name: string; cost: number; tokens: number }>;
   budgetAlerts?: string[];
+  error?: string;
 };
 
 export type SecurityResponse = {
-  overallScore: number;
+  available?: boolean;
+  overallScore: number | null;
   activeThreats: number;
-  serverReports: Array<{ name: string; score: number; critical: number; high: number }>;
+  lastScan?: string | null;
+  serverReports: Array<{
+    name: string;
+    scanned?: boolean;
+    score: number | null;
+    critical: number | null;
+    high: number | null;
+  }>;
+  error?: string;
 };
 
 export type HealthResponse = {
+  available?: boolean;
   overallStatus?: string;
   status?: string;
-  avgLatencyMs?: number;
-  avgLatency?: number;
-  serverReports?: Array<{ name: string; latency: number; successRate: number; circuitBreaker: string }>;
+  avgLatencyMs?: number | null;
+  avgLatency?: number | null;
+  serverReports?: Array<{
+    name: string;
+    latency: number;
+    successRate: number | null;
+    circuitBreaker: string;
+    hasHealthData?: boolean;
+  }>;
   atRisk?: string[];
+  error?: string;
 };
+
+function liveOrNull<T extends { available?: boolean }>(body: T | null): T | null {
+  if (!body || body.available === false) return null;
+  return body;
+}
 
 export type AiSuggestion = {
   id: string;
@@ -239,6 +265,12 @@ export type AuthStatus = {
   sessionTenantId?: string;
   multiTenantMode?: boolean;
   tenantLocked?: boolean;
+  licensed?: boolean;
+  licenseEnforced?: boolean;
+  licenseRequired?: boolean;
+  licenseStatus?: string;
+  cloudBillingUrl?: string | null;
+  features?: string[];
 };
 
 export type WsDashboardMessage = {
@@ -365,7 +397,7 @@ export async function fetchTenantContext(): Promise<{
 export async function fetchAggregateMetrics(): Promise<AggregateMetrics | null> {
   const res = await guardianFetch('/api/aggregate/metrics');
   if (!res.ok) return null;
-  return (await res.json()) as AggregateMetrics;
+  return liveOrNull((await res.json()) as AggregateMetrics);
 }
 
 export async function fetchAudit(opts?: {
@@ -380,25 +412,26 @@ export async function fetchAudit(opts?: {
   const q = params.toString();
   const res = await guardianFetch(`/api/aggregate/audit${q ? `?${q}` : ''}`);
   if (!res.ok) return null;
-  return (await res.json()) as AuditResponse;
+  return liveOrNull((await res.json()) as AuditResponse & { available?: boolean });
 }
 
 export async function fetchCost(): Promise<CostResponse | null> {
   const res = await guardianFetch('/api/cost');
   if (!res.ok) return null;
-  return (await res.json()) as CostResponse;
+  return liveOrNull((await res.json()) as CostResponse);
 }
 
 export async function fetchSecurity(): Promise<SecurityResponse | null> {
   const res = await guardianFetch('/api/security');
   if (!res.ok) return null;
-  return (await res.json()) as SecurityResponse;
+  return liveOrNull((await res.json()) as SecurityResponse);
 }
 
 export async function fetchHealth(): Promise<HealthResponse | null> {
   const res = await guardianFetch('/api/health');
   if (!res.ok) return null;
-  const data = (await res.json()) as HealthResponse & { status?: string };
+  const data = liveOrNull((await res.json()) as HealthResponse);
+  if (!data) return null;
   return {
     ...data,
     overallStatus: data.overallStatus || data.status || 'unknown',
@@ -493,6 +526,7 @@ export type SwarmJobStatus = {
   error: string | null;
   analysisPath: string;
   logTail: string;
+  hasRun?: boolean;
 };
 
 export async function runSecuritySwarm(opts?: {
@@ -543,11 +577,24 @@ export async function fetchAiReport(): Promise<AiReport | null> {
   return (await res.json()) as AiReport;
 }
 
-export async function fetchAiState(): Promise<Record<string, unknown> | null> {
+export async function fetchAiState(): Promise<{
+  initialized: boolean;
+  state: Record<string, unknown> | null;
+} | null> {
   const res = await guardianFetch('/api/ai/state');
   if (!res.ok) return null;
-  const body = (await res.json()) as { state?: Record<string, unknown> };
-  return body.state || null;
+  const body = (await res.json()) as {
+    available?: boolean;
+    initialized?: boolean;
+    state?: Record<string, unknown> | null;
+  };
+  if (body.available === false) {
+    return { initialized: false, state: null };
+  }
+  return {
+    initialized: !!body.initialized,
+    state: body.state ?? null,
+  };
 }
 
 export async function fetchAiBaselines(): Promise<unknown[]> {
@@ -557,10 +604,39 @@ export async function fetchAiBaselines(): Promise<unknown[]> {
   return body.baselines || [];
 }
 
-export async function fetchAiThreats(): Promise<{ threats: number; knownIds?: string[] } | null> {
+export type ThreatIntelEntry = {
+  id: string;
+  source: 'OSV' | 'NVD' | 'GitHub' | 'custom';
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  description: string;
+  remediation?: string;
+  publishedAt?: string;
+  firstSeenAt?: string;
+  affectedPackage?: string;
+};
+
+export type ThreatIntelStatus = {
+  threats: number;
+  knownIds: string[];
+  entries: ThreatIntelEntry[];
+  updated: string | null;
+  lastPollAt: string | null;
+  pollingActive: boolean;
+  pollingDisabled: boolean;
+};
+
+export async function fetchAiThreats(): Promise<ThreatIntelStatus | null> {
   const res = await guardianFetch('/api/ai/threats');
   if (!res.ok) return null;
-  return (await res.json()) as { threats: number; knownIds?: string[] };
+  return (await res.json()) as ThreatIntelStatus;
+}
+
+export async function pollAiThreats(): Promise<{ ok: boolean; status?: ThreatIntelStatus; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/ai/threats/poll', { method: 'POST', headers, body: '{}' });
+  if (!res.ok) return { ok: false, error: await parseApiError(res) };
+  const status = (await res.json()) as ThreatIntelStatus;
+  return { ok: true, status };
 }
 
 export async function parseApiError(res: Response): Promise<string> {
@@ -672,7 +748,12 @@ export async function fetchVisualsLive(): Promise<VisualsLiveFetchResult> {
     }
     return { ok: false, status: res.status, message };
   }
-  return { ok: true, data: (await res.json()) as VisualsData };
+  const body = (await res.json()) as VisualsData & { available?: boolean; error?: string };
+  if (body.available === false) {
+    return { ok: false, status: 503, message: body.error || 'No live visuals data' };
+  }
+  const { available: _a, error: _e, ...data } = body;
+  return { ok: true, data: data as VisualsData };
 }
 
 export async function fetchSwarmSummary(): Promise<string | null> {

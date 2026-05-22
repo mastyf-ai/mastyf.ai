@@ -366,9 +366,19 @@ export function useDashboardWs(enabled: boolean, sessionKey: number): DashboardW
         );
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         if (wsRef.current === ws) wsRef.current = null;
         setConnected(false);
+        if (ev.code === 4401) {
+          applyStatus('Subscription or authentication required for WebSocket', true);
+          intentionalClose = true;
+          return;
+        }
+        if (ev.code === 4403) {
+          applyStatus('Subscription inactive — WebSocket closed', true);
+          intentionalClose = true;
+          return;
+        }
         scheduleReconnect();
       };
 

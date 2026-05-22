@@ -3,6 +3,11 @@ import { HistoryDatabase } from '../src/database/history-db.js';
 import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 
+if (process.env.GUARDIAN_SEED_CONFIRM !== '1') {
+  console.error('Refusing to seed demo data. Set GUARDIAN_SEED_CONFIRM=1 to run scripts/seed-live-data.ts');
+  process.exit(1);
+}
+
 const db = new HistoryDatabase();
 await db.initialize?.();
 

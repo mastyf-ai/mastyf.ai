@@ -10,10 +10,12 @@ import {
   fetchAiThreats,
   fetchSemanticOutcomes,
   labelSemanticOutcome,
+  pollAiThreats,
   rejectSuggestion,
   rollbackAiLearning,
   type AiSuggestion,
   type SemanticOutcome,
+  type ThreatIntelStatus,
 } from '@/lib/guardian-api';
 import { hasPermission } from '@/lib/dashboard-roles';
 
@@ -28,9 +30,11 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
   const canMutate = hasPermission(roles, 'policy_mutate');
   const [suggestions, setSuggestions] = useState<AiSuggestion[]>([]);
   const [semantic, setSemantic] = useState<SemanticOutcome[]>([]);
-  const [state, setState] = useState<Record<string, unknown> | null>(null);
+  const [aiInitialized, setAiInitialized] = useState(false);
+  const [engineState, setEngineState] = useState<Record<string, unknown> | null>(null);
   const [baselines, setBaselines] = useState<unknown[]>([]);
-  const [threats, setThreats] = useState<{ threats: number } | null>(null);
+  const [threats, setThreats] = useState<ThreatIntelStatus | null>(null);
+  const [threatPollBusy, setThreatPollBusy] = useState(false);
   const [reportSnippet, setReportSnippet] = useState('');
 
   const refresh = useCallback(async () => {
@@ -44,7 +48,8 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
     ]);
     setSuggestions(sug);
     setSemantic(sem);
-    setState(st);
+    setAiInitialized(!!st?.initialized);
+    setEngineState(st?.state ?? null);
     setBaselines(base);
     setThreats(thr);
     const snippet = rep?.report ? JSON.stringify(rep.report, null, 2).slice(0, 1500) : '';
@@ -102,6 +107,33 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
     if (res.ok) await refresh();
   };
 
+  const formatTs = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  };
+
+  const onPollThreats = async () => {
+    if (!canAi) {
+      onAction?.('Requires admin/ai role');
+      return;
+    }
+    setThreatPollBusy(true);
+    try {
+      const res = await pollAiThreats();
+      if (res.ok && res.status) {
+        setThreats(res.status);
+        onAction?.(`Threat intel refreshed (${res.status.threats} known IDs)`);
+      } else {
+        onAction?.(res.error || 'Threat intel poll failed');
+      }
+    } finally {
+      setThreatPollBusy(false);
+    }
+  };
+
+  const threatEntries = threats?.entries ?? [];
+
   return (
     <section>
       <h2>AI learning &amp; semantic audit</h2>
@@ -118,26 +150,81 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
         ) : null}
       </div>
 
-      {state ? (
+      {aiInitialized && engineState ? (
         <div className="cards">
           <article className="card">
             <h3>Engine state</h3>
             <p className="metric-inline">
-              TP rate: {String(state.truePositiveRate ?? '—')} · FP rate:{' '}
-              {String(state.falsePositiveRate ?? '—')}
+              TP rate: {String(engineState.truePositiveRate ?? '—')} · FP rate:{' '}
+              {String(engineState.falsePositiveRate ?? '—')}
             </p>
-            <p className="muted">Threshold: {String(state.adaptiveThreshold ?? '—')}</p>
+            <p className="muted">Threshold: {String(engineState.adaptiveThreshold ?? '—')}</p>
           </article>
           <article className="card">
             <h3>Threat intel</h3>
             <p className="metric">{threats?.threats ?? 0} known IDs</p>
+            <p className="muted">
+              Updated {formatTs(threats?.updated)} · Last poll {formatTs(threats?.lastPollAt)}
+            </p>
+            <p className="muted">
+              {threats?.pollingDisabled
+                ? 'Live polling disabled (GUARDIAN_AI_DISABLE_THREAT_POLL=true)'
+                : threats?.pollingActive
+                  ? 'Live polling active (NVD, OSV, GitHub)'
+                  : 'Polling starts on first dashboard load'}
+            </p>
           </article>
           <article className="card">
             <h3>Baselines</h3>
             <p className="metric">{baselines.length}</p>
           </article>
         </div>
-      ) : null}
+      ) : (
+        <p className="muted">
+          AI engine not initialized yet — start the proxy with traffic; learning state appears after policy blocks.
+        </p>
+      )}
+
+      <div className="btn-row">
+        {canAi ? (
+          <button
+            type="button"
+            className="secondary"
+            disabled={threatPollBusy || !!threats?.pollingDisabled}
+            onClick={() => void onPollThreats()}
+          >
+            {threatPollBusy ? 'Polling feeds…' : 'Poll threat feeds now'}
+          </button>
+        ) : null}
+      </div>
+
+      <h3>Threat intel catalog</h3>
+      {threatEntries.length === 0 ? (
+        <p className="muted">No threat feed IDs recorded yet. Use “Poll threat feeds now” or wait for the next scheduled poll.</p>
+      ) : (
+        <table className="data-table compact">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Source</th>
+              <th>Severity</th>
+              <th>First seen</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            {threatEntries.map((entry) => (
+              <tr key={entry.id}>
+                <td><code>{entry.id}</code></td>
+                <td>{entry.source}</td>
+                <td>{entry.severity}</td>
+                <td>{formatTs(entry.firstSeenAt)}</td>
+                <td>{entry.description?.slice(0, 120) || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <h3>Pending suggestions</h3>
       {suggestions.length === 0 ? (

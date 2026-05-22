@@ -125,7 +125,7 @@ export function DashboardClient() {
         if (authRes.roles) setRoles(authRes.roles);
       }
 
-      if (!auditRes && !costRes) {
+      if (!auditRes && !metricsRes && !costRes) {
         pollFailuresRef.current += 1;
         if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) {
           setApiUnreachable(true);
@@ -276,7 +276,9 @@ export function DashboardClient() {
           <article className="card">
             <h2>Cost (USD)</h2>
             <p className="metric">
-              ${(displayMetrics?.totalCost ?? cost?.totalCost ?? 0).toFixed(4)}
+              {displayMetrics?.totalCost != null || cost?.totalCost != null
+                ? `$${(displayMetrics?.totalCost ?? cost?.totalCost ?? 0).toFixed(4)}`
+                : '—'}
             </p>
           </article>
           <article className="card">
@@ -393,42 +395,62 @@ export function DashboardClient() {
       {tab === 'security' && (
         <section>
           <h2>Security scans</h2>
-          <p className="metric-inline">Score: {security?.overallScore ?? '—'} / 100</p>
-          <ul className="list">
-            {(security?.serverReports || []).map((s) => (
-              <li key={s.name}>
-                {s.name}: score {s.score}, critical {s.critical}, high {s.high}
-              </li>
-            ))}
-          </ul>
+          {!security ? (
+            <p className="muted">No security scan data — run scan via CLI or wait for proxy traffic.</p>
+          ) : (
+            <>
+              <p className="metric-inline">
+                Score: {security.overallScore != null ? `${security.overallScore} / 100` : '—'}
+              </p>
+              <ul className="list">
+                {(security.serverReports || []).map((s) => (
+                  <li key={s.name}>
+                    {s.scanned === false
+                      ? `${s.name}: no scan yet`
+                      : `${s.name}: score ${s.score ?? '—'}, critical ${s.critical ?? '—'}, high ${s.high ?? '—'}`}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </section>
       )}
 
       {tab === 'cost' && (
         <section>
           <h2>Cost governance</h2>
-          <p className="metric-inline">Total: ${(cost?.totalCost ?? 0).toFixed(4)}</p>
-          {(cost?.budgetAlerts || []).map((a) => (
-            <p key={a} className="alert">
-              {a}
-            </p>
-          ))}
+          {!cost ? (
+            <p className="muted">No cost data — connect proxy history DB.</p>
+          ) : (
+            <>
+              <p className="metric-inline">
+                Total: {cost.totalCost != null ? `$${cost.totalCost.toFixed(4)}` : '—'}
+              </p>
+              {(cost.budgetAlerts || []).map((a) => (
+                <p key={a} className="alert">
+                  {a}
+                </p>
+              ))}
+            </>
+          )}
         </section>
       )}
 
       {tab === 'health' && (
         <section>
           <h2>Health</h2>
-          <p className="metric-inline">
-            Avg latency: {health?.avgLatencyMs ?? health?.avgLatency ?? '—'} ms
-          </p>
-          <ul className="list">
-            {(health?.serverReports || []).map((h) => (
-              <li key={h.name}>
-                {h.name}: {h.latency}ms, CB {h.circuitBreaker}, success {h.successRate}%
-              </li>
-            ))}
-          </ul>
+          {!health ? (
+            <p className="muted">No health data — connect proxy history DB.</p>
+          ) : (
+            <ul className="list">
+              {(health.serverReports || []).map((h) => (
+                <li key={h.name}>
+                  {h.name}: {h.latency}ms, CB {h.circuitBreaker}, success{' '}
+                  {h.successRate != null ? `${h.successRate}%` : '—'}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 

@@ -38,6 +38,8 @@ describe('llm-config', () => {
   it('defaults provider to anthropic when ANTHROPIC_API_KEY is set', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test';
     delete process.env.GUARDIAN_LLM_PROVIDER;
+    delete process.env.GUARDIAN_LLM_MODEL;
+    resetLlmConfigForTests();
     expect(getLlmConfig().provider).toBe('anthropic');
     expect(getLlmConfig().model).toContain('claude');
   });
