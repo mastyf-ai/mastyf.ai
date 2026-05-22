@@ -9,7 +9,12 @@ export default defineConfig({
   },
   test: {
     setupFiles: ['./tests/setup-env.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', 'tests/integration/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'tests/integration/**',
+      'adversarial-harness/**',
+    ],
     maxConcurrency: 1,
     fileParallelism: false,
     testTimeout: 90_000,
