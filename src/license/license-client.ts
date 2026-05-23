@@ -1,11 +1,11 @@
 import { Logger } from '../utils/logger.js';
 import {
   isCiLicenseBypass,
-  isDevUnlockAllowed,
   isOpenCoreEnabled,
   isProFeature,
   licenseTier,
 } from './feature-tiers.js';
+import { isCiTokenCached } from './ci-token.js';
 
 export type LicenseState = {
   licensed: boolean;
@@ -96,7 +96,7 @@ export class LicenseClient {
   }
 
   isLicensed(): boolean {
-    if (isDevUnlockAllowed() || isCiLicenseBypass()) return true;
+    if (isCiLicenseBypass() || isCiTokenCached()) return true;
     if (!this.isEnabled()) return false;
     if (this.state?.licensed) return true;
     if (this.lastGoodState && this.isWithinGrace()) return true;
@@ -108,7 +108,7 @@ export class LicenseClient {
   }
 
   hasFeature(feature: string): boolean {
-    if (isDevUnlockAllowed() || isCiLicenseBypass()) return true;
+    if (isCiLicenseBypass() || isCiTokenCached()) return true;
     if (!isProFeature(feature)) return true;
     if (!isOpenCoreEnabled()) return false;
     return this.isLicensed();

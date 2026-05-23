@@ -30,9 +30,9 @@ import {
 import {
   getProCheckoutUrl,
   isCiLicenseBypass,
-  isDevUnlockAllowed,
   isOpenCoreEnabled,
 } from '../license/feature-tiers.js';
+import { isCiTokenCached } from '../license/ci-token.js';
 import { mapCloudRoles, verifyCloudSessionToken } from '../license/cloud-session.js';
 import {
   getAllActiveServerNames,
@@ -324,8 +324,8 @@ export async function startDashboardServer(
   if (
     dashboardEnabled
     && isOpenCoreEnabled()
-    && !isDevUnlockAllowed()
     && !isCiLicenseBypass()
+    && !isCiTokenCached()
     && !licenseClient.hasFeature('dashboard')
   ) {
     Logger.error(
@@ -405,7 +405,7 @@ export async function startDashboardServer(
 
   function assertLicensedApi(path: string, res: ServerResponse, setCors: () => void): boolean {
     if (isLicenseExemptPath(path)) return true;
-    if (isDevUnlockAllowed() || isCiLicenseBypass()) return true;
+    if (isCiLicenseBypass() || isCiTokenCached()) return true;
     if (!isLicenseEnforcementEnabled() && licenseClient.isLicensed()) return true;
     if (licenseClient.hasFeature('dashboard')) {
       return true;

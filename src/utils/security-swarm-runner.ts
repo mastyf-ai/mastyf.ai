@@ -330,10 +330,9 @@ export function startSwarmAnalysis(opts: {
       ...process.env,
       GUARDIAN_SWARM_DIR: swarmOut,
       GUARDIAN_TENANT_ID: tenantId,
-      // Required: gate-pro.mjs checks this; GUARDIAN_DEV_UNLOCK_ALL alone is not enough
-      GUARDIAN_CI_BYPASS_LICENSE:
-        process.env['GUARDIAN_CI_BYPASS_LICENSE'] ||
-        (process.env['GUARDIAN_DEV_UNLOCK_ALL'] === 'true' ? 'true' : undefined),
+      // Required: gate-pro.mjs checks this; set in dashboard via CI token or legacy env var
+      GUARDIAN_CI_BYPASS_LICENSE: process.env['GUARDIAN_CI_BYPASS_LICENSE'] || undefined,
+      GUARDIAN_CI_TOKEN: process.env['GUARDIAN_CI_TOKEN'] || undefined,
       // Skip --skip-continuous always when launched from dashboard
       GUARDIAN_SWARM_SKIP_CONTINUOUS: 'true',
     },

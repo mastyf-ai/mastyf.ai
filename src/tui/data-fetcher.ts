@@ -20,7 +20,8 @@ import { readFileSync, existsSync } from 'fs';
 import { resolveGuardianDbPath } from '../utils/guardian-db-path.js';
 import { ensureProFeature } from '../license/enforce-pro.js';
 import { getLicenseClient } from '../license/license-client.js';
-import { isCiLicenseBypass, isDevUnlockAllowed } from '../license/feature-tiers.js';
+import { isCiLicenseBypass } from '../license/feature-tiers.js';
+import { isCiTokenCached } from '../license/ci-token.js';
 import {
   resolveAiLearningStatePath,
   resolveAiPendingSuggestionsPath,
@@ -578,7 +579,7 @@ export class DataFetcher {
   }
 
   private tuiAiLearningAllowed(): boolean {
-    if (isDevUnlockAllowed() || isCiLicenseBypass()) return true;
+    if (isCiLicenseBypass() || isCiTokenCached()) return true;
     return getLicenseClient().hasFeature('ai');
   }
 

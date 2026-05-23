@@ -3,7 +3,8 @@
  */
 import { Logger } from '../utils/logger.js';
 import { getLicenseClient } from '../license/license-client.js';
-import { isCiLicenseBypass, isDevUnlockAllowed } from '../license/feature-tiers.js';
+import { isCiLicenseBypass } from '../license/feature-tiers.js';
+import { isCiTokenCached } from '../license/ci-token.js';
 import {
   discoverFromBypass,
   discoverFromCorpusSeed,
@@ -73,7 +74,7 @@ function requireReplay(): boolean {
 export function threatResearchAutoEnabled(): boolean {
   if (process.env.GUARDIAN_THREAT_RESEARCH_AUTO !== 'true') return false;
   if (process.env.SWARM_THREAT_RESEARCH_AUTO === 'true') return true;
-  if (isCiLicenseBypass() || isDevUnlockAllowed()) return true;
+  if (isCiLicenseBypass() || isCiTokenCached()) return true;
   return getLicenseClient().hasFeature('swarm');
 }
 

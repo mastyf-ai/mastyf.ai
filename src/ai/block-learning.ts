@@ -5,7 +5,8 @@ import { triggerLearningCycleIfEnabled } from './suggestion-engine.js';
 import { recordInstantBlockEvent } from './instant-attack-learning.js';
 import { isAiLearningEnabled } from '../utils/ai-enabled.js';
 import { getLicenseClient } from '../license/license-client.js';
-import { isCiLicenseBypass, isDevUnlockAllowed } from '../license/feature-tiers.js';
+import { isCiLicenseBypass } from '../license/feature-tiers.js';
+import { isCiTokenCached } from '../license/ci-token.js';
 import { Logger } from '../utils/logger.js';
 import type { HistoryDatabase } from '../database/history-db.js';
 import type { McpServerConfig } from '../types.js';
@@ -132,7 +133,7 @@ function debounceMs(): number {
 
 /** Pro feature `ai` — instant + debounced learning loops (Community keeps regex/schema block). */
 function aiLearningLicensed(): boolean {
-  if (isDevUnlockAllowed() || isCiLicenseBypass()) return true;
+  if (isCiLicenseBypass() || isCiTokenCached()) return true;
   return getLicenseClient().hasFeature('ai');
 }
 

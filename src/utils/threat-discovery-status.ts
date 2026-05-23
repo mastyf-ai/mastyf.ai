@@ -2,7 +2,8 @@
  * Aggregated Threat Discovery hub status for dashboard API.
  */
 import { getLicenseClient } from '../license/license-client.js';
-import { isCiLicenseBypass, isDevUnlockAllowed } from '../license/feature-tiers.js';
+import { isCiLicenseBypass } from '../license/feature-tiers.js';
+import { isCiTokenCached } from '../license/ci-token.js';
 import {
   ensureThreatLabLlmReady,
   threatLabEnabled,
@@ -147,13 +148,13 @@ export async function buildThreatDiscoveryStatus(
   const hasSwarm =
     getLicenseClient().hasFeature('swarm')
     || isCiLicenseBypass()
-    || isDevUnlockAllowed();
+    || isCiTokenCached();
 
   return {
     timestamp: new Date().toISOString(),
     license: {
       swarmFeature: hasSwarm,
-      bypass: isCiLicenseBypass() || isDevUnlockAllowed(),
+      bypass: isCiLicenseBypass() || isCiTokenCached(),
     },
     features: {
       threatLabEnabled: threatLabEnabled(),
