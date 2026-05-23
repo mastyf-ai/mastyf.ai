@@ -27,9 +27,9 @@ describe('HttpProxyServer response gate', () => {
       id: 42,
       result: { note: 'patient ssn 123-45-6789' },
     };
-    const blocked = await (proxy as any).inspectToolResponse('read_file', msg, 42);
-    expect(blocked?.error?.code).toBe(-32002);
-    expect(String(blocked?.error?.message)).toContain('blocked');
+    const inspected = await (proxy as any).inspectToolResponse('read_file', msg, 42);
+    expect(inspected.blocked?.error?.code).toBe(-32002);
+    expect(String(inspected.blocked?.error?.message)).toContain('blocked');
   });
 
   it('redacts tool result in redact mode', async () => {
@@ -45,8 +45,9 @@ describe('HttpProxyServer response gate', () => {
       id: 7,
       result: { note: 'patient ssn 123-45-6789' },
     };
-    const blocked = await (proxy as any).inspectToolResponse('read_file', msg, 7);
-    expect(blocked).toBeNull();
+    const inspected = await (proxy as any).inspectToolResponse('read_file', msg, 7);
+    expect(inspected.blocked).toBeNull();
+    expect(inspected.redactionReasons?.length).toBeGreaterThan(0);
     expect(JSON.stringify(msg.result)).not.toContain('123-45-6789');
   });
 

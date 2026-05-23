@@ -15,6 +15,8 @@ describe('open-core feature tiers', () => {
 
   beforeEach(() => {
     resetLicenseClientForTests();
+    delete process.env.GUARDIAN_CI_BYPASS_LICENSE;
+    delete process.env.GUARDIAN_DEV_UNLOCK_ALL;
   });
 
   afterEach(() => {

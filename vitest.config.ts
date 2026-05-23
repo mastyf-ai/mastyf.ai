@@ -14,6 +14,7 @@ export default defineConfig({
       '**/dist/**',
       'tests/integration/**',
       'adversarial-harness/**',
+      'apps/cloud/**',
     ],
     maxConcurrency: 1,
     fileParallelism: false,
