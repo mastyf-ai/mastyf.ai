@@ -6,12 +6,13 @@ import { ThreatDiscoveryOverview } from './ThreatDiscoveryOverview';
 import { ThreatLabWorkbench } from './ThreatLabWorkbench';
 import { AutoResearchMonitor } from './AutoResearchMonitor';
 import { ThreatArchitectureView } from './ThreatArchitectureView';
+import { ThreatDiscoveryAutomation } from './ThreatDiscoveryAutomation';
 import { ProUpgradeBanner } from './ProUpgradeBanner';
 import type { AuthStatus } from '@/lib/guardian-api';
 
 import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
 
-type SubTab = 'overview' | 'threat-lab' | 'auto-research' | 'architecture';
+type SubTab = 'overview' | 'threat-lab' | 'auto-research' | 'automation' | 'architecture';
 
 type Props = {
   roles?: string[];
@@ -27,6 +28,7 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'threat-lab', label: 'Threat Lab' },
   { id: 'auto-research', label: 'Auto Research' },
+  { id: 'automation', label: 'Automation' },
   { id: 'architecture', label: 'Architecture' },
 ];
 
@@ -124,6 +126,7 @@ export function ThreatDiscoveryPanel({
         <AutoResearchMonitor entries={autoEntries} status={status} />
       ) : null}
 
+      {subTab === 'automation' ? <ThreatDiscoveryAutomation /> : null}
       {subTab === 'architecture' ? <ThreatArchitectureView /> : null}
     </section>
   );
