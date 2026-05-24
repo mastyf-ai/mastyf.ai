@@ -20,6 +20,7 @@
  *   - Log injection / forging (MCPG-A-LOG-*)
  */
 import type { Issue } from './types.js';
+import { runEntropyScan } from './entropy-detector.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PATTERN DEFINITIONS
@@ -841,6 +842,10 @@ export function runArgumentScan(
   }
 
   const flat = walkArgs(args);
+
+  // ── Entropy-based secret detection (Shannon entropy) ────────────
+  const entropyIssues = runEntropyScan(flat);
+  issues.push(...entropyIssues);
 
   for (const item of flat) {
     // ══════════════════════════════════════════════════════════════════
