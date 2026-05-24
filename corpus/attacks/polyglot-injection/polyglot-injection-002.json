@@ -1,0 +1,9 @@
+{
+  "toolName": "database_query",
+  "arguments": {
+    "query": "SELECT * FROM users WHERE 1=1; whoami"
+  },
+  "expected": "block",
+  "category": "polyglot-injection",
+  "ruleHint": "sql-shell-polyglot"
+}

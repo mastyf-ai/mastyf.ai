@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "phar://malicious.phar/test.txt"
+  },
+  "expected": "block",
+  "category": "file-inclusion",
+  "ruleHint": "phar-wrapper"
+}

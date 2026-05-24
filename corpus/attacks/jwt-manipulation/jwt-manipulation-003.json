@@ -1,0 +1,10 @@
+{
+  "toolName": "authenticate",
+  "arguments": {
+    "redirect_uri": "https://evil.com/callback",
+    "client_id": "malicious"
+  },
+  "expected": "block",
+  "category": "jwt-manipulation",
+  "ruleHint": "oauth-redirect"
+}

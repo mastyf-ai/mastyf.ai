@@ -1,0 +1,12 @@
+{
+  "toolName": "fetch_url",
+  "arguments": {
+    "url": "http://localhost:8080",
+    "headers": {
+      "Content-Length": "0%0d%0aTransfer-Encoding: chunked"
+    }
+  },
+  "expected": "block",
+  "category": "http-smuggling",
+  "ruleHint": "cl-te-smuggling"
+}

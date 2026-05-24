@@ -1,0 +1,9 @@
+{
+  "toolName": "execute_command",
+  "arguments": {
+    "command": "whoami; cat /etc/shadow"
+  },
+  "expected": "block",
+  "category": "command-injection",
+  "ruleHint": "semicolon-chain"
+}

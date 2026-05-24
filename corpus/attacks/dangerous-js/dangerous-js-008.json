@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "document.cookie",
+    "language": "javascript"
+  },
+  "expected": "block",
+  "category": "dangerous-js",
+  "ruleHint": "cookie-access"
+}

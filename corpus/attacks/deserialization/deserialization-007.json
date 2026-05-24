@@ -1,0 +1,10 @@
+{
+  "toolName": "template_render",
+  "arguments": {
+    "template": "!!python/object:os.system [\"id\"]",
+    "data": {}
+  },
+  "expected": "block",
+  "category": "deserialization",
+  "ruleHint": "yaml-deserialization"
+}

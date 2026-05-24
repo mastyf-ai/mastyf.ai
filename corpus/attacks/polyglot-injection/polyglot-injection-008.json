@@ -1,0 +1,10 @@
+{
+  "toolName": "template_render",
+  "arguments": {
+    "template": "%25%37%33%25%36%35%25%36%63%25%36%35%25%36%33%25%37%34",
+    "data": {}
+  },
+  "expected": "block",
+  "category": "polyglot-injection",
+  "ruleHint": "double-url-encoding"
+}

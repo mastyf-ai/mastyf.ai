@@ -1,0 +1,9 @@
+{
+  "toolName": "authenticate",
+  "arguments": {
+    "assertion": "<saml:Assertion xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\"><saml:AttributeStatement><saml:Attribute Name=\"role\"><saml:AttributeValue>admin</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion>"
+  },
+  "expected": "block",
+  "category": "jwt-manipulation",
+  "ruleHint": "saml-injection"
+}

@@ -1,0 +1,10 @@
+{
+  "toolName": "render_html",
+  "arguments": {
+    "html": "<a href=\"javascript:alert(1)\">click</a>",
+    "context": {}
+  },
+  "expected": "block",
+  "category": "dangerous-js",
+  "ruleHint": "javascript-uri"
+}

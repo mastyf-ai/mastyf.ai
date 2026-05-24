@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "O:8:\"stdClass\":0:{}",
+    "language": "php"
+  },
+  "expected": "block",
+  "category": "deserialization",
+  "ruleHint": "php-unserialize"
+}

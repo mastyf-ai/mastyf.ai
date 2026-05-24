@@ -1,0 +1,10 @@
+{
+  "toolName": "send_message",
+  "arguments": {
+    "body": "</script><script>alert(1)</script>",
+    "channel": "#general"
+  },
+  "expected": "block",
+  "category": "context-injection",
+  "ruleHint": "xss-breakout"
+}

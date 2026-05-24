@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "../../../../../etc/passwd"
+  },
+  "expected": "block",
+  "category": "file-inclusion",
+  "ruleHint": "deep-traversal"
+}

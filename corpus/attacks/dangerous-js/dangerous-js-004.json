@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "({}).__proto__.polluted = true",
+    "language": "javascript"
+  },
+  "expected": "block",
+  "category": "dangerous-js",
+  "ruleHint": "prototype-pollution"
+}

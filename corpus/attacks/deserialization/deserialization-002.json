@@ -1,0 +1,10 @@
+{
+  "toolName": "cache_set",
+  "arguments": {
+    "key": "payload",
+    "value": "aced00057372000d...hex..."
+  },
+  "expected": "block",
+  "category": "deserialization",
+  "ruleHint": "java-serialization-hex"
+}

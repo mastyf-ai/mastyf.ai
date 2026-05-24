@@ -1,0 +1,11 @@
+{
+  "toolName": "api_request",
+  "arguments": {
+    "headers": {
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiJ9.unsigned"
+    }
+  },
+  "expected": "block",
+  "category": "jwt-manipulation",
+  "ruleHint": "unsigned-jwt"
+}

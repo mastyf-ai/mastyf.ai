@@ -1,0 +1,10 @@
+{
+  "toolName": "render_html",
+  "arguments": {
+    "html": "<IMG SRC=x onerror=\"alert('XSS')\">",
+    "context": {}
+  },
+  "expected": "block",
+  "category": "dangerous-js",
+  "ruleHint": "xss-onerror"
+}

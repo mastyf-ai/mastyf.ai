@@ -1,0 +1,10 @@
+{
+  "toolName": "cache_set",
+  "arguments": {
+    "key": "payload",
+    "value": "rO0ABX...base64encoded..."
+  },
+  "expected": "block",
+  "category": "deserialization",
+  "ruleHint": "java-deserialization"
+}

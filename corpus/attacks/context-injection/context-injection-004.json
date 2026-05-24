@@ -1,0 +1,10 @@
+{
+  "toolName": "template_render",
+  "arguments": {
+    "body": "{{ config.SECRET_KEY }}",
+    "context": {}
+  },
+  "expected": "block",
+  "category": "context-injection",
+  "ruleHint": "ssti-config-leak"
+}

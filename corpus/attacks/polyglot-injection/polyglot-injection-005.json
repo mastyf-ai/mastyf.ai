@@ -1,0 +1,10 @@
+{
+  "toolName": "template_render",
+  "arguments": {
+    "template": "<style>@import url(\"http://evil.com/x\")</style><script>eval(atob(\"Y29uc29sZQ==\"))</script>",
+    "data": {}
+  },
+  "expected": "block",
+  "category": "polyglot-injection",
+  "ruleHint": "css-js-polyglot"
+}

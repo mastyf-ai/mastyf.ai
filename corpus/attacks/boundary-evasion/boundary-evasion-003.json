@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "\\\\x00/etc/passwd"
+  },
+  "expected": "block",
+  "category": "boundary-evasion",
+  "ruleHint": "hex-escaped-null"
+}

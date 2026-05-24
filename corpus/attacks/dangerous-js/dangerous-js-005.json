@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "constructor.constructor('return process')()",
+    "language": "javascript"
+  },
+  "expected": "block",
+  "category": "dangerous-js",
+  "ruleHint": "constructor-escape"
+}

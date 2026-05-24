@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "php://filter/convert.base64-encode/resource=/etc/passwd"
+  },
+  "expected": "block",
+  "category": "file-inclusion",
+  "ruleHint": "php-filter"
+}

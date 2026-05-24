@@ -1,0 +1,10 @@
+{
+  "toolName": "render_markdown",
+  "arguments": {
+    "content": "<%= System.getenv('SECRET_KEY') %>",
+    "context": {}
+  },
+  "expected": "block",
+  "category": "context-injection",
+  "ruleHint": "ssti-ejs"
+}

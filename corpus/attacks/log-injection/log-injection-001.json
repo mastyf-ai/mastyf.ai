@@ -1,0 +1,10 @@
+{
+  "toolName": "write_log",
+  "arguments": {
+    "message": "Test message\r\nFATAL: System compromised",
+    "level": "INFO"
+  },
+  "expected": "block",
+  "category": "log-injection",
+  "ruleHint": "log-forging"
+}

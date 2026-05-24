@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "/var/log/auth.log"
+  },
+  "expected": "block",
+  "category": "file-inclusion",
+  "ruleHint": "log-file-probe"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "/proc/self/environ"
+  },
+  "expected": "block",
+  "category": "file-inclusion",
+  "ruleHint": "proc-self"
+}

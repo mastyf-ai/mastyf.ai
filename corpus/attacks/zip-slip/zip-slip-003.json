@@ -1,0 +1,10 @@
+{
+  "toolName": "extract_archive",
+  "arguments": {
+    "path": "/tmp/../../../../etc/passwd",
+    "data": "base64data"
+  },
+  "expected": "block",
+  "category": "zip-slip",
+  "ruleHint": "absolute-traversal"
+}

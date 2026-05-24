@@ -1,0 +1,10 @@
+{
+  "toolName": "write_log",
+  "arguments": {
+    "message": "Test%0d%0aCRITICAL: Security breach",
+    "level": "INFO"
+  },
+  "expected": "block",
+  "category": "log-injection",
+  "ruleHint": "url-encoded-crlf"
+}

@@ -1,0 +1,10 @@
+{
+  "toolName": "template_render",
+  "arguments": {
+    "template": "{{7*7}}",
+    "data": {}
+  },
+  "expected": "block",
+  "category": "context-injection",
+  "ruleHint": "ssti-probe"
+}

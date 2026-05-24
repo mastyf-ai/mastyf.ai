@@ -1,0 +1,10 @@
+{
+  "toolName": "extract_archive",
+  "arguments": {
+    "path": "..\\..\\..\\..\\..\\Windows\\System32\\evil.dll",
+    "data": "base64data"
+  },
+  "expected": "block",
+  "category": "zip-slip",
+  "ruleHint": "windows-traversal-archive"
+}

@@ -1,0 +1,10 @@
+{
+  "toolName": "template_render",
+  "arguments": {
+    "template": "<?php eval($_GET[\"x\"]); ?>",
+    "data": {}
+  },
+  "expected": "block",
+  "category": "polyglot-injection",
+  "ruleHint": "php-js-polyglot"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "/admin%00/public/file.txt"
+  },
+  "expected": "block",
+  "category": "boundary-evasion",
+  "ruleHint": "url-encoded-null"
+}

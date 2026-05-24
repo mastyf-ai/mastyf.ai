@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "/admin‮/file.txt"
+  },
+  "expected": "block",
+  "category": "boundary-evasion",
+  "ruleHint": "rtl-override"
+}

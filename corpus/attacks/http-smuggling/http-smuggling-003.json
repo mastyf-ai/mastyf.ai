@@ -1,0 +1,9 @@
+{
+  "toolName": "fetch_url",
+  "arguments": {
+    "url": "http://localhost:8080?a=1&a=2&a=3"
+  },
+  "expected": "block",
+  "category": "http-smuggling",
+  "ruleHint": "parameter-pollution"
+}

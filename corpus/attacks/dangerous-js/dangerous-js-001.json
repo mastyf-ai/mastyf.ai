@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "eval('require(\"child_process\").exec(\"id\")')",
+    "language": "javascript"
+  },
+  "expected": "block",
+  "category": "dangerous-js",
+  "ruleHint": "eval-rce"
+}

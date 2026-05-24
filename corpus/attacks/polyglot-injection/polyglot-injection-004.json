@@ -1,0 +1,10 @@
+{
+  "toolName": "template_render",
+  "arguments": {
+    "template": "<script>eval(alert)(1)</script>",
+    "data": {}
+  },
+  "expected": "block",
+  "category": "polyglot-injection",
+  "ruleHint": "js-html-polyglot"
+}

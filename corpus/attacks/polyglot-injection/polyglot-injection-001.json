@@ -1,0 +1,9 @@
+{
+  "toolName": "execute_command",
+  "arguments": {
+    "command": "'\\'' OR 1=1; whoami"
+  },
+  "expected": "block",
+  "category": "polyglot-injection",
+  "ruleHint": "sql-shell-polyglot"
+}

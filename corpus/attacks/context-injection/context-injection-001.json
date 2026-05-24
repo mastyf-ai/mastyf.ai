@@ -1,0 +1,12 @@
+{
+  "toolName": "template_render",
+  "arguments": {
+    "template": "{{ SYSTEM_PROMPT }}",
+    "data": {
+      "x": "{{ admin_role }}"
+    }
+  },
+  "expected": "block",
+  "category": "context-injection",
+  "ruleHint": "ssti-jinja2"
+}

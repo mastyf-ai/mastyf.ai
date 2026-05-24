@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "..\\..\\..\\Windows\\System32\\config"
+  },
+  "expected": "block",
+  "category": "boundary-evasion",
+  "ruleHint": "windows-traversal"
+}

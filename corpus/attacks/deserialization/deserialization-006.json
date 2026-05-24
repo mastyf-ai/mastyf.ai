@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "__type: System.Windows.Data.ObjectDataProvider",
+    "language": "dotnet"
+  },
+  "expected": "block",
+  "category": "deserialization",
+  "ruleHint": "dotnet-deserialization"
+}

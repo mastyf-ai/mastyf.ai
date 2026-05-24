@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "import pickle; pickle.loads(data)",
+    "language": "python"
+  },
+  "expected": "block",
+  "category": "deserialization",
+  "ruleHint": "python-pickle"
+}

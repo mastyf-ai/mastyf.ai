@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "cos\nsystem\n(S'id'\ntR.",
+    "language": "python"
+  },
+  "expected": "block",
+  "category": "deserialization",
+  "ruleHint": "python-pickle-payload"
+}

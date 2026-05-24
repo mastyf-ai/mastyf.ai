@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "setTimeout(\"require('child_process').exec('whoami')\", 0)",
+    "language": "javascript"
+  },
+  "expected": "block",
+  "category": "dangerous-js",
+  "ruleHint": "setTimeout-injection"
+}

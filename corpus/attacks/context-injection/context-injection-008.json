@@ -1,0 +1,10 @@
+{
+  "toolName": "render_markdown",
+  "arguments": {
+    "content": "#{7*7}",
+    "context": {}
+  },
+  "expected": "block",
+  "category": "context-injection",
+  "ruleHint": "ssti-ruby"
+}

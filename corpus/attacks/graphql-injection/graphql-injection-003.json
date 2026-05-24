@@ -1,0 +1,9 @@
+{
+  "toolName": "graphql_query",
+  "arguments": {
+    "query": "fragment UserFragment on User { password token secret }"
+  },
+  "expected": "block",
+  "category": "graphql-injection",
+  "ruleHint": "sensitive-fragment"
+}

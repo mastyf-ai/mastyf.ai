@@ -1,0 +1,9 @@
+{
+  "toolName": "graphql_query",
+  "arguments": {
+    "query": "{ __schema { types { name } } }"
+  },
+  "expected": "block",
+  "category": "graphql-injection",
+  "ruleHint": "introspection"
+}

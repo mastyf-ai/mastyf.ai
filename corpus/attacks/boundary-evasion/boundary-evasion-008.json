@@ -1,0 +1,9 @@
+{
+  "toolName": "write_file",
+  "arguments": {
+    "path": "/tmp/​malicious.sh"
+  },
+  "expected": "block",
+  "category": "boundary-evasion",
+  "ruleHint": "zero-width-space"
+}

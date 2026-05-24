@@ -1,5 +1,5 @@
 # Enterprise LLM/MCP attack corpus manifest
-version: '2.0'
+version: '3.0'
 policy: default-policy.yaml
 evaluator: corpus/run-eval.ts
 minimum_entries: 200
@@ -41,5 +41,53 @@ categories:
     description: Unicode boundaries, large payloads, denied tools, traversal
     expected: mixed
     count: 22
+  boundary-evasion:
+    description: Null byte injection, path traversal, Unicode bidi attacks, overflow probes
+    expected: block
+    count: 10
+  context-injection:
+    description: SSTI, template breakout, context escape, comment injection
+    expected: block
+    count: 10
+  polyglot-injection:
+    description: SQL+shell, JS+HTML, PHP+JS, CSS+JS, double-encoding cascades
+    expected: block
+    count: 8
+  deserialization:
+    description: Java, Python pickle, PHP unserialize, .NET, YAML, JNDI injection
+    expected: block
+    count: 8
+  dangerous-js:
+    description: eval/injection, prototype pollution, XSS, cookie access
+    expected: block
+    count: 8
+  file-inclusion:
+    description: Absolute paths, PHP wrappers, traversal chains, remote includes
+    expected: block
+    count: 8
+  log-injection:
+    description: Log forging, CRLF injection, ANSI escapes, timestamp forging
+    expected: block
+    count: 5
+  http-smuggling:
+    description: Transfer-Encoding/Content-Length confusion, parameter pollution
+    expected: block
+    count: 4
+  graphql-injection:
+    description: Schema introspection, type probing, sensitive fragment enumeration
+    expected: block
+    count: 4
+  jwt-manipulation:
+    description: alg:none, unsigned JWT, OAuth redirect, SAML injection
+    expected: block
+    count: 4
+  zip-slip:
+    description: Archive traversal, path injection in extraction paths
+    expected: block
+    count: 3
+  command-injection:
+    description: Pipe chains, semicolon separation, DNS exfil, download-exec, cloud metadata
+    expected: block
+    count: 6
 
-total: 226
+total: 304

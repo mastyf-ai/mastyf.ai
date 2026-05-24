@@ -1,0 +1,9 @@
+{
+  "toolName": "graphql_query",
+  "arguments": {
+    "query": "query IntrospectionQuery { __schema { queryType { name } mutationType { name } } }"
+  },
+  "expected": "block",
+  "category": "graphql-injection",
+  "ruleHint": "introspection-query"
+}
