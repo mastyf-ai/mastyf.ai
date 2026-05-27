@@ -48,12 +48,12 @@ export function AuditExplorerPanel({
   onFpReject,
   canMutate,
 }: Props) {
-  const { windowDays, window } = useDashboardWindow();
+  const { windowDays, windowParam, window } = useDashboardWindow();
   const [heatmap, setHeatmap] = useState<AuditHeatmapResponse | null>(null);
 
   const loadHeatmap = useCallback(async () => {
-    setHeatmap(await fetchAuditHeatmap(windowDays));
-  }, [windowDays]);
+    setHeatmap(await fetchAuditHeatmap(windowParam || windowDays));
+  }, [windowDays, windowParam]);
 
   useEffect(() => {
     void loadHeatmap();

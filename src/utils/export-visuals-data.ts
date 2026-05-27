@@ -18,7 +18,9 @@ import { buildSemanticVisualsFromRecords } from './semantic-visuals.js';
 import { isSwarmSessionActiveForTenant, isStrictLiveDashboard } from './swarm-session.js';
 import {
   fillTimeSeries,
+  filterRecordsInWindow,
   generateTimeBuckets,
+  parseRecordTimestamp,
   parseWindowDays,
   windowRangeMs,
 } from './time-buckets.js';
@@ -129,8 +131,8 @@ function buildHourlyBuckets(
   const buckets = generateTimeBuckets(sinceMs, endMs, 'hour');
   const rawMap = new Map<number, ProxyCallRecord[]>();
   for (const r of records) {
-    const t = new Date(r.timestamp || 0).getTime();
-    if (Number.isNaN(t) || t < sinceMs || t > endMs) continue;
+    const t = parseRecordTimestamp(r.timestamp);
+    if (!Number.isFinite(t) || t < sinceMs || t > endMs) continue;
     const hour = Math.floor(t / 3_600_000) * 3_600_000;
     const list = rawMap.get(hour) ?? [];
     list.push(r);
@@ -251,10 +253,7 @@ export async function buildVisualsData(opts: {
     }
   }
 
-  const windowRecords = allRecords.filter((r) => {
-    const t = new Date(r.timestamp || 0).getTime();
-    return !Number.isNaN(t) && t >= sinceMs;
-  });
+  const windowRecords = filterRecordsInWindow(allRecords, sinceMs, endMs);
 
   const { hourly, sparse: trafficSparse } = buildHourlyBuckets(windowRecords, sinceMs, endMs);
   const serverMap = new Map<string, ProxyCallRecord[]>();
@@ -295,7 +294,9 @@ export async function buildVisualsData(opts: {
 
   const totalBlocked = windowRecords.filter((r) => r.blocked).length;
   if (!windowRecords.length) {
-    emptyReasons.traffic = 'No proxied calls in window — use IDE MCP through Guardian proxy.';
+    const windowLabel = windowDays <= 1 / 24 ? '1h' : windowDays <= 1 ? '24h' : `${Math.round(windowDays)}d`;
+    emptyReasons.traffic =
+      `No proxied calls in the last ${windowLabel} — widen the dashboard time window or route MCP through Guardian (proxy and dashboard must share MCP_GUARDIAN_DB_PATH).`;
   }
 
   const attackState = loadAttackLearningState(tenantId);

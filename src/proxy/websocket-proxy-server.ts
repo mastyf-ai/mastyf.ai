@@ -3,7 +3,7 @@
  */
 import { createServer, type IncomingMessage } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createHash, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
@@ -33,6 +33,13 @@ import { sanitizeProxyClientError, webSocketClientOptions } from '../utils/ws-tl
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 import { getAnomalyDetector } from '../ai/anomaly-detector.js';
+import {
+  applyToolFingerprintFromResult,
+  type ToolFingerprintState,
+} from './tool-fingerprint.js';
+import { publishRugPullAlert } from './rug-pull-cluster.js';
+import { isProxyInflightExceeded, proxyMaxInflight } from './proxy-inflight.js';
+import { runSyncSemanticRequestGate } from './proxy-post-policy-gates.js';
 
 export interface WebSocketProxyOptions {
   listenPort: number;
@@ -47,8 +54,7 @@ export class WebSocketProxyServer {
   private opts: WebSocketProxyOptions;
   private httpServer: ReturnType<typeof createServer> | null = null;
   private wss: WebSocketServer | null = null;
-  private toolFingerprint: string | null = null;
-  private rugPullBlocked = false;
+  private rugPullState: ToolFingerprintState = { fingerprint: null, blocked: false };
   private pendingToolCalls = new Map<string | number, string>();
   private pendingToolTenants = new Map<string | number, string>();
   private pendingSessionTokens = new Map<string | number, string>();
@@ -103,10 +109,6 @@ export class WebSocketProxyServer {
 
   private breakerFor(tenantId: string) {
     return getCircuitBreaker(tenantId, this.opts.serverName);
-  }
-
-  private fingerprintToolsList(result: unknown): string {
-    return createHash('sha256').update(JSON.stringify(result ?? {})).digest('hex');
   }
 
   private async handleClientConnection(clientWs: WebSocket, req: IncomingMessage): Promise<void> {
@@ -169,14 +171,19 @@ export class WebSocketProxyServer {
       return;
     }
 
-    if (msg.method === 'tools/list' && msg.result) {
-      const hash = this.fingerprintToolsList(msg.result);
-      if (!this.toolFingerprint) {
-        this.toolFingerprint = hash;
-      } else if (this.toolFingerprint !== hash) {
-        this.rugPullBlocked = true;
-        Logger.warn(`[ws-proxy:${this.opts.serverName}] Rug-pull: tools/list fingerprint changed`);
-      }
+    if (msg.result && typeof msg.result === 'object') {
+      applyToolFingerprintFromResult(this.rugPullState, msg.result, {
+        serverName: this.opts.serverName,
+        tenantId: 'default',
+        logPrefix: `[ws-proxy:${this.opts.serverName}]`,
+        onMismatch: async () => {
+          void publishRugPullAlert(
+            this.opts.serverName,
+            'default',
+            this.rugPullState.fingerprint || '',
+          );
+        },
+      });
     }
 
     if (msg.result && typeof msg.id !== 'undefined') {
@@ -287,10 +294,32 @@ export class WebSocketProxyServer {
 
     if (msg.method === 'tools/call') {
       const params = msg.params as { name?: string } | undefined;
-      if (msg.id != null && params?.name) {
-        this.pendingToolCalls.set(msg.id as string | number, params.name);
+      if (msg.id != null) {
+        if (isProxyInflightExceeded(this.pendingToolCalls.size)) {
+          const max = proxyMaxInflight();
+          Metrics.proxyInflightRejectedTotal.inc(
+            Metrics.withTenantMetricLabels(
+              { server_name: this.opts.serverName },
+              'default',
+            ),
+          );
+          clientWs.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: msg.id,
+              error: {
+                code: -32005,
+                message: `MCP Guardian: proxy overloaded (${this.pendingToolCalls.size}/${max} in flight)`,
+              },
+            }),
+          );
+          return;
+        }
+        if (params?.name) {
+          this.pendingToolCalls.set(msg.id as string | number, params.name);
+        }
       }
-      if (this.rugPullBlocked) {
+      if (this.rugPullState.blocked) {
         clientWs.send(JSON.stringify({
           jsonrpc: '2.0',
           id: msg.id,
@@ -301,6 +330,9 @@ export class WebSocketProxyServer {
 
       const blocked = await this.evaluateToolCall(msg, req);
       if (blocked) {
+        if (msg.id != null) {
+          this.pendingToolCalls.delete(msg.id as string | number);
+        }
         clientWs.send(JSON.stringify(blocked));
         return;
       }
@@ -449,6 +481,16 @@ export class WebSocketProxyServer {
         jsonrpc: '2.0',
         id: msg.id,
         error: { code: -32001, message: `Blocked by MCP Guardian policy: ${decision.reason}` },
+      };
+    }
+
+    const semGate = await runSyncSemanticRequestGate(context, decision, this.opts.serverName);
+    if (semGate.block) {
+      breaker.recordFailure();
+      return {
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: { code: -32001, message: `Blocked by MCP Guardian semantic gate: ${semGate.reason}` },
       };
     }
 

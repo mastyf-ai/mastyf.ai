@@ -15,7 +15,9 @@ import {
   bucketGranularityForWindow,
   computeComparison,
   fillTimeSeries,
+  filterRecordsInWindow,
   generateTimeBuckets,
+  parseRecordTimestamp,
   parseWindowDays,
   windowRangeMs,
 } from './time-buckets.js';
@@ -32,8 +34,8 @@ export type ExecutiveSummary = {
   totalRequests: number;
   blockedRequests: number;
   passedRequests: number;
-  passRatePct: number;
-  blockRatePct: number;
+  passRatePct: number | null;
+  blockRatePct: number | null;
   totalCostUsd: number;
   burnRatePerHour: number;
   projectedMonthlyUsd: number;
@@ -58,17 +60,6 @@ export type ExecutiveSummary = {
   };
 };
 
-function filterRecordsByRange(
-  records: ProxyCallRecord[],
-  startMs: number,
-  endMs: number,
-): ProxyCallRecord[] {
-  return records.filter((r) => {
-    const ts = Date.parse(String(r.timestamp || ''));
-    return Number.isFinite(ts) && ts >= startMs && ts <= endMs;
-  });
-}
-
 function buildSparklines(
   records: ProxyCallRecord[],
   windowDays: number,
@@ -80,7 +71,7 @@ function buildSparklines(
   const dailyCounts = new Map<string, { total: number; blocked: number; costUsd: number }>();
 
   for (const r of records) {
-    const ts = Date.parse(String(r.timestamp || ''));
+    const ts = parseRecordTimestamp(r.timestamp);
     if (!Number.isFinite(ts)) continue;
     const bucket =
       granularity === 'hour'
@@ -109,7 +100,7 @@ function buildSparklines(
 
 function summarizeWindow(records: ProxyCallRecord[]) {
   const sum = summarizeRecords(records);
-  const passRatePct = sum.total > 0 ? (sum.passed / sum.total) * 100 : 0;
+  const passRatePct = sum.total > 0 ? (sum.passed / sum.total) * 100 : null;
   return { sum, passRatePct };
 }
 
@@ -122,8 +113,8 @@ export async function buildExecutiveSummary(
   const { startMs, endMs, priorStartMs, priorEndMs } = windowRangeMs(windowDays);
   const srvs = await getAllActiveServerNames(db, tenantId);
   const allRecords = await loadAllCallRecords(db, srvs, tenantId);
-  const records = filterRecordsByRange(allRecords, startMs, endMs);
-  const priorRecords = filterRecordsByRange(allRecords, priorStartMs, priorEndMs);
+  const records = filterRecordsInWindow(allRecords, startMs, endMs);
+  const priorRecords = filterRecordsInWindow(allRecords, priorStartMs, priorEndMs);
 
   const { sum, passRatePct } = summarizeWindow(records);
   const prior = summarizeWindow(priorRecords);
@@ -164,7 +155,7 @@ export async function buildExecutiveSummary(
   const buckets = generateTimeBuckets(startMs, endMs, granularity);
   const bucketCounts = new Map<string, number>();
   for (const r of records) {
-    const ts = Date.parse(String(r.timestamp || ''));
+    const ts = parseRecordTimestamp(r.timestamp);
     if (!Number.isFinite(ts)) continue;
     const bucket =
       granularity === 'hour'
@@ -193,8 +184,9 @@ export async function buildExecutiveSummary(
     totalRequests: sum.total,
     blockedRequests: sum.blocked,
     passedRequests: sum.passed,
-    passRatePct: Math.round(passRatePct * 10) / 10,
-    blockRatePct: Math.round((100 - passRatePct) * 10) / 10,
+    passRatePct: passRatePct != null ? Math.round(passRatePct * 10) / 10 : null,
+    blockRatePct:
+      passRatePct != null ? Math.round((100 - passRatePct) * 10) / 10 : null,
     totalCostUsd: sum.costUsd,
     burnRatePerHour: Math.round(burnRatePerHour * 1_000_000) / 1_000_000,
     projectedMonthlyUsd: Math.round(projectedMonthlyUsd * 100) / 100,
@@ -211,7 +203,7 @@ export async function buildExecutiveSummary(
       totalRequests: computeComparison(sum.total, prior.sum.total),
       blockedRequests: computeComparison(sum.blocked, prior.sum.blocked),
       totalCostUsd: computeComparison(sum.costUsd, prior.sum.costUsd),
-      passRatePct: computeComparison(passRatePct, prior.passRatePct),
+      passRatePct: computeComparison(passRatePct ?? 0, prior.passRatePct ?? 0),
     },
     sparklines: buildSparklines(records, windowDays, startMs, endMs),
   };

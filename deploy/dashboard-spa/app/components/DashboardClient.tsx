@@ -40,6 +40,7 @@ import { AgentFlowPanel } from './AgentFlowPanel';
 import { SetupChecklistPanel } from './setup/SetupChecklistPanel';
 import { AnalyticsDashboardPanel } from './analytics/AnalyticsDashboardPanel';
 import { SecurityDashboardPanel } from './security/SecurityDashboardPanel';
+import { QuarantinedIntelPanel } from './security/QuarantinedIntelPanel';
 import { SwarmPanel } from './SwarmPanel';
 import { AiLearningPanel } from './AiLearningPanel';
 import { ThreatDiscoveryPanel } from './ThreatDiscoveryPanel';
@@ -121,9 +122,20 @@ export function DashboardClient() {
 
   const pollFailuresRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
+  const chartRefreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ws = useDashboardWs(ready, sessionKey);
-  const { windowDays: currentWindowDays } = useCurrentWindowDays();
+  const { windowDays: currentWindowDays, windowLabel: currentWindowLabel } = useCurrentWindowDays();
+  const visualsPollMs = currentWindowLabel === '1h' ? 10_000 : REST_POLL_MS;
+
+  const scheduleChartRefresh = useCallback(() => {
+    if (chartRefreshDebounceRef.current) {
+      globalThis.clearTimeout(chartRefreshDebounceRef.current);
+    }
+    chartRefreshDebounceRef.current = globalThis.setTimeout(() => {
+      setRefreshTick((t) => t + 1);
+    }, 750);
+  }, []);
 
   const applyView = useCallback((wsId: WorkspaceId, view?: string, topic?: string) => {
     if (wsId === 'security' && view) setSecurityView(view as SecurityView);
@@ -277,6 +289,24 @@ export function DashboardClient() {
   }, [ws.metricsPatch]);
 
   useEffect(() => {
+    if (!ws.metricsPatch) return;
+    scheduleChartRefresh();
+  }, [ws.metricsPatch, scheduleChartRefresh]);
+
+  useEffect(() => {
+    if (!ws.auditPatch) return;
+    scheduleChartRefresh();
+  }, [ws.auditPatch, scheduleChartRefresh]);
+
+  useEffect(() => {
+    return () => {
+      if (chartRefreshDebounceRef.current) {
+        globalThis.clearTimeout(chartRefreshDebounceRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!ws.auditPatch) return;
     const patch = ws.auditPatch;
     setAudit((prev) => {
@@ -345,7 +375,7 @@ export function DashboardClient() {
     <LoginGate onAuthenticated={onAuthenticated}>
       <DashboardWindowProvider>
         <DashboardRegionProvider>
-          <VisualsProvider refreshKey={refreshTick} pollMs={REST_POLL_MS}>
+          <VisualsProvider refreshKey={refreshTick} pollMs={visualsPollMs}>
             <EnterpriseLayout
               workspaces={WORKSPACES}
               activeWorkspace={workspace}
@@ -463,6 +493,7 @@ export function DashboardClient() {
                       { id: 'policy', label: 'Policy' },
                       { id: 'enterprise-ai', label: 'Enterprise AI' },
                       { id: 'ai-copilot', label: 'AI copilot' },
+                      { id: 'quarantined-intel', label: 'Quarantined' },
                     ]}
                     active={securityView}
                     onChange={(v) => {
@@ -515,6 +546,12 @@ export function DashboardClient() {
                       refreshTick={ws.aiRefreshTick}
                       onAction={(m) => setActionMsg(m)}
                       onOpenThreatLab={openThreatLab}
+                    />
+                  )}
+                  {securityView === 'quarantined-intel' && (
+                    <QuarantinedIntelPanel
+                      roles={roles}
+                      onAction={(m) => setActionMsg(m)}
                     />
                   )}
                 </>

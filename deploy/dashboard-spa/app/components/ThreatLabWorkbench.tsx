@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   acceptThreatLabCandidate,
+  fetchThreatDiscoveryStatus,
   rejectThreatLabCandidate,
   runThreatLab,
+  type AutoCorpusEntry,
   type ThreatLabCandidate,
 } from '@/lib/guardian-api';
 import { SOURCE_LABELS } from '@/lib/threat-discovery-copy';
@@ -14,8 +16,21 @@ import { hasPermission } from '@/lib/dashboard-roles';
 
 import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
 
+function fixtureCell(c: ThreatLabCandidate): string {
+  if (c.path) {
+    const id = c.id.startsWith('adv-') ? c.id : c.path.split('/').pop() || c.id;
+    return id;
+  }
+  if (c.advWriteSkipped) {
+    const short = c.advWriteSkipped.length > 28 ? `${c.advWriteSkipped.slice(0, 28)}…` : c.advWriteSkipped;
+    return short;
+  }
+  return '—';
+}
+
 type Props = {
   candidates: ThreatLabCandidate[];
+  autoEntries?: AutoCorpusEntry[];
   roles?: string[];
   preloadedContext?: ThreatLabContext | null;
   manifestMeta?: {
@@ -23,6 +38,8 @@ type Props = {
     mode?: string;
     llmModel?: string;
     llmUsed?: boolean;
+    skipped?: string;
+    runNote?: string;
   };
   onRefresh?: () => void;
   onClearContext?: () => void;
@@ -51,6 +68,7 @@ function investigateTriggerId(c: ThreatLabCandidate): string {
 
 export function ThreatLabWorkbench({
   candidates,
+  autoEntries = [],
   roles,
   preloadedContext,
   manifestMeta,
@@ -58,6 +76,14 @@ export function ThreatLabWorkbench({
   onClearContext,
   onRunStarted,
 }: Props) {
+  const autoByFingerprint = useMemo(() => {
+    const map = new Map<string, AutoCorpusEntry>();
+    for (const e of autoEntries) {
+      if (e.fingerprint) map.set(e.fingerprint, e);
+    }
+    return map;
+  }, [autoEntries]);
+
   const [selected, setSelected] = useState<ThreatLabCandidate | null>(null);
   const [investigateId, setInvestigateId] = useState<string | null>(null);
   const [runBusy, setRunBusy] = useState(false);
@@ -87,8 +113,34 @@ export function ThreatLabWorkbench({
     try {
       const res = await runThreatLab('reactive');
       if (res.ok) {
-        onRunStarted?.('Threat Lab started (reactive)');
+        onRunStarted?.(
+          res.jobId
+            ? `Threat Lab started (reactive) — job ${res.jobId.slice(0, 8)}…`
+            : 'Threat Lab started (reactive)',
+        );
         onRefresh?.();
+        for (let i = 0; i < 45; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          onRefresh?.();
+          const { status } = await fetchThreatDiscoveryStatus();
+          const job = status?.jobs?.threatLab;
+          if (job && job.state !== 'running') {
+            if (job.state === 'failed') {
+              onRunStarted?.(job.error || 'Threat Lab job failed — see Overview job log');
+            } else {
+              const n = status?.threatLab.manifest?.candidates?.length ?? 0;
+              const note = status?.threatLab.manifest?.runNote || status?.threatLab.manifest?.skipped;
+              onRunStarted?.(
+                n > 0
+                  ? `Threat Lab finished: ${n} candidate(s) ready for review`
+                  : note
+                    ? `Threat Lab finished with 0 candidates — ${note}`
+                    : 'Threat Lab finished with 0 candidates — label semantic true positives or run Security Swarm for bypasses',
+              );
+            }
+            break;
+          }
+        }
       } else {
         onRunStarted?.(res.error || 'Threat Lab failed to start');
       }
@@ -150,11 +202,27 @@ export function ThreatLabWorkbench({
           {contextActions}
         </aside>
       ) : null}
-      <p className="hint">
-        LLM-proposed fixtures and policy rules — human accept applies rule to live policy (blocking).
-        {manifestMeta?.mode ? ` Mode: ${manifestMeta.mode}.` : ''}
-        {manifestMeta?.llmModel ? ` Model: ${manifestMeta.llmModel}.` : ''}
-      </p>
+      <div className="tribunal-summary-head" style={{ marginBottom: 8 }}>
+        <p className="hint" style={{ margin: 0, flex: 1 }}>
+          LLM-proposed policy rules: <strong>pending</strong> until you accept (applies YAML to live policy).
+          Reactive mode uses bypasses, then <strong>labeled semantic true positives</strong>, then threat intel.
+          {manifestMeta?.mode ? ` Mode: ${manifestMeta.mode}.` : ''}
+          {manifestMeta?.llmModel ? ` Model: ${manifestMeta.llmModel}.` : ''}
+        </p>
+        {canRun && !preloadedContext ? (
+          <button
+            type="button"
+            className="primary btn-sm"
+            disabled={runBusy}
+            onClick={() => void runThreatLabReactive()}
+          >
+            {runBusy ? 'Running…' : 'Run Threat Lab (reactive)'}
+          </button>
+        ) : null}
+      </div>
+      {manifestMeta?.runNote || manifestMeta?.skipped ? (
+        <p className="hint status-warning">{manifestMeta.runNote || manifestMeta.skipped}</p>
+      ) : null}
       {candidates.length === 0 ? (
         <>
           {preloadedContext ? (
@@ -169,6 +237,7 @@ export function ThreatLabWorkbench({
           {selected ? (
             <ThreatCandidateDrawer
               candidate={selected}
+              autoEntry={selected.fingerprint ? autoByFingerprint.get(selected.fingerprint) : undefined}
               onClose={() => setSelected(null)}
               onAccept={(id) => void onAccept(id)}
               onReject={(id) => void onReject(id)}
@@ -185,7 +254,8 @@ export function ThreatLabWorkbench({
                 <th>Source</th>
                 <th>Attack class</th>
                 <th>Confidence</th>
-                <th>Status</th>
+                <th>Fixture</th>
+                <th>Policy</th>
                 <th />
               </tr>
             </thead>
@@ -203,6 +273,9 @@ export function ThreatLabWorkbench({
                       {c.attackClass.length > 40 ? '…' : ''}
                     </td>
                     <td>{(c.confidence * 100).toFixed(0)}%</td>
+                    <td className="cell-truncate" title={c.path || c.advWriteSkipped || ''}>
+                      {fixtureCell(c)}
+                    </td>
                     <td>{c.reviewStatus || 'pending'}</td>
                     <td>
                       <div className="btn-row" style={{ marginTop: 0 }}>
@@ -229,6 +302,9 @@ export function ThreatLabWorkbench({
           {selected ? (
             <ThreatCandidateDrawer
               candidate={selected}
+              autoEntry={
+                selected.fingerprint ? autoByFingerprint.get(selected.fingerprint) : undefined
+              }
               onClose={() => setSelected(null)}
               onAccept={(id) => void onAccept(id)}
               onReject={(id) => void onReject(id)}

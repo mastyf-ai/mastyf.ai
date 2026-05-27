@@ -2,6 +2,35 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [3.3.0] - 2026-05-28
+
+### Added
+
+- **Premortem v3.2.7 remediation (complete)** — shared tool-fingerprint helper (rug-pull on `tools/list` responses with `id`), early `proxyMaxInflight` before policy eval, rug-pull cluster shared Redis + local TTL, opt-in policy eval cache (`cacheable` in YAML schema), enterprise sync semantic request gate (default ON with enterprise + LLM), cross-transport parity (stdio/HTTP/WS/SSE/streamable), Prometheus metrics (`rugpull_detected_total`, `proxy_inflight_rejected_total`, `semantic_sync_request_blocks_total`, `policy_cache_hits_total`, `session_flow_backend`)
+- **Enterprise deployment guide** — [ENTERPRISE_DEPLOYMENT.md](docs/ENTERPRISE_DEPLOYMENT.md)
+- **Ops** — `DELETE /api/internal/rug-pull`; dashboard `/api/health` exposes `semanticRequestGate`
+
+### Changed
+
+- **npm publish** — monorepo workspace packages (`core`, `server`, `cli`, `plugin-sdk`) aligned to **3.3.0**
+- **Enterprise mode** — `GUARDIAN_CI_BYPASS_LICENSE` / `GUARDIAN_DEV_UNLOCK_ALL` forbidden at startup; Redis required for multi-replica when `GUARDIAN_STRICT_MODE=true`
+- **Policy eval cache** — pass decisions cached only when opt-in (`cacheable: true` or legacy `GUARDIAN_POLICY_EVAL_CACHE_LEGACY_HEURISTIC=true`)
+- **Encoding guard** — module-load regex union from injection-detector stems; blocks base64 paraphrase after decode without plain-text false positives
+- **README** — restored Glama, Website, TypeScript, and MCP SDK badges
+
+### Fixed
+
+- Rug-pull silent fail on normal JSON-RPC `tools/list` responses
+- DoS amplifier: policy/LLM work on overloaded proxy before inflight reject
+- Per-request Redis connections and unbounded local rug-pull flags
+
+## [3.2.8] - 2026-05-26
+
+### Changed
+
+- **npm publish** — monorepo workspace packages (`core`, `server`, `cli`, `plugin-sdk`) aligned to 3.2.8 for version-alignment tests
+- **README** — version header and release notes updated for npm
+
 ## [3.2.7] - 2026-05-26
 
 ### Added

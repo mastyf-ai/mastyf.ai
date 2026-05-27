@@ -4,6 +4,23 @@
 import { LRUCache } from 'lru-cache';
 import { isRedisConfigured, getSharedRedisClient } from '../utils/redis-client.js';
 import { Logger } from '../utils/logger.js';
+import * as Metrics from '../utils/metrics.js';
+
+let sessionFlowBackendLogged = false;
+
+function logSessionFlowBackend(): void {
+  if (sessionFlowBackendLogged) return;
+  sessionFlowBackendLogged = true;
+  const redis = isRedisConfigured();
+  Metrics.sessionFlowBackend.set(redis ? 1 : 0);
+  if (process.env['GUARDIAN_ENTERPRISE_MODE'] === 'true' && !redis) {
+    Logger.error(
+      '[SessionFlow] GUARDIAN_ENTERPRISE_MODE=true without REDIS_URL — session flow is per-process only',
+    );
+  } else {
+    Logger.info(`[SessionFlow] backend=${redis ? 'redis' : 'memory'}`);
+  }
+}
 
 const FLOW_WINDOW_MS = 5 * 60 * 1000;
 const MAX_HISTORY = 24;
@@ -58,6 +75,7 @@ async function redisSet(key: string, events: FlowEvent[]): Promise<void> {
 }
 
 export async function getFlowHistory(sessionKey: string): Promise<FlowEvent[]> {
+  logSessionFlowBackend();
   const now = Date.now();
   if (isRedisConfigured()) {
     const fromRedis = await redisGet(sessionKey);

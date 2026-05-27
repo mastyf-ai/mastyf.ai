@@ -1,3 +1,5 @@
+import { TRIBUNAL_BATCH_LIMIT } from './tribunal-config';
+
 export type GuardianHeaders = Record<string, string>;
 
 const TENANT_STORAGE_KEY = 'mcp-guardian-tenant-id';
@@ -787,10 +789,39 @@ export async function fetchSignatureHints(): Promise<Record<string, unknown> | n
   return (await res.json()) as Record<string, unknown>;
 }
 
-export async function fetchTribunalReport(limit = 3): Promise<Record<string, unknown> | null> {
-  const res = await guardianFetch(`/api/learning/semantic/tribunal?limit=${limit}&useLlm=false`);
+export type TribunalDebateSummary = {
+  recordId?: string;
+  toolName?: string;
+  serverName?: string;
+  uncertaintyScore?: number;
+  verdict?: {
+    recommendedLabel?: 'true_positive' | 'false_positive' | 'needs_review';
+    unanimous?: boolean;
+    confidence?: number;
+    dissent?: string;
+  };
+};
+
+export type TribunalReport = {
+  generatedAt?: string;
+  queueSize?: number;
+  debatedCount?: number;
+  batchLimit?: number;
+  eligibleTotal?: number;
+  remainingEligible?: number;
+  debates?: TribunalDebateSummary[];
+  quorumMet?: boolean;
+  autoLabelsApplied?: number;
+};
+
+export async function fetchTribunalReport(
+  limit: number = TRIBUNAL_BATCH_LIMIT,
+): Promise<TribunalReport | null> {
+  const res = await guardianFetch(
+    `/api/learning/semantic/tribunal?limit=${limit}&useLlm=false`,
+  );
   if (!res.ok) return null;
-  return (await res.json()) as Record<string, unknown>;
+  return (await res.json()) as TribunalReport;
 }
 
 export async function fetchComplianceReport(windowDays = 7): Promise<Record<string, unknown> | null> {

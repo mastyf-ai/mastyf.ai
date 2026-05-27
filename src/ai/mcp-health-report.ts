@@ -6,7 +6,12 @@ import { buildExecutiveSummary } from '../utils/dashboard-executive-summary.js';
 import { getAllActiveServerNames } from '../utils/db-aggregate.js';
 import { fetchCircuitBreakerStates } from '../utils/tui-sources.js';
 import { readSwarmJsonFile } from '../utils/swarm-artifacts.js';
-import { parseWindowDays } from '../utils/time-buckets.js';
+import {
+  filterRecordsInWindow,
+  parseWindowDays,
+  windowRangeMs,
+  windowToLabel,
+} from '../utils/time-buckets.js';
 import { LlmAssistant } from './llm-assistant.js';
 import { Logger } from '../utils/logger.js';
 import { existsSync, readFileSync } from 'fs';
@@ -77,10 +82,23 @@ async function loadPolicySnapshot(): Promise<{ mode: string; ruleSummary: string
   }
 }
 
+function windowLabelForSummary(windowDays: number): string {
+  const label = windowToLabel(windowDays);
+  if (label === '1h') return 'last 1 hour';
+  if (label === '12h') return 'last 12 hours';
+  if (label === '24h') return 'last 24 hours';
+  if (label === '7d') return 'last 7 days';
+  if (label === '30d') return 'last 30 days';
+  return 'last 90 days';
+}
+
 async function buildServerSections(
   db: IDatabase,
   tenantId: string | undefined,
+  windowDays: number,
 ): Promise<{ servers: ServerHealthSection[]; avgLatency: number | null; atRisk: string[] }> {
+  const { startMs, endMs } = windowRangeMs(windowDays);
+  const windowLabel = windowLabelForSummary(windowDays);
   const srvs = await getAllActiveServerNames(db, tenantId);
   const cbStates = await fetchCircuitBreakerStates();
   const reps: ServerHealthSection[] = [];
@@ -89,7 +107,8 @@ async function buildServerSections(
   const atRisk: string[] = [];
 
   for (const srv of srvs) {
-    const recs = await db.getCallRecordsForServer(srv, undefined, tenantId);
+    const allRecs = await db.getCallRecordsForServer(srv, undefined, tenantId);
+    const recs = filterRecordsInWindow(allRecs, startMs, endMs);
     const callLat =
       recs.length > 0
         ? Math.round(recs.reduce((s, r) => s + (r.durationMs || 0), 0) / recs.length)
@@ -118,7 +137,7 @@ async function buildServerSections(
       atRisk.push(srv);
     }
     const cb = cbStates.get(srv) ?? 'closed';
-    let summary = `${recs.length} calls in window`;
+    let summary = `${recs.length} calls in ${windowLabel}`;
     if (successPct != null) summary += `; ${successPct}% success`;
     if (blocked > 0) summary += `; ${blocked} blocked`;
     reps.push({
@@ -262,7 +281,7 @@ export async function buildMcpHealthReport(
 
   const windowDays = parseWindowDays(opts?.windowDays ?? 7);
   const summary = await buildExecutiveSummary(db, tenantId, windowDays);
-  const { servers, avgLatency, atRisk } = await buildServerSections(db, tenantId);
+  const { servers, avgLatency, atRisk } = await buildServerSections(db, tenantId, windowDays);
   const policy = await loadPolicySnapshot();
 
   const traffic = readSwarmJsonFile<{ servers?: Record<string, { calls?: number; blocked?: number }> }>(
@@ -351,7 +370,7 @@ export async function buildMcpHealthReport(
     servers,
     performance: {
       avgLatencyMs: avgLatency,
-      passRatePct: summary.passRatePct,
+      passRatePct: summary.passRatePct ?? 0,
       totalRequests: summary.totalRequests,
       blockedRequests: summary.blockedRequests,
       totalCostUsd: summary.totalCostUsd,

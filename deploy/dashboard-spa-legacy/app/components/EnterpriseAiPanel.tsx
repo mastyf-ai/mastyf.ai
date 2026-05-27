@@ -9,7 +9,9 @@ import {
   fetchSupplyChainGraph,
   fetchTribunalReport,
   type SemanticOutcome,
+  type TribunalReport,
 } from '@/lib/guardian-api';
+import { TRIBUNAL_BATCH_LIMIT } from '@/lib/tribunal-config';
 import { DashboardSection } from './dashboard/DashboardSection';
 import { TenantLoraPanel } from './TenantLoraPanel';
 import { EnterpriseSecurityIntelSection } from './EnterpriseSecurityIntelSection';
@@ -37,17 +39,18 @@ export function EnterpriseAiPanel({
   const [supplyChain, setSupplyChain] = useState<Record<string, unknown> | null>(null);
   const [shadowRedTeam, setShadowRedTeam] = useState<Record<string, unknown> | null>(null);
   const [signatureHints, setSignatureHints] = useState<Record<string, unknown> | null>(null);
-  const [tribunal, setTribunal] = useState<Record<string, unknown> | null>(null);
+  const [tribunal, setTribunal] = useState<TribunalReport | null>(null);
   const [compliance, setCompliance] = useState<Record<string, unknown> | null>(null);
   const [semantic, setSemantic] = useState<SemanticOutcome[]>([]);
   const [investigateId, setInvestigateId] = useState<string | null>(null);
+  const [tribunalLoading, setTribunalLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     const [sc, shadow, hints, trib, comp, semResp] = await Promise.all([
       fetchSupplyChainGraph(),
       fetchShadowRedTeamReport(),
       fetchSignatureHints(),
-      fetchTribunalReport(5),
+      fetchTribunalReport(TRIBUNAL_BATCH_LIMIT),
       fetchComplianceReport(7),
       fetchSemanticOutcomes(),
     ]);
@@ -58,6 +61,27 @@ export function EnterpriseAiPanel({
     setCompliance(comp);
     setSemantic(semResp.records);
   }, []);
+
+  const runTribunalOnly = useCallback(async () => {
+    setTribunalLoading(true);
+    try {
+      const trib = await fetchTribunalReport(TRIBUNAL_BATCH_LIMIT);
+      setTribunal(trib);
+      const n = trib?.debatedCount ?? 0;
+      const remaining = trib?.remainingEligible ?? 0;
+      if (n > 0) {
+        onAction?.(
+          remaining > 0
+            ? `Tribunal: ${n} debate(s) · ${remaining} remaining — run next batch`
+            : `Tribunal completed: ${n} debate(s) — queue empty`,
+        );
+      } else {
+        onAction?.('Tribunal ran — no uncertain flags in queue');
+      }
+    } finally {
+      setTribunalLoading(false);
+    }
+  }, [onAction]);
 
   useEffect(() => {
     void refresh();
@@ -89,9 +113,9 @@ export function EnterpriseAiPanel({
             <span className="enterprise-ai-kpi-value">{supplyNodes}</span>
             <span className="enterprise-ai-kpi-label">Supply chain nodes</span>
           </div>
-          <div className="enterprise-ai-kpi">
+          <div className="enterprise-ai-kpi" title="Debates from last tribunal run (uncertain semantic flags)">
             <span className="enterprise-ai-kpi-value">{debatedCount}</span>
-            <span className="enterprise-ai-kpi-label">Tribunal debates</span>
+            <span className="enterprise-ai-kpi-label">Tribunal debates (last run)</span>
           </div>
           <div className="enterprise-ai-kpi">
             <span className="enterprise-ai-kpi-value">{hintCount}</span>
@@ -105,7 +129,12 @@ export function EnterpriseAiPanel({
 
         <div className="enterprise-ai-grid">
           <TenantLoraPanel roles={roles} refreshTick={refreshTick} onAction={onAction} />
-          <TribunalSummaryCard tribunal={tribunal} />
+          <TribunalSummaryCard
+            tribunal={tribunal}
+            tribunalLoading={tribunalLoading}
+            onRunTribunal={() => void runTribunalOnly()}
+            onInvestigateRecord={canAi ? (id) => setInvestigateId(id) : undefined}
+          />
           <ComplianceBriefingCard compliance={compliance} />
           <EnterpriseSecurityIntelSection
             supplyChain={supplyChain}

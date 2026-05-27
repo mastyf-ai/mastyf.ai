@@ -1475,6 +1475,82 @@ a.tab.linkish {
   grid-column: 1 / -1;
 }
 
+.tribunal-summary-card { grid-column: 1 / -1; }
+.tribunal-summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.tribunal-queue-empty-hint { margin: 0 0 0.5rem; font-size: 0.8125rem; }
+.tribunal-how-toggle { margin: 0 0 0.5rem; }
+.tribunal-how-it-works {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.tribunal-how-it-works ol { margin: 0; padding-left: 1.2rem; }
+.tribunal-how-it-works li { margin-bottom: 0.5rem; }
+.tribunal-run-meta { margin-bottom: 0.75rem; }
+.tribunal-debate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.tribunal-debate-item {
+  border: 1px solid var(--border, #334155);
+  border-radius: 6px;
+  padding: 0.75rem;
+  background: rgba(148, 163, 184, 0.06);
+}
+.tribunal-debate-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.tribunal-debate-subject { display: block; font-size: 0.875rem; }
+.tribunal-debate-question { margin: 4px 0 0; font-size: 0.75rem; }
+.tribunal-verdict-badge { flex-shrink: 0; }
+.tribunal-outcome-dl {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 4px 12px;
+  font-size: 0.8125rem;
+  margin: 0 0 0.5rem;
+}
+.tribunal-outcome-dl dt { opacity: 0.75; margin: 0; }
+.tribunal-outcome-dl dd { margin: 0; }
+.tribunal-debate-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tribunal-debate-expanded {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border, #334155);
+}
+.tribunal-argument { margin-bottom: 0.5rem; font-size: 0.8125rem; }
+.tribunal-argument p { margin: 4px 0 0; }
+.tribunal-transcript-details { margin-top: 0.5rem; font-size: 0.75rem; }
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #60a5fa;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+}
+.badge.verdict-true_positive { color: #f87171; }
+.badge.verdict-false_positive { color: #4ade80; }
+.badge.verdict-needs_review { color: #fbbf24; }
+
 .lora-progress-row {
   display: flex;
   flex-direction: column;

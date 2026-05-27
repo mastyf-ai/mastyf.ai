@@ -43,6 +43,8 @@ export interface PolicyRule {
   toolAllowExceptions?: string[];
   /** Max tokens per call */
   maxTokens?: number;
+  /** When true, pass decisions from this rule may be stored in policy eval cache. */
+  cacheable?: boolean;
   /** Max calls per minute per server */
   maxCallsPerMinute?: number;
   /** Adaptive burst limit — max calls per 10-second window */

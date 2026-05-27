@@ -17,6 +17,13 @@ import type { MtlsConfig } from '../utils/mtls-config.js';
 import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import { resolveTenantContext, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
+import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
+import { runSyncSemanticRequestGate } from './proxy-post-policy-gates.js';
+import {
+  fingerprintJsonRpcToolsList,
+  isRugPullBlockedForCall,
+} from './rug-pull-transport.js';
+import type { ToolFingerprintState } from './tool-fingerprint.js';
 
 interface SseProxyOptions {
   upstreamUrl: string;
@@ -49,6 +56,7 @@ export class SseProxyServer extends EventEmitter {
   private sessions = new Map<string, SseSession>();
   private httpServer: Server | null = null;
   private boundPort = 0;
+  private readonly rugPullState: ToolFingerprintState = { fingerprint: null, blocked: false };
 
   constructor(opts: SseProxyOptions) {
     super();
@@ -330,7 +338,29 @@ export class SseProxyServer extends EventEmitter {
         }
         throw err;
       }
+      const inflight = acquireProxyInflight(this.opts.serverName);
+      if (!inflight.ok) {
+        return {
+          jsonrpc: '2.0',
+          id: jsonRpcRequest.id,
+          error: {
+            code: -32005,
+            message: `MCP Guardian: proxy overloaded (${inflight.current}/${inflight.max} in flight)`,
+          },
+        };
+      }
       resolvedTenantId = tenantId;
+      if (await isRugPullBlockedForCall(this.rugPullState, this.opts.serverName, tenantId)) {
+        return {
+          jsonrpc: '2.0',
+          id: jsonRpcRequest.id,
+          error: {
+            code: -32001,
+            message:
+              'Blocked by MCP Guardian policy: tool definitions changed mid-session (rug-pull)',
+          },
+        };
+      }
       const context = {
         serverName: this.opts.serverName,
         toolName: (jsonRpcRequest.params as { name?: string })?.name || 'unknown',
@@ -342,6 +372,7 @@ export class SseProxyServer extends EventEmitter {
       };
       const decision = await this.opts.policy.evaluateAsync(context);
       if (decision.action === 'block') {
+        releaseProxyInflight(this.opts.serverName);
         this.emit('blocked', { serverName: this.opts.serverName, reason: decision.reason });
         return {
           jsonrpc: '2.0',
@@ -352,10 +383,33 @@ export class SseProxyServer extends EventEmitter {
           },
         };
       }
+
+      const semGate = await runSyncSemanticRequestGate(context, decision, this.opts.serverName);
+      if (semGate.block) {
+        releaseProxyInflight(this.opts.serverName);
+        return {
+          jsonrpc: '2.0',
+          id: jsonRpcRequest.id,
+          error: {
+            code: -32001,
+            message: `Blocked by MCP Guardian semantic gate: ${semGate.reason}`,
+          },
+        };
+      }
     }
 
     const startMs = Date.now();
     let response = await this._forwardToUpstream(jsonRpcRequest, session);
+    fingerprintJsonRpcToolsList(
+      this.rugPullState,
+      response,
+      this.opts.serverName,
+      resolvedTenantId,
+      `[sse-proxy:${this.opts.serverName}]`,
+    );
+    if (isToolCall) {
+      releaseProxyInflight(this.opts.serverName);
+    }
     const durationMs = Date.now() - startMs;
 
     if (isToolCall) {

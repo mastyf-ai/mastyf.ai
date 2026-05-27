@@ -8,6 +8,8 @@ export interface TenantSemanticOverrides {
   localSemantic?: boolean;
   syncResponse?: boolean;
   syncResponseLlm?: boolean;
+  syncRequest?: boolean;
+  syncRequestLlm?: boolean;
   asyncAudit?: boolean;
   strict?: boolean;
 }
@@ -88,4 +90,30 @@ export function isSemanticStrictForTenant(tenantId?: string): boolean {
   const o = getTenantSemanticOverrides(tenantId);
   if (o?.strict !== undefined) return o.strict;
   return process.env['GUARDIAN_SEMANTIC_STRICT'] === 'true';
+}
+
+export function isEnterpriseMode(): boolean {
+  return process.env['GUARDIAN_ENTERPRISE_MODE'] === 'true';
+}
+
+/** Sync request gate — ON by default in enterprise when LLM is available. */
+export function isSyncSemanticRequestEnabledGlobal(): boolean {
+  const explicit = process.env['GUARDIAN_SEMANTIC_SYNC_REQUEST'];
+  if (explicit === 'true') return true;
+  if (explicit === 'false') return false;
+  return isEnterpriseMode();
+}
+
+export function isSyncSemanticRequestEnabledForTenant(tenantId?: string): boolean {
+  const o = getTenantSemanticOverrides(tenantId);
+  if (o?.syncRequest !== undefined) return o.syncRequest;
+  return isSyncSemanticRequestEnabledGlobal();
+}
+
+export function isSyncSemanticRequestLlmEnabledForTenant(tenantId?: string): boolean {
+  const o = getTenantSemanticOverrides(tenantId);
+  if (o?.syncRequestLlm !== undefined) return o.syncRequestLlm;
+  if (process.env['GUARDIAN_SEMANTIC_SYNC_REQUEST_LLM'] === 'false') return false;
+  if (process.env['GUARDIAN_SEMANTIC_SYNC_REQUEST_LLM'] === 'true') return true;
+  return isSyncSemanticRequestEnabledForTenant(tenantId) && isEnterpriseMode();
 }

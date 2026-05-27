@@ -26,6 +26,13 @@ import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
 import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import { parseJsonWithDepthLimit } from './http-proxy-security.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
+import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
+import { runSyncSemanticRequestGate } from './proxy-post-policy-gates.js';
+import {
+  fingerprintJsonRpcToolsList,
+  isRugPullBlockedForCall,
+} from './rug-pull-transport.js';
+import type { ToolFingerprintState } from './tool-fingerprint.js';
 
 export interface StreamableHttpProxyOptions {
   listenPort: number;
@@ -46,6 +53,7 @@ export class StreamableHttpProxyServer {
   private boundPort = 0;
   private sessionCache: GuardianSessionCache | null;
   private tokenCounter = new TokenCounter();
+  private readonly rugPullState: ToolFingerprintState = { fingerprint: null, blocked: false };
 
   constructor(opts: StreamableHttpProxyOptions) {
     this.opts = opts;
@@ -121,6 +129,9 @@ export class StreamableHttpProxyServer {
     if (blocked) return blocked;
 
     if (!isUpstreamRelayEnabled()) {
+      if (msg.method === 'tools/call') {
+        releaseProxyInflight(this.opts.serverName);
+      }
       return {
         jsonrpc: '2.0',
         id: msg.id,
@@ -129,7 +140,26 @@ export class StreamableHttpProxyServer {
     }
 
     const upstream = await this.relayToUpstream(JSON.stringify(msg), req);
+    if (msg.method === 'tools/call') {
+      releaseProxyInflight(this.opts.serverName);
+    }
     if (!upstream || typeof upstream !== 'object') return upstream;
+
+    let fpTenant = 'default';
+    try {
+      fpTenant = resolveTenantContext({
+        headers: req.headers as Record<string, string | string[] | undefined>,
+      }).tenantId;
+    } catch {
+      /* default */
+    }
+    fingerprintJsonRpcToolsList(
+      this.rugPullState,
+      upstream,
+      this.opts.serverName,
+      fpTenant,
+      `[streamable-http:${this.opts.serverName}]`,
+    );
 
     const rotated = (msg as { _rotatedSessionToken?: string })._rotatedSessionToken;
     if (rotated) {
@@ -266,6 +296,18 @@ export class StreamableHttpProxyServer {
       throw err;
     }
 
+    if (await isRugPullBlockedForCall(this.rugPullState, this.opts.serverName, tenantId)) {
+      return {
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: {
+          code: -32001,
+          message:
+            'Blocked by MCP Guardian policy: tool definitions changed mid-session (rug-pull)',
+        },
+      };
+    }
+
     if (token && this.sessionCache && !authenticated) {
       const sessionResult = await validateSessionToken(this.sessionCache, token, tenantId);
       if (sessionResult) {
@@ -317,8 +359,21 @@ export class StreamableHttpProxyServer {
       idempotencyKey: idempotencyKeyFromRequest(params?._meta),
     };
 
+    const inflight = acquireProxyInflight(this.opts.serverName);
+    if (!inflight.ok) {
+      return {
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: {
+          code: -32005,
+          message: `MCP Guardian: proxy overloaded (${inflight.current}/${inflight.max} in flight)`,
+        },
+      };
+    }
+
     const decision = await this.opts.policy.evaluateAsync(context);
     if (decision.action === 'block') {
+      releaseProxyInflight(this.opts.serverName);
       StructuredLogger.logBlocked({
         event: 'tool_blocked',
         requestId: context.requestId,
@@ -333,6 +388,19 @@ export class StreamableHttpProxyServer {
         error: {
           code: -32001,
           message: `Blocked by MCP Guardian policy: ${decision.reason}`,
+        },
+      };
+    }
+
+    const semGate = await runSyncSemanticRequestGate(context, decision, this.opts.serverName);
+    if (semGate.block) {
+      releaseProxyInflight(this.opts.serverName);
+      return {
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: {
+          code: -32001,
+          message: `Blocked by MCP Guardian semantic gate: ${semGate.reason}`,
         },
       };
     }
@@ -362,4 +430,5 @@ export class StreamableHttpProxyServer {
 
     return null;
   }
+
 }

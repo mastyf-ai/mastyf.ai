@@ -122,6 +122,21 @@ export function permissionForRoute(method: string, url: string): DashboardRouteP
   if (path === '/api/ai/tenant-model/train') return m === 'POST' ? 'ai' : null;
   if (path === '/api/ai/tenant-model/train/status') return m === 'GET' ? 'ai' : null;
   if (path === '/api/soar/playbooks') return m === 'GET' ? 'ai' : m === 'POST' ? 'ai' : null;
+  if (path.startsWith('/api/ai/threats/')) {
+    if (path === '/api/ai/threats/quarantined' || path === '/api/ai/threats/quarantine/policy') {
+      return m === 'GET' || m === 'POST' ? 'read' : null;
+    }
+    return m === 'POST' ? 'policy_mutate' : null;
+  }
+  if (path.startsWith('/api/security/threats/')) {
+    if (
+      path === '/api/security/threats/quarantined'
+      || path === '/api/security/threats/quarantine/policy'
+    ) {
+      return m === 'GET' || m === 'POST' ? 'read' : null;
+    }
+    return m === 'POST' ? 'policy_mutate' : null;
+  }
   if (path === '/api/policy/reload' || path.startsWith('/api/policy/suggestions/')) {
     return m === 'POST' ? 'policy_mutate' : m === 'GET' ? 'read' : null;
   }
@@ -135,7 +150,9 @@ export function permissionForRoute(method: string, url: string): DashboardRouteP
     if (path === '/api/security-swarm/run' && m === 'POST') return 'policy_test';
     return m === 'GET' ? 'read' : null;
   }
-  if (path === '/api/audit' || path.startsWith('/api/audit?')) return m === 'GET' ? 'read' : null;
+  if (path === '/api/audit' || path === '/api/audit/heatmap' || path.startsWith('/api/audit?')) {
+    return m === 'GET' ? 'read' : null;
+  }
   if (path.startsWith('/api/admin/')) return m === 'GET' ? 'admin' : 'admin';
   if (path.startsWith('/api/ai/')) return m === 'GET' ? 'ai' : 'ai';
   if (path === '/api/logout') return 'read';

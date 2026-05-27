@@ -31,6 +31,8 @@ if command -v lsof >/dev/null 2>&1; then
   fi
 fi
 
+# Proxy and dashboard read the same history DB — set explicitly when using a repo-local DB:
+#   MCP_GUARDIAN_DB_PATH="$PWD/reports/local-history.db" ./scripts/start-dashboard-proxy.sh
 export MCP_GUARDIAN_DB_PATH="${MCP_GUARDIAN_DB_PATH:-$HOME/.mcp-guardian/history.db}"
 export DASHBOARD_ENABLED=true
 export DASHBOARD_AUTH_DISABLED="${DASHBOARD_AUTH_DISABLED:-true}"

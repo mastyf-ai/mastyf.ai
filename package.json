@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "3.2.7",
+  "version": "3.3.0",
   "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
@@ -60,6 +60,9 @@
     "build:guardian": "pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json",
     "test": "vitest run && turbo run test",
     "test:policy-proxy-utils": "vitest run tests/policy/ tests/proxy/ tests/utils/ --reporter=dot",
+    "test:enterprise-profile": "GUARDIAN_ENTERPRISE_MODE=true GUARDIAN_STRICT_MODE=true vitest run tests/policy/ tests/proxy/ tests/license/enterprise-license-posture.test.ts tests/enterprise/ tests/ai/sync-semantic-request.test.ts --reporter=dot",
+    "validate:enterprise-matrix": "vitest run tests/enterprise/preflight-matrix.test.ts --reporter=dot",
+    "harness:premortem-profiles": "GUARDIAN_ENTERPRISE_MODE=false pnpm exec vitest run tests/e2e/adversarial-proxy.e2e.test.ts --reporter=dot && GUARDIAN_ENTERPRISE_MODE=true GUARDIAN_CI_BYPASS_LICENSE=true pnpm exec vitest run tests/e2e/adversarial-proxy.e2e.test.ts --reporter=dot",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:scale-postgres": "node scripts/test-scale-postgres.mjs",
     "test:scale-proxy": "node scripts/test-scale-proxy-replicas.mjs",
@@ -71,6 +74,7 @@
     "live:tui-demo": "node scripts/run-live-tui-demo.cjs --stream",
     "doctor": "node dist/cli.js doctor --policy default-policy.yaml",
     "onboard": "node dist/cli.js onboard",
+    "control-plane": "node dist/cli.js control-plane",
     "analyze": "node dist/cli.js analyze",
     "autopilot:init": "node dist/cli.js autopilot init",
     "autopilot:start": "node dist/cli.js autopilot start",
@@ -143,6 +147,8 @@
     "benchmark:proxy-tiers": "tsx benchmarks/proxy-slo-by-concurrency.ts",
     "benchmark:multi-proxy": "tsx benchmarks/concurrent-multi-proxy.ts",
     "benchmark:proxy-slo": "tsx benchmarks/run.ts",
+    "parity:control-data-plane": "node scripts/control-plane/run-parity-harness.mjs",
+    "soak:data-plane": "node scripts/control-plane/run-data-plane-soak.mjs",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "lint": "tsc --noEmit",
@@ -153,8 +159,8 @@
     "postinstall": "node scripts/postinstall-windows.cjs"
   },
   "dependencies": {
-    "@mcp-guardian/core": "workspace:^3.2.7",
-    "@mcp-guardian/plugin-sdk": "workspace:^3.2.7",
+    "@mcp-guardian/core": "workspace:^3.3.0",
+    "@mcp-guardian/plugin-sdk": "workspace:^3.3.0",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.75.0",

@@ -87,6 +87,11 @@ interface ProxyOptions {
   authRequired?: boolean;
 }
 
+interface ControlPlaneOptions {
+  port?: string;
+  policy?: string;
+}
+
 // ── Shared helpers ────────────────────────────────────────────────────
 function loadConfigs(options: { all?: boolean; config?: string }): {
   servers: McpServerConfig[];
@@ -499,6 +504,20 @@ program
     if (opts.policy) process.env.GUARDIAN_POLICY_PATH = opts.policy;
     const { startTui } = await import('./tui/app.js');
     await startTui(opts.dashboardUrl);
+  });
+
+program
+  .command('control-plane')
+  .description('Start control-plane APIs for compiled policy distribution and governance services')
+  .option('--port <port>', 'Control-plane port (default: CONTROL_PLANE_PORT or 3000)')
+  .option('--policy <path>', 'Path to policy YAML file to compile for data plane')
+  .action(async (opts: ControlPlaneOptions) => {
+    const { startControlPlaneServer } = await import('./control-plane/server.js');
+    const parsedPort = opts.port ? parseInt(opts.port, 10) : undefined;
+    startControlPlaneServer({
+      port: Number.isFinite(parsedPort as number) ? parsedPort : undefined,
+      policyPath: opts.policy,
+    });
   });
 
 program

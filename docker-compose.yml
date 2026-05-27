@@ -40,5 +40,53 @@ services:
       - --policy
       - /etc/mcp-guardian/policy.yaml
 
+  control-plane:
+    profiles: ["split-plane"]
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      CONTROL_PLANE_PORT: "3000"
+      CONTROL_PLANE_POLICY_PATH: /etc/mcp-guardian/policy.yaml
+    volumes:
+      - ./default-policy.yaml:/etc/mcp-guardian/policy.yaml:ro
+    command:
+      - node
+      - dist/cli.js
+      - control-plane
+      - --port
+      - "3000"
+      - --policy
+      - /etc/mcp-guardian/policy.yaml
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  data-plane:
+    profiles: ["split-plane"]
+    build:
+      context: ./apps/proxy-core
+      dockerfile: Dockerfile
+    ports:
+      - "9091:9090"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:3000
+      UPSTREAM_URL: http://mcp-guardian:4000
+      DATA_PLANE_PORT: "9090"
+      DATA_PLANE_SHADOW_MODE: "true"
+      DATA_PLANE_FAIL_OPEN: "true"
+      RULES_REFRESH_INTERVAL_MS: "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   guardian-data:

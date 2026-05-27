@@ -13,9 +13,12 @@ import { parseWindowDays } from './time-buckets.js';
 import { buildChartMeta } from './chart-meta.js';
 import { getSemanticAuditStats } from '../ai/async-semantic-audit.js';
 import { loadSemanticAuditRecordsAsync } from '../ai/semantic-audit-store.js';
+import { getSecurityThreatQuarantine } from './security-threat-quarantine.js';
 
 export type SecurityThreatRow = {
   id: string;
+  /** Stable key for quarantine / restore (semantic audit id or block record fingerprint). */
+  threatKey: string;
   type: string;
   source: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
@@ -88,9 +91,14 @@ function threatIdFromRecord(r: ProxyCallRecord, index: number): string {
   return `THR-${2840 + (n % 900) + index}`;
 }
 
+function blockThreatKey(r: ProxyCallRecord): string {
+  return `block:${r.serverName}:${r.toolName}:${r.timestamp || ''}`;
+}
+
 function buildThreatsFromRecords(blocked: ProxyCallRecord[]): SecurityThreatRow[] {
   return blocked.slice(0, 20).map((r, i) => ({
     id: threatIdFromRecord(r, i),
+    threatKey: blockThreatKey(r),
     type: ruleToThreatType(r.blockRule, r.blockReason),
     source: pseudoSource(r.serverName, r.toolName),
     severity: severityFromRule(r.blockRule),
@@ -106,6 +114,7 @@ async function buildThreatsFromSemantic(
     .filter((r) => r.semanticAudit?.suspicious)
     .map((r, i) => ({
       id: `THR-S${2840 + i}`,
+      threatKey: `semantic:${r.id}`,
       type: 'Semantic Prompt Injection',
       source: pseudoSource(r.serverName, r.toolName || 'unknown'),
       severity: (r.semanticAudit?.confidence ?? 0) >= 0.85 ? 'critical' : 'high',
@@ -161,11 +170,14 @@ export async function buildSecurityDashboard(
   const records = await loadAllRecordsInWindow(db, tenantId, windowDays);
   const sum = summarizeRecords(records);
   const blocked = records.filter((r) => r.blocked);
+  const quarantine = getSecurityThreatQuarantine(tenantId);
+  const suppressed = quarantine.quarantinedKeys();
   const semanticThreats = await buildThreatsFromSemantic(tenantId);
   const recordThreats = buildThreatsFromRecords(blocked);
   const seen = new Set<string>();
   const threats: SecurityThreatRow[] = [];
   for (const t of [...semanticThreats, ...recordThreats]) {
+    if (suppressed.has(t.threatKey)) continue;
     const key = `${t.type}:${t.source}`;
     if (seen.has(key)) continue;
     seen.add(key);

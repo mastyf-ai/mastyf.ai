@@ -27,6 +27,29 @@ export interface ThreatSuggestion {
 
 export type ThreatIntelCatalogEntry = ThreatIntelEntry & { firstSeenAt: string };
 
+export type ThreatIntelSuppressedState = {
+  action: 'removed' | 'quarantined';
+  at: string;
+  by?: string;
+};
+
+export type ThreatIntelQuarantineRecord = {
+  id: string;
+  source: ThreatIntelEntry['source'];
+  severity: ThreatIntelEntry['severity'];
+  description: string;
+  remediation: string;
+  publishedAt: string;
+  affectedPackage?: string;
+  affectedPattern?: string;
+  signature?: string;
+  quarantinedAt: string;
+  operator?: string;
+  note?: string;
+  appliedRuleName?: string;
+  policyPath?: string;
+};
+
 export interface ThreatIntelStatus {
   threats: number;
   knownIds: string[];
@@ -35,6 +58,7 @@ export interface ThreatIntelStatus {
   lastPollAt: string | null;
   pollingActive: boolean;
   pollingDisabled: boolean;
+  suppressed: number;
 }
 
 let sharedThreatIntel: ThreatIntel | null = null;
@@ -74,6 +98,8 @@ export class ThreatIntel {
   private lastUpdated: string | null = null;
   private lastPollAt: string | null = null;
   private nvdApiKey: string;
+  private suppressed = new Map<string, ThreatIntelSuppressedState>();
+  private quarantineArchive: ThreatIntelQuarantineRecord[] = [];
 
   constructor(statePath?: string) {
     this.statePath = statePath || resolveThreatStatePath();
@@ -121,16 +147,17 @@ export class ThreatIntel {
     if (allEntries.length > 0) {
       const newEntries = this.diffFeed(allEntries);
       Logger.info(`[ThreatIntel] Live poll: ${allEntries.length} total, ${newEntries.length} new threats`);
-      if (newEntries.length > 0 && process.env.GUARDIAN_THREAT_RESEARCH_THREAT_INTEL !== 'false') {
+      const activeEntries = newEntries.filter((e) => !this.suppressed.has(e.id));
+      if (activeEntries.length > 0 && process.env.GUARDIAN_THREAT_RESEARCH_THREAT_INTEL !== 'false') {
         setImmediate(() => {
           void import('./threat-research-pipeline.js').then(({ buildThreatIntelEvent, enqueueThreatResearch }) => {
-            for (const entry of newEntries) {
+            for (const entry of activeEntries) {
               enqueueThreatResearch(buildThreatIntelEvent(entry));
             }
           });
         });
       }
-      return newEntries;
+      return activeEntries;
     }
 
     this.saveState();
@@ -144,6 +171,7 @@ export class ThreatIntel {
   /** Dashboard / API snapshot of known threat feed IDs and metadata. */
   getStatus(): ThreatIntelStatus {
     const entries = [...this.knownEntries.values()]
+      .filter((e) => !this.suppressed.has(e.id))
       .filter((e) => !isDemoThreatId(e.id))
       .sort((a, b) => (b.firstSeenAt || '').localeCompare(a.firstSeenAt || ''));
     const knownIds = entries.map((e) => e.id);
@@ -155,6 +183,7 @@ export class ThreatIntel {
       lastPollAt: this.lastPollAt,
       pollingActive: this.isPollingActive(),
       pollingDisabled: process.env.GUARDIAN_AI_DISABLE_THREAT_POLL === 'true',
+      suppressed: this.suppressed.size,
     };
   }
 
@@ -167,11 +196,82 @@ export class ThreatIntel {
     const minIdx = opts?.minSeverity ? order.indexOf(opts.minSeverity) : 0;
     const limit = opts?.limit ?? 50;
     return [...this.knownEntries.values()]
+      .filter((e) => !this.suppressed.has(e.id))
       .filter((e) => !isDemoThreatId(e.id))
       .filter((e) => order.indexOf(e.severity) >= minIdx)
       .sort((a, b) => (b.firstSeenAt || '').localeCompare(a.firstSeenAt || ''))
       .slice(0, limit)
       .map(({ firstSeenAt: _fs, ...entry }) => entry);
+  }
+
+  dismissThreat(id: string, operator?: string, note?: string): {
+    ok: boolean;
+    error?: string;
+    entry?: ThreatIntelCatalogEntry;
+  } {
+    const entry = this.knownEntries.get(id);
+    if (!entry) return { ok: false, error: `Unknown threat id: ${id}` };
+    const existing = this.suppressed.get(id);
+    if (existing) return { ok: false, error: `Threat already ${existing.action}` };
+    this.suppressed.set(id, { action: 'removed', at: new Date().toISOString(), by: operator });
+    this.saveState();
+    return { ok: true, entry };
+  }
+
+  quarantineThreat(
+    id: string,
+    opts?: {
+      operator?: string;
+      note?: string;
+      appliedRuleName?: string;
+      policyPath?: string;
+    },
+  ): { ok: boolean; error?: string; record?: ThreatIntelQuarantineRecord } {
+    const entry = this.knownEntries.get(id);
+    if (!entry) return { ok: false, error: `Unknown threat id: ${id}` };
+    const existing = this.suppressed.get(id);
+    if (existing) return { ok: false, error: `Threat already ${existing.action}` };
+
+    const now = new Date().toISOString();
+    const record: ThreatIntelQuarantineRecord = {
+      id: entry.id,
+      source: entry.source,
+      severity: entry.severity,
+      description: entry.description,
+      remediation: entry.remediation,
+      publishedAt: entry.publishedAt,
+      affectedPackage: entry.affectedPackage,
+      affectedPattern: entry.affectedPattern,
+      signature: entry.signature,
+      quarantinedAt: now,
+      operator: opts?.operator,
+      note: opts?.note,
+      appliedRuleName: opts?.appliedRuleName,
+      policyPath: opts?.policyPath,
+    };
+    this.suppressed.set(id, { action: 'quarantined', at: now, by: opts?.operator });
+    this.quarantineArchive.push(record);
+    this.purgeQuarantineArchive(30);
+    this.saveState();
+    return { ok: true, record };
+  }
+
+  restoreThreat(id: string): { ok: boolean; error?: string } {
+    if (!this.suppressed.has(id)) return { ok: false, error: `Threat is not suppressed: ${id}` };
+    this.suppressed.delete(id);
+    this.saveState();
+    return { ok: true };
+  }
+
+  listQuarantined(days = 30): ThreatIntelQuarantineRecord[] {
+    this.purgeQuarantineArchive(days);
+    return [...this.quarantineArchive].sort(
+      (a, b) => Date.parse(b.quarantinedAt || '') - Date.parse(a.quarantinedAt || ''),
+    );
+  }
+
+  getEntryById(id: string): ThreatIntelCatalogEntry | null {
+    return this.knownEntries.get(id) ?? null;
   }
 
   /** Poll NVD API v2 for recent CVEs relevant to MCP ecosystem */
@@ -361,6 +461,47 @@ export class ThreatIntel {
             }
           }
         }
+        const suppressed = data.suppressed;
+        if (suppressed && typeof suppressed === 'object') {
+          for (const [id, val] of Object.entries(suppressed as Record<string, unknown>)) {
+            if (!id || isDemoThreatId(id) || !val || typeof val !== 'object') continue;
+            const action = String((val as Record<string, unknown>).action || '');
+            if (action !== 'removed' && action !== 'quarantined') continue;
+            this.suppressed.set(id, {
+              action,
+              at: String((val as Record<string, unknown>).at || new Date().toISOString()),
+              by: typeof (val as Record<string, unknown>).by === 'string'
+                ? String((val as Record<string, unknown>).by)
+                : undefined,
+            });
+          }
+        }
+        const archive = data.quarantineArchive;
+        if (Array.isArray(archive)) {
+          for (const row of archive) {
+            if (!row || typeof row !== 'object') continue;
+            const r = row as Record<string, unknown>;
+            if (!r.id || isDemoThreatId(String(r.id))) continue;
+            if (!r.quarantinedAt) continue;
+            this.quarantineArchive.push({
+              id: String(r.id),
+              source: String(r.source || 'custom') as ThreatIntelEntry['source'],
+              severity: String(r.severity || 'MEDIUM') as ThreatIntelEntry['severity'],
+              description: String(r.description || ''),
+              remediation: String(r.remediation || ''),
+              publishedAt: String(r.publishedAt || ''),
+              affectedPackage: r.affectedPackage ? String(r.affectedPackage) : undefined,
+              affectedPattern: r.affectedPattern ? String(r.affectedPattern) : undefined,
+              signature: r.signature ? String(r.signature) : undefined,
+              quarantinedAt: String(r.quarantinedAt),
+              operator: r.operator ? String(r.operator) : undefined,
+              note: r.note ? String(r.note) : undefined,
+              appliedRuleName: r.appliedRuleName ? String(r.appliedRuleName) : undefined,
+              policyPath: r.policyPath ? String(r.policyPath) : undefined,
+            });
+          }
+        }
+        this.purgeQuarantineArchive(30);
         Logger.info(`[ThreatIntel] Loaded ${this.knownEntries.size} threat catalog entries`);
       }
     } catch {
@@ -379,6 +520,8 @@ export class ThreatIntel {
         updated: this.lastUpdated,
         lastPollAt: this.lastPollAt,
         entries: [...this.knownEntries.values()],
+        suppressed: Object.fromEntries(this.suppressed.entries()),
+        quarantineArchive: this.quarantineArchive,
       }, null, 2));
     } catch (err: any) {
       Logger.warn(`[ThreatIntel] Failed to save state: ${err?.message}`);
@@ -410,7 +553,7 @@ export class ThreatIntel {
   /** Diff new entries against last-seen state — returns only previously unseen */
   diffFeed(entries: ThreatIntelEntry[]): ThreatIntelEntry[] {
     const live = entries.filter((e) => !isDemoThreatId(e.id));
-    const new_ = live.filter(e => !this.lastSeenIds.has(e.id));
+    const new_ = live.filter((e) => !this.lastSeenIds.has(e.id) && !this.suppressed.has(e.id));
     for (const e of live) {
       this.lastSeenIds.add(e.id);
       this.rememberEntry(e);
@@ -418,6 +561,15 @@ export class ThreatIntel {
     this.saveState();
     Logger.info(`[ThreatIntel] ${new_.length} new threat entries (${live.length} total)`);
     return new_;
+  }
+
+  private purgeQuarantineArchive(days: number): void {
+    const maxDays = Number.isFinite(days) && days > 0 ? days : 30;
+    const cutoff = Date.now() - maxDays * 24 * 60 * 60 * 1000;
+    this.quarantineArchive = this.quarantineArchive.filter((r) => {
+      const ts = Date.parse(r.quarantinedAt || '');
+      return Number.isFinite(ts) && ts >= cutoff;
+    });
   }
 
   /** Convert threat intel entries into policy rules */

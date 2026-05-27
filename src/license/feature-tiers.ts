@@ -44,18 +44,30 @@ export function isOpenCoreEnabled(): boolean {
   return true;
 }
 
-/** Test/CI license bypass — allowed in non-production only. */
+/** Test/CI license bypass — disabled in enterprise mode. */
 export function isCiLicenseBypass(): boolean {
-  // Enterprise mode: no bypasses allowed — requires real license key
   if (process.env['GUARDIAN_ENTERPRISE_MODE'] === 'true') {
     return false;
   }
-  // Test/CI mode: GUARDIAN_CI_BYPASS_LICENSE allowed for test suites
   if (process.env['GUARDIAN_CI_BYPASS_LICENSE'] === 'true') {
     return true;
   }
-  // Production default: no env-var bypass
   return false;
+}
+
+/** Warn/fail startup when enterprise mode has license bypass env set. */
+export function assertEnterpriseLicensePosture(): void {
+  if (process.env['GUARDIAN_ENTERPRISE_MODE'] !== 'true') return;
+  if (process.env['GUARDIAN_CI_BYPASS_LICENSE'] === 'true') {
+    throw new Error(
+      'GUARDIAN_CI_BYPASS_LICENSE is not allowed when GUARDIAN_ENTERPRISE_MODE=true',
+    );
+  }
+  if (process.env['GUARDIAN_DEV_UNLOCK_ALL'] === 'true') {
+    throw new Error(
+      'GUARDIAN_DEV_UNLOCK_ALL is not allowed when GUARDIAN_ENTERPRISE_MODE=true',
+    );
+  }
 }
 
 /** isDevUnlockAllowed removed in v3.2.3 — use a valid GUARDIAN_LICENSE_KEY for local development. */

@@ -7,6 +7,8 @@ import {
   buildBypassEvent,
   buildBlockRepeatEvent,
   threatResearchAutoEnabled,
+  threatLabSourceToAutoCorpusSource,
+  writeValidatedDiscoveryToAutoCorpus,
   resetThreatResearchQueueForTests,
 } from '../../src/ai/threat-research-pipeline.js';
 import * as threatLab from '../../src/ai/threat-lab.js';
@@ -74,6 +76,7 @@ describe('threat-research-pipeline', () => {
     delete process.env.GUARDIAN_THREAT_RESEARCH_STATE_PATH;
     delete process.env.GUARDIAN_THREAT_RESEARCH_REQUIRE_REPLAY;
     delete process.env.GUARDIAN_THREAT_RESEARCH_MAX_PER_HOUR;
+    delete process.env.SWARM_THREAT_RESEARCH_AUTO;
     vi.clearAllMocks();
   });
 
@@ -142,6 +145,51 @@ describe('threat-research-pipeline', () => {
     );
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('below min confidence');
+  });
+
+  it('maps Threat Lab sources to auto-corpus sources', () => {
+    expect(threatLabSourceToAutoCorpusSource('semantic-tp')).toBe('semantic_flag');
+    expect(threatLabSourceToAutoCorpusSource('threat-intel')).toBe('threat_intel');
+    expect(threatLabSourceToAutoCorpusSource('corpus-proactive')).toBe('corpus_proactive');
+    expect(threatLabSourceToAutoCorpusSource('bypass')).toBe('bypass');
+  });
+
+  it('writeValidatedDiscoveryToAutoCorpus writes adv fixture without LLM', async () => {
+    process.env.SWARM_THREAT_RESEARCH_AUTO = 'true';
+    const result = await writeValidatedDiscoveryToAutoCorpus(
+      validDiscovery as threatLab.ThreatLabDiscovery,
+      {
+        source: 'bypass',
+        llmUsed: true,
+        inputFingerprint: 'threat-lab-delegate-1',
+      },
+      { requireReplayBlock: false },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.advId).toMatch(/^adv-/);
+    expect(result.relPath).toContain('custom-attacks');
+  });
+
+  it('writeValidatedDiscoveryToAutoCorpus rejects duplicate fingerprint', async () => {
+    process.env.SWARM_THREAT_RESEARCH_AUTO = 'true';
+    const provenance = {
+      source: 'bypass' as const,
+      llmUsed: true,
+      inputFingerprint: 'threat-lab-delegate-dup',
+    };
+    const first = await writeValidatedDiscoveryToAutoCorpus(
+      validDiscovery as threatLab.ThreatLabDiscovery,
+      provenance,
+      { requireReplayBlock: false },
+    );
+    const second = await writeValidatedDiscoveryToAutoCorpus(
+      validDiscovery as threatLab.ThreatLabDiscovery,
+      provenance,
+      { requireReplayBlock: false },
+    );
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(false);
+    expect(second.reason).toMatch(/duplicate/i);
   });
 
   it('buildBlockRepeatEvent includes redacted arguments and window context', () => {

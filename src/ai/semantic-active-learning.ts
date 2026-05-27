@@ -152,7 +152,7 @@ export function buildActiveLearningReport(records: StoredSemanticAudit[]): {
   const flagged = records.filter((r) => r.semanticAudit?.suspicious);
   const unlabeled = flagged.filter((r) => !r.labeled);
   return {
-    reviewQueue: rankSemanticReviewQueue(records, { limit: 5 }),
+    reviewQueue: rankSemanticReviewQueue(records, { limit: 10 }),
     thresholds: recommendSemanticThresholds(records),
     totals: {
       records: records.length,

@@ -14,6 +14,16 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent proxy**, a **standalone CLI**, an **MCP server** (so agents can self-audit), and a **pnpm monorepo** — install only what you need.
 
+### Detection tiers (honest)
+
+| Path | Community | Enterprise (`GUARDIAN_ENTERPRISE_MODE=true`) |
+|------|-----------|-----------------------------------------------|
+| Request (`tools/call`) | Regex + schema | + sync semantic gate (default when LLM configured) |
+| Response | Optional sync gate | Sync response gate (production default) |
+| Async audit / tribunal | Opt-in | Opt-in |
+
+See [ENTERPRISE_DEPLOYMENT.md](../../docs/ENTERPRISE_DEPLOYMENT.md) for Redis, multi-replica, and license requirements.
+
 ---
 
 ## Quick Start

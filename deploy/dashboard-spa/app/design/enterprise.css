@@ -398,6 +398,74 @@ button.secondary, .secondary {
 .chart-card-title { margin: 0; font-size: 14px; font-weight: 600; }
 .chart-card-sub { margin: 4px 0 0; font-size: 12px; color: var(--text-muted); }
 .chart-card-body { margin-top: 12px; }
+.audit-activity-heatmap {
+  display: grid;
+  grid-template-columns: 3.5rem repeat(24, minmax(0, 1fr));
+  gap: 4px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.35), rgba(15, 23, 42, 0.12));
+}
+.audit-activity-heatmap-wrap {
+  display: grid;
+  gap: 8px;
+}
+.audit-heatmap-hour-label,
+.audit-heatmap-day-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.audit-heatmap-hour-label {
+  text-align: center;
+}
+.audit-heatmap-day-label {
+  text-align: right;
+  padding-right: 6px;
+}
+.audit-heatmap-cell {
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: rgba(148, 163, 184, 0.08);
+  position: relative;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+.audit-heatmap-cell.active {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25) inset;
+}
+.audit-heatmap-cell:hover {
+  transform: translateY(-1px);
+}
+.audit-heatmap-hit {
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+}
+.audit-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.audit-heatmap-legend-bar {
+  width: 120px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: linear-gradient(
+    90deg,
+    rgba(56, 189, 248, 0.2) 0%,
+    rgba(56, 189, 248, 0.55) 50%,
+    rgba(56, 189, 248, 1) 100%
+  );
+}
 
 .insight-callout {
   background: var(--accent-muted);
@@ -511,6 +579,7 @@ button.secondary, .secondary {
 .threat-lab-context-banner,
 .threat-drawer,
 .candidate-drawer,
+.quarantine-policy-drawer,
 .incident-drawer {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -559,6 +628,103 @@ button.secondary, .secondary {
 }
 .enterprise-ai-kpi-value { font-size: 22px; font-weight: 600; }
 .enterprise-ai-kpi-label { font-size: 12px; color: var(--text-muted); }
+
+.enterprise-ai-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+.enterprise-ai-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+.enterprise-ai-card-wide {
+  grid-column: 1 / -1;
+}
+.tribunal-summary-card { grid-column: 1 / -1; }
+.tribunal-summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.tribunal-queue-empty-hint { margin: 0 0 var(--space-2); font-size: 13px; }
+.tribunal-how-toggle { margin: 0 0 var(--space-2); }
+.tribunal-how-it-works {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.tribunal-how-it-works ol { margin: 0; padding-left: 1.2rem; }
+.tribunal-how-it-works li { margin-bottom: 0.5rem; }
+.tribunal-run-meta { margin-bottom: var(--space-3); }
+.tribunal-debate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.tribunal-debate-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  background: var(--bg-subtle);
+}
+.tribunal-debate-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.tribunal-debate-subject { display: block; font-size: 14px; }
+.tribunal-debate-question { margin: 4px 0 0; font-size: 12px; }
+.tribunal-verdict-badge { flex-shrink: 0; }
+.badge.verdict-true_positive { color: var(--danger, #dc2626); border-color: color-mix(in srgb, var(--danger, #dc2626) 40%, transparent); }
+.badge.verdict-false_positive { color: var(--success, #16a34a); border-color: color-mix(in srgb, var(--success, #16a34a) 40%, transparent); }
+.badge.verdict-needs_review { color: var(--warning, #d97706); border-color: color-mix(in srgb, var(--warning, #d97706) 40%, transparent); }
+.tribunal-outcome-dl {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 4px 12px;
+  font-size: 13px;
+  margin: 0 0 var(--space-2);
+}
+.tribunal-outcome-dl dt { color: var(--text-muted); margin: 0; }
+.tribunal-outcome-dl dd { margin: 0; }
+.tribunal-debate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tribunal-debate-expanded {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border);
+}
+.tribunal-argument {
+  margin-bottom: var(--space-2);
+  font-size: 13px;
+}
+.tribunal-argument p { margin: 4px 0 0; }
+.tribunal-transcript-details { margin-top: var(--space-2); font-size: 12px; }
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent, #3b82f6);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+}
 
 .health-report-panel {
   margin-bottom: var(--space-5);
@@ -864,6 +1030,35 @@ button.linkish {
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: var(--space-4);
   margin-top: var(--space-3);
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.threat-automation-log {
+  margin: 8px 0 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+.threat-automation-feed-row {
+  display: grid;
+  grid-template-columns: 92px 210px 1fr;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
 }
 .workbench-layout {
   display: grid;

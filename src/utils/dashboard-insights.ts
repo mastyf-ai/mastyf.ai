@@ -32,7 +32,9 @@ export type DashboardInsightsPayload = {
 function measuredOverview(summary: ExecutiveSummary): string[] {
   const bullets: string[] = [];
   bullets.push(
-    `${summary.totalRequests.toLocaleString()} measured proxy calls across ${summary.activeServers} server(s); pass rate ${summary.passRatePct}%.`,
+    `${summary.totalRequests.toLocaleString()} measured proxy calls across ${summary.activeServers} server(s)${
+      summary.passRatePct != null ? `; pass rate ${summary.passRatePct}%` : ''
+    }.`,
   );
   if (summary.budgetUsd != null && summary.budgetUtilizationPct != null) {
     bullets.push(

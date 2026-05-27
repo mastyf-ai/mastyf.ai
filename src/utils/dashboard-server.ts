@@ -1,8 +1,9 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync, appendFileSync } from 'fs';
 import { load } from 'js-yaml';
 import { parsePolicyConfig } from '../policy/policy-schema.js';
 import { resolve, dirname, join, extname } from 'path';
+import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import { LRUCache } from 'lru-cache';
@@ -514,6 +515,16 @@ export async function startDashboardServer(
       return (first || '').trim();
     }
     return req.socket?.remoteAddress || 'unknown';
+  }
+
+  function appendThreatIntelActionAudit(action: Record<string, unknown>): void {
+    try {
+      const file = join(homedir(), '.mcp-guardian', 'threat-intel-actions.jsonl');
+      mkdirSync(dirname(file), { recursive: true });
+      appendFileSync(file, `${JSON.stringify(action)}\n`, 'utf-8');
+    } catch {
+      /* best effort */
+    }
   }
 
   const loginRateLimiter: LRUCache<string, number> = new LRUCache({
@@ -1097,10 +1108,11 @@ export async function startDashboardServer(
         setCors();
         const { buildTribunalReport } = await import('../ai/swarm-debate-tribunal.js');
         const u = new URL(req.url || url, 'http://localhost');
-        const limit = parseInt(u.searchParams.get('limit') || '3', 10);
+        const limitRaw = parseInt(u.searchParams.get('limit') || '10', 10);
+        const limit = Number.isFinite(limitRaw) ? limitRaw : 10;
         const report = await buildTribunalReport({
           tenantId: requestTenantId,
-          limit: Number.isFinite(limit) ? limit : 3,
+          limit: Math.min(Math.max(limit, 1), 25),
           useLlm: u.searchParams.get('useLlm') !== 'false',
         });
         writeJson(res, 200, report);
@@ -1336,7 +1348,28 @@ export async function startDashboardServer(
         return;
       }
 
-      if (url.startsWith('/api/audit') && method === 'GET') {
+      if (url === '/api/audit/heatmap' && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db;
+          if (!db) {
+            writeJson(res, 200, unavailable({ cells: [] }, 'No history database'));
+            return;
+          }
+          const records = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
+          const bundle = buildAuditHeatmapBundle(records, windowDays);
+          writeJson(res, 200, available({ ...bundle, meta: mergeFedMeta(bundle.meta as Record<string, unknown>, fed) }));
+        } catch {
+          writeJson(res, 200, unavailable({ cells: [] }, 'Failed audit heatmap'));
+        }
+        return;
+      }
+
+      if (url === '/api/audit' && method === 'GET') {
         setCors();
         const u = new URL(req.url || url, 'http://localhost');
         const startTime = u.searchParams.get('startTime') || undefined;
@@ -1538,6 +1571,241 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url === '/api/ai/threats/quarantined' && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const daysRaw = parseInt(u.searchParams.get('days') || '30', 10);
+          const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(daysRaw, 365) : 30;
+          const { getAiEngine } = await import('../ai/suggestion-engine.js');
+          const { startThreatIntelPollingIfEnabled } = await import('../ai/threat-intel.js');
+          const engine = getAiEngine();
+          const threatIntel = engine?.getThreatIntel() ?? startThreatIntelPollingIfEnabled();
+          writeJson(res, 200, { entries: threatIntel.listQuarantined(days), days });
+          return;
+        } catch (err) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Failed to read quarantined threats',
+          });
+          return;
+        }
+      }
+
+      if (
+        url === '/api/ai/threats/quarantine/policy'
+        && (method === 'GET' || method === 'POST')
+      ) {
+        setCors();
+        try {
+          let id = '';
+          let days = 30;
+          let listSnapshot: Record<string, unknown> | undefined;
+          if (method === 'GET') {
+            const u = new URL(req.url || '/', 'http://localhost');
+            id = String(u.searchParams.get('id') || '').trim();
+            const daysRaw = parseInt(u.searchParams.get('days') || '30', 10);
+            days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(daysRaw, 365) : 30;
+          } else {
+            const b = await readBody(req);
+            id = String(b.id || '').trim();
+            const daysRaw = parseInt(String(b.days || '30'), 10);
+            days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(daysRaw, 365) : 30;
+            listSnapshot =
+              b.record && typeof b.record === 'object'
+                ? (b.record as Record<string, unknown>)
+                : undefined;
+          }
+          if (!id && !listSnapshot?.id) {
+            writeJson(res, 400, { error: 'id required' });
+            return;
+          }
+          const lookupId = id || String(listSnapshot?.id || '');
+          const { getAiEngine } = await import('../ai/suggestion-engine.js');
+          const { startThreatIntelPollingIfEnabled } = await import('../ai/threat-intel.js');
+          const { buildIntelQuarantinePolicyDetail } = await import('./quarantine-policy-detail.js');
+          const engine = getAiEngine();
+          const threatIntel = engine?.getThreatIntel() ?? startThreatIntelPollingIfEnabled();
+          let record = threatIntel.listQuarantined(days).find((e) => e.id === lookupId);
+          if (!record && listSnapshot) {
+            record = {
+              id: lookupId,
+              source: (listSnapshot.source || 'custom') as 'OSV' | 'NVD' | 'GitHub' | 'custom',
+              severity: (listSnapshot.severity || 'HIGH') as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
+              description: String(listSnapshot.description || ''),
+              remediation: String(listSnapshot.remediation || ''),
+              publishedAt: String(listSnapshot.publishedAt || new Date().toISOString()),
+              quarantinedAt: String(listSnapshot.quarantinedAt || new Date().toISOString()),
+              operator: listSnapshot.operator ? String(listSnapshot.operator) : undefined,
+              note: listSnapshot.note ? String(listSnapshot.note) : undefined,
+              appliedRuleName: listSnapshot.appliedRuleName
+                ? String(listSnapshot.appliedRuleName)
+                : undefined,
+              policyPath: listSnapshot.policyPath ? String(listSnapshot.policyPath) : undefined,
+              affectedPackage: listSnapshot.affectedPackage
+                ? String(listSnapshot.affectedPackage)
+                : undefined,
+              affectedPattern: listSnapshot.affectedPattern
+                ? String(listSnapshot.affectedPattern)
+                : undefined,
+              signature: listSnapshot.signature ? String(listSnapshot.signature) : undefined,
+            };
+          }
+          if (!record) {
+            writeJson(res, 404, { error: 'Quarantined threat not found' });
+            return;
+          }
+          writeJson(res, 200, buildIntelQuarantinePolicyDetail(record));
+          return;
+        } catch (err) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Failed to read quarantine policy detail',
+          });
+          return;
+        }
+      }
+
+      if (url === '/api/ai/threats/dismiss' && method === 'POST') {
+        setCors();
+        const b = await readBody(req);
+        const id = String(b.id || '').trim();
+        if (!id) {
+          writeJson(res, 400, { ok: false, error: 'id required' });
+          return;
+        }
+        try {
+          const { getAiEngine } = await import('../ai/suggestion-engine.js');
+          const { startThreatIntelPollingIfEnabled } = await import('../ai/threat-intel.js');
+          const engine = getAiEngine();
+          const threatIntel = engine?.getThreatIntel() ?? startThreatIntelPollingIfEnabled();
+          const result = threatIntel.dismissThreat(id, authResult.identity || undefined, String(b.note || ''));
+          if (!result.ok) {
+            writeJson(res, 400, { ok: false, error: result.error || 'Dismiss failed' });
+            return;
+          }
+          appendThreatIntelActionAudit({
+            action: 'dismiss',
+            id,
+            note: b.note ? String(b.note) : undefined,
+            operator: authResult.identity || null,
+            tenantId: requestTenantId,
+            timestamp: new Date().toISOString(),
+          });
+          writeJson(res, 200, { ok: true, id });
+          return;
+        } catch (err) {
+          writeJson(res, 500, {
+            ok: false,
+            error: err instanceof Error ? err.message : 'Dismiss failed',
+          });
+          return;
+        }
+      }
+
+      if (url === '/api/ai/threats/quarantine' && method === 'POST') {
+        setCors();
+        const b = await readBody(req);
+        const id = String(b.id || '').trim();
+        if (!id) {
+          writeJson(res, 400, { ok: false, error: 'id required' });
+          return;
+        }
+        try {
+          const { getAiEngine, recordSuggestionOutcome } = await import('../ai/suggestion-engine.js');
+          const { startThreatIntelPollingIfEnabled } = await import('../ai/threat-intel.js');
+          const engine = getAiEngine();
+          const threatIntel = engine?.getThreatIntel() ?? startThreatIntelPollingIfEnabled();
+          const entry = threatIntel.getEntryById(id);
+          if (!entry) {
+            writeJson(res, 404, { ok: false, error: `Unknown threat id: ${id}` });
+            return;
+          }
+          const suggestion = threatIntel
+            .generateRules([entry])
+            .find((s) => s.rule.action === 'block')
+            ?? threatIntel.generateRules([entry])[0];
+          if (!suggestion?.rule) {
+            writeJson(res, 400, { ok: false, error: 'No policy rule generated for threat' });
+            return;
+          }
+          const policyPath = process.env['GUARDIAN_POLICY_PATH']
+            || process.env['MCP_GUARDIAN_POLICY_PATH']
+            || 'default-policy.yaml';
+          await recordSuggestionOutcome(`threat-quarantine:${id}`, 'applied', {
+            ruleName: suggestion.rule.name,
+            source: 'threat',
+            confidence: suggestion.confidence,
+            rule: suggestion.rule,
+            policyPath,
+            policyWatcher: policyWatcher ?? null,
+            userId: authResult.identity || undefined,
+          });
+          const result = threatIntel.quarantineThreat(id, {
+            operator: authResult.identity || undefined,
+            note: b.note ? String(b.note) : undefined,
+            appliedRuleName: suggestion.rule.name,
+            policyPath,
+          });
+          if (!result.ok) {
+            writeJson(res, 400, { ok: false, error: result.error || 'Quarantine failed' });
+            return;
+          }
+          appendThreatIntelActionAudit({
+            action: 'quarantine',
+            id,
+            note: b.note ? String(b.note) : undefined,
+            operator: authResult.identity || null,
+            tenantId: requestTenantId,
+            appliedRuleName: suggestion.rule.name,
+            policyPath,
+            timestamp: new Date().toISOString(),
+          });
+          writeJson(res, 200, { ok: true, id, appliedRuleName: suggestion.rule.name, record: result.record });
+          return;
+        } catch (err) {
+          writeJson(res, 500, {
+            ok: false,
+            error: err instanceof Error ? err.message : 'Quarantine failed',
+          });
+          return;
+        }
+      }
+
+      if (url === '/api/ai/threats/restore' && method === 'POST') {
+        setCors();
+        const b = await readBody(req);
+        const id = String(b.id || '').trim();
+        if (!id) {
+          writeJson(res, 400, { ok: false, error: 'id required' });
+          return;
+        }
+        try {
+          const { getAiEngine } = await import('../ai/suggestion-engine.js');
+          const { startThreatIntelPollingIfEnabled } = await import('../ai/threat-intel.js');
+          const engine = getAiEngine();
+          const threatIntel = engine?.getThreatIntel() ?? startThreatIntelPollingIfEnabled();
+          const result = threatIntel.restoreThreat(id);
+          if (!result.ok) {
+            writeJson(res, 400, { ok: false, error: result.error || 'Restore failed' });
+            return;
+          }
+          appendThreatIntelActionAudit({
+            action: 'restore',
+            id,
+            operator: authResult.identity || null,
+            tenantId: requestTenantId,
+            timestamp: new Date().toISOString(),
+          });
+          writeJson(res, 200, { ok: true, id });
+          return;
+        } catch (err) {
+          writeJson(res, 500, {
+            ok: false,
+            error: err instanceof Error ? err.message : 'Restore failed',
+          });
+          return;
+        }
+      }
+
       if (url === '/api/ai/threats/poll' && method === 'POST') {
         setCors();
         try {
@@ -1717,14 +1985,272 @@ export async function startDashboardServer(
         return;
       }
 
-      if (url === '/api/security/threats/quarantine' && method === 'POST') {
+      if (url === '/api/security/threats/quarantined' && method === 'GET') {
         setCors();
         try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const daysRaw = parseInt(u.searchParams.get('days') || '30', 10);
+          const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(daysRaw, 365) : 30;
+          const { getSecurityThreatQuarantine } = await import('./security-threat-quarantine.js');
+          writeJson(res, 200, {
+            entries: getSecurityThreatQuarantine(requestTenantId).list(days),
+            days,
+          });
+        } catch (e) {
+          writeJson(res, 500, {
+            error: e instanceof Error ? e.message : 'Failed to read quarantined monitor threats',
+          });
+        }
+        return;
+      }
+
+      if (
+        url === '/api/security/threats/quarantine/policy'
+        && (method === 'GET' || method === 'POST')
+      ) {
+        setCors();
+        try {
+          let threatKey = '';
+          let displayId = '';
+          let days = 30;
+          let listSnapshot: Record<string, unknown> | undefined;
+          if (method === 'GET') {
+            const u = new URL(req.url || '/', 'http://localhost');
+            threatKey = String(u.searchParams.get('threatKey') || '').trim();
+            displayId = String(u.searchParams.get('id') || '').trim();
+            const daysRaw = parseInt(u.searchParams.get('days') || '30', 10);
+            days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(daysRaw, 365) : 30;
+          } else {
+            const b = await readBody(req);
+            threatKey = String(b.threatKey || '').trim();
+            displayId = String(b.id || '').trim();
+            const daysRaw = parseInt(String(b.days || '30'), 10);
+            days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(daysRaw, 365) : 30;
+            listSnapshot =
+              b.record && typeof b.record === 'object'
+                ? (b.record as Record<string, unknown>)
+                : undefined;
+          }
+          if (!threatKey && !displayId && !listSnapshot?.threatKey && !listSnapshot?.id) {
+            writeJson(res, 400, { error: 'threatKey or id required' });
+            return;
+          }
+          const { getSecurityThreatQuarantine } = await import('./security-threat-quarantine.js');
+          const { buildMonitorQuarantinePolicyDetail } = await import('./quarantine-policy-detail.js');
+          const store = getSecurityThreatQuarantine(requestTenantId);
+          let record = store.findEntry(days, {
+            threatKey: threatKey || String(listSnapshot?.threatKey || ''),
+            id: displayId || String(listSnapshot?.id || ''),
+          });
+          if (!record && listSnapshot) {
+            record = {
+              id: String(listSnapshot.id || displayId || threatKey),
+              threatKey: String(listSnapshot.threatKey || threatKey || displayId),
+              type: String(listSnapshot.type || 'Policy violation'),
+              source: String(listSnapshot.source || 'unknown'),
+              severity: (['critical', 'high', 'medium', 'low'].includes(String(listSnapshot.severity))
+                ? listSnapshot.severity
+                : 'high') as 'critical' | 'high' | 'medium' | 'low',
+              status: (['blocked', 'monitored', 'resolved'].includes(String(listSnapshot.status))
+                ? listSnapshot.status
+                : 'resolved') as 'blocked' | 'monitored' | 'resolved',
+              quarantinedAt: String(listSnapshot.quarantinedAt || new Date().toISOString()),
+              operator: listSnapshot.operator ? String(listSnapshot.operator) : undefined,
+              note: listSnapshot.note ? String(listSnapshot.note) : undefined,
+              appliedRuleName: listSnapshot.appliedRuleName
+                ? String(listSnapshot.appliedRuleName)
+                : undefined,
+              policyPath: listSnapshot.policyPath ? String(listSnapshot.policyPath) : undefined,
+              enforcementStatus: (listSnapshot.enforcementStatus || 'skipped') as
+                | 'applied'
+                | 'already_present'
+                | 'already_blocked'
+                | 'no_context'
+                | 'skipped',
+              enforcementDetail: listSnapshot.enforcementDetail
+                ? String(listSnapshot.enforcementDetail)
+                : undefined,
+              sourceKind: (listSnapshot.sourceKind || 'unknown') as
+                | 'semantic'
+                | 'block'
+                | 'unknown',
+            };
+          }
+          if (!record) {
+            writeJson(res, 404, { error: 'Quarantined monitor threat not found' });
+            return;
+          }
           const fed = await resolveChartContext(requestTenantId, 1);
-          const { buildSecurityDashboard } = await import('./security-dashboard.js');
-          const dash = await buildSecurityDashboard(fed.db, requestTenantId, 1);
-          const quarantined = dash.threats.filter((t) => t.severity === 'critical' || t.severity === 'high').length;
-          writeJson(res, 200, { ok: true, quarantined });
+          const detail = await buildMonitorQuarantinePolicyDetail(
+            record,
+            requestTenantId,
+            fed.db,
+          );
+          writeJson(res, 200, detail);
+        } catch (e) {
+          writeJson(res, 500, {
+            error: e instanceof Error ? e.message : 'Failed to read quarantine policy detail',
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/security/threats/restore' && method === 'POST') {
+        setCors();
+        const b = await readBody(req);
+        const threatKey = String(b.threatKey || '').trim();
+        const removeRule = b.removeRule === true || b.removeRule === 'true';
+        if (!threatKey) {
+          writeJson(res, 400, { ok: false, error: 'threatKey required' });
+          return;
+        }
+        try {
+          const { getSecurityThreatQuarantine } = await import('./security-threat-quarantine.js');
+          const result = getSecurityThreatQuarantine(requestTenantId).restore(threatKey);
+          if (!result.ok) {
+            writeJson(res, 400, { ok: false, error: result.error || 'Restore failed' });
+            return;
+          }
+          let removedRule = false;
+          if (removeRule && result.record?.appliedRuleName) {
+            const { removeSuggestionRuleFromPolicy } = await import('../ai/policy-applier.js');
+            const removed = removeSuggestionRuleFromPolicy(
+              result.record.appliedRuleName,
+              result.record.policyPath || defaultPolicyPath(),
+              policyWatcher ?? null,
+            );
+            removedRule = removed.removed;
+          }
+          appendThreatIntelActionAudit({
+            action: 'monitor_restore',
+            id: threatKey,
+            appliedRuleName: result.record?.appliedRuleName,
+            removeRule,
+            removedRule,
+            operator: authResult.identity || null,
+            tenantId: requestTenantId,
+            timestamp: new Date().toISOString(),
+          });
+          writeJson(res, 200, { ok: true, threatKey, removedRule });
+        } catch (e) {
+          writeJson(res, 500, { ok: false, error: e instanceof Error ? e.message : 'Restore failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/security/threats/quarantine' && method === 'POST') {
+        setCors();
+        const b = await readBody(req);
+        try {
+          const { getSecurityThreatQuarantine } = await import('./security-threat-quarantine.js');
+          const { applyMonitorQuarantineEnforcement } = await import('./monitor-quarantine-enforcement.js');
+          const store = getSecurityThreatQuarantine(requestTenantId);
+          const operator = authResult.identity || undefined;
+          const policyPath = process.env['GUARDIAN_POLICY_PATH']
+            || process.env['MCP_GUARDIAN_POLICY_PATH']
+            || defaultPolicyPath();
+
+          if (b.all === true || b.all === 'true') {
+            const fed = await resolveChartContext(requestTenantId, 1);
+            const { buildSecurityDashboard } = await import('./security-dashboard.js');
+            let policyMode: string | undefined;
+            try {
+              const { readFileSync } = await import('fs');
+              const { load } = await import('js-yaml');
+              const { parsePolicyConfig } = await import('../policy/policy-schema.js');
+              const yaml = readFileSync(defaultPolicyPath(), 'utf-8');
+              policyMode = parsePolicyConfig(load(yaml)).policy.mode;
+            } catch {
+              policyMode = process.env.GUARDIAN_POLICY_MODE;
+            }
+            const dash = await buildSecurityDashboard(fed.db, requestTenantId, 1, { policyMode });
+            const targets = (dash.threats ?? []).filter(
+              (t) => t.severity === 'critical' || t.severity === 'high',
+            );
+            let quarantined = 0;
+            for (const row of targets) {
+              const enforcement = await applyMonitorQuarantineEnforcement({
+                row,
+                tenantId: requestTenantId,
+                db: fed.db,
+                policyPath,
+                policyWatcher: policyWatcher ?? null,
+                operator,
+              });
+              const result = store.quarantine(row, operator, undefined, {
+                appliedRuleName: enforcement.appliedRuleName,
+                policyPath: enforcement.policyPath,
+                enforcementStatus: enforcement.status,
+                enforcementDetail: enforcement.detail,
+                sourceKind: enforcement.sourceKind,
+              });
+              if (result.ok) quarantined += 1;
+            }
+            appendThreatIntelActionAudit({
+              action: 'monitor_quarantine_all',
+              count: quarantined,
+              operator: authResult.identity || null,
+              tenantId: requestTenantId,
+              timestamp: new Date().toISOString(),
+            });
+            writeJson(res, 200, { ok: true, quarantined });
+            return;
+          }
+
+          const threatKey = String(b.threatKey || '').trim();
+          if (!threatKey) {
+            writeJson(res, 400, { ok: false, error: 'threatKey required' });
+            return;
+          }
+          const row = {
+            threatKey,
+            id: String(b.id || threatKey),
+            type: String(b.type || 'Policy violation'),
+            source: String(b.source || 'unknown'),
+            severity: (['critical', 'high', 'medium', 'low'].includes(String(b.severity))
+              ? b.severity
+              : 'high') as 'critical' | 'high' | 'medium' | 'low',
+            status: (['blocked', 'monitored', 'resolved'].includes(String(b.status))
+              ? b.status
+              : 'blocked') as 'blocked' | 'monitored' | 'resolved',
+          };
+          const fed = await resolveChartContext(requestTenantId, 1);
+          const enforcement = await applyMonitorQuarantineEnforcement({
+            row,
+            tenantId: requestTenantId,
+            db: fed.db,
+            policyPath,
+            policyWatcher: policyWatcher ?? null,
+            operator,
+          });
+          const result = store.quarantine(row, operator, b.note ? String(b.note) : undefined, {
+            appliedRuleName: enforcement.appliedRuleName,
+            policyPath: enforcement.policyPath,
+            enforcementStatus: enforcement.status,
+            enforcementDetail: enforcement.detail,
+            sourceKind: enforcement.sourceKind,
+          });
+          if (!result.ok) {
+            writeJson(res, 400, { ok: false, error: result.error || 'Quarantine failed' });
+            return;
+          }
+          appendThreatIntelActionAudit({
+            action: 'monitor_quarantine',
+            id: row.id,
+            threatKey,
+            appliedRuleName: enforcement.appliedRuleName,
+            enforcementStatus: enforcement.status,
+            operator: authResult.identity || null,
+            tenantId: requestTenantId,
+            timestamp: new Date().toISOString(),
+          });
+          writeJson(res, 200, {
+            ok: true,
+            threatKey,
+            record: result.record,
+            appliedRuleName: enforcement.appliedRuleName,
+            enforcementStatus: enforcement.status,
+          });
         } catch (e) {
           writeJson(res, 500, { ok: false, error: e instanceof Error ? e.message : 'Quarantine failed' });
         }
@@ -2174,27 +2700,6 @@ export async function startDashboardServer(
         return;
       }
 
-      if (url === '/api/audit/heatmap' && method === 'GET') {
-        setCors();
-        try {
-          const u = new URL(req.url || url, 'http://localhost');
-          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
-          const region = parseRegionParam(u.searchParams);
-          const fed = await resolveChartContext(requestTenantId, windowDays, region);
-          const db = fed.db;
-          if (!db) {
-            writeJson(res, 200, unavailable({ cells: [] }, 'No history database'));
-            return;
-          }
-          const records = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
-          const bundle = buildAuditHeatmapBundle(records, windowDays);
-          writeJson(res, 200, available({ ...bundle, meta: mergeFedMeta(bundle.meta as Record<string, unknown>, fed) }));
-        } catch {
-          writeJson(res, 200, unavailable({ cells: [] }, 'Failed audit heatmap'));
-        }
-        return;
-      }
-
       if (url === '/api/dashboard/regions' && method === 'GET') {
         setCors();
         try {
@@ -2246,7 +2751,17 @@ export async function startDashboardServer(
           const atRisk = reps.filter((h: any) =>
             (h.latency != null && h.latency > 200) || (h.successRate != null && h.successRate < 70),
           ).map((h: any) => h.name);
-          writeJson(res, 200, available({ serverReports: reps, atRisk, avgLatency, totalTools }));
+          const { getSemanticRequestGateStatus } = await import('../ai/sync-semantic-request.js');
+          const semanticGate = getSemanticRequestGateStatus(requestTenantId);
+          writeJson(res, 200, available({
+            serverReports: reps,
+            atRisk,
+            avgLatency,
+            totalTools,
+            semanticRequestGate: semanticGate.semanticRequestGate,
+            semanticGateLlmConfigured: semanticGate.llmConfigured,
+            enterpriseMode: semanticGate.enterpriseMode,
+          }));
         } catch {
           writeJson(res, 200, unavailable({ serverReports: [], atRisk: [], avgLatency: null, totalTools: 0 }, 'Failed to read health data'));
         }
@@ -2723,6 +3238,12 @@ export async function startDashboardServer(
         writeJson(res, 200, await buildThreatDiscoveryStatus(requestTenantId));
         return;
       }
+      if (url === '/api/threat-discovery/automation/summary' && method === 'GET') {
+        setCors();
+        const { buildThreatAutomationSummary } = await import('./threat-automation-summary.js');
+        writeJson(res, 200, await buildThreatAutomationSummary(requestTenantId));
+        return;
+      }
       if (url === '/api/threat-discovery/threat-lab/run' && method === 'POST') {
         setCors();
         const body = await readBody(req).catch(() => ({}));
@@ -2802,6 +3323,16 @@ export async function startDashboardServer(
         }
         return;
       }
+      if (url === '/api/threat-discovery/promote/stats' && method === 'GET') {
+        setCors();
+        try {
+          const { getPromotionStats } = await import('../ai/auto-corpus-promoter.js');
+          writeJson(res, 200, await getPromotionStats());
+        } catch {
+          writeJson(res, 200, { error: 'Auto-corpus promoter not available', enabled: process.env['GUARDIAN_AUTO_CORPUS_PROMOTE'] !== 'true' });
+        }
+        return;
+      }
       if (url === '/api/threat-discovery/promote/batch' && method === 'POST') {
         setCors();
         try {
@@ -2816,6 +3347,34 @@ export async function startDashboardServer(
         setCors();
         const { getOnboardingStatus } = await import('./server-registry.js');
         writeJson(res, 200, await getOnboardingStatus());
+        return;
+      }
+
+      if (url === '/api/internal/rug-pull' && method === 'DELETE') {
+        setCors();
+        const expected = process.env['GUARDIAN_INTERNAL_ADMIN_TOKEN'];
+        const provided =
+          (typeof req.headers['x-guardian-internal-token'] === 'string'
+            ? req.headers['x-guardian-internal-token']
+            : req.headers['authorization']?.replace(/^Bearer\s+/i, '')) || '';
+        if (expected && provided !== expected) {
+          writeJson(res, 401, { error: 'Unauthorized' });
+          return;
+        }
+        try {
+          const b = await readBody(req);
+          const { clearRugPullAlert } = await import('../proxy/rug-pull-cluster.js');
+          const serverName = String(b.serverName || b.server || '');
+          const tenantId = String(b.tenantId || requestTenantId || 'default');
+          if (!serverName) {
+            writeJson(res, 400, { error: 'serverName required' });
+            return;
+          }
+          await clearRugPullAlert(serverName, tenantId);
+          writeJson(res, 200, available({ cleared: true, serverName, tenantId }));
+        } catch (e) {
+          writeJson(res, 500, { error: e instanceof Error ? e.message : 'Clear failed' });
+        }
         return;
       }
 

@@ -4,14 +4,35 @@
 
 [![npm version](https://img.shields.io/npm/v/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
 [![npm downloads](https://img.shields.io/npm/dm/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
+[![Website](https://img.shields.io/badge/Website-mcp--guardian--cloud.vercel.app-0070f3)](https://mcp-guardian-cloud.vercel.app/)
+[![mcp-guardian MCP server](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian/badges/score.svg)](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
+[![MCP SDK](https://img.shields.io/badge/MCP_SDK-1.25-green)](https://github.com/modelcontextprotocol/typescript-sdk)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-**Version 3.2.7** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+**Version 3.3.0** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+
+### Detection tiers (honest)
+
+| Path | Community | Enterprise (`GUARDIAN_ENTERPRISE_MODE=true`) |
+|------|-----------|-----------------------------------------------|
+| Request (`tools/call`) | Regex + schema | + sync semantic request gate (default when LLM configured) |
+| Response | Optional sync gate | Sync response gate (production default) |
+| Audit / learning | Opt-in async | Opt-in async |
+
+See [ENTERPRISE_DEPLOYMENT.md](docs/ENTERPRISE_DEPLOYMENT.md) for Redis, multi-replica, and license requirements.
 
 ---
 
-## What's new in 3.2.7
+## What's new in 3.3.0
+
+- **Production premortem remediation** — rug-pull on all `tools/list` responses (including JSON-RPC with `id`), inflight cap before policy/LLM, opt-in policy eval cache (`cacheable` in YAML), enterprise sync semantic request gate, cross-transport parity (stdio, HTTP, WebSocket, SSE, streamable HTTP)
+- **Enterprise hardening** — shared Redis rug-pull alerts, license bypass lockdown in enterprise mode, encoding-guard union for base64 paraphrase attacks, session-flow backend metrics
+- **Enterprise deployment guide** — [ENTERPRISE_DEPLOYMENT.md](docs/ENTERPRISE_DEPLOYMENT.md)
+- **Ops** — `DELETE /api/internal/rug-pull` for clearing cluster rug-pull flags; `semanticRequestGate` on dashboard `/api/health`
+
+## What's new in 3.2.8
 
 - **Dashboard v3** — workspace navigation (Protection, Activity, Threats, Security, Operations, Settings, Help)
 - **Operations analytics** — live traffic, error rate, and cost charts (`GET /api/analytics/summary`)

@@ -25,6 +25,8 @@ import { resolveMcpServerDbPath } from './utils/guardian-db-path.js';
 import { Logger } from './utils/logger.js';
 import type { IDatabase } from './database/database-interface.js';
 import type { McpServerConfig, SecurityReport, CostReport, HealthReport, ProxyCallRecord } from './types.js';
+import { parseWindowDays } from './utils/time-buckets.js';
+import { buildAuditHeatmapBundle } from './utils/audit-heatmap.js';
 
 // ── Types for API responses (matching guardian-api.ts in dashboard-spa) ─────
 
@@ -677,7 +679,7 @@ export async function startSocApiServer(port = 4040): Promise<void> {
 
   // ── GET /api/aggregate/audit ──────────────────────────────────────────────
   app.get('/api/aggregate/audit', async (req: Request, res: Response) => {
-    const windowDays = parseInt(String(req.query['window'] ?? '7'), 10);
+    const windowDays = parseWindowDays(String(req.query['window'] ?? '7'));
     const limitParam = parseInt(String(req.query['limit'] ?? '200'), 10);
     const actionFilter = req.query['action'] as string | undefined;
     const serverFilter = req.query['server'] as string | undefined;
@@ -723,52 +725,12 @@ export async function startSocApiServer(port = 4040): Promise<void> {
 
   // ── GET /api/audit/heatmap ────────────────────────────────────────────────
   app.get('/api/audit/heatmap', async (req: Request, res: Response) => {
-    const windowDays = parseInt(String(req.query['window'] ?? '7'), 10);
+    const windowDays = parseWindowDays(String(req.query['window'] ?? '7'));
     try {
       const serverNames = await db.getDistinctActiveServers();
       const allRecords = await getAllCallRecords(db, serverNames, windowDays);
-
-      // Rule×tool heatmap cells
-      const cellMap = new Map<string, { rule: string; tool: string; count: number }>();
-      for (const r of allRecords) {
-        if (r.blocked && r.blockRule) {
-          const key = `${r.blockRule}::${r.toolName}`;
-          const existing = cellMap.get(key) ?? { rule: r.blockRule, tool: r.toolName, count: 0 };
-          existing.count += 1;
-          cellMap.set(key, existing);
-        }
-      }
-
-      // Day×hour activity matrix (7 days × 24 hours)
-      const DAYS = Math.min(windowDays, 7);
-      const days: string[] = [];
-      const now = new Date();
-      for (let d = DAYS - 1; d >= 0; d--) {
-        const dt = new Date(now.getTime() - d * 86400_000);
-        days.push(dt.toISOString().slice(0, 10));
-      }
-      const hours = Array.from({ length: 24 }, (_, i) => i);
-      const matrix: number[][] = days.map(() => hours.map(() => 0));
-      let maxCount = 0;
-
-      for (const r of allRecords) {
-        const t = new Date(parseTimestamp(r.timestamp));
-        if (Number.isNaN(t.getTime())) continue;
-        const dayStr = t.toISOString().slice(0, 10);
-        const dayIdx = days.indexOf(dayStr);
-        const hour = t.getUTCHours();
-        if (dayIdx >= 0) {
-          matrix[dayIdx][hour] = (matrix[dayIdx][hour] ?? 0) + 1;
-          if (matrix[dayIdx][hour] > maxCount) maxCount = matrix[dayIdx][hour];
-        }
-      }
-
-      res.json({
-        available: true,
-        windowDays,
-        cells: Array.from(cellMap.values()).sort((a, b) => b.count - a.count),
-        activity: { days, hours, matrix, maxCount },
-      });
+      const bundle = buildAuditHeatmapBundle(allRecords, windowDays);
+      res.json({ available: true, ...bundle });
     } catch (err) {
       res.status(500).json({ available: false, error: String(err) });
     }

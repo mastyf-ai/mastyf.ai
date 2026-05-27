@@ -5,14 +5,35 @@
 import type { CallContext, PolicyDecision } from './policy-types.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
 import { deobfuscateRecursive, stripZeroWidthCharacters } from '../utils/payload-normalizer.js';
+import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
+import { OVERRIDE_ATTACK_RE, SUSPICIOUS_DECODED_RE } from './encoding-guard-patterns.js';
 
 const BASE64_BLOB_RE = /(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{20,}={0,2})(?:[^A-Za-z0-9+/]|$)/g;
 const RAW_HEX_BLOB_RE = /\b([0-9a-fA-F]{16,})\b/g;
 const PERCENT_ENCODED_RUN_RE = /(?:%[0-9a-fA-F]{2}){4,}/i;
-const SUSPICIOUS_DECODED_RE =
-  /\b(?:ignore|disregard|bypass|jailbreak|delete|drop|exec|eval|curl|wget|rm\s+-rf|union\s+select|sleep\s*\(|benchmark\s*\(|\/etc\/passwd|bash|\/bin\/sh|select\s+\*|\bselect\b|\/dev\/tcp)\b/i;
-const OVERRIDE_ATTACK_RE =
-  /\boverride\b.{0,80}\b(?:all|previous|prior|safety|instruction|rules|system|filter|restriction|guidance)\b/i;
+const SHELL_FRAGMENT_RE =
+  /\b(?:rm\s+-rf|union\s+select|sleep\s*\(|benchmark\s*\(|\/etc\/passwd|\/bin\/sh|select\s+\*|\/dev\/tcp|delete\s+account|drop\s+table)\b/i;
+
+function encodingTransformApplied(original: string, decoded: string): boolean {
+  if (decoded.length === 0 || decoded === original) return false;
+  const norm = (s: string) => s.replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim();
+  if (norm(original) === norm(decoded)) return false;
+  return true;
+}
+
+/** After a real encoding transform, run keyword union + injection detector. */
+function decodedContentSuspicious(original: string, decoded: string): boolean {
+  if (!encodingTransformApplied(original, decoded)) return false;
+  if (
+    SUSPICIOUS_DECODED_RE.test(decoded)
+    || OVERRIDE_ATTACK_RE.test(decoded)
+    || SHELL_FRAGMENT_RE.test(decoded)
+  ) {
+    return true;
+  }
+  const findings = detectPromptInjection('encoding-guard', decoded);
+  return findings.some((f) => f.severity === 'critical' || f.severity === 'high');
+}
 
 export function isEncodingGuardEnabled(): boolean {
   return process.env['GUARDIAN_ENCODING_GUARD'] !== 'false';
@@ -45,26 +66,21 @@ export function scanEncodingEvasion(blob: string): { matched: boolean; reason: s
 
   const deobfuscated = deobfuscateRecursive(blob);
   const strippedInvisible = stripZeroWidthCharacters(blob);
-  const decodedSuspicious =
-    SUSPICIOUS_DECODED_RE.test(deobfuscated) || OVERRIDE_ATTACK_RE.test(deobfuscated);
-  if (
-    deobfuscated.length > 0 &&
-    decodedSuspicious &&
-    (deobfuscated !== blob ||
-      (strippedInvisible !== blob &&
-        (SUSPICIOUS_DECODED_RE.test(strippedInvisible) || OVERRIDE_ATTACK_RE.test(strippedInvisible))))
-  ) {
+  if (decodedContentSuspicious(blob, deobfuscated)) {
     return { matched: true, reason: 'multi-layer encoding reveals blocked content after decode' };
   }
+  if (strippedInvisible !== blob && decodedContentSuspicious(blob, strippedInvisible)) {
+    return { matched: true, reason: 'zero-width stripped content is suspicious after decode' };
+  }
 
-  if (PERCENT_ENCODED_RUN_RE.test(blob) && SUSPICIOUS_DECODED_RE.test(deobfuscated)) {
+  if (PERCENT_ENCODED_RUN_RE.test(blob) && decodedContentSuspicious(blob, deobfuscated)) {
     return { matched: true, reason: 'percent-encoded payload decodes to suspicious content' };
   }
 
   for (const match of blob.matchAll(BASE64_BLOB_RE)) {
     const b64 = match[1];
     const decoded = tryDecodeBase64(b64);
-    if (decoded && SUSPICIOUS_DECODED_RE.test(decoded)) {
+    if (decoded && decodedContentSuspicious(b64, decoded)) {
       return { matched: true, reason: 'base64 blob decodes to suspicious instruction text' };
     }
   }
@@ -72,7 +88,7 @@ export function scanEncodingEvasion(blob: string): { matched: boolean; reason: s
   for (const match of blob.matchAll(RAW_HEX_BLOB_RE)) {
     const hex = match[1];
     const decoded = tryDecodeRawHex(hex);
-    if (decoded && SUSPICIOUS_DECODED_RE.test(decoded)) {
+    if (decoded && decodedContentSuspicious(hex, decoded)) {
       return { matched: true, reason: 'raw hex blob decodes to suspicious instruction text' };
     }
   }
@@ -80,7 +96,7 @@ export function scanEncodingEvasion(blob: string): { matched: boolean; reason: s
   const trimmed = blob.trim();
   if (/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed)) {
     const whole = tryDecodeBase64(trimmed);
-    if (whole && SUSPICIOUS_DECODED_RE.test(whole)) {
+    if (whole && decodedContentSuspicious(trimmed, whole)) {
       return { matched: true, reason: 'whole-string base64 decodes to suspicious content' };
     }
   }

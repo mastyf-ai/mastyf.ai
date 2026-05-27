@@ -7,6 +7,7 @@ import { LRUCache } from 'lru-cache';
 import type { CallContext, PolicyDecision } from './policy-types.js';
 import { isRedisConfigured, getSharedRedisClient } from '../utils/redis-client.js';
 import { Logger } from '../utils/logger.js';
+import * as Metrics from '../utils/metrics.js';
 
 type CacheEntry = { decision: PolicyDecision; expiresAt: number };
 
@@ -37,8 +38,14 @@ export function isPolicyEvalCacheEnabled(): boolean {
 
 const NON_CACHEABLE_RULE_PREFIXES = ['rate', 'idempotency', 'redis-rate', 'timing'];
 
-/** Stateful / time-varying decisions must not be cached. */
-export function shouldCachePolicyDecision(decision: PolicyDecision): boolean {
+/** Explicit allowlist for static pass rules safe to cache (opt-in model). */
+const CACHEABLE_RULE_ALLOWLIST = new Set([
+  'default-pass',
+  'static-allow',
+  'yaml-default',
+]);
+
+function legacyCacheHeuristic(decision: PolicyDecision): boolean {
   const rule = decision.rule.toLowerCase();
   if (NON_CACHEABLE_RULE_PREFIXES.some((p) => rule.includes(p))) return false;
   if (decision.reason.toLowerCase().includes('rate limit')) return false;
@@ -46,16 +53,47 @@ export function shouldCachePolicyDecision(decision: PolicyDecision): boolean {
   return true;
 }
 
+function useLegacyCacheHeuristic(): boolean {
+  if (process.env['GUARDIAN_POLICY_EVAL_CACHE_LEGACY_HEURISTIC'] === 'true') return true;
+  if (
+    process.env['GUARDIAN_ENTERPRISE_MODE'] === 'true'
+    && process.env['GUARDIAN_POLICY_EVAL_CACHE_LEGACY_HEURISTIC'] !== 'true'
+  ) {
+    return false;
+  }
+  return process.env['GUARDIAN_POLICY_EVAL_CACHE_LEGACY_HEURISTIC'] === 'true';
+}
+
+/** Opt-in: only cache explicit allowlist passes unless legacy heuristic enabled. */
+export function shouldCachePolicyDecision(
+  decision: PolicyDecision,
+  opts?: { ruleCacheable?: boolean },
+): boolean {
+  if (decision.action !== 'pass') return false;
+  if (opts?.ruleCacheable === true) return true;
+  if (CACHEABLE_RULE_ALLOWLIST.has(decision.rule)) return true;
+  if (useLegacyCacheHeuristic()) return legacyCacheHeuristic(decision);
+  return false;
+}
+
 export function resetPolicyEvalCacheForTests(): void {
   localCache.clear();
 }
 
-export async function getCachedPolicyDecision(key: string): Promise<PolicyDecision | null> {
+export async function getCachedPolicyDecision(
+  key: string,
+  tenantId?: string,
+): Promise<PolicyDecision | null> {
   const ttl = cacheTtlMs();
   if (ttl <= 0) return null;
 
   const local = localCache.get(key);
-  if (local && local.expiresAt > Date.now()) return local.decision;
+  if (local && local.expiresAt > Date.now()) {
+    Metrics.policyCacheHitsTotal.inc(
+      Metrics.withTenantMetricLabels({ allowed: 'true' }, tenantId),
+    );
+    return local.decision;
+  }
 
   if (!isRedisConfigured()) return null;
 
@@ -65,6 +103,9 @@ export async function getCachedPolicyDecision(key: string): Promise<PolicyDecisi
     if (!raw) return null;
     const decision = JSON.parse(raw) as PolicyDecision;
     localCache.set(key, { decision, expiresAt: Date.now() + ttl });
+    Metrics.policyCacheHitsTotal.inc(
+      Metrics.withTenantMetricLabels({ allowed: 'true' }, tenantId),
+    );
     return decision;
   } catch (err: unknown) {
     Logger.debug(

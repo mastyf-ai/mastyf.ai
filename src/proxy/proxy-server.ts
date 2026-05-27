@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
-import { randomUUID, createHash } from 'crypto';
+import { randomUUID } from 'crypto';
 import {
   TokenCounter,
   countAudioTokensInPayload,
@@ -53,7 +53,14 @@ import {
   ingestPolicyDecision,
 } from '../ai/block-learning.js';
 import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semantic-audit.js';
+import { isSyncSemanticRequestEnabled } from '../ai/sync-semantic-request.js';
 import { publishRugPullAlert, isClusterRugPullActive } from './rug-pull-cluster.js';
+import {
+  applyToolFingerprintFromResult,
+  type ToolFingerprintState,
+} from './tool-fingerprint.js';
+import { isProxyInflightExceeded, proxyMaxInflight } from './proxy-inflight.js';
+import { runSyncSemanticRequestGate } from './proxy-post-policy-gates.js';
 import { resolveToolTimeoutMs } from '../utils/tool-timeout.js';
 import type { HistoryDatabase } from '../database/history-db.js';
 import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js';
@@ -63,12 +70,6 @@ import { startMemoryMonitor } from '../utils/memory-monitor.js';
 const MAX_PAYLOAD_BYTES = parseInt(
   process.env['MCP_GUARDIAN_MAX_PAYLOAD_BYTES'] ?? '10485760', // 10 MB default
 );
-
-function proxyMaxInflight(): number {
-  const raw = process.env['GUARDIAN_PROXY_MAX_INFLIGHT'] ?? '50';
-  const n = parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : 50;
-}
 
 const RESTART_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000]; // Exponential
 
@@ -97,12 +98,10 @@ export class McpProxyServer {
   private readonly clientInputQueue = new RequestIdLock();
   private stopMemoryMonitor: (() => void) | null = null;
 
-  /** P0 Week 2: SHA-256 fingerprint of the tools/list response at session init.
-   *  Compared on every subsequent tools/list to detect rug-pull attacks
-   *  (OWASP MCP03 — server mutates tool descriptions mid-session). */
-  private toolFingerprint: string | null = null;
-  /** When true, tools/call and mutated tools/list are blocked (rug-pull detected). */
-  private rugPullBlocked = false;
+  /** OWASP MCP03 rug-pull fingerprint state (tools/list). */
+  private rugPullState: ToolFingerprintState = { fingerprint: null, blocked: false };
+  /** Pending tools/list JSON-RPC ids awaiting correlated responses. */
+  private pendingToolsListIds = new Set<string | number>();
   private pendingRequestTimer: ReturnType<typeof setTimeout> | null = null;
   /** Bearer token captured from initialize / env for the session (stdio OAuth). */
   private sessionAuthHeader: string | undefined;
@@ -226,38 +225,20 @@ export class McpProxyServer {
       try {
         const msg = JSON.parse(line);
 
-        // ── P0 Week 2: Rug-pull detection via tool definition fingerprinting ──
-        if (!msg.id && msg.result?.tools && Array.isArray(msg.result.tools)) {
-          const canonical = JSON.stringify(msg.result.tools.map((t: any) => ({
-            name: t.name,
-            description: t.description,
-            inputSchema: t.inputSchema,
-          })).sort((a: any, b: any) => a.name.localeCompare(b.name)));
-          const hash = createHash('sha256').update(canonical).digest('hex').slice(0, 16);
-
-          if (!this.toolFingerprint) {
-            this.toolFingerprint = hash;
-            Logger.debug(`[proxy:${this.serverName}] Tool fingerprint registered: ${hash} (${msg.result.tools.length} tools)`);
-          } else if (this.toolFingerprint !== hash) {
-            const prev = this.toolFingerprint;
-            const alert = `[proxy:${this.serverName}] 🚨 RUG-PULL DETECTED (OWASP MCP03): tool definitions changed mid-session. Previous fingerprint: ${prev}, New: ${hash}. Server may have been compromised.`;
-            Logger.error(alert);
-            this.rugPullBlocked = true;
-            void publishRugPullAlert(this.serverName, this.defaultTenantId, hash);
-            StructuredLogger.info({
-              event: 'rug_pull_detected' as any,
-              serverName: this.serverName,
-              previousFingerprint: prev,
-              currentFingerprint: hash,
-              toolCount: msg.result.tools.length,
-            });
-            Metrics.blockedRequestsTotal?.inc({
-              server_name: this.serverName,
-              block_reason: 'rug_pull',
-              rule: 'tool-fingerprint-mismatch',
-            });
-            return;
-          }
+        // ── Rug-pull: fingerprint tools/list on any message carrying result.tools ──
+        if (msg.result?.tools && Array.isArray(msg.result.tools)) {
+          if (msg.id != null) this.pendingToolsListIds.delete(msg.id);
+          applyToolFingerprintFromResult(this.rugPullState, msg.result, {
+            serverName: this.serverName,
+            tenantId: this.defaultTenantId,
+            onMismatch: async (_ctx) => {
+              void publishRugPullAlert(
+                this.serverName,
+                this.defaultTenantId,
+                this.rugPullState.fingerprint || '',
+              );
+            },
+          });
         }
 
         if (msg.id != null) {
@@ -592,7 +573,33 @@ export class McpProxyServer {
         if (initAuth) this.sessionAuthHeader = initAuth;
       }
 
+      if (msg.method === 'tools/list' && msg.id != null) {
+        this.pendingToolsListIds.add(msg.id);
+      }
+
       if (msg.method === 'tools/call' && msg.id) {
+        const maxInflightEarly = proxyMaxInflight();
+        if (isProxyInflightExceeded(this.requestContexts.size)) {
+          Metrics.proxyInflightRejectedTotal.inc(
+            Metrics.withTenantMetricLabels(
+              { server_name: this.serverName },
+              this.defaultTenantId,
+            ),
+          );
+          this.sendError(
+            msg.id,
+            -32005,
+            `MCP Guardian: proxy overloaded (${this.requestContexts.size}/${maxInflightEarly} in flight)`,
+            { rule: 'proxy-max-inflight' },
+          );
+          Metrics.requestsTotal.inc({
+            server_name: this.serverName,
+            decision: 'block',
+            authn_success: 'false',
+          });
+          return;
+        }
+
         const meta = msg.params?._meta as Record<string, unknown> | undefined;
         const tenantForRug = resolveProxyTenantId({
           meta,
@@ -600,7 +607,7 @@ export class McpProxyServer {
           jwtTenantId: this.defaultTenantId,
         });
         if (
-          this.rugPullBlocked
+          this.rugPullState.blocked
           || (await isClusterRugPullActive(this.serverName, tenantForRug))
         ) {
           const toolName = msg.params?.name || 'unknown';
@@ -1008,25 +1015,30 @@ export class McpProxyServer {
             }
           }
 
+          if (isSyncSemanticRequestEnabled(context.tenantId)) {
+            const semGate = await runSyncSemanticRequestGate(context, decision, this.serverName);
+            if (semGate.block) {
+              this.recordDeniedCall(
+                toolName,
+                requestTokens,
+                Date.now() - proxyStartTime,
+                semGate.rule,
+                semGate.reason,
+                requestArguments,
+                requestTenantId,
+              );
+              this.sendError(msg.id, -32001, `Blocked by MCP Guardian semantic gate: ${semGate.reason}`, {
+                rule: semGate.rule,
+                policy: 'block',
+              });
+              return;
+            }
+          }
+
           enqueueSemanticAudit(buildSemanticAuditJob(context, decision));
           recordSessionToolCall(context);
         }
 
-        const maxInflight = proxyMaxInflight();
-        if (this.requestContexts.size >= maxInflight) {
-          this.sendError(
-            msg.id,
-            -32005,
-            `MCP Guardian: proxy overloaded (${this.requestContexts.size}/${maxInflight} in flight)`,
-            { rule: 'proxy-max-inflight' },
-          );
-          Metrics.requestsTotal.inc({
-            server_name: this.serverName,
-            decision: 'block',
-            authn_success: String(authnSuccess),
-          });
-          return;
-        }
 
         this.requestContexts.set(msg.id, {
           requestStartTime: proxyStartTime,

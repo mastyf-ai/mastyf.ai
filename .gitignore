@@ -30,3 +30,4 @@ reports/tenants/
 .vercel
 .env*.local
 *.tsbuildinfo
+apps/proxy-core/proxy-core

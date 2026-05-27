@@ -1,8 +1,8 @@
 export const THREAT_DISCOVERY_EXPLAINERS: Record<string, string> = {
   pendingReview:
-    'LLM-proposed attack fixtures awaiting human review. Accept applies the suggested YAML policy rule to live policy; reject discards the candidate.',
+    'Policy rule review only — pending until you accept (YAML applied to live policy). With Autopilot, harness adv-*.json fixtures are written at discovery time via the auto-corpus path; pending does not mean the fixture is missing.',
   autoFixtures:
-    'Harness fixtures written automatically by the self-sustaining Threat Research pipeline — no human accept step. Policy rules are never auto-applied.',
+    'Harness fixtures written by Auto Threat Research (runtime, scheduler, or Threat Lab batch when both auto flags are on). Policy rules are never auto-applied — use Threat Lab accept for policy only.',
   llmStatus:
     'Threat Lab and Auto Research require a healthy local Ollama instance (GUARDIAN_LLM_ENABLED=true). No synthetic fallback candidates are emitted when LLM is offline.',
   queueDepth:
@@ -56,14 +56,14 @@ export const THREAT_LAB_STAGES: PipelineStage[] = [
     label: 'Candidate manifest',
     short: 'Manifest',
     explanation:
-      'Signed threat-lab-candidates.json with provenance (source, llmUsed). Dashboard accept/reject workflow — human review required.',
+      'Signed threat-lab-candidates.json with provenance. When Autopilot auto flags are on, validated discoveries also write adv-*.json via the auto-corpus writer (same path as Auto Research).',
   },
   {
     id: 'accept',
     label: 'Human accept',
     short: 'Review',
     explanation:
-      'Accept applies policyRule to live policy via policy-applier. Reject marks candidate rejected. Fixtures remain in adversarial-harness for regression.',
+      'Accept applies policyRule to live policy via policy-applier. Reject marks the candidate rejected. Harness fixtures are not created or removed by accept — they are written at discovery when auto-corpus is enabled.',
   },
 ];
 

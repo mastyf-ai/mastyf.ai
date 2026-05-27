@@ -318,6 +318,8 @@ export function readThreatLabCandidates(tenantId?: string): {
   mode?: string;
   llmModel?: string;
   llmUsed?: boolean;
+  skipped?: string;
+  runNote?: string;
   candidates: ThreatLabCandidateRecord[];
 } | null {
   const data = readSwarmJsonFile<{
@@ -326,6 +328,8 @@ export function readThreatLabCandidates(tenantId?: string): {
     mode?: string;
     llmModel?: string;
     llmUsed?: boolean;
+    skipped?: string;
+    runNote?: string;
     candidates?: ThreatLabCandidateRecord[];
   }>('threat-lab-candidates.json', tenantId);
   if (!data) return null;
@@ -335,6 +339,8 @@ export function readThreatLabCandidates(tenantId?: string): {
     mode: data.mode,
     llmModel: data.llmModel,
     llmUsed: data.llmUsed,
+    skipped: data.skipped,
+    runNote: data.runNote,
     candidates: data.candidates || [],
   };
 }

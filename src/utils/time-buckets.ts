@@ -1,6 +1,7 @@
 /**
  * Time bucket generation and zero-fill for honest dashboard charts.
  */
+import type { ProxyCallRecord } from '../types.js';
 
 export type DashboardWindow = '1h' | '12h' | '24h' | '7d' | '30d' | '90d';
 
@@ -72,6 +73,29 @@ export function windowRangeMs(windowDays: number, nowMs = Date.now()): {
   const priorEndMs = startMs;
   const priorStartMs = priorEndMs - windowDays * 86_400_000;
   return { startMs, endMs, priorStartMs, priorEndMs };
+}
+
+/** Filter proxy call records to an inclusive time window using SQLite-safe UTC parsing. */
+export function filterRecordsInWindow(
+  records: ProxyCallRecord[],
+  startMs: number,
+  endMs: number,
+): ProxyCallRecord[] {
+  return records.filter((r) => {
+    const ts = parseRecordTimestamp(r.timestamp);
+    return Number.isFinite(ts) && ts >= startMs && ts <= endMs;
+  });
+}
+
+/** Filter by window length ending at now (or optional endMs). */
+export function filterRecordsByWindowDays(
+  records: ProxyCallRecord[],
+  windowDaysInput: string | number,
+  nowMs = Date.now(),
+): ProxyCallRecord[] {
+  const windowDays = parseWindowDays(windowDaysInput);
+  const { startMs, endMs } = windowRangeMs(windowDays, nowMs);
+  return filterRecordsInWindow(records, startMs, endMs);
 }
 
 function hourBucketIso(ts: number): string {

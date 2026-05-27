@@ -103,7 +103,7 @@ Target: ≥500 labeled rows before fine-tune is worthwhile. Export excludes cali
 
 When enabled, detections automatically flow through LLM research → taxonomy classification → validated `adv-NNN.json` writes under `adversarial-harness/fixtures/custom-attacks/` — **no dashboard accept step**. Policy rules are **not** auto-applied; only harness fixtures grow.
 
-When both `GUARDIAN_THREAT_RESEARCH_AUTO=true` and `SWARM_THREAT_RESEARCH_AUTO=true`, Threat Lab still writes `threat-lab-candidates.json` for audit but **skips** direct `adv-*.json` writes (auto pipeline owns the corpus loop).
+When both `GUARDIAN_THREAT_RESEARCH_AUTO=true` and `SWARM_THREAT_RESEARCH_AUTO=true`, Threat Lab still writes `threat-lab-candidates.json` for **policy review** (pending/accept), and each validated discovery is written to `adv-*.json` via the **same** `writeAutoCorpusFixture` path as Auto Threat Research (no second LLM call, shared fingerprint dedupe). Legacy direct Threat Lab fixture writes are used only when those auto flags are off.
 
 ### Detection sources
 

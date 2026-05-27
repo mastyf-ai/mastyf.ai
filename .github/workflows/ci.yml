@@ -34,6 +34,12 @@ jobs:
 
       - run: pnpm test
 
+      - name: Premortem enterprise profile
+        run: pnpm test:enterprise-profile
+
+      - name: Enterprise validation matrix
+        run: pnpm validate:enterprise-matrix
+
       - name: Run tests with coverage
         run: pnpm vitest run --coverage
 
@@ -106,6 +112,12 @@ jobs:
 
       - name: Multi-tenant dashboard regression
         run: pnpm exec vitest run tests/dashboard/dashboard-multi-tenant.test.ts
+
+      - name: Adversarial proxy (community vs enterprise profiles)
+        run: pnpm harness:premortem-profiles
+        env:
+          GUARDIAN_CI_BYPASS_LICENSE: 'true'
+          SKIP_E2E: 'false'
 
   dogfood:
     name: Dogfood scenario

@@ -23,7 +23,10 @@ import {
   type ThreatLabCandidateProvenance,
 } from '../../src/ai/threat-lab.js';
 import { candidateFingerprint, nextAdvId } from '../../src/ai/auto-corpus-writer.js';
-import { autoThreatResearchOwnsAdvWrites } from '../../src/ai/threat-research-pipeline.js';
+import {
+  autoThreatResearchOwnsAdvWrites,
+  writeValidatedDiscoveryToAutoCorpus,
+} from '../../src/ai/threat-research-pipeline.js';
 import { resolveSwarmOutputDir } from '../../src/tenant/swarm-tenant-paths.js';
 import { loadSemanticAuditRecordsAsync } from '../../src/ai/semantic-audit-store.js';
 import { getSharedThreatIntel } from '../../src/ai/threat-intel.js';
@@ -150,14 +153,14 @@ function writeAdvFixture(
   return { advId, relPath };
 }
 
-function queueCandidate(
+async function queueCandidate(
   candidates: QueuedCandidate[],
   seen: Set<string>,
   discovery: ThreatLabDiscovery,
   provenance: ThreatLabCandidateProvenance,
   requireReplay: boolean,
   fixtureSource: string,
-): boolean {
+): Promise<boolean> {
   const fp = candidateFingerprint(discovery);
   if (seen.has(fp)) return false;
   const validation = validateThreatLabDiscovery(discovery, { requireReplayBlock: requireReplay });
@@ -168,18 +171,33 @@ function queueCandidate(
   seen.add(fp);
   let advId: string;
   let relPath: string | undefined;
+  let advWriteSkipped: string | undefined;
+
   if (autoThreatResearchOwnsAdvWrites()) {
-    advId = `threat-lab-${String(candidates.length + 1).padStart(3, '0')}`;
-    relPath = undefined;
-    console.log(
-      `[threat-lab] audit-only ${advId} (${discovery.attackClass}) — adv writes owned by auto-threat-research`,
-    );
+    const corpusWrite = await writeValidatedDiscoveryToAutoCorpus(discovery, provenance, {
+      requireReplayBlock: requireReplay,
+    });
+    if (corpusWrite.ok && corpusWrite.advId && corpusWrite.relPath) {
+      advId = corpusWrite.advId;
+      relPath = corpusWrite.relPath;
+      console.log(
+        `[threat-lab] auto-corpus ${advId} (${discovery.attackClass}, source=${provenance.source})`,
+      );
+    } else {
+      advId = `threat-lab-${String(candidates.length + 1).padStart(3, '0')}`;
+      relPath = undefined;
+      advWriteSkipped = corpusWrite.reason ?? 'auto-corpus-write-skipped';
+      console.log(
+        `[threat-lab] manifest-only ${advId} (${discovery.attackClass}) — ${advWriteSkipped}`,
+      );
+    }
   } else {
     const written = writeAdvFixture(discovery, fixtureSource);
     advId = written.advId;
     relPath = written.relPath;
     console.log(`[threat-lab] queued ${advId} (${discovery.attackClass}, source=${provenance.source})`);
   }
+
   candidates.push({
     id: advId,
     fingerprint: fp,
@@ -192,7 +210,7 @@ function queueCandidate(
     branch: relPath ? `swarm/threat-lab-${advId}` : undefined,
     policyRule: discovery.policyRule,
     corpusCandidate: discovery.corpusCandidate,
-    advWriteSkipped: autoThreatResearchOwnsAdvWrites() ? 'auto-threat-research' : undefined,
+    advWriteSkipped,
   });
   return true;
 }
@@ -219,32 +237,18 @@ async function main(): Promise<void> {
   let seq = 1;
 
   const bypasses = collectBypasses();
+  let runNote: string | undefined;
   if (mode === 'reactive' && bypasses.length === 0) {
-    console.log('[threat-lab] reactive mode: no authentic bypasses — skipping');
-    writeFileSync(
-      MANIFEST,
-      JSON.stringify(
-        {
-          timestamp: new Date().toISOString(),
-          count: 0,
-          mode,
-          llmModel: llm.getModel(),
-          skipped: 'no bypasses in reactive mode',
-          candidates: [],
-          promotions: [],
-        },
-        null,
-        2,
-      ),
-    );
-    process.exit(0);
+    runNote =
+      'No swarm bypasses found — continuing with labeled semantic true positives and threat intel';
+    console.log(`[threat-lab] reactive mode: ${runNote}`);
   }
 
   for (const b of bypasses.slice(0, max)) {
     if (candidates.length >= max) break;
     const discovery = await discoverFromBypass(b as Parameters<typeof discoverFromBypass>[0], { llm, seq });
     if (!discovery) continue;
-    queueCandidate(
+    await queueCandidate(
       candidates,
       seen,
       discovery,
@@ -266,7 +270,7 @@ async function main(): Promise<void> {
       if (candidates.length >= max) break;
       const discovery = await discoverFromSemanticAudit(rec, { llm, seq });
       if (!discovery) continue;
-      queueCandidate(
+      await queueCandidate(
         candidates,
         seen,
         discovery,
@@ -292,7 +296,7 @@ async function main(): Promise<void> {
       if (candidates.length >= max) break;
       const discovery = await discoverFromThreatIntel(entry, { llm, seq });
       if (!discovery) continue;
-      queueCandidate(
+      await queueCandidate(
         candidates,
         seen,
         discovery,
@@ -310,7 +314,7 @@ async function main(): Promise<void> {
       if (candidates.length >= max) break;
       const discovery = await discoverFromCorpusSeed(seed, { llm, seq });
       if (!discovery) continue;
-      queueCandidate(
+      await queueCandidate(
         candidates,
         seen,
         discovery,
@@ -355,6 +359,7 @@ async function main(): Promise<void> {
       mode,
       llmModel: llm.getModel(),
       llmUsed: true,
+      runNote,
       candidates,
       instructions:
         'Review via dashboard or: node security-swarm/scripts/open-corpus-pr.mjs. Human merge required — no auto-merge.',

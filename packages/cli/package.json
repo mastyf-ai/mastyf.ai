@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/cli",
-  "version": "3.2.7",
+  "version": "3.3.0",
   "description": "CLI binary for scanning MCP tool definitions",
   "type": "module",
   "bin": {
@@ -15,8 +15,8 @@
     "postpack": "node ../../scripts/postpack-npm-deps.mjs"
   },
   "dependencies": {
-    "@mcp-guardian/core": "workspace:^3.2.7",
-    "@mcp-guardian/server": "workspace:^3.2.7"
+    "@mcp-guardian/core": "workspace:^3.3.0",
+    "@mcp-guardian/server": "workspace:^3.3.0"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

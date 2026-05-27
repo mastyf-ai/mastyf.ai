@@ -20,6 +20,7 @@ type Props = {
   refreshKey?: number;
   onAction?: (msg: string) => void;
   initialSubTab?: SubTab;
+  externalView?: SubTab;
   threatLabContext?: ThreatLabContext | null;
   onClearThreatLabContext?: () => void;
 };
@@ -38,17 +39,19 @@ export function ThreatDiscoveryPanel({
   refreshKey = 0,
   onAction,
   initialSubTab,
+  externalView,
   threatLabContext,
   onClearThreatLabContext,
 }: Props) {
-  const [subTab, setSubTab] = useState<SubTab>(initialSubTab || 'overview');
+  const [subTab, setSubTab] = useState<SubTab>(externalView || initialSubTab || 'overview');
   const [status, setStatus] = useState<ThreatDiscoveryStatus | null>(null);
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (initialSubTab) setSubTab(initialSubTab);
-  }, [initialSubTab]);
+    if (externalView) setSubTab(externalView);
+    else if (initialSubTab) setSubTab(initialSubTab);
+  }, [initialSubTab, externalView]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,21 +81,29 @@ export function ThreatDiscoveryPanel({
 
       <ProUpgradeBanner authStatus={authStatus ?? null} />
 
-      <nav className="threat-discovery-tabs" aria-label="Threat Discovery sections">
-        {SUB_TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={subTab === t.id ? 'tab active' : 'tab'}
-            onClick={() => setSubTab(t.id)}
-          >
-            {t.label}
+      {!externalView ? (
+        <nav className="threat-discovery-tabs" aria-label="Threat Discovery sections">
+          {SUB_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={subTab === t.id ? 'tab active' : 'tab'}
+              onClick={() => setSubTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+          <button type="button" className="secondary btn-sm" disabled={loading} onClick={() => void load()}>
+            {loading ? 'Refreshing…' : 'Refresh'}
           </button>
-        ))}
-        <button type="button" className="secondary btn-sm" disabled={loading} onClick={() => void load()}>
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
-      </nav>
+        </nav>
+      ) : (
+        <div className="btn-row">
+          <button type="button" className="secondary btn-sm" disabled={loading} onClick={() => void load()}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+      )}
 
       {loadError ? <p className="status status-error">{loadError}</p> : null}
 
@@ -110,6 +121,7 @@ export function ThreatDiscoveryPanel({
       {subTab === 'threat-lab' ? (
         <ThreatLabWorkbench
           candidates={candidates}
+          autoEntries={autoEntries}
           roles={roles}
           preloadedContext={threatLabContext}
           manifestMeta={{
@@ -117,8 +129,12 @@ export function ThreatDiscoveryPanel({
             mode: status?.threatLab.manifest?.mode,
             llmModel: status?.threatLab.manifest?.llmModel,
             llmUsed: status?.threatLab.manifest?.llmUsed,
+            skipped: status?.threatLab.manifest?.skipped,
+            runNote: status?.threatLab.manifest?.runNote,
           }}
           onRefresh={() => void load()}
+          onClearContext={onClearThreatLabContext}
+          onRunStarted={onAction}
         />
       ) : null}
 

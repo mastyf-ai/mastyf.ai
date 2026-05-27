@@ -181,7 +181,7 @@ export class PolicyEngine {
 
       if (isPolicyEvalCacheEnabled()) {
         const cacheKey = policyEvalCacheKey(context);
-        const cached = await getCachedPolicyDecision(cacheKey);
+        const cached = await getCachedPolicyDecision(cacheKey, context.tenantId);
         if (cached) return resolvePolicyPrecedence(opaDecision, cached);
       }
 
@@ -193,7 +193,11 @@ export class PolicyEngine {
         }),
       );
       const finalDecision = resolvePolicyPrecedence(opaDecision, yamlDecision);
-      if (isPolicyEvalCacheEnabled() && shouldCachePolicyDecision(finalDecision)) {
+      const matchedRule = this.config.policy.rules.find((r) => r.name === finalDecision.rule);
+      if (
+        isPolicyEvalCacheEnabled()
+        && shouldCachePolicyDecision(finalDecision, { ruleCacheable: matchedRule?.cacheable })
+      ) {
         await setCachedPolicyDecision(policyEvalCacheKey(context), finalDecision);
       }
       return finalDecision;

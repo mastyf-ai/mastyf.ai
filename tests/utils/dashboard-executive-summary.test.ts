@@ -47,4 +47,33 @@ describe('buildExecutiveSummary', () => {
     expect(summary.comparison).toBeDefined();
     expect(summary.sparklines?.totalCalls.length).toBeGreaterThan(0);
   });
+
+  it('parses SQLite UTC timestamps without Z suffix in 1h window', async () => {
+    const now = Date.now();
+    const ts = new Date(now - 15 * 60_000).toISOString().slice(0, 19).replace('T', ' ');
+    const records: ProxyCallRecord[] = [
+      {
+        serverName: 'test-server',
+        toolName: 'read',
+        blocked: false,
+        costUsd: 0,
+        requestTokens: 0,
+        responseTokens: 0,
+        totalTokens: 0,
+        durationMs: 10,
+        timestamp: ts,
+      },
+    ];
+    const summary = await buildExecutiveSummary(mockDb(records), 'default', '1h');
+    expect(summary.totalRequests).toBe(1);
+    expect(summary.passRatePct).toBe(100);
+    expect(summary.blockRatePct).toBe(0);
+  });
+
+  it('returns null pass/block rates when no traffic in window', async () => {
+    const summary = await buildExecutiveSummary(mockDb([]), 'default', 7);
+    expect(summary.totalRequests).toBe(0);
+    expect(summary.passRatePct).toBeNull();
+    expect(summary.blockRatePct).toBeNull();
+  });
 });

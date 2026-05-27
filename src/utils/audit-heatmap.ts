@@ -3,7 +3,7 @@
  */
 import type { ProxyCallRecord } from '../types.js';
 import { buildChartMeta, type ChartMetaEnvelope } from './chart-meta.js';
-import { parseWindowDays, windowRangeMs } from './time-buckets.js';
+import { parseRecordTimestamp, parseWindowDays } from './time-buckets.js';
 
 export type AuditHeatmapCell = {
   rule: string;
@@ -51,7 +51,7 @@ export function buildAuditActivityMatrix(records: ProxyCallRecord[]): AuditActiv
   let maxCount = 0;
 
   for (const r of records) {
-    const ts = Date.parse(String(r.timestamp || ''));
+    const ts = parseRecordTimestamp(r.timestamp);
     if (!Number.isFinite(ts)) continue;
     const d = new Date(ts);
     const day = d.toISOString().slice(0, 10);

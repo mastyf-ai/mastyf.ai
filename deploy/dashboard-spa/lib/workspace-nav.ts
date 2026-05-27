@@ -27,7 +27,7 @@ export type ThreatsView =
   | 'architecture'
   | 'intel';
 
-export type SecurityView = 'overview' | 'policy' | 'enterprise-ai' | 'ai-copilot';
+export type SecurityView = 'overview' | 'policy' | 'enterprise-ai' | 'ai-copilot' | 'quarantined-intel';
 
 export type OperationsView =
   | 'analytics'
@@ -104,6 +104,7 @@ export const LEGACY_TAB_MAP: Record<string, { workspace: WorkspaceId; view?: str
   'ai-hub': { workspace: 'security', view: 'enterprise-ai' },
   ai: { workspace: 'security', view: 'ai-copilot' },
   'enterprise-ai': { workspace: 'security', view: 'enterprise-ai' },
+  'quarantined-intel': { workspace: 'security', view: 'quarantined-intel' },
   security: { workspace: 'security', view: 'overview' },
   'cost-health': { workspace: 'operations', view: 'analytics' },
   analytics: { workspace: 'operations', view: 'analytics' },

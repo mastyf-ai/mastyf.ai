@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   fetchSecurityDashboard,
   quarantineAllThreats,
+  quarantineSecurityThreat,
   type SecurityDashboardResponse,
   type SecurityDashboardThreat,
 } from '@/lib/guardian-api';
+import { hasPermission } from '@/lib/dashboard-roles';
 import type { WorkspaceId } from '@/lib/workspace-nav';
 import { DataTablePro, type Column } from '../dashboard/DataTablePro';
 import { Button } from '../ui/Button';
@@ -35,6 +37,7 @@ function statusClass(s: SecurityDashboardThreat['status']): string {
 }
 
 export function SecurityDashboardPanel({ refreshKey = 0, roles = [], onNavigate, onAction }: Props) {
+  const canMutate = hasPermission(roles, 'policy_mutate');
   const [data, setData] = useState<SecurityDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -49,11 +52,63 @@ export function SecurityDashboardPanel({ refreshKey = 0, roles = [], onNavigate,
     void load();
   }, [load, refreshKey]);
 
-  const onQuarantine = async () => {
-    setBusy('quarantine');
+  const onQuarantineAll = async () => {
+    if (!canMutate) {
+      onAction?.('Requires operator role to quarantine threats');
+      return;
+    }
+    const count = (data?.threats ?? []).filter(
+      (t) => t.severity === 'critical' || t.severity === 'high',
+    ).length;
+    if (!count) {
+      onAction?.('No high-severity threats to quarantine');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Quarantine ${count} high/critical threat(s)? This will hide them from Threat Monitor and apply or confirm hardening policy rules. Quarantined records are listed under Security → Quarantined.`,
+      )
+    ) {
+      return;
+    }
+    setBusy('quarantine-all');
     const res = await quarantineAllThreats();
     if (res.ok) {
-      onAction?.(`Quarantine recommended for ${res.quarantined ?? 0} high-severity threat(s)`);
+      onAction?.(`Quarantined ${res.quarantined ?? 0} threat(s) with enforcement checks — see Security → Quarantined`);
+      await load();
+    } else {
+      onAction?.(res.error || 'Quarantine failed');
+    }
+    setBusy('');
+  };
+
+  const onQuarantineOne = async (row: SecurityDashboardThreat) => {
+    if (!canMutate) {
+      onAction?.('Requires operator role to quarantine threats');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Quarantine ${row.id} (${row.type})? This will hide it from Threat Monitor and apply or confirm hardening policy.`,
+      )
+    ) {
+      return;
+    }
+    const payload = { ...row, threatKey: row.threatKey || row.id };
+    setBusy(payload.threatKey);
+    const res = await quarantineSecurityThreat(payload);
+    if (res.ok) {
+      if (res.enforcementStatus === 'applied') {
+        onAction?.(`Quarantined ${row.id}. Applied policy rule ${res.appliedRuleName || 'for threat hardening'}.`);
+      } else if (res.enforcementStatus === 'already_blocked') {
+        onAction?.(`Quarantined ${row.id}. Threat is already blocked by policy.`);
+      } else if (res.enforcementStatus === 'already_present') {
+        onAction?.(`Quarantined ${row.id}. Matching policy rule already exists.`);
+      } else if (res.enforcementStatus === 'no_context') {
+        onAction?.(`Quarantined ${row.id}. Archived without new rule (no source context).`);
+      } else {
+        onAction?.(`Quarantined ${row.id}.`);
+      }
       await load();
     } else {
       onAction?.(res.error || 'Quarantine failed');
@@ -91,6 +146,23 @@ export function SecurityDashboardPanel({ refreshKey = 0, roles = [], onNavigate,
       key: 'status',
       header: 'Status',
       render: (r) => <span className={statusClass(r.status)}>{r.status}</span>,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (r) =>
+        canMutate ? (
+          <button
+            type="button"
+            className="secondary btn-sm"
+            disabled={!!busy}
+            onClick={() => void onQuarantineOne(r)}
+          >
+            {busy === (r.threatKey || r.id) ? 'Quarantining…' : 'Quarantine'}
+          </button>
+        ) : (
+          '—'
+        ),
     },
   ];
 
@@ -169,8 +241,13 @@ export function SecurityDashboardPanel({ refreshKey = 0, roles = [], onNavigate,
                 <span className="threat-active-badge">{data?.activeThreatCount ?? 0} active</span>
               </h3>
               <div className="btn-row">
-                <Button variant="primary" onClick={() => void onQuarantine()} disabled={!!busy}>
-                  Quarantine All
+                <Button
+                  variant="primary"
+                  onClick={() => void onQuarantineAll()}
+                  disabled={!!busy || !canMutate}
+                  title={!canMutate ? 'Requires operator role' : undefined}
+                >
+                  {busy === 'quarantine-all' ? 'Quarantining…' : 'Quarantine All'}
                 </Button>
                 <Button variant="secondary" onClick={onExport}>
                   Export

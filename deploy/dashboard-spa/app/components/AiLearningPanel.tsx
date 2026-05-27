@@ -8,12 +8,15 @@ import {
   fetchAiState,
   fetchAiSuggestions,
   fetchAiThreats,
+  fetchQuarantinedThreats,
   fetchActiveLearningReport,
   fetchAgentAbuseScores,
   fetchSemanticOutcomes,
   labelSemanticOutcome,
   pollAiThreats,
   rejectSuggestion,
+  quarantineThreatIntel,
+  dismissThreatIntel,
   rollbackAiLearning,
   type AiSuggestion,
   type SemanticOutcome,
@@ -155,6 +158,38 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
 
   const threatEntries = threats?.entries ?? [];
 
+  const onQuarantineThreat = async (id: string) => {
+    if (!canMutate) {
+      onAction?.('Requires operator role');
+      return;
+    }
+    if (!window.confirm(`Quarantine ${id}? This will auto-apply a blocking policy rule immediately.`)) return;
+    const res = await quarantineThreatIntel(id);
+    if (res.ok) {
+      onAction?.(
+        `Quarantined ${id}${res.appliedRuleName ? ` · applied ${res.appliedRuleName}` : ''}. See Security → Quarantined.`,
+      );
+      await Promise.all([refresh(), fetchQuarantinedThreats(30)]);
+    } else {
+      onAction?.(res.error || 'Quarantine failed');
+    }
+  };
+
+  const onRemoveThreat = async (id: string) => {
+    if (!canMutate) {
+      onAction?.('Requires operator role');
+      return;
+    }
+    if (!window.confirm(`Remove ${id} from active threat catalog?`)) return;
+    const res = await dismissThreatIntel(id);
+    if (res.ok) {
+      onAction?.(`Removed ${id} from active threat catalog`);
+      await refresh();
+    } else {
+      onAction?.(res.error || 'Remove failed');
+    }
+  };
+
   const confidenceChart = suggestions.map((s, i) => ({
     name: (s.ruleName || s.id || `s${i}`).slice(0, 16),
     confidence: Math.round((s.confidence ?? 0) * 100),
@@ -237,6 +272,7 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
               <th>Severity</th>
               <th>First seen</th>
               <th>Description</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -247,6 +283,26 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
                 <td>{entry.severity}</td>
                 <td>{formatTs(entry.firstSeenAt)}</td>
                 <td>{entry.description?.slice(0, 120) || '—'}</td>
+                <td>
+                  {canMutate ? (
+                    <span className="btn-row inline">
+                      <button
+                        type="button"
+                        className="secondary btn-sm"
+                        onClick={() => void onQuarantineThreat(entry.id)}
+                      >
+                        Quarantine
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary btn-sm"
+                        onClick={() => void onRemoveThreat(entry.id)}
+                      >
+                        Remove
+                      </button>
+                    </span>
+                  ) : '—'}
+                </td>
               </tr>
             ))}
           </tbody>

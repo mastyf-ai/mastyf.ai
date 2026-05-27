@@ -34,6 +34,13 @@ import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { formatRedactionHeader, injectRedactionMeta } from '../utils/redaction-meta.js';
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
+import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
+import { runSyncSemanticRequestGate } from './proxy-post-policy-gates.js';
+import {
+  fingerprintJsonRpcToolsList,
+  isRugPullBlockedForCall,
+} from './rug-pull-transport.js';
+import type { ToolFingerprintState } from './tool-fingerprint.js';
 
 /**
  * HTTP/SSE Proxy for remote MCP servers.
@@ -50,6 +57,7 @@ export class HttpProxyServer {
   private db: HistoryDatabase;
   private port: number;
   private server: ReturnType<typeof createServer> | null = null;
+  private readonly rugPullState: ToolFingerprintState = { fingerprint: null, blocked: false };
 
   constructor(
     targetUrl: string,
@@ -267,6 +275,42 @@ export class HttpProxyServer {
             toolsCallId = msg.id as string | number;
             toolsCallName = toolName;
           }
+          if (await isRugPullBlockedForCall(this.rugPullState, this.serverName, requestTenantId)) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: msg.id,
+                error: {
+                  code: -32001,
+                  message:
+                    'Blocked by MCP Guardian policy: tool definitions changed mid-session (rug-pull)',
+                },
+              }),
+            );
+            return;
+          }
+          const inflight = acquireProxyInflight(this.serverName);
+          if (!inflight.ok) {
+            Metrics.proxyInflightRejectedTotal.inc(
+              Metrics.withTenantMetricLabels(
+                { server_name: this.serverName },
+                requestTenantId,
+              ),
+            );
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: msg.id,
+                error: {
+                  code: -32005,
+                  message: `MCP Guardian: proxy overloaded (${inflight.current}/${inflight.max} in flight)`,
+                },
+              }),
+            );
+            return;
+          }
           const tokens = this.tokenCounter.count(body);
 
           const context: CallContext = {
@@ -283,6 +327,7 @@ export class HttpProxyServer {
           const decision = await this.policyEngine.evaluateAsync(context);
 
           if (decision.action === 'block') {
+            releaseProxyInflight(this.serverName);
             Metrics.recordProxyBlock(
               {
                 server_name: this.serverName,
@@ -301,6 +346,23 @@ export class HttpProxyServer {
               id: msg.id,
               error: { code: -32001, message: `Blocked by MCP Guardian policy: ${decision.reason}` },
             }));
+            return;
+          }
+
+          const semGate = await runSyncSemanticRequestGate(context, decision, this.serverName);
+          if (semGate.block) {
+            releaseProxyInflight(this.serverName);
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: msg.id,
+                error: {
+                  code: -32001,
+                  message: `Blocked by MCP Guardian semantic gate: ${semGate.reason}`,
+                },
+              }),
+            );
             return;
           }
         }
@@ -350,6 +412,9 @@ export class HttpProxyServer {
         const gateResponse = toolsCallId != null && toolsCallName != null;
 
         const recordSuccess = () => {
+          if (toolsCallId != null) {
+            releaseProxyInflight(this.serverName);
+          }
           tenantBreaker.recordSuccess();
           Metrics.circuitBreakerState.set(
             { server_name: this.serverName },
@@ -364,6 +429,52 @@ export class HttpProxyServer {
         };
 
         if (!gateResponse) {
+          const ct = String(upstreamRes.headers['content-type'] || '');
+          if (ct.toLowerCase().includes('application/json')) {
+            const respChunks: Buffer[] = [];
+            let respSize = 0;
+            upstreamRes.on('data', (chunk: Buffer) => {
+              respSize += chunk.length;
+              if (respSize > MAX_BODY_SIZE) {
+                upstreamRes.destroy();
+                if (!res.headersSent) {
+                  res.writeHead(413, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: 'Upstream response too large' }));
+                }
+                return;
+              }
+              respChunks.push(chunk);
+            });
+            upstreamRes.on('end', () => {
+              void (async () => {
+                try {
+                  const raw = Buffer.concat(respChunks).toString();
+                  const parsed = parseJsonWithDepthLimit(raw);
+                  if (parsed.ok) {
+                    fingerprintJsonRpcToolsList(
+                      this.rugPullState,
+                      parsed.value,
+                      this.serverName,
+                      requestTenantId,
+                      `[http-proxy:${this.serverName}]`,
+                    );
+                  }
+                  if (!res.headersSent) {
+                    res.writeHead(upstreamRes.statusCode || 200, safeHeaders);
+                    res.end(raw);
+                  }
+                  recordSuccess();
+                } catch {
+                  tenantBreaker.recordFailure();
+                }
+              })();
+            });
+            upstreamRes.on('error', () => {
+              tenantBreaker.recordFailure();
+              Metrics.circuitBreakerState.set({ server_name: this.serverName }, 1);
+            });
+            return;
+          }
           res.writeHead(upstreamRes.statusCode || 200, safeHeaders);
           upstreamRes.pipe(res);
           upstreamRes.on('end', recordSuccess);
@@ -399,6 +510,13 @@ export class HttpProxyServer {
               const parsed = parseJsonWithDepthLimit(raw);
               if (parsed.ok) {
                 const msg = parsed.value as Record<string, unknown>;
+                fingerprintJsonRpcToolsList(
+                  this.rugPullState,
+                  msg,
+                  this.serverName,
+                  requestTenantId,
+                  `[http-proxy:${this.serverName}]`,
+                );
                 const inspected = await this.inspectToolResponse(
                   toolsCallName!,
                   msg,

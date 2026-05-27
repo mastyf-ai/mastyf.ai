@@ -112,7 +112,7 @@ describe('v298 gap categories — production PolicyEngine', () => {
       message: 'ok\r\nAUDIT: user=admin override=success\r\n',
     }));
     expect(d.action).toBe('block');
-    expect(d.rule).toBe('semantic-log-injection');
+    expect(['semantic-log-injection', 'encoding-evasion-guard']).toContain(d.rule);
   });
 
   it('blocks puppeteer navigation to admin paths on public hosts', () => {

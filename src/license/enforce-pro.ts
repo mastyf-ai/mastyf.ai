@@ -2,6 +2,7 @@
  * Central Pro license enforcement for CLI and scripts.
  */
 import {
+  assertEnterpriseLicensePosture,
   getProCheckoutUrl,
   isCiLicenseBypass,
   isProFeature,
@@ -30,6 +31,7 @@ export function formatProRequiredMessage(feature: string): string {
 }
 
 export async function ensureProFeature(feature: ProFeature | string): Promise<void> {
+  assertEnterpriseLicensePosture();
   if (isCiLicenseBypass() || isCiTokenCached()) return;
 
   const name = String(feature);
@@ -57,6 +59,7 @@ export async function exitUnlessProFeature(feature: ProFeature | string): Promis
 
 /** Sync check after license client has been started (e.g. dashboard already refreshed). */
 export function assertProFeatureStarted(feature: ProFeature | string): void {
+  assertEnterpriseLicensePosture();
   if (isCiLicenseBypass() || isCiTokenCached()) return;
   const name = String(feature);
   if (!isProFeature(name)) return;
@@ -78,6 +81,12 @@ export class ProLicenseRequiredError extends Error {
 /** CLI entry: node dist/license/check-pro.js <feature> */
 export async function runCheckProCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   const feature = argv[0] || 'swarm';
+  try {
+    assertEnterpriseLicensePosture();
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
   if (isCiLicenseBypass() || isCiTokenCached()) return 0;
   if (await verifyCiToken()) return 0;
 

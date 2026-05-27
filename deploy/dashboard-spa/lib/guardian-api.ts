@@ -1,3 +1,5 @@
+import { TRIBUNAL_BATCH_LIMIT } from './tribunal-config';
+
 export type GuardianHeaders = Record<string, string>;
 
 const TENANT_STORAGE_KEY = 'mcp-guardian-tenant-id';
@@ -143,8 +145,8 @@ export type ExecutiveSummaryResponse = {
   totalRequests?: number;
   blockedRequests?: number;
   passedRequests?: number;
-  passRatePct?: number;
-  blockRatePct?: number;
+  passRatePct?: number | null;
+  blockRatePct?: number | null;
   totalCostUsd?: number;
   burnRatePerHour?: number;
   projectedMonthlyUsd?: number;
@@ -346,6 +348,7 @@ export type VisualsData = {
     sparse?: boolean;
     window?: string;
     generatedAt?: string;
+    dbPath?: string;
     dataSources?: {
       traffic?: string;
       semantic?: string;
@@ -580,8 +583,12 @@ export async function fetchTenantContext(): Promise<{
   };
 }
 
-function withWindowRegionQuery(windowDays: number, region?: string, extra?: Record<string, string>): string {
-  const params = new URLSearchParams({ window: String(windowDays) });
+function withWindowRegionQuery(
+  window: string | number,
+  region?: string,
+  extra?: Record<string, string>,
+): string {
+  const params = new URLSearchParams({ window: String(window) });
   if (region) params.set('region', region);
   if (extra) {
     for (const [k, v] of Object.entries(extra)) params.set(k, v);
@@ -877,8 +884,11 @@ export async function downloadFullAnalysis(windowDays = 7, useLlm = true): Promi
   URL.revokeObjectURL(url);
 }
 
-export async function fetchAuditHeatmap(windowDays = 7, region?: string): Promise<AuditHeatmapResponse | null> {
-  const res = await guardianFetch(`/api/audit/heatmap?${withWindowRegionQuery(windowDays, region)}`);
+export async function fetchAuditHeatmap(
+  window: string | number = 7,
+  region?: string,
+): Promise<AuditHeatmapResponse | null> {
+  const res = await guardianFetch(`/api/audit/heatmap?${withWindowRegionQuery(window, region)}`);
   if (!res.ok) return null;
   return liveOrNull((await res.json()) as AuditHeatmapResponse);
 }
@@ -1013,10 +1023,40 @@ export async function fetchSignatureHints(): Promise<Record<string, unknown> | n
   return (await res.json()) as Record<string, unknown>;
 }
 
-export async function fetchTribunalReport(limit = 3): Promise<Record<string, unknown> | null> {
-  const res = await guardianFetch(`/api/learning/semantic/tribunal?limit=${limit}&useLlm=false`);
+export type TribunalDebateSummary = {
+  recordId?: string;
+  toolName?: string;
+  serverName?: string;
+  uncertaintyScore?: number;
+  verdict?: {
+    recommendedLabel?: 'true_positive' | 'false_positive' | 'needs_review';
+    unanimous?: boolean;
+    confidence?: number;
+    dissent?: string;
+  };
+};
+
+export type TribunalReport = {
+  generatedAt?: string;
+  queueSize?: number;
+  debatedCount?: number;
+  batchLimit?: number;
+  eligibleTotal?: number;
+  remainingEligible?: number;
+  debates?: TribunalDebateSummary[];
+  quorumMet?: boolean;
+  autoLabelsApplied?: number;
+};
+
+export async function fetchTribunalReport(
+  limit: number = TRIBUNAL_BATCH_LIMIT,
+): Promise<TribunalReport | null> {
+  const batch = limit;
+  const res = await guardianFetch(
+    `/api/learning/semantic/tribunal?limit=${batch}&useLlm=false`,
+  );
   if (!res.ok) return null;
-  return (await res.json()) as Record<string, unknown>;
+  return (await res.json()) as TribunalReport;
 }
 
 export async function fetchComplianceReport(windowDays = 7): Promise<Record<string, unknown> | null> {
@@ -1323,7 +1363,106 @@ export type ThreatIntelStatus = {
   lastPollAt: string | null;
   pollingActive: boolean;
   pollingDisabled: boolean;
+  suppressed?: number;
 };
+
+export type QuarantineRecord = {
+  id: string;
+  source: 'OSV' | 'NVD' | 'GitHub' | 'custom';
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  description: string;
+  remediation: string;
+  publishedAt: string;
+  quarantinedAt: string;
+  operator?: string;
+  note?: string;
+  appliedRuleName?: string;
+  policyPath?: string;
+  affectedPackage?: string;
+  affectedPattern?: string;
+  signature?: string;
+};
+
+export type QuarantineTriggeredDetail = {
+  kind: 'proxy_block' | 'semantic_flag' | 'threat_intel';
+  title: string;
+  ruleName?: string;
+  reason?: string;
+  toolName?: string;
+  serverName?: string;
+  timestamp?: string;
+  patterns?: string[];
+  severity?: string;
+  signature?: string;
+  affectedPackage?: string;
+  affectedPattern?: string;
+  semanticLabel?: string | null;
+  semanticConfidence?: number;
+  argumentsSnapshot?: Record<string, unknown>;
+};
+
+export type QuarantinePolicyDetail = {
+  source: 'monitor' | 'intel';
+  id: string;
+  threatKey?: string;
+  policyPath?: string;
+  quarantine: {
+    quarantinedAt: string;
+    operator?: string;
+    note?: string;
+    appliedRuleName?: string;
+    enforcementStatus?: string;
+    enforcementDetail?: string;
+    sourceKind?: string;
+  };
+  triggered: QuarantineTriggeredDetail | null;
+  appliedRule: Record<string, unknown> | null;
+  suggestedRule: Record<string, unknown> | null;
+};
+
+export async function fetchIntelQuarantinePolicy(
+  row: Pick<QuarantineRecord, 'id'> & Partial<QuarantineRecord>,
+  days = 30,
+): Promise<{ detail: QuarantinePolicyDetail | null; error?: string }> {
+  const headers = await buildMutatingHeaders({ 'Content-Type': 'application/json' });
+  const res = await guardianFetch('/api/ai/threats/quarantine/policy', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ id: row.id, days, record: row }),
+  });
+  if (res.status === 404) {
+    return { detail: null, error: 'Quarantined threat not found' };
+  }
+  if (!res.ok) {
+    return { detail: null, error: await parseApiError(res) };
+  }
+  return { detail: (await res.json()) as QuarantinePolicyDetail };
+}
+
+export async function fetchMonitorQuarantinePolicy(
+  row: Pick<SecurityMonitorQuarantineRecord, 'threatKey' | 'id'> &
+    Partial<SecurityMonitorQuarantineRecord>,
+  days = 30,
+): Promise<{ detail: QuarantinePolicyDetail | null; error?: string }> {
+  const headers = await buildMutatingHeaders({ 'Content-Type': 'application/json' });
+  const res = await guardianFetch('/api/security/threats/quarantine/policy', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      threatKey: row.threatKey,
+      id: row.id,
+      days,
+      record: row,
+    }),
+  });
+  if (res.status === 404) {
+    return { detail: null, error: 'Quarantined monitor threat not found' };
+  }
+  if (!res.ok) {
+    return { detail: null, error: await parseApiError(res) };
+  }
+  return { detail: (await res.json()) as QuarantinePolicyDetail };
+}
 
 export async function fetchAiThreats(): Promise<ThreatIntelStatus | null> {
   const res = await guardianFetch('/api/ai/threats');
@@ -1337,6 +1476,50 @@ export async function pollAiThreats(): Promise<{ ok: boolean; status?: ThreatInt
   if (!res.ok) return { ok: false, error: await parseApiError(res) };
   const status = (await res.json()) as ThreatIntelStatus;
   return { ok: true, status };
+}
+
+export async function fetchQuarantinedThreats(days = 30): Promise<QuarantineRecord[]> {
+  const res = await guardianFetch(`/api/ai/threats/quarantined?days=${days}`);
+  if (!res.ok) return [];
+  const body = (await res.json()) as { entries?: QuarantineRecord[] };
+  return body.entries ?? [];
+}
+
+export async function quarantineThreatIntel(
+  id: string,
+  note?: string,
+): Promise<{ ok: boolean; error?: string; appliedRuleName?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/ai/threats/quarantine', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ id, note }),
+  });
+  if (!res.ok) return { ok: false, error: await parseApiError(res) };
+  const body = (await res.json()) as { appliedRuleName?: string };
+  return { ok: true, appliedRuleName: body.appliedRuleName };
+}
+
+export async function dismissThreatIntel(id: string, note?: string): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/ai/threats/dismiss', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ id, note }),
+  });
+  if (!res.ok) return { ok: false, error: await parseApiError(res) };
+  return { ok: true };
+}
+
+export async function restoreThreatIntel(id: string): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/ai/threats/restore', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) return { ok: false, error: await parseApiError(res) };
+  return { ok: true };
 }
 
 export async function parseApiError(res: Response): Promise<string> {
@@ -1551,6 +1734,8 @@ export type ThreatDiscoveryStatus = {
       mode?: string;
       llmModel?: string;
       llmUsed?: boolean;
+      skipped?: string;
+      runNote?: string;
       candidates?: ThreatLabCandidate[];
     } | null;
     stats: {
@@ -1591,6 +1776,80 @@ export type ThreatDiscoveryStatus = {
   };
 };
 
+export type ThreatAutomationSummary = {
+  timestamp: string;
+  scheduler: {
+    running: boolean;
+    startedAt: string | null;
+    stoppedAt: string | null;
+    lastRunAt: string | null;
+    lastRunStatus: 'success' | 'failed' | null;
+    lastRunError: string | null;
+    nextRunAt: string | null;
+    intervalMs: number;
+    totalRuns: number;
+    totalErrors: number;
+    tenantId: string;
+    pid: number | null;
+    message?: string;
+  };
+  features: {
+    autoResearchEnabled: boolean;
+    threatLabMode: 'reactive' | 'proactive';
+    autoResearchConfig: Record<string, unknown>;
+  };
+  llm: { ok: boolean; reason?: string; model?: string };
+  pipeline: {
+    queued: number;
+    writesThisHour: number;
+    maxPerHour: number;
+    debounceMs: number;
+    enabled: boolean;
+    sources: { semantic: boolean; blocks: boolean; threatIntel: boolean };
+    ephemeral: true;
+  };
+  processedFingerprints: number;
+  jobs: {
+    autoResearch: ThreatDiscoveryJobStatus & {
+      parsed: {
+        written: number;
+        attempted: number;
+        skips: { duplicate: number; belowMinConfidence: number; other: number };
+        summaryLine: string | null;
+      };
+    };
+    threatLab: ThreatDiscoveryJobStatus & {
+      parsed: { wroteAuthentic: number | null };
+    };
+  };
+  autoCorpus: {
+    total: number;
+    last24h: number;
+    recent: AutoCorpusEntry[];
+  };
+  threatLab: {
+    total: number;
+    pending: number;
+    byReviewStatus: Record<string, number>;
+  };
+  learning: {
+    recent: {
+      timestamp: string;
+      type: string;
+      detail: string;
+      fingerprint?: string;
+      confidence?: number;
+    }[];
+    counts24h: Record<string, number>;
+  };
+  promotion: {
+    enabled: boolean;
+    totalPromoted: number;
+    dailyQuota: { used: number; max: number };
+    lastPromotionAt: string | null;
+  };
+};
+
 export async function fetchThreatDiscoveryStatus(): Promise<{
   status: ThreatDiscoveryStatus | null;
   error?: string;
@@ -1611,6 +1870,28 @@ export async function fetchThreatDiscoveryStatus(): Promise<{
     return { status: null, error: body.error || `HTTP ${res.status}` };
   }
   return { status: (await res.json()) as ThreatDiscoveryStatus };
+}
+
+export async function fetchThreatAutomationSummary(): Promise<{
+  status: ThreatAutomationSummary | null;
+  error?: string;
+}> {
+  const res = await guardianFetch('/api/threat-discovery/automation/summary');
+  if (res.status === 404) {
+    return {
+      status: null,
+      error:
+        'Threat Discovery automation summary API not found — run `pnpm exec tsc && pnpm dashboard:build`, then restart `pnpm dashboard:proxy guardian-configs/filesystem.json`.',
+    };
+  }
+  if (res.status === 402) {
+    return { status: null, error: 'Pro license required (swarm feature).' };
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { status: null, error: body.error || `HTTP ${res.status}` };
+  }
+  return { status: (await res.json()) as ThreatAutomationSummary };
 }
 
 export async function runThreatLab(
@@ -1769,10 +2050,22 @@ export async function fetchAnalyticsSummary(
 
 export type SecurityDashboardThreat = {
   id: string;
+  threatKey: string;
   type: string;
   source: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   status: 'blocked' | 'monitored' | 'resolved';
+};
+
+export type SecurityMonitorQuarantineRecord = SecurityDashboardThreat & {
+  quarantinedAt: string;
+  operator?: string;
+  note?: string;
+  appliedRuleName?: string;
+  policyPath?: string;
+  enforcementStatus?: 'applied' | 'already_present' | 'already_blocked' | 'no_context' | 'skipped';
+  enforcementDetail?: string;
+  sourceKind?: 'semantic' | 'block' | 'unknown';
 };
 
 export type SecurityDashboardResponse = {
@@ -1802,14 +2095,75 @@ export async function fetchSecurityDashboard(
   return (await res.json()) as SecurityDashboardResponse;
 }
 
-export async function quarantineAllThreats(): Promise<{ ok: boolean; quarantined?: number; error?: string }> {
+export async function quarantineAllThreats(): Promise<{
+  ok: boolean;
+  quarantined?: number;
+  error?: string;
+}> {
   const headers = await buildMutatingHeaders();
-  const res = await guardianFetch('/api/security/threats/quarantine', { method: 'POST', headers });
+  const res = await guardianFetch('/api/security/threats/quarantine', {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ all: true }),
+  });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     return { ok: false, error: body.error || `HTTP ${res.status}` };
   }
   return (await res.json()) as { ok: boolean; quarantined?: number };
+}
+
+export async function quarantineSecurityThreat(
+  row: SecurityDashboardThreat,
+  note?: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  appliedRuleName?: string;
+  enforcementStatus?: SecurityMonitorQuarantineRecord['enforcementStatus'];
+}> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/security/threats/quarantine', {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...row, note }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: body.error || `HTTP ${res.status}` };
+  }
+  const body = (await res.json().catch(() => ({}))) as {
+    appliedRuleName?: string;
+    enforcementStatus?: SecurityMonitorQuarantineRecord['enforcementStatus'];
+  };
+  return { ok: true, appliedRuleName: body.appliedRuleName, enforcementStatus: body.enforcementStatus };
+}
+
+export async function fetchSecurityQuarantinedThreats(
+  days = 30,
+): Promise<SecurityMonitorQuarantineRecord[]> {
+  const res = await guardianFetch(`/api/security/threats/quarantined?days=${days}`);
+  if (!res.ok) return [];
+  const body = (await res.json()) as { entries?: SecurityMonitorQuarantineRecord[] };
+  return body.entries ?? [];
+}
+
+export async function restoreSecurityThreat(
+  threatKey: string,
+  opts?: { removeRule?: boolean },
+): Promise<{ ok: boolean; error?: string; removedRule?: boolean }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/security/threats/restore', {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ threatKey, removeRule: opts?.removeRule === true }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: body.error || `HTTP ${res.status}` };
+  }
+  const body = (await res.json().catch(() => ({}))) as { removedRule?: boolean };
+  return { ok: true, removedRule: body.removedRule };
 }
 
 export type SetupGuardianConfig = {
@@ -1824,7 +2178,7 @@ export type SetupStatusResponse = {
   completedCount?: number;
   totalSteps?: number;
   guardianConfig?: SetupGuardianConfig & { done?: boolean };
-  database?: { done?: boolean; engine?: string; version?: string; latencyMs?: number | null };
+  database?: { done?: boolean; engine?: string; version?: string; latencyMs?: number | null; error?: string };
   proxyTraffic?: { done?: boolean; totalCalls?: number; healthy?: boolean };
   cloud?: { connected?: boolean; controlPlaneUrl?: string | null };
   onboarding?: OnboardingStatus;

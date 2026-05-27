@@ -7,6 +7,8 @@ import { IDatabase } from '../database/database-interface.js';
 import { registerReadinessCheck } from './readiness.js';
 import { Logger } from './logger.js';
 import { createRedisClient, isRedisConfigured } from './redis-client.js';
+import { assertEnterpriseLicensePosture } from '../license/feature-tiers.js';
+import { maybeClearRugPullOnStart } from '../proxy/rug-pull-cluster.js';
 import { MtlsCertWatcher } from './mtls-watcher.js';
 import { getMtlsAgent } from './mtls-agent-registry.js';
 import {
@@ -40,6 +42,8 @@ const SECRET_KEYS = [
 ];
 
 export async function bootstrapSecrets(): Promise<void> {
+  assertEnterpriseLicensePosture();
+  maybeClearRugPullOnStart();
   const provider = createSecretProvider();
   const healthy = await provider.healthCheck();
   if (!healthy) {
@@ -131,7 +135,31 @@ export async function bootstrapCompliance(db: IDatabase): Promise<void> {
 }
 
 /** Startup warnings for production security posture (mcp tests 31 §3.5 / §3.1). */
+function isMultiReplicaDeployment(): boolean {
+  if (process.env.KUBERNETES_SERVICE_HOST) return true;
+  const n = parseInt(process.env.GUARDIAN_REPLICA_COUNT || '1', 10);
+  return Number.isFinite(n) && n > 1;
+}
+
 export function runEnterpriseSecurityPreflight(): void {
+  assertEnterpriseLicensePosture();
+
+  if (process.env.GUARDIAN_ENTERPRISE_MODE === 'true') {
+    if (!isRedisConfigured()) {
+      const msg =
+        '[bootstrap] GUARDIAN_ENTERPRISE_MODE=true but REDIS_URL is unset — session flow, distributed rate limits, and policy cache are per-instance only';
+      if (process.env.GUARDIAN_STRICT_MODE === 'true' || isMultiReplicaDeployment()) {
+        throw new Error(msg);
+      }
+      Logger.warn(msg);
+    }
+    if (process.env.GUARDIAN_POLICY_EVAL_CACHE_LEGACY_HEURISTIC === 'true') {
+      Logger.warn(
+        '[bootstrap] GUARDIAN_POLICY_EVAL_CACHE_LEGACY_HEURISTIC=true in enterprise — prefer opt-in rule.cacheable only',
+      );
+    }
+  }
+
   const jwtMaxSec = parseInt(process.env.GUARDIAN_JWT_MAX_LIFETIME_SEC || '86400', 10);
   if (Number.isFinite(jwtMaxSec) && jwtMaxSec > 86400) {
     const msg = `[bootstrap] GUARDIAN_JWT_MAX_LIFETIME_SEC=${jwtMaxSec} exceeds 86400 — long-lived tokens increase replay risk`;

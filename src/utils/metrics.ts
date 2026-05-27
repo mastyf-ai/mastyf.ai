@@ -33,6 +33,40 @@ export const blockedRequestsTotal = new Counter({
   registers: [registry],
 });
 
+export const rugpullDetectedTotal = new Counter({
+  name: 'mcp_guardian_rugpull_detected_total',
+  help: 'Tool list fingerprint mismatches (OWASP MCP03 rug-pull)',
+  labelNames: ['server_name', 'tenant_id'],
+  registers: [registry],
+});
+
+export const proxyInflightRejectedTotal = new Counter({
+  name: 'mcp_guardian_proxy_inflight_rejected_total',
+  help: 'tools/call rejected because proxy max in-flight limit was reached',
+  labelNames: ['server_name', 'tenant_id'],
+  registers: [registry],
+});
+
+export const semanticSyncRequestBlocksTotal = new Counter({
+  name: 'mcp_guardian_semantic_sync_request_blocks_total',
+  help: 'tools/call blocked by enterprise sync semantic request gate',
+  labelNames: ['server_name', 'tenant_id'],
+  registers: [registry],
+});
+
+export const policyCacheHitsTotal = new Counter({
+  name: 'mcp_guardian_policy_cache_hits_total',
+  help: 'Policy evaluation cache hits',
+  labelNames: ['tenant_id', 'allowed'],
+  registers: [registry],
+});
+
+export const sessionFlowBackend = new Gauge({
+  name: 'mcp_guardian_session_flow_backend',
+  help: 'Session flow store backend (1=redis, 0=memory)',
+  registers: [registry],
+});
+
 export const attacksBlockedTotal = new Counter({
   name: 'mcp_guardian_attacks_blocked_total',
   help: 'Policy blocks by attack category and rule',
@@ -251,8 +285,15 @@ export async function startMetricsServer(port: number = 9090): Promise<Registry>
     const server = createServer(async (req, res) => {
       const url = req.url || '/metrics';
       if (url === '/healthz') {
+        const { getSemanticRequestGateStatus } = await import('../ai/sync-semantic-request.js');
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
+        res.end(
+          JSON.stringify({
+            status: 'ok',
+            uptime: process.uptime(),
+            ...getSemanticRequestGateStatus(),
+          }),
+        );
         return;
       }
       if (url === '/readyz') {

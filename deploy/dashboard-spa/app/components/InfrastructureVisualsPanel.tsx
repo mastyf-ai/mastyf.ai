@@ -81,8 +81,15 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
         recordCount: data.meta.recordCount,
         sparse: data.meta.sparse,
         dataSources: ['history.db'],
+        emptyReason: data.meta.emptyReasons?.traffic,
       }
     : undefined;
+
+  const trafficEmptyReason =
+    data?.meta?.emptyReasons?.traffic
+    ?? (data?.meta?.dbPath
+      ? `No proxy traffic in the selected ${window} window — widen the time window or route MCP through Guardian. Reading ${data.meta.dbPath}.`
+      : `No proxy traffic in the selected ${window} window — widen the time window or route MCP through Guardian.`);
 
   return (
     <section className="infra-visuals-panel" aria-label="Infrastructure visuals">
@@ -126,6 +133,7 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
             title="Calls over time"
             loading={loading}
             empty={!hourly.some((h) => h.calls > 0)}
+            emptyReason={trafficEmptyReason}
             meta={trafficMeta}
             sparse={trafficMeta?.sparse}
           >
@@ -141,7 +149,12 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Latency p50 by server (ms)" empty={!servers.length} meta={trafficMeta}>
+          <ChartCard
+            title="Latency p50 by server (ms)"
+            empty={!servers.length}
+            emptyReason={trafficEmptyReason}
+            meta={trafficMeta}
+          >
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={servers} layout="vertical">
                 <CartesianGrid {...CHART_GRID} />
@@ -153,7 +166,7 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Top tools" empty={!tools.length} meta={trafficMeta}>
+          <ChartCard title="Top tools" empty={!tools.length} emptyReason={trafficEmptyReason} meta={trafficMeta}>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={tools}>
                 <CartesianGrid {...CHART_GRID} />
@@ -165,7 +178,7 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Block rules" empty={!rules.length} meta={trafficMeta}>
+          <ChartCard title="Block rules" empty={!rules.length} emptyReason={trafficEmptyReason} meta={trafficMeta}>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={rules} layout="vertical">
                 <CartesianGrid {...CHART_GRID} />

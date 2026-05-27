@@ -136,7 +136,7 @@ describe('WebSocketProxyServer round-trip', () => {
   it(
     'blocks tools/call when rug-pull flag is set',
     async () => {
-      (proxy as any).rugPullBlocked = true;
+      (proxy as any).rugPullState.blocked = true;
       const client = await openWs(`ws://127.0.0.1:${proxyPort}`);
       const response = await sendToolsCall(client, 2, 'echo');
       client.close();

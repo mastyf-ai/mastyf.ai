@@ -59,6 +59,21 @@ describe('dashboard multi-tenant isolation', () => {
     delete process.env.GUARDIAN_MULTI_TENANT_ENABLED;
   });
 
+  it('serves /api/audit/heatmap as chart data (not shadowed by /api/audit)', async () => {
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/audit/heatmap?window=7d`);
+    expect(res.ok).toBe(true);
+    const body = (await res.json()) as {
+      available?: boolean;
+      cells?: unknown[];
+      activity?: { days?: string[] };
+      kind?: string;
+    };
+    expect(body.available).toBe(true);
+    expect(Array.isArray(body.cells)).toBe(true);
+    expect(body.activity?.days).toBeDefined();
+    expect(body.kind).toBeUndefined();
+  });
+
   it('scopes /api/aggregate/audit by X-Guardian-Tenant', async () => {
     const resA = await fetch(`http://127.0.0.1:${PORT}/api/aggregate/audit`, {
       headers: { 'X-Guardian-Tenant': 'tenant-a' },

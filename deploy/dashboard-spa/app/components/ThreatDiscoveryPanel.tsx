@@ -121,6 +121,7 @@ export function ThreatDiscoveryPanel({
       {subTab === 'threat-lab' ? (
         <ThreatLabWorkbench
           candidates={candidates}
+          autoEntries={autoEntries}
           roles={roles}
           preloadedContext={threatLabContext}
           manifestMeta={{
@@ -128,6 +129,8 @@ export function ThreatDiscoveryPanel({
             mode: status?.threatLab.manifest?.mode,
             llmModel: status?.threatLab.manifest?.llmModel,
             llmUsed: status?.threatLab.manifest?.llmUsed,
+            skipped: status?.threatLab.manifest?.skipped,
+            runNote: status?.threatLab.manifest?.runNote,
           }}
           onRefresh={() => void load()}
           onClearContext={onClearThreatLabContext}

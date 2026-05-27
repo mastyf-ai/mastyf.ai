@@ -31,6 +31,8 @@ export const PolicyRuleSchema = z.object({
   maxTokens: z.number().positive().optional(),
   maxCallsPerMinute: z.number().positive().optional(),
   maxCallsPer10Seconds: z.number().positive().optional(),
+  /** Opt-in: allow caching pass decisions for this rule (enterprise policy eval cache). */
+  cacheable: z.boolean().optional(),
   rbac: RbacSchema.optional(),
 });
 

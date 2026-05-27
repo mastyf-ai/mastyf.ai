@@ -14,6 +14,10 @@ Lifetime use of Pro entitlement on **self-hosted** MCP Guardian (no recurring fe
 
 The open-source software is also available under MIT. **npm install is free** — you are paying to unlock **Pro runtime features**, not the download.
 
+## Enterprise mode (`GUARDIAN_ENTERPRISE_MODE=true`)
+
+Production multi-replica deployments must set `REDIS_URL` (see [ENTERPRISE_DEPLOYMENT.md](./ENTERPRISE_DEPLOYMENT.md)). License bypass env vars (`GUARDIAN_CI_BYPASS_LICENSE`, `GUARDIAN_DEV_UNLOCK_ALL`) are **not** allowed in enterprise mode — use your `GUARDIAN_LICENSE_KEY`.
+
 ## Community vs Pro
 
 | | Community (free) | Pro (your purchase) |

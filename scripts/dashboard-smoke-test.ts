@@ -82,7 +82,7 @@ async function main(): Promise<void> {
       `status=${compliance.status} markdown=${typeof compBody?.markdown}`,
     );
 
-    const tribunal = await getJson('/api/learning/semantic/tribunal?limit=3&useLlm=false');
+    const tribunal = await getJson('/api/learning/semantic/tribunal?limit=10&useLlm=false');
     record('GET /api/learning/semantic/tribunal', tribunal.status === 200, `status=${tribunal.status}`);
 
     const readiness = await getJson('/api/ai/tenant-model/readiness');

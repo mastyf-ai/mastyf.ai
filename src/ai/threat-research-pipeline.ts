@@ -16,9 +16,12 @@ import {
   type BypassContext,
   type ThreatLabDiscovery,
   type CorpusCandidate,
+  type ThreatLabCandidateProvenance,
+  type ThreatLabSource,
 } from './threat-lab.js';
 import { normalizeDiscoveryClassification, categoryFromBlockRule } from './threat-taxonomy.js';
 import {
+  candidateFingerprint,
   isFingerprintProcessed,
   markThreatResearchProcessed,
   writeAutoCorpusFixture,
@@ -47,6 +50,145 @@ export interface ThreatResearchResult {
   advId?: string;
   relPath?: string;
   reason?: string;
+  fingerprint?: string;
+}
+
+export type AutoCorpusWriteInput = {
+  discovery: ThreatLabDiscovery;
+  source: AutoCorpusSource;
+  inputFingerprint: string;
+  llmUsed?: boolean;
+};
+
+/** Map Threat Lab provenance sources to auto-corpus writer sources. */
+export function threatLabSourceToAutoCorpusSource(source: ThreatLabSource): AutoCorpusSource {
+  switch (source) {
+    case 'semantic-tp':
+      return 'semantic_flag';
+    case 'threat-intel':
+      return 'threat_intel';
+    case 'corpus-proactive':
+      return 'corpus_proactive';
+    case 'bypass':
+    default:
+      return 'bypass';
+  }
+}
+
+function replayRequiredForCorpusWrite(override?: boolean): boolean {
+  if (override !== undefined) return override;
+  return process.env.GUARDIAN_AUTOPILOT_CORPUS_GATE === 'true' || requireReplay();
+}
+
+/** Shared normalize → validate → write → promote path for runtime and Threat Lab batch. */
+async function persistValidatedDiscoveryToAutoCorpus(
+  input: AutoCorpusWriteInput,
+  opts?: { requireReplayBlock?: boolean; recordRateLimit?: boolean },
+): Promise<ThreatResearchResult> {
+  const { discovery, source, inputFingerprint } = input;
+  const fp = inputFingerprint || candidateFingerprint(discovery);
+
+  if (isFingerprintProcessed(fp)) {
+    return { ok: false, reason: 'duplicate fingerprint', fingerprint: fp };
+  }
+
+  let normalized: ThreatLabDiscovery;
+  try {
+    normalized = normalizeDiscoveryClassification(discovery);
+  } catch {
+    return { ok: false, reason: 'classification normalization failed', fingerprint: fp };
+  }
+
+  const validation = validateThreatLabDiscovery(normalized, {
+    requireReplayBlock: replayRequiredForCorpusWrite(opts?.requireReplayBlock),
+  });
+  if (!validation.ok) {
+    return { ok: false, reason: validation.errors.join('; '), fingerprint: fp };
+  }
+
+  const written = writeAutoCorpusFixture(normalized, {
+    source,
+    inputFingerprint: fp,
+    llmUsed: input.llmUsed ?? true,
+    attackClass: normalized.attackClass,
+    hypothesis: normalized.hypothesis,
+    confidence: normalized.confidence,
+  });
+  if (!written) {
+    return { ok: false, reason: 'fixture write skipped (duplicate)', fingerprint: fp };
+  }
+
+  markThreatResearchProcessed(fp);
+  if (opts?.recordRateLimit) {
+    recordHourlyWrite();
+  }
+
+  Logger.info(
+    `[threat-research] auto-wrote ${written.advId} (${normalized.attackClass}, source=${source})`,
+  );
+
+  try {
+    const { appendLearningEvent } = await import('../utils/learning-events.js');
+    appendLearningEvent({
+      type: 'threat_research_write',
+      detail: `${written.advId} ${normalized.attackClass}`,
+      fingerprint: fp,
+      confidence: normalized.confidence,
+    });
+  } catch {
+    /* non-fatal */
+  }
+
+  if (process.env.GUARDIAN_AUTO_CORPUS_PROMOTE === 'true') {
+    try {
+      const provenance: CorpusPromotionProvenance = {
+        source,
+        inputFingerprint: fp,
+        attackClass: normalized.attackClass,
+        hypothesis: normalized.hypothesis,
+        confidence: normalized.confidence,
+        llmUsed: input.llmUsed ?? true,
+        advId: written.advId,
+      };
+      const promoted = await promoteToCorpus(normalized, provenance);
+      if (promoted.ok) {
+        Logger.info(
+          `[threat-research] auto-promoted ${written.advId} → corpus/attacks/${promoted.category}/${promoted.relPath?.split('/').pop()}`,
+        );
+      }
+    } catch (err) {
+      Logger.debug(
+        `[threat-research] auto-promotion failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return {
+    ok: true,
+    advId: written.advId,
+    relPath: written.relPath,
+    fingerprint: written.fingerprint,
+  };
+}
+
+/**
+ * Write a Threat Lab–validated discovery via the auto-corpus path (no second LLM call, no rate limit).
+ */
+export async function writeValidatedDiscoveryToAutoCorpus(
+  discovery: ThreatLabDiscovery,
+  provenance: ThreatLabCandidateProvenance,
+  opts?: { requireReplayBlock?: boolean },
+): Promise<ThreatResearchResult> {
+  const fp = provenance.inputFingerprint || candidateFingerprint(discovery);
+  return persistValidatedDiscoveryToAutoCorpus(
+    {
+      discovery,
+      source: threatLabSourceToAutoCorpusSource(provenance.source),
+      inputFingerprint: fp,
+      llmUsed: provenance.llmUsed,
+    },
+    { requireReplayBlock: opts?.requireReplayBlock, recordRateLimit: false },
+  );
 }
 
 const queue: ThreatResearchEvent[] = [];
@@ -79,7 +221,7 @@ export function threatResearchAutoEnabled(): boolean {
   return getLicenseClient().hasFeature('swarm');
 }
 
-/** When true, Threat Lab skips direct adv-*.json writes (auto pipeline owns the corpus loop). */
+/** When true, Threat Lab writes adv fixtures via the auto-corpus path (not legacy direct writes). */
 export function autoThreatResearchOwnsAdvWrites(): boolean {
   return (
     process.env.GUARDIAN_THREAT_RESEARCH_AUTO === 'true'
@@ -258,79 +400,15 @@ export async function processThreatResearchEvent(
     return { ok: false, reason: 'below min confidence' };
   }
 
-  let normalized: ThreatLabDiscovery;
-  try {
-    normalized = normalizeDiscoveryClassification(discovery);
-  } catch {
-    return { ok: false, reason: 'classification normalization failed' };
-  }
-
-  const corpusGate =
-    process.env.GUARDIAN_AUTOPILOT_CORPUS_GATE === 'true' || requireReplay();
-  const validation = validateThreatLabDiscovery(normalized, {
-    requireReplayBlock: corpusGate,
-  });
-  if (!validation.ok) {
-    return { ok: false, reason: validation.errors.join('; ') };
-  }
-
-  const written = writeAutoCorpusFixture(normalized, {
-    source: event.type,
-    inputFingerprint: event.fingerprint,
-    llmUsed: true,
-    attackClass: normalized.attackClass,
-    hypothesis: normalized.hypothesis,
-    confidence: normalized.confidence,
-  });
-  if (!written) {
-    return { ok: false, reason: 'fixture write skipped (duplicate)' };
-  }
-
-  markThreatResearchProcessed(event.fingerprint);
-  recordHourlyWrite();
-  Logger.info(
-    `[threat-research] auto-wrote ${written.advId} (${normalized.attackClass}, source=${event.type})`,
+  return persistValidatedDiscoveryToAutoCorpus(
+    {
+      discovery,
+      source: event.type,
+      inputFingerprint: event.fingerprint,
+      llmUsed: true,
+    },
+    { recordRateLimit: true },
   );
-  try {
-    const { appendLearningEvent } = await import('../utils/learning-events.js');
-    appendLearningEvent(
-      {
-        type: 'threat_research_write',
-        detail: `${written.advId} ${normalized.attackClass}`,
-        fingerprint: event.fingerprint,
-        confidence: normalized.confidence,
-      },
-    );
-  } catch {
-    /* non-fatal */
-  }
-
-  // ── Auto-promote to corpus/attacks/ (Phase 1 of self-sustaining pipeline) ──
-  if (process.env.GUARDIAN_AUTO_CORPUS_PROMOTE === 'true') {
-    try {
-      const provenance: CorpusPromotionProvenance = {
-        source: event.type,
-        inputFingerprint: event.fingerprint,
-        attackClass: normalized.attackClass,
-        hypothesis: normalized.hypothesis,
-        confidence: normalized.confidence,
-        llmUsed: true,
-        advId: written.advId,
-      };
-      const promoted = await promoteToCorpus(normalized, provenance);
-      if (promoted.ok) {
-        Logger.info(
-          `[threat-research] auto-promoted ${written.advId} → corpus/attacks/${promoted.category}/${promoted.relPath?.split('/').pop()}`,
-        );
-      }
-    } catch (err) {
-      Logger.debug(
-        `[threat-research] auto-promotion failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  return { ok: true, advId: written.advId, relPath: written.relPath };
 }
 
 export async function processThreatResearchBatch(

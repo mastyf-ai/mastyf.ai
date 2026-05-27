@@ -73,12 +73,15 @@ export function ExecutiveOverviewPanel({ refreshKey = 0, metrics: metricsProp, s
     color: CHART_COLORS[i % CHART_COLORS.length],
   }));
 
+  const totalInWindow = summary?.totalRequests ?? metricsProp?.totalRequests ?? 0;
   const passRateRaw =
-    summary?.passRatePct ??
-    metricsProp?.passRate ??
-    (metricsProp && metricsProp.totalRequests
-      ? ((metricsProp.passedRequests ?? 0) / metricsProp.totalRequests) * 100
-      : null);
+    totalInWindow > 0
+      ? summary?.passRatePct ??
+        metricsProp?.passRate ??
+        (metricsProp
+          ? ((metricsProp.passedRequests ?? 0) / metricsProp.totalRequests) * 100
+          : null)
+      : null;
   const passRate = passRateRaw != null && Number.isFinite(passRateRaw) ? passRateRaw : null;
 
   const cmp = summary?.comparison;

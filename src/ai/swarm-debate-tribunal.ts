@@ -245,36 +245,58 @@ export async function runTribunalDebate(
   };
 }
 
+export const DEFAULT_TRIBUNAL_BATCH = 10;
+
 export async function runTribunalForQueue(opts?: {
   tenantId?: string;
   limit?: number;
   uncertaintyMin?: number;
   useLlm?: boolean;
-}): Promise<{ debates: TribunalDebate[]; queueSize: number }> {
+}): Promise<{
+  debates: TribunalDebate[];
+  queueSize: number;
+  batchLimit: number;
+  eligibleTotal: number;
+  remainingEligible: number;
+}> {
   const { loadSemanticAuditRecordsAsync } = await import('./semantic-audit-store.js');
+  const batchLimit = opts?.limit ?? DEFAULT_TRIBUNAL_BATCH;
   const records = await loadSemanticAuditRecordsAsync({
     tenantId: opts?.tenantId,
     sinceMs: 30 * 24 * 60 * 60 * 1000,
     limit: 500,
   });
-  const queue = rankSemanticReviewQueue(records, { limit: opts?.limit ?? 5 });
+  const ranked = rankSemanticReviewQueue(records, { limit: 500 });
   const minScore = opts?.uncertaintyMin ?? 0.35;
-  const eligible = queue.filter((r) => r.uncertaintyScore >= minScore && !r.labeled);
+  const eligible = ranked.filter((r) => r.uncertaintyScore >= minScore && !r.labeled);
+  const batch = eligible.slice(0, batchLimit);
 
   const debates: TribunalDebate[] = [];
-  for (const rec of eligible) {
+  for (const rec of batch) {
     const debate = await runTribunalDebate(rec, { useLlm: opts?.useLlm });
     debate.uncertaintyScore = rec.uncertaintyScore;
     debates.push(debate);
   }
 
-  return { debates, queueSize: queue.length };
+  const eligibleTotal = eligible.length;
+  const remainingEligible = Math.max(0, eligibleTotal - debates.length);
+
+  return {
+    debates,
+    queueSize: batch.length,
+    batchLimit,
+    eligibleTotal,
+    remainingEligible,
+  };
 }
 
 export type TribunalReport = {
   generatedAt: string;
   queueSize: number;
   debatedCount: number;
+  batchLimit: number;
+  eligibleTotal: number;
+  remainingEligible: number;
   debates: TribunalDebate[];
   quorumMet: boolean;
   autoLabelsApplied: number;
@@ -285,17 +307,23 @@ export async function buildTribunalReport(opts?: {
   limit?: number;
   useLlm?: boolean;
 }): Promise<TribunalReport> {
-  const { debates, queueSize } = await runTribunalForQueue(opts);
+  const { debates, queueSize, batchLimit, eligibleTotal, remainingEligible } =
+    await runTribunalForQueue(opts);
   const cfg = getQuorumConfig();
   const autoLabelsApplied = await applyTribunalAutoLabels(debates, { tenantId: opts?.tenantId });
   const quorumMet = debates.some((d) => d.autoLabelEligible) || cfg.minTotalLabels <= 1;
 
-  Logger.info(`[SwarmTribunal] Report: ${debates.length} debate(s), autoLabels=${autoLabelsApplied}`);
+  Logger.info(
+    `[SwarmTribunal] Report: ${debates.length} debate(s), eligible=${eligibleTotal}, remaining=${remainingEligible}, autoLabels=${autoLabelsApplied}`,
+  );
 
   return {
     generatedAt: new Date().toISOString(),
     queueSize,
     debatedCount: debates.length,
+    batchLimit,
+    eligibleTotal,
+    remainingEligible,
     debates,
     quorumMet,
     autoLabelsApplied,

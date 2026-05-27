@@ -14,10 +14,10 @@ importers:
   .:
     dependencies:
       '@mcp-guardian/core':
-        specifier: workspace:^3.2.7
+        specifier: workspace:^3.2.8
         version: link:packages/core
       '@mcp-guardian/plugin-sdk':
-        specifier: workspace:^3.2.7
+        specifier: workspace:^3.2.8
         version: link:packages/plugin-sdk
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
@@ -200,10 +200,10 @@ importers:
   packages/cli:
     dependencies:
       '@mcp-guardian/core':
-        specifier: workspace:^3.2.7
+        specifier: workspace:^3.2.8
         version: link:../core
       '@mcp-guardian/server':
-        specifier: workspace:^3.2.7
+        specifier: workspace:^3.2.8
         version: link:../server
     devDependencies:
       '@types/node':
@@ -243,7 +243,7 @@ importers:
   packages/server:
     dependencies:
       '@mcp-guardian/core':
-        specifier: workspace:^3.2.7
+        specifier: workspace:^3.2.8
         version: link:../core
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
