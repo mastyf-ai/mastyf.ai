@@ -1,0 +1,29 @@
+MCP Guardian — Comprehensive Analysis
+Generated: 2026-05-28T12:06:43.645Z
+
+EXECUTIVE SUMMARY
+  Overall security score: 50/100
+  Active servers: 1
+  Blocked calls: 130
+  Total cost (snapshot): $0.0048
+  AI adaptive threshold: 0.85
+  True positive rate: 0%
+  False positive rate: 0%
+
+SECURITY
+  official-filesystem: score 50/100, 2 CVE(s) (0 critical), auth no
+
+COST
+  official-filesystem: 8,528 tokens, $0.0048, trend flat
+  Projected monthly: $0.14
+
+HEALTH
+  official-filesystem: 103ms latency, 100% success, 14 tools
+
+BEHAVIORAL BASELINES
+  official-filesystem/read_text_file: 405 samples, ~48 tokens, ~110ms
+  official-filesystem/write_file: 90 samples, ~46 tokens, ~78ms
+  official-filesystem/list_directory: 45 samples, ~129 tokens, ~49ms
+
+CROSS-LAYER INSIGHTS
+  [info] official-filesystem security score is 50/100 (below 70). Review tool permissions, CVEs, and policy rules before production use. (confidence 65%)

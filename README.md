@@ -11,7 +11,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-**Version 3.3.0** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+**Version 3.3.1** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
 
 ### Detection tiers (honest)
 
@@ -24,6 +24,14 @@
 See [ENTERPRISE_DEPLOYMENT.md](docs/ENTERPRISE_DEPLOYMENT.md) for Redis, multi-replica, and license requirements.
 
 ---
+
+## What's new in 3.3.1
+
+- **Control-plane parity harness** — added data-plane vs control-plane rule parity validation with new harness tooling and tests
+- **Enterprise AI/autopilot expansion** — new safety contract, continuous assurance, policy impact scoring, similar-environment benchmarks, and tenant simulation modules
+- **Dashboard v3 upgrades** — advanced analytics panel, richer workspace UX, expanded security posture/health views, and updated API wiring
+- **Federated trust/security primitives** — new certified MCP and threat-intel v2 utilities with regression coverage
+- **Plugin SDK release alignment** — `@mcp-guardian/plugin-sdk` docs/source/tests aligned to `3.3.1`
 
 ## What's new in 3.3.0
 

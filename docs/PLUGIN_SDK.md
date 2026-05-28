@@ -50,7 +50,7 @@ mcp-guardian proxy --policy default-policy.yaml ...
 | `createDetectorPlugin` | Stable |
 | `DetectorPlugin`, `DetectorFinding`, `DetectorScanContext` | Stable |
 | `onLoad` / `onUnload` | Stable lifecycle hooks |
-| `PLUGIN_SDK_VERSION` | Semver-aligned (`3.3.0`) |
+| `PLUGIN_SDK_VERSION` | Semver-aligned (`3.3.1`) |
 
 Plugins run **after** built-in `scanForSecrets()` in the secret scanner pipeline.
 
@@ -69,7 +69,7 @@ pnpm publish --filter @mcp-guardian/plugin-sdk --access public
 "@mcp-guardian/plugin-sdk": "workspace:*"
 ```
 
-1. Depend on `@mcp-guardian/plugin-sdk@^3.3.0` (npm) or `workspace:*` (monorepo).
+1. Depend on `@mcp-guardian/plugin-sdk@^3.3.1` (npm) or `workspace:*` (monorepo).
 2. Compile plugin to `.js` (Node 18+).
 3. Document required env vars in your README.
 4. Test with `GUARDIAN_PLUGIN_PATH` in staging before production.

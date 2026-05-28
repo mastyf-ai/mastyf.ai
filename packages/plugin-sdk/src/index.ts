@@ -53,4 +53,4 @@ export function createDetectorPlugin(opts: CreatePluginOptions): DetectorPlugin 
 }
 
 /** SDK version string embedded in registry logs. */
-export const PLUGIN_SDK_VERSION = '3.3.0';
+export const PLUGIN_SDK_VERSION = '3.3.1';

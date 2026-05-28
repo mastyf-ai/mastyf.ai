@@ -1,0 +1,104 @@
+{
+  "entries": [
+    {
+      "threatKey": "block:official-filesystem:read_text_file:2026-05-27 19:05:06",
+      "id": "THR-3450",
+      "type": "Semantic Prompt Injection",
+      "source": "10.13.195.218",
+      "severity": "critical",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:03:21.475Z",
+      "operator": "anonymous"
+    },
+    {
+      "threatKey": "block:official-filesystem:read_text_file:2026-05-27 19:12:03",
+      "id": "THR-3148",
+      "type": "Semantic Prompt Injection",
+      "source": "10.13.195.218",
+      "severity": "critical",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:03:17.044Z",
+      "operator": "anonymous"
+    },
+    {
+      "threatKey": "block:official-filesystem:read_text_file:2026-05-27 19:12:05",
+      "id": "THR-3345",
+      "type": "Semantic Prompt Injection",
+      "source": "10.13.195.218",
+      "severity": "critical",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:03:13.920Z",
+      "operator": "anonymous"
+    },
+    {
+      "id": "THR-3247",
+      "threatKey": "block:official-filesystem:write_file:2026-05-27 19:12:04",
+      "type": "Semantic Prompt Injection",
+      "source": "10.12.44.193",
+      "severity": "critical",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:03:09.335Z",
+      "operator": "anonymous"
+    },
+    {
+      "id": "THR-3441",
+      "threatKey": "block:official-filesystem:read_text_file:2026-05-27 19:12:06",
+      "type": "Semantic Prompt Injection",
+      "source": "10.13.195.218",
+      "severity": "critical",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:03:09.335Z",
+      "operator": "anonymous"
+    },
+    {
+      "id": "THR-S2841",
+      "threatKey": "semantic:1779626077833-a8zuf3i",
+      "type": "Semantic Prompt Injection",
+      "source": "10.2.7.32",
+      "severity": "high",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:03:09.335Z",
+      "operator": "anonymous"
+    },
+    {
+      "id": "THR-3346",
+      "threatKey": "block:official-filesystem:write_file:2026-05-27 19:12:05",
+      "type": "Semantic Prompt Injection",
+      "source": "10.12.44.193",
+      "severity": "critical",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:00:45.563Z",
+      "operator": "anonymous"
+    },
+    {
+      "id": "THR-3540",
+      "threatKey": "block:official-filesystem:read_text_file:2026-05-27 19:12:07",
+      "type": "Semantic Prompt Injection",
+      "source": "10.13.195.218",
+      "severity": "critical",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:00:45.562Z",
+      "operator": "anonymous"
+    },
+    {
+      "id": "THR-S2846",
+      "threatKey": "semantic:1779736473586-zh5lsrl",
+      "type": "Semantic Prompt Injection",
+      "source": "10.8.43.129",
+      "severity": "critical",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:00:45.562Z",
+      "operator": "anonymous"
+    },
+    {
+      "id": "THR-S2840",
+      "threatKey": "semantic:1779624740715-5slq6g1",
+      "type": "Semantic Prompt Injection",
+      "source": "10.2.7.32",
+      "severity": "high",
+      "status": "resolved",
+      "quarantinedAt": "2026-05-27T20:00:45.562Z",
+      "operator": "anonymous"
+    }
+  ]
+}

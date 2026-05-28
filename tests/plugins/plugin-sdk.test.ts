@@ -4,7 +4,7 @@ import { registerDetectorPlugin, runDetectorPlugins, clearDetectorPluginsForTest
 
 describe('plugin-sdk v3', () => {
   it('exports stable version', () => {
-    expect(PLUGIN_SDK_VERSION).toBe('3.3.0');
+    expect(PLUGIN_SDK_VERSION).toBe('3.3.1');
   });
 
   it('createDetectorPlugin registers and scans', () => {

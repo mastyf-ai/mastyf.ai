@@ -2,6 +2,22 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [3.3.1] - 2026-05-28
+
+### Added
+
+- **Control-plane parity harness** — new parity harness module/CLI path and tests to assert rule behavior consistency between data-plane and control-plane evaluation paths
+- **Autopilot assurance modules** — `autopilot-safety-contract`, `continuous-assurance`, `policy-impact-scoring`, `similar-environment-benchmarks`, and `tenant-simulation-pack` with test coverage
+- **Dashboard advanced analytics** — new analytics panel and expanded workspace/dashboard components for protection, reliability, and security posture
+- **Federated security utilities** — `federated-threat-intel-v2` and `guardian-certified-mcp` helpers plus dedicated tests
+- **Policy template segments** — new reusable policy segments for AI startup, enterprise SOC, MCP builder, and regulated profiles
+
+### Changed
+
+- **npm publish alignment** — monorepo workspace packages (`core`, `server`, `cli`, `plugin-sdk`) aligned to **3.3.1**
+- **README** — detailed release highlights updated for 3.3.1 and current enterprise tracks
+- **Plugin SDK semver metadata** — `PLUGIN_SDK_VERSION`, docs, and tests aligned to 3.3.1
+
 ## [3.3.0] - 2026-05-28
 
 ### Added

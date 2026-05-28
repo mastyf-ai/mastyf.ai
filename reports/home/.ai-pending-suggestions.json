@@ -1,0 +1,299 @@
+{
+  "updatedAt": "2026-05-28T12:07:00.063Z",
+  "suggestions": [
+    {
+      "id": "attack-3",
+      "ruleName": "attack-learned-semantic-path-guard-read_text_file",
+      "rule": {
+        "name": "attack-learned-semantic-path-guard-read_text_file",
+        "description": "Learned from 91 blocks (semantic-path-guard on read_text_file@official-filesystem) — pending approval",
+        "action": "block",
+        "argPatterns": [
+          {
+            "field": "*",
+            "patterns": [
+              "/etc"
+            ]
+          }
+        ]
+      },
+      "confidence": 0.95,
+      "reason": "91 blocks by rule \"semantic-path-guard\" on tool \"read_text_file\" — common patterns: /etc",
+      "source": "attack",
+      "autopilot": {
+        "safetyAllowed": true,
+        "safetyBlockers": [],
+        "impactOverall": 0.761,
+        "recommendation": "promote"
+      }
+    },
+    {
+      "id": "cost-6",
+      "ruleName": "cost-optimize-read_text_file",
+      "rule": {
+        "name": "cost-optimize-read_text_file",
+        "description": "Auto-generated: read_text_file consumes 60.4% of total cost ($0.0000)",
+        "action": "flag",
+        "maxTokens": 39
+      },
+      "confidence": 0.9,
+      "reason": "High-cost tool: 60.4% of budget, trend: flat",
+      "source": "cost",
+      "estimatedSavings": 8.177000000000001e-9,
+      "autopilot": {
+        "safetyAllowed": false,
+        "safetyBlockers": [
+          "predicted bypass delta too high (0.002 > 0.000)"
+        ],
+        "impactOverall": 0.705,
+        "recommendation": "promote"
+      }
+    },
+    {
+      "id": "attack-4",
+      "ruleName": "attack-learned-deny-multimodal-injection-write_file",
+      "rule": {
+        "name": "attack-learned-deny-multimodal-injection-write_file",
+        "description": "Learned deny after 26 multimodal-injection blocks on write_file — pending approval",
+        "action": "block",
+        "tools": {
+          "deny": [
+            "write_file"
+          ]
+        }
+      },
+      "confidence": 0.88,
+      "reason": "26 blocks by \"multimodal-injection\" on \"write_file\" (no shared path fragment; suggesting tool deny)",
+      "source": "attack",
+      "autopilot": {
+        "safetyAllowed": true,
+        "safetyBlockers": [],
+        "impactOverall": 0.712,
+        "recommendation": "promote"
+      }
+    },
+    {
+      "id": "attack-5",
+      "ruleName": "attack-learned-deny-request-prompt-injection-read_text_file",
+      "rule": {
+        "name": "attack-learned-deny-request-prompt-injection-read_text_file",
+        "description": "Learned deny after 13 request-prompt-injection blocks on read_text_file — pending approval",
+        "action": "block",
+        "tools": {
+          "deny": [
+            "read_text_file"
+          ]
+        }
+      },
+      "confidence": 0.88,
+      "reason": "13 blocks by \"request-prompt-injection\" on \"read_text_file\" (no shared path fragment; suggesting tool deny)",
+      "source": "attack",
+      "autopilot": {
+        "safetyAllowed": true,
+        "safetyBlockers": [],
+        "impactOverall": 0.712,
+        "recommendation": "promote"
+      }
+    },
+    {
+      "id": "cost-8",
+      "ruleName": "cost-optimize-list_directory",
+      "rule": {
+        "name": "cost-optimize-list_directory",
+        "description": "Auto-generated: list_directory consumes 30.8% of total cost ($0.0000)",
+        "action": "flag",
+        "maxTokens": 103
+      },
+      "confidence": 0.6161228406909789,
+      "reason": "High-cost tool: 30.8% of budget, trend: flat",
+      "source": "cost",
+      "estimatedSavings": 4.173e-9,
+      "autopilot": {
+        "safetyAllowed": false,
+        "safetyBlockers": [
+          "replay coverage too low (0.88 < 0.95)",
+          "confidence too low (0.62 < 0.75)",
+          "predicted bypass delta too high (0.002 > 0.000)",
+          "rollback confidence too low (0.88 < 0.90)"
+        ],
+        "impactOverall": 0.506,
+        "recommendation": "canary_only"
+      }
+    },
+    {
+      "id": "cost-7",
+      "ruleName": "cost-burst-read_text_file",
+      "rule": {
+        "name": "cost-burst-read_text_file",
+        "description": "Auto-generated: read_text_file shows burst usage (18 calls/min peak)",
+        "action": "flag",
+        "maxCallsPerMinute": 9
+      },
+      "confidence": 0.6,
+      "reason": "Burst pattern detected: 18 calls/min peak",
+      "source": "cost",
+      "estimatedSavings": 6.132750000000001e-9,
+      "autopilot": {
+        "safetyAllowed": false,
+        "safetyBlockers": [
+          "replay coverage too low (0.88 < 0.95)",
+          "confidence too low (0.60 < 0.75)",
+          "predicted bypass delta too high (0.002 > 0.000)",
+          "rollback confidence too low (0.88 < 0.90)"
+        ],
+        "impactOverall": 0.495,
+        "recommendation": "canary_only"
+      }
+    },
+    {
+      "id": "baseline-0",
+      "ruleName": "preventive-token-cap-official-filesystem-read_text_file",
+      "rule": {
+        "name": "preventive-token-cap-official-filesystem-read_text_file",
+        "description": "Preventive token cap for read_text_file on official-filesystem (n=405, mean=48 tokens)",
+        "action": "flag",
+        "maxTokens": 108
+      },
+      "confidence": 0.55,
+      "reason": "Stable baseline: flag calls above ~108 tokens (mean=48, σ=30)",
+      "source": "baseline",
+      "autopilot": {
+        "safetyAllowed": false,
+        "safetyBlockers": [
+          "replay coverage too low (0.86 < 0.95)",
+          "confidence too low (0.55 < 0.75)",
+          "predicted bypass delta too high (0.002 > 0.000)",
+          "rollback confidence too low (0.86 < 0.90)"
+        ],
+        "impactOverall": 0.475,
+        "recommendation": "canary_only"
+      }
+    },
+    {
+      "id": "baseline-1",
+      "ruleName": "preventive-token-cap-official-filesystem-write_file",
+      "rule": {
+        "name": "preventive-token-cap-official-filesystem-write_file",
+        "description": "Preventive token cap for write_file on official-filesystem (n=90, mean=46 tokens)",
+        "action": "flag",
+        "maxTokens": 52
+      },
+      "confidence": 0.55,
+      "reason": "Stable baseline: flag calls above ~52 tokens (mean=46, σ=3)",
+      "source": "baseline",
+      "autopilot": {
+        "safetyAllowed": false,
+        "safetyBlockers": [
+          "replay coverage too low (0.86 < 0.95)",
+          "confidence too low (0.55 < 0.75)",
+          "predicted bypass delta too high (0.002 > 0.000)",
+          "rollback confidence too low (0.86 < 0.90)"
+        ],
+        "impactOverall": 0.475,
+        "recommendation": "canary_only"
+      }
+    },
+    {
+      "id": "baseline-2",
+      "ruleName": "preventive-token-cap-official-filesystem-list_directory",
+      "rule": {
+        "name": "preventive-token-cap-official-filesystem-list_directory",
+        "description": "Preventive token cap for list_directory on official-filesystem (n=45, mean=129 tokens)",
+        "action": "flag",
+        "maxTokens": 131
+      },
+      "confidence": 0.55,
+      "reason": "Stable baseline: flag calls above ~131 tokens (mean=129, σ=1)",
+      "source": "baseline",
+      "autopilot": {
+        "safetyAllowed": false,
+        "safetyBlockers": [
+          "replay coverage too low (0.86 < 0.95)",
+          "confidence too low (0.55 < 0.75)",
+          "predicted bypass delta too high (0.002 > 0.000)",
+          "rollback confidence too low (0.86 < 0.90)"
+        ],
+        "impactOverall": 0.475,
+        "recommendation": "canary_only"
+      }
+    },
+    {
+      "id": "threat-9",
+      "ruleName": "threat-pkg-osv-GHSA-345p-7cg4-v4c7",
+      "rule": {
+        "name": "threat-pkg-osv-GHSA-345p-7cg4-v4c7",
+        "description": "[MEDIUM] @modelcontextprotocol/sdk vulnerability: @modelcontextprotocol/sdk has cross-client data leak via shared server/transport instance reuse",
+        "action": "flag",
+        "patterns": [
+          "@modelcontextprotocol/sdk"
+        ]
+      },
+      "confidence": 0.4,
+      "reason": "Affected package @modelcontextprotocol/sdk: @modelcontextprotocol/sdk has cross-client data leak via shared server/transport instance reuse",
+      "source": "threat",
+      "autopilot": {
+        "safetyAllowed": false,
+        "safetyBlockers": [
+          "simulation failed",
+          "replay coverage too low (0.82 < 0.95)",
+          "confidence too low (0.40 < 0.75)",
+          "rollback confidence too low (0.82 < 0.90)"
+        ],
+        "impactOverall": 0.395,
+        "recommendation": "hold"
+      }
+    },
+    {
+      "id": "threat-10",
+      "ruleName": "threat-pkg-osv-GHSA-8r9q-7v3j-jr4g",
+      "rule": {
+        "name": "threat-pkg-osv-GHSA-8r9q-7v3j-jr4g",
+        "description": "[MEDIUM] @modelcontextprotocol/sdk vulnerability: Anthropic's MCP TypeScript SDK has a ReDoS vulnerability",
+        "action": "flag",
+        "patterns": [
+          "@modelcontextprotocol/sdk"
+        ]
+      },
+      "confidence": 0.4,
+      "reason": "Affected package @modelcontextprotocol/sdk: Anthropic's MCP TypeScript SDK has a ReDoS vulnerability",
+      "source": "threat",
+      "autopilot": {
+        "safetyAllowed": false,
+        "safetyBlockers": [
+          "simulation failed",
+          "replay coverage too low (0.82 < 0.95)",
+          "confidence too low (0.40 < 0.75)",
+          "rollback confidence too low (0.82 < 0.90)"
+        ],
+        "impactOverall": 0.395,
+        "recommendation": "hold"
+      }
+    },
+    {
+      "id": "threat-11",
+      "ruleName": "threat-pkg-osv-GHSA-w48q-cv73-mx4w",
+      "rule": {
+        "name": "threat-pkg-osv-GHSA-w48q-cv73-mx4w",
+        "description": "[MEDIUM] @modelcontextprotocol/sdk vulnerability: Model Context Protocol (MCP) TypeScript SDK does not enable DNS rebinding protection by default",
+        "action": "flag",
+        "patterns": [
+          "@modelcontextprotocol/sdk"
+        ]
+      },
+      "confidence": 0.4,
+      "reason": "Affected package @modelcontextprotocol/sdk: Model Context Protocol (MCP) TypeScript SDK does not enable DNS rebinding protection by default",
+      "source": "threat",
+      "autopilot": {
+        "safetyAllowed": false,
+        "safetyBlockers": [
+          "simulation failed",
+          "replay coverage too low (0.82 < 0.95)",
+          "confidence too low (0.40 < 0.75)",
+          "rollback confidence too low (0.82 < 0.90)"
+        ],
+        "impactOverall": 0.395,
+        "recommendation": "hold"
+      }
+    }
+  ]
+}

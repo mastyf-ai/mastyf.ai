@@ -1,0 +1,185 @@
+{
+  "updatedAt": "2026-05-28T09:40:22.109Z",
+  "suggestions": [
+    {
+      "id": "attack-2547",
+      "ruleName": "attack-learned-semantic-path-guard-read_text_file",
+      "rule": {
+        "name": "attack-learned-semantic-path-guard-read_text_file",
+        "description": "Learned from 77 blocks (semantic-path-guard on read_text_file@official-filesystem) — pending approval",
+        "action": "block",
+        "argPatterns": [
+          {
+            "field": "*",
+            "patterns": [
+              "/etc"
+            ]
+          }
+        ]
+      },
+      "confidence": 0.95,
+      "reason": "77 blocks by rule \"semantic-path-guard\" on tool \"read_text_file\" — common patterns: /etc",
+      "source": "attack"
+    },
+    {
+      "id": "cost-2550",
+      "ruleName": "cost-optimize-read_text_file",
+      "rule": {
+        "name": "cost-optimize-read_text_file",
+        "description": "Auto-generated: read_text_file consumes 60.4% of total cost ($0.0000)",
+        "action": "flag",
+        "maxTokens": 39
+      },
+      "confidence": 0.9,
+      "reason": "High-cost tool: 60.4% of budget, trend: flat",
+      "source": "cost",
+      "estimatedSavings": 6.922000000000001e-9
+    },
+    {
+      "id": "attack-2548",
+      "ruleName": "attack-learned-deny-multimodal-injection-write_file",
+      "rule": {
+        "name": "attack-learned-deny-multimodal-injection-write_file",
+        "description": "Learned deny after 22 multimodal-injection blocks on write_file — pending approval",
+        "action": "block",
+        "tools": {
+          "deny": [
+            "write_file"
+          ]
+        }
+      },
+      "confidence": 0.88,
+      "reason": "22 blocks by \"multimodal-injection\" on \"write_file\" (no shared path fragment; suggesting tool deny)",
+      "source": "attack"
+    },
+    {
+      "id": "attack-2549",
+      "ruleName": "attack-learned-deny-request-prompt-injection-read_text_file",
+      "rule": {
+        "name": "attack-learned-deny-request-prompt-injection-read_text_file",
+        "description": "Learned deny after 11 request-prompt-injection blocks on read_text_file — pending approval",
+        "action": "block",
+        "tools": {
+          "deny": [
+            "read_text_file"
+          ]
+        }
+      },
+      "confidence": 0.88,
+      "reason": "11 blocks by \"request-prompt-injection\" on \"read_text_file\" (no shared path fragment; suggesting tool deny)",
+      "source": "attack"
+    },
+    {
+      "id": "cost-2552",
+      "ruleName": "cost-optimize-list_directory",
+      "rule": {
+        "name": "cost-optimize-list_directory",
+        "description": "Auto-generated: list_directory consumes 30.8% of total cost ($0.0000)",
+        "action": "flag",
+        "maxTokens": 103
+      },
+      "confidence": 0.6163236832926403,
+      "reason": "High-cost tool: 30.8% of budget, trend: flat",
+      "source": "cost",
+      "estimatedSavings": 3.5340000000000004e-9
+    },
+    {
+      "id": "cost-2551",
+      "ruleName": "cost-burst-read_text_file",
+      "rule": {
+        "name": "cost-burst-read_text_file",
+        "description": "Auto-generated: read_text_file shows burst usage (18 calls/min peak)",
+        "action": "flag",
+        "maxCallsPerMinute": 9
+      },
+      "confidence": 0.6,
+      "reason": "Burst pattern detected: 18 calls/min peak",
+      "source": "cost",
+      "estimatedSavings": 5.1915000000000005e-9
+    },
+    {
+      "id": "baseline-2544",
+      "ruleName": "preventive-token-cap-official-filesystem-read_text_file",
+      "rule": {
+        "name": "preventive-token-cap-official-filesystem-read_text_file",
+        "description": "Preventive token cap for read_text_file on official-filesystem (n=17352, mean=48 tokens)",
+        "action": "flag",
+        "maxTokens": 108
+      },
+      "confidence": 0.55,
+      "reason": "Stable baseline: flag calls above ~108 tokens (mean=48, σ=30)",
+      "source": "baseline"
+    },
+    {
+      "id": "baseline-2545",
+      "ruleName": "preventive-token-cap-official-filesystem-write_file",
+      "rule": {
+        "name": "preventive-token-cap-official-filesystem-write_file",
+        "description": "Preventive token cap for write_file on official-filesystem (n=3856, mean=46 tokens)",
+        "action": "flag",
+        "maxTokens": 52
+      },
+      "confidence": 0.55,
+      "reason": "Stable baseline: flag calls above ~52 tokens (mean=46, σ=3)",
+      "source": "baseline"
+    },
+    {
+      "id": "baseline-2546",
+      "ruleName": "preventive-token-cap-official-filesystem-list_directory",
+      "rule": {
+        "name": "preventive-token-cap-official-filesystem-list_directory",
+        "description": "Preventive token cap for list_directory on official-filesystem (n=1928, mean=129 tokens)",
+        "action": "flag",
+        "maxTokens": 131
+      },
+      "confidence": 0.55,
+      "reason": "Stable baseline: flag calls above ~131 tokens (mean=129, σ=1)",
+      "source": "baseline"
+    },
+    {
+      "id": "threat-2553",
+      "ruleName": "threat-pkg-osv-GHSA-345p-7cg4-v4c7",
+      "rule": {
+        "name": "threat-pkg-osv-GHSA-345p-7cg4-v4c7",
+        "description": "[MEDIUM] @modelcontextprotocol/sdk vulnerability: @modelcontextprotocol/sdk has cross-client data leak via shared server/transport instance reuse",
+        "action": "flag",
+        "patterns": [
+          "@modelcontextprotocol/sdk"
+        ]
+      },
+      "confidence": 0.4,
+      "reason": "Affected package @modelcontextprotocol/sdk: @modelcontextprotocol/sdk has cross-client data leak via shared server/transport instance reuse",
+      "source": "threat"
+    },
+    {
+      "id": "threat-2554",
+      "ruleName": "threat-pkg-osv-GHSA-8r9q-7v3j-jr4g",
+      "rule": {
+        "name": "threat-pkg-osv-GHSA-8r9q-7v3j-jr4g",
+        "description": "[MEDIUM] @modelcontextprotocol/sdk vulnerability: Anthropic's MCP TypeScript SDK has a ReDoS vulnerability",
+        "action": "flag",
+        "patterns": [
+          "@modelcontextprotocol/sdk"
+        ]
+      },
+      "confidence": 0.4,
+      "reason": "Affected package @modelcontextprotocol/sdk: Anthropic's MCP TypeScript SDK has a ReDoS vulnerability",
+      "source": "threat"
+    },
+    {
+      "id": "threat-2555",
+      "ruleName": "threat-pkg-osv-GHSA-w48q-cv73-mx4w",
+      "rule": {
+        "name": "threat-pkg-osv-GHSA-w48q-cv73-mx4w",
+        "description": "[MEDIUM] @modelcontextprotocol/sdk vulnerability: Model Context Protocol (MCP) TypeScript SDK does not enable DNS rebinding protection by default",
+        "action": "flag",
+        "patterns": [
+          "@modelcontextprotocol/sdk"
+        ]
+      },
+      "confidence": 0.4,
+      "reason": "Affected package @modelcontextprotocol/sdk: Model Context Protocol (MCP) TypeScript SDK does not enable DNS rebinding protection by default",
+      "source": "threat"
+    }
+  ]
+}

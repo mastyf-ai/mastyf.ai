@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "Runtime security, cost governance, and health monitoring proxy for MCP infrastructure",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,10 +11,10 @@
     "build": "tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "tsc && (npm pack --dry-run 2>&1 | grep -q dist/cli.js || (echo 'ERROR: dist/cli.js missing from tarball' && exit 1)) && (node -e \"var p=require('./default-policy.yaml'); if(!['pass','block','flag'].includes(p.policy.default_action)){console.error('ERROR: invalid default_action: '+p.policy.default_action);process.exit(1)}\" 2>/dev/null || true) && echo '✅ prepublish checks passed'"
+    "prepublishOnly": "tsc && (npm pack --dry-run 2>&1 | grep -q dist/cli.js || (echo 'ERROR: dist/cli.js missing from tarball' && exit 1)) && (node -e \"var p=require('./default-policy.yaml'); if(!['pass','block','flag'].includes(p.policy.default_action)){console.error('ERROR: invalid default_action: '+p.policy.default_action);process.exit(1)}\" 2>/dev/null || true) && echo '\u2705 prepublish checks passed'"
   },
   "dependencies": {
-    "@mcp-guardian/core": "workspace:^3.3.0",
+    "@mcp-guardian/core": "workspace:^3.3.1",
     "@modelcontextprotocol/sdk": "^1.25.2"
   },
   "devDependencies": {
