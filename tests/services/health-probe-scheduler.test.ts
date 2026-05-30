@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import type { IDatabase } from '../../src/database/database-interface.js';
+
+const stubDb = {} as IDatabase;
 
 describe('health-probe-scheduler', () => {
   afterEach(() => {
@@ -11,7 +14,7 @@ describe('health-probe-scheduler', () => {
     const { startHealthProbeScheduler, stopHealthProbeScheduler } = await import(
       '../../src/services/health-probe-scheduler.js'
     );
-    startHealthProbeScheduler();
+    startHealthProbeScheduler(stubDb, []);
     stopHealthProbeScheduler();
     expect(true).toBe(true);
   });

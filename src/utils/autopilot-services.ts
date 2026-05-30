@@ -1,6 +1,8 @@
 /**
  * Start Autopilot background services (scheduler, reports).
  */
+import type { IDatabase } from '../database/database-interface.js';
+import type { McpServerConfig } from '../types.js';
 import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { applyAutopilotEnv, isAutopilotMode } from './autopilot-profile.js';
 import { maybeAutoStart } from './threat-discovery-scheduler.js';
@@ -9,8 +11,9 @@ import { readAutopilotConfig } from './autopilot-config.js';
 import { startHealthProbeScheduler } from '../services/health-probe-scheduler.js';
 
 export function startAutopilotServices(
-  historyDb: unknown,
+  historyDb: IDatabase,
   tenantId: string = DEFAULT_TENANT_ID,
+  servers: McpServerConfig[] = [],
 ): void {
   applyAutopilotEnv();
   const cfg = readAutopilotConfig();
@@ -28,5 +31,5 @@ export function startAutopilotServices(
     startReportScheduler(historyDb, tenantId);
   }
 
-  startHealthProbeScheduler();
+  startHealthProbeScheduler(historyDb, servers, tenantId);
 }

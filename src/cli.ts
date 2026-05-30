@@ -687,14 +687,6 @@ program
     const manager = new ProxyManager(db, useWatcherForManager ? policyWatcher : policyEngine, authValidator);
     await manager.startAll(servers);
 
-    try {
-      const { startHealthProbeScheduler } = await import('./services/health-probe-scheduler.js');
-      const { resolveCliTenantId } = await import('./tenant/resolve-tenant.js');
-      startHealthProbeScheduler(db, servers, resolveCliTenantId({}));
-    } catch {
-      /* optional */
-    }
-
     if (authValidator) {
       void authValidator.init().then(() => authValidator!.startBackgroundJwksRefresh()).catch(() => {});
     }
@@ -751,7 +743,7 @@ program
       applyAutopilotEnv();
       const { startAutopilotServices } = await import('./utils/autopilot-services.js');
       const { resolveCliTenantId } = await import('./tenant/resolve-tenant.js');
-      startAutopilotServices(db, resolveCliTenantId({}));
+      startAutopilotServices(db, resolveCliTenantId({}), servers);
       if (isAutopilotMode()) {
         console.error(chalk.green('Guardian Autopilot services started (scheduler + reports)'));
       }
