@@ -1,0 +1,27 @@
+{
+  "name": "@mcp-guardian/mtx",
+  "version": "4.0.0",
+  "description": "MCP Threat Exchange (MTX) v1 format for anonymized threat intelligence",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudraneel93/mcp-guardian.git",
+    "directory": "packages/mtx"
+  }
+}

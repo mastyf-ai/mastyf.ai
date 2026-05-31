@@ -5,6 +5,7 @@ import { parsePolicyConfig } from '../policy/policy-schema.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
 import { Logger } from '../utils/logger.js';
 import { resolvePolicyPath } from '../utils/tui-sources.js';
+import { requirePolicySimulationBeforeApply } from '../utils/policy-apply-gate.js';
 
 function rulesEqual(a: PolicyRule, b: PolicyRule): boolean {
   if (a.name === b.name) return true;
@@ -18,14 +19,25 @@ function rulesEqual(a: PolicyRule, b: PolicyRule): boolean {
 /**
  * Merge an accepted suggestion into live policy YAML and hot-reload via PolicyWatcher.
  */
-export function applySuggestionToPolicy(
+export async function applySuggestionToPolicy(
   rule: PolicyRule,
   policyPath?: string | null,
   policyWatcher?: PolicyWatcher | null,
-): { applied: boolean; policyPath: string | null; reason?: string } {
+  opts?: { skipSimulation?: boolean; tenantId?: string },
+): Promise<{ applied: boolean; policyPath: string | null; reason?: string; simulationSummary?: string }> {
   const path = policyPath || resolvePolicyPath();
   if (!path) {
     return { applied: false, policyPath: null, reason: 'No policy file (set GUARDIAN_POLICY_PATH)' };
+  }
+
+  const gate = await requirePolicySimulationBeforeApply({
+    draftRule: rule,
+    policyPath: path,
+    tenantId: opts?.tenantId,
+    skip: opts?.skipSimulation,
+  });
+  if (!gate.allowed) {
+    return { applied: false, policyPath: path, reason: gate.reason, simulationSummary: gate.simulationSummary };
   }
 
   try {
@@ -46,11 +58,24 @@ export function applySuggestionToPolicy(
     writeFileSync(path, out, 'utf-8');
     Logger.info(`[policy-applier] Appended rule "${rule.name}" → ${path}`);
 
+    try {
+      const { recordConfigProvenance } = await import('../agentic/provenance/config-provenance-chain.js');
+      recordConfigProvenance({
+        actor: process.env.GUARDIAN_ACTOR ?? 'policy-applier',
+        eventType: 'policy_apply',
+        resourcePath: path,
+        diff: { ruleName: rule.name, action: 'append' },
+        store: undefined,
+      });
+    } catch {
+      /* best-effort provenance */
+    }
+
     if (policyWatcher) {
       // chokidar reloads on write; touch is unnecessary
     }
 
-    return { applied: true, policyPath: path };
+    return { applied: true, policyPath: path, simulationSummary: gate.simulationSummary };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     Logger.error(`[policy-applier] Failed to apply rule: ${msg}`);
@@ -58,9 +83,6 @@ export function applySuggestionToPolicy(
   }
 }
 
-/**
- * Remove an existing policy rule by name and write updated YAML.
- */
 /** Look up a rule by name in the policy YAML file. */
 export function findPolicyRuleByName(
   ruleName: string,

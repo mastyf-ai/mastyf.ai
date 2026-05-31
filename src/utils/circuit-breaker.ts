@@ -102,6 +102,15 @@ export class CircuitBreaker {
     };
   }
 
+  /** Force circuit open (incident isolation). */
+  forceOpen(reason?: string): void {
+    this.state = 'OPEN';
+    this.openedAt = Date.now();
+    this.failureCount = this.failureThreshold;
+    Logger.warn(`[circuit-breaker:${this.name}] Circuit force-opened${reason ? `: ${reason}` : ''}`);
+    this.syncRedis();
+  }
+
   private syncRedis(): void {
     void saveCircuitToRedis(this.name, {
       state: this.state,

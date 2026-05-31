@@ -32,6 +32,10 @@ export interface ToolCallObservation {
   success: boolean;
   /** A short hash of the session/context for co-occurrence analysis */
   sessionHash: string;
+  /** Agent id for biometric vector correlation (A3) */
+  agentId?: string;
+  /** Credential identity for mismatch detection */
+  credentialIdentity?: string;
 }
 
 export interface ObservationWindow {
@@ -72,6 +76,12 @@ export class BehaviorCollector {
   private active = false;
   private currentWindow: ObservationWindow | null = null;
   private windowHistory: ObservationWindow[] = [];
+  private fingerprintEngine: import('../biometrics/behavior-fingerprint.js').BehaviorFingerprintEngine | null = null;
+
+  /** Wire A3 biometric fingerprint engine for vector correlation. */
+  setFingerprintEngine(engine: import('../biometrics/behavior-fingerprint.js').BehaviorFingerprintEngine): void {
+    this.fingerprintEngine = engine;
+  }
 
   /**
    * Start a new observation window. If a window is already active,
@@ -114,6 +124,20 @@ export class BehaviorCollector {
    */
   record(observation: ToolCallObservation): void {
     if (!this.active || !this.currentWindow) return;
+
+    if (this.fingerprintEngine && observation.agentId) {
+      const argBytes = Object.values(observation.argumentRanges).reduce(
+        (sum, r) => sum + (r.avg ?? r.max ?? 0),
+        0,
+      ) || 64;
+      this.fingerprintEngine.observe({
+        agentId: observation.agentId,
+        toolName: observation.toolName,
+        argBytes: Math.round(argBytes),
+        timestamp: observation.timestamp,
+        credentialIdentity: observation.credentialIdentity ?? observation.agentId,
+      });
+    }
 
     const w = this.currentWindow;
     w.totalCalls++;

@@ -74,6 +74,10 @@ export interface PolicyConfig {
     unicode_strict?: boolean;
     /** When true (and OPA_URL set), evaluate OPA/Rego before YAML rules. */
     opa?: boolean;
+    /** Minimum MCP certification level required for all tool calls (bronze|silver|gold|platinum). */
+    require_certification?: 'bronze' | 'silver' | 'gold' | 'platinum';
+    /** Default sandbox tier for uncertified servers (shadow|redact|allow). */
+    default_sandbox_tier?: 'shadow' | 'redact' | 'allow';
     rules: PolicyRule[];
   };
 }
@@ -97,4 +101,8 @@ export interface CallContext {
   agentIdentity?: import('../auth/auth-types.js').AgentIdentity;
   /** Optional idempotency key from params._meta or HTTP header */
   idempotencyKey?: string;
+  /** ISO country/region from proxy headers (C3 zero-trust context) */
+  geoRegion?: string;
+  /** Hour of day UTC at request time */
+  hourUtc?: number;
 }

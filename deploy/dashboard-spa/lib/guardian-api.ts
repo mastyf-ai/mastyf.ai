@@ -387,6 +387,13 @@ export type VisualsData = {
     blocksPerMinute?: Array<{ t: number; value: number }>;
     ruleToolPairs?: Array<{ rule: string; tool: string; count: number }>;
     classConfidence?: Array<{ class: string; confidence: number }>;
+    suggestionEngine?: {
+      learningInitialized?: boolean;
+      cyclesCompleted?: number;
+      baselinesCount?: number;
+      recordsAnalyzed?: number;
+      suggestionsGenerated?: number;
+    };
   };
   semantic?: {
     hasData?: boolean;
@@ -1175,7 +1182,8 @@ export async function investigateIncident(triggerId: string): Promise<Investigat
         message =
           'Incident API is unavailable on this dashboard host. Restart the Guardian proxy after `pnpm build` so it loads the latest dashboard routes.';
       } else if (body.error === 'Trigger record not found') {
-        message = 'Semantic audit record not found — it may have aged out of the 7-day window.';
+        message =
+          'No investigation anchor found for this trigger. Try refreshing Threat Lab candidates, or investigate from a semantic audit record in AI Learning.';
       } else if (body.error) {
         message = body.error;
       }
@@ -1787,7 +1795,21 @@ export type ThreatDiscoveryStatus = {
   };
   jobs: {
     threatLab: ThreatDiscoveryJobStatus;
-    autoResearch: ThreatDiscoveryJobStatus;
+    autoResearch: ThreatDiscoveryJobStatus & {
+      parsed?: {
+        written: number;
+        attempted: number;
+        skips: {
+          duplicate: number;
+          belowMinConfidence: number;
+          replayFailed: number;
+          llmUnavailable: number;
+          llmDiscoveryNull: number;
+          other: number;
+        };
+        summaryLine: string | null;
+      };
+    };
   };
   provenance?: {
     strictLive: boolean;
@@ -1835,7 +1857,14 @@ export type ThreatAutomationSummary = {
       parsed: {
         written: number;
         attempted: number;
-        skips: { duplicate: number; belowMinConfidence: number; other: number };
+        skips: {
+          duplicate: number;
+          belowMinConfidence: number;
+          replayFailed: number;
+          llmUnavailable: number;
+          llmDiscoveryNull: number;
+          other: number;
+        };
         summaryLine: string | null;
       };
     };
@@ -2550,6 +2579,171 @@ export async function agenticPost(
   } catch {
     return { ok: true, data: null };
   }
+}
+
+export async function fetchCertificationRegistry(): Promise<{
+  certifications: Array<{ serverName: string; level: string; score: number; expiresAt: string }>;
+  count: number;
+} | null> {
+  const res = await guardianFetch('/api/certification/registry');
+  if (!res.ok) return null;
+  const body = (await res.json()) as {
+    certifications?: Array<{ serverName: string; level: string; score: number; expiresAt: string }>;
+    count?: number;
+  };
+  return { certifications: body.certifications ?? [], count: body.count ?? 0 };
+}
+
+export async function fetchIndustryChainGraph(): Promise<{
+  events: Array<{ sessionId: string; agentId: string | null; serverName: string; toolName: string; eventType: string; blocked: boolean }>;
+  count: number;
+} | null> {
+  const res = await guardianFetch('/api/industry-standard/chain-graph');
+  if (!res.ok) return null;
+  const body = (await res.json()) as { events?: unknown[]; count?: number };
+  return { events: (body.events ?? []) as NonNullable<Awaited<ReturnType<typeof fetchIndustryChainGraph>>>['events'], count: body.count ?? 0 };
+}
+
+export async function fetchIndustryCapabilityGraph(): Promise<{
+  edges: Array<{ serverName: string; sourceTool: string; targetResource: string | null; edgeType: string }>;
+  count: number;
+} | null> {
+  const res = await guardianFetch('/api/industry-standard/capability-graph');
+  if (!res.ok) return null;
+  const body = (await res.json()) as { edges?: unknown[]; count?: number };
+  return { edges: (body.edges ?? []) as NonNullable<Awaited<ReturnType<typeof fetchIndustryCapabilityGraph>>>['edges'], count: body.count ?? 0 };
+}
+
+export async function fetchIndustrySandboxTiers(): Promise<{
+  tiers: Array<{ serverName: string; tier: string; certLevel: string }>;
+} | null> {
+  const res = await guardianFetch('/api/industry-standard/sandbox-tiers');
+  if (!res.ok) return null;
+  const body = (await res.json()) as { tiers?: Array<{ serverName: string; tier: string; certLevel: string }> };
+  return { tiers: body.tiers ?? [] };
+}
+
+export async function approvePlaybookAction(approvalId: string, approve: boolean): Promise<{ ok: boolean; error?: string }> {
+  const res = await guardianFetch('/api/agentic/playbook/approve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ approvalId, approve }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: body.error ?? res.statusText };
+  }
+  return { ok: true };
+}
+
+export type PlanComplianceReport = {
+  overallScore: number;
+  productionReady: boolean;
+  modules: Array<{ id: string; name: string; score: number; checks: Array<{ id: string; passed: boolean; detail: string }> }>;
+  generatedAt: string;
+  summary: string;
+};
+
+export async function fetchPlanComplianceAudit(): Promise<PlanComplianceReport | null> {
+  const res = await guardianFetch('/api/agentic/plan-compliance/audit');
+  if (!res.ok) return null;
+  return (await res.json()) as PlanComplianceReport;
+}
+
+export type FederatedStatus = {
+  enabled: boolean;
+  activeVersion: string;
+  stats: Record<string, unknown>;
+};
+
+export async function fetchFederatedStatus(): Promise<FederatedStatus | null> {
+  const res = await guardianFetch('/api/agentic/federated/status');
+  if (!res.ok) return null;
+  return (await res.json()) as FederatedStatus;
+}
+
+export async function aggregateFederatedDeltas(minContributors = 1): Promise<{ aggregated?: boolean; contributorCount?: number } | null> {
+  const res = await guardianFetch('/api/agentic/federated/aggregate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minContributors, syncRemote: true }),
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as { aggregated?: boolean; contributorCount?: number };
+}
+
+export async function promoteFederatedRollout(): Promise<{ stage?: string; decision?: unknown } | null> {
+  const res = await guardianFetch('/api/agentic/federated/promote-rollout', { method: 'POST' });
+  if (!res.ok) return null;
+  return (await res.json()) as { stage?: string; decision?: unknown };
+}
+
+export async function fetchFederatedExportBundle(): Promise<unknown | null> {
+  const res = await guardianFetch('/api/agentic/federated/export');
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export type ReputationEntry = {
+  serverName: string;
+  consensusScore: number;
+  level?: string;
+  dimensions?: Record<string, number>;
+  attestationJws?: string;
+};
+
+export async function queryServerReputation(serverName: string, networkFetch = true): Promise<ReputationEntry | null> {
+  const res = await guardianFetch('/api/agentic/reputation/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverName, networkFetch }),
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { entry: ReputationEntry | null };
+  return body.entry;
+}
+
+export async function syncReputationMesh(): Promise<number> {
+  const res = await guardianFetch('/api/agentic/reputation/sync-mesh', { method: 'POST' });
+  if (!res.ok) return 0;
+  const body = (await res.json()) as { ingested?: number };
+  return body.ingested ?? 0;
+}
+
+export type ZeroTrustScore = {
+  composite: number;
+  action: 'allow' | 'block' | 'step_up';
+  dimensions: Record<string, number>;
+  reason?: string;
+};
+
+export async function fetchZeroTrustScore(params: {
+  agentId: string;
+  sessionId: string;
+  serverName: string;
+  toolName: string;
+  authenticated?: boolean;
+}): Promise<ZeroTrustScore | null> {
+  const res = await guardianFetch('/api/agentic/zero-trust/score', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as ZeroTrustScore;
+}
+
+export type ChainGraph = {
+  nodes: Array<{ id: string; label: string; type: 'agent' | 'server' | 'tool' }>;
+  edges: Array<{ from: string; to: string; label: string; blocked?: boolean }>;
+  alerts: Array<{ alertId: string; pattern: string; description: string; confidence: number }>;
+};
+
+export async function fetchFleetChainGraph(sessionId?: string): Promise<ChainGraph | null> {
+  const q = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+  const res = await guardianFetch(`/api/agentic/fleet-chains/graph${q}`);
+  if (!res.ok) return null;
+  return (await res.json()) as ChainGraph;
 }
 
 export function resolveWsUrl(): string {

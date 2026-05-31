@@ -576,6 +576,38 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: 'object', properties: { serverName: { type: 'string' }, packageName: { type: 'string' }, version: { type: 'string' }, trustScore: { type: 'number' }, complianceScore: { type: 'number' }, cveFree: { type: 'boolean' }, authMethod: { type: 'string' }, transport: { type: 'string' }, trustedPublisher: { type: 'boolean' } } },
     },
     {
+      name: 'list_certified_servers',
+      description: 'List MCP servers in the local certification registry with level and expiry',
+      inputSchema: { type: 'object', properties: { limit: { type: 'number' } } },
+    },
+    {
+      name: 'verify_certification',
+      description: 'Verify a server certification attestation (JWS) and level',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          serverName: { type: 'string' },
+          attestationJws: { type: 'string' },
+        },
+        required: ['serverName'],
+      },
+    },
+    {
+      name: 'declare_intent',
+      description: 'Declare session intent and allowed tools for intent-binding enforcement',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string' },
+          intent: { type: 'string' },
+          allowedTools: { type: 'array', items: { type: 'string' } },
+          agentId: { type: 'string' },
+          ttlMinutes: { type: 'number' },
+        },
+        required: ['sessionId', 'intent', 'allowedTools'],
+      },
+    },
+    {
       name: 'run_protocol_fuzzer',
       description: 'Run MCP protocol fuzzer — test defenses against malformed JSON-RPC, overflow, injection',
       inputSchema: { type: 'object', properties: {} },
@@ -604,6 +636,52 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: 'detect_collusion',
       description: 'Detect agent-to-agent collusion patterns (recon-then-exploit, coordinated exfil, token sharing)',
       inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'policy_to_natural_language',
+      description: 'Explain MCP Guardian policy YAML in plain English for compliance stakeholders',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          yaml: { type: 'string', description: 'Policy YAML text' },
+          policyPath: { type: 'string', description: 'Optional path to policy file' },
+        },
+      },
+    },
+    {
+      name: 'natural_language_to_policy',
+      description: 'Convert a natural-language security goal into a draft YAML policy rule (requires approval before enforce)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          goal: { type: 'string', description: 'Natural language policy goal' },
+          availableTools: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['goal'],
+      },
+    },
+    {
+      name: 'query_server_reputation',
+      description: 'Query decentralized MCP server reputation (8-dimension consensus score)',
+      inputSchema: {
+        type: 'object',
+        properties: { serverName: { type: 'string' }, packageName: { type: 'string' } },
+        required: ['serverName'],
+      },
+    },
+    {
+      name: 'quantify_insurance_risk',
+      description: 'Compute cyber insurance ALE (Annualized Loss Expectancy) for an MCP server',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          serverName: { type: 'string' },
+          toolCount: { type: 'number' },
+          networkExposure: { type: 'number' },
+          recordsAtRisk: { type: 'number' },
+        },
+        required: ['serverName'],
+      },
     },
     // ── RL Features ──
     {
@@ -925,7 +1003,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     case 'ab_test_policy': {
-      return { content: [{ type: 'text', text: `**Policy A/B Test**\nProposed change received. Testing against 16 base attacks + 45 generated variants...\n\nResult: Policy A/B testing framework active — use with active policy engine for full results.` }] };
+      const proposed = (args?.proposedPolicyYaml as string) || '';
+      const { simulatePolicyChange } = await import('./utils/policy-simulator.js');
+      const report = await simulatePolicyChange({
+        generatedPolicyYaml: proposed,
+        existingPolicyYaml: proposed,
+        policyPath: process.env.MCP_GUARDIAN_POLICY_PATH || 'default-policy.yaml',
+      });
+      return {
+        content: [{
+          type: 'text',
+          text: `**Policy A/B Simulation**\n${report.combinedSummary}\n\nCounterfactual: ${report.counterfactual.summary}\nHarness: ${report.harnessSample.summary}`,
+        }],
+      };
     }
 
     // Threat Intel Mesh (Feature #3)
@@ -1072,26 +1162,68 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const sn = (args?.serverName as string) || servers[0]?.name || 'unknown';
       const pkg = (args?.packageName as string) || servers[0]?.packageName || sn;
       const ver = (args?.version as string) || 'latest';
-      const trustScore = (args?.trustScore as number) || 50;
-      const complianceScore = (args?.complianceScore as number) || 0;
-      const cveFree = args?.cveFree !== false;
-      const authMethod = (args?.authMethod as string) || 'none';
-      const transport = (args?.transport as string) || (servers[0]?.transport || 'stdio');
-      const trustedPublisher = args?.trustedPublisher === true;
-      const cert = container.certifier.certify(sn, pkg, ver, { trustScore, complianceScore, cveFree, authMethod, transport, trustedPublisher });
+      const srv = servers.find((s) => s.name === sn) ?? servers[0];
+      let cert;
+      if (args?.trustScore != null) {
+        const trustScore = (args.trustScore as number) || 50;
+        const complianceScore = (args.complianceScore as number) || 0;
+        const cveFree = args.cveFree !== false;
+        const authMethod = (args.authMethod as string) || 'none';
+        const transport = (args.transport as string) || (srv?.transport || 'stdio');
+        const trustedPublisher = args.trustedPublisher === true;
+        cert = container.certifier.certify(sn, pkg, ver, { trustScore, complianceScore, cveFree, authMethod, transport, trustedPublisher });
+      } else if (srv) {
+        const scan = await container.securityScanner.scanServer(srv);
+        cert = container.certifier.certifyFromScan(sn, pkg, ver, {
+          serverName: sn,
+          cveCount: scan.cves.length,
+          maxCvss: scan.cves.reduce((m, c) => Math.max(m, (c as { cvssScore?: number }).cvssScore ?? 0), 0),
+          authMethod: 'none',
+          transport: srv.transport === 'stdio' ? 'stdio' : 'https',
+          guardianProtected: true,
+        });
+      } else {
+        cert = container.certifier.certify(sn, pkg, ver, { trustScore: 50, complianceScore: 0, cveFree: true, authMethod: 'none', transport: 'stdio', trustedPublisher: false });
+      }
       return { content: [{ type: 'text', text: `**MCP Server Certification**\n\nServer: ${cert.serverName} (${cert.packageName}@${cert.version})\nLevel: **${cert.level.toUpperCase()}**\nScore: ${cert.score}/100\nCertified: ${cert.certified ? 'Yes ✅' : 'No ❌'}\nAttestation: ${cert.signedAttestation}\nIssued: ${cert.issuedAt}\nExpires: ${cert.expiresAt}\n\n**Checks:**\n${cert.checks.map(c => `- [${c.passed ? '✓' : '✗'}] ${c.name}: ${c.score}/${c.maxScore} — ${c.details}`).join('\n')}` }] };
     }
 
+    case 'list_certified_servers': {
+      const limit = (args?.limit as number) || 50;
+      const rows = container.industryStore.listCertifications(tenantId, limit);
+      const text = rows.length === 0
+        ? 'No certified servers in registry.'
+        : rows.map((r) => `- **${r.serverName}** ${r.level} (${r.score}/100) expires ${r.expiresAt}`).join('\n');
+      return { content: [{ type: 'text', text: `**Certified Servers (${rows.length})**\n\n${text}` }] };
+    }
+
+    case 'verify_certification': {
+      const sn = (args?.serverName as string) || '';
+      const v = container.certifier.verifyCertification(sn, args?.attestationJws as string | undefined);
+      return { content: [{ type: 'text', text: v.valid ? `✅ **${sn}** certified (${v.level})` : `❌ Verification failed: ${v.reason}` }] };
+    }
+
+    case 'declare_intent': {
+      const sessionId = String(args?.sessionId ?? '');
+      const intent = String(args?.intent ?? '');
+      const allowedTools = (args?.allowedTools as string[]) ?? [];
+      const binding = container.intentEngine.declareIntent(sessionId, intent, allowedTools, {
+        agentId: args?.agentId as string | undefined,
+        ttlMs: ((args?.ttlMinutes as number) || 30) * 60_000,
+      });
+      return { content: [{ type: 'text', text: `Intent bound for session \`${binding.sessionId}\`: ${binding.intent}\nAllowed tools: ${binding.allowedTools.join(', ')}\nExpires: ${binding.expiresAt}` }] };
+    }
+
     case 'run_protocol_fuzzer': {
-      const blockFn = (method: string, params: Record<string, unknown>) => {
-        try {
-          const check = container.promptInjectionDetector.scan(method, 'fuzzer', params);
-          return { blocked: false };
-        } catch { return { blocked: true, reason: 'eval_error' }; }
-      };
-      const results = container.protocolFuzzer.runFuzzer(blockFn);
+      const blockFn = (method: string, params: Record<string, unknown>) => ({ blocked: false });
+      const sn = (args?.serverName as string) || servers[0]?.name || 'local';
+      const live = process.env.GUARDIAN_FUZZ_TARGET || (args?.liveTransport === true);
+      const results = live
+        ? await container.protocolFuzzer.runLiveTransportFuzz(blockFn, sn, container.reinforceFuzzer)
+        : container.protocolFuzzer.runFuzzer(blockFn, sn, container.reinforceFuzzer);
       const stats = container.protocolFuzzer.getStats();
-      return { content: [{ type: 'text', text: `**MCP Protocol Fuzzer Results**\n\n${stats.total} payloads tested\n✅ Blocked: ${stats.blocked}\n⚠️ Passed: ${stats.passed}\n💥 Crashed: ${stats.crashed}\n🚨 Critical Bypasses: ${stats.criticalBypasses}\n\n**Findings:**\n${results.map(r => `- [${r.risk}] ${r.payload.id} (${r.payload.category}): ${r.blocked ? 'BLOCKED' : r.crashed ? 'CRASHED' : 'PASSED'} — ${r.payload.description}`).join('\n')}` }] };
+      const certGate = container.protocolFuzzer.passesCertGate(container.certifier, sn, 'silver');
+      return { content: [{ type: 'text', text: `**MCP Protocol Fuzzer Results**\n\n${stats.total} payloads tested\n✅ Blocked: ${stats.blocked}\n⚠️ Passed: ${stats.passed}\n💥 Crashed: ${stats.crashed}\n🚨 Critical Bypasses: ${stats.criticalBypasses}\nCert gate (silver+): ${certGate ? 'PASS ✅' : 'FAIL ❌'}\n\n**Findings:**\n${results.map(r => `- [${r.risk}] ${r.payload.id} (${r.payload.category}): ${r.blocked ? 'BLOCKED' : r.crashed ? 'CRASHED' : 'PASSED'} — ${r.payload.description}`).join('\n')}` }] };
     }
 
     case 'check_sla': {
@@ -1133,6 +1265,48 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       container.collusionDetector.record('agent-b', servers[0]?.name || 'filesystem', 'read_file');
       const alerts = container.collusionDetector.getAlerts();
       return { content: [{ type: 'text', text: `**Collusion Detection**\n\n${alerts.length > 0 ? alerts.map(a => `⚠️ **${a.pattern}** (${(a.confidence * 100).toFixed(0)}% confidence)\nAgents: ${a.agents.join(', ')}\nTools: ${a.tools.join(' → ')}\n${a.description}`).join('\n\n') : 'No collusion patterns detected. Agents operating independently.'}` }] };
+    }
+
+    case 'policy_to_natural_language': {
+      const { policyToNaturalLanguage, explainPolicyFile } = await import('./agentic/semantic-policy/translator.js');
+      const yaml = args?.yaml as string | undefined;
+      const summary = yaml
+        ? await policyToNaturalLanguage(yaml)
+        : await explainPolicyFile(args?.policyPath as string | undefined);
+      const sections = summary.sections.map(s => `### ${s.title}\n${s.summary}`).join('\n\n');
+      return { content: [{ type: 'text', text: `**Policy Summary** (${summary.mode}, ${summary.ruleCount} rules)\n\n${summary.overview}\n\n${sections}` }] };
+    }
+
+    case 'natural_language_to_policy': {
+      const { naturalLanguageToPolicy } = await import('./agentic/semantic-policy/translator.js');
+      const goal = String(args?.goal ?? '');
+      const draft = await naturalLanguageToPolicy(goal, {
+        availableTools: args?.availableTools as string[] | undefined,
+      });
+      if (!draft) {
+        return { content: [{ type: 'text', text: 'Could not generate policy draft from goal.' }] };
+      }
+      return { content: [{ type: 'text', text: `**Draft Policy Rule** (staged=${draft.staged})\n\n\`\`\`yaml\n${draft.yaml}\n\`\`\`\n\nReplay: ${draft.replay.passed}/${draft.replay.total} passed\n${draft.replay.blockReason ? `Block reason: ${draft.replay.blockReason}` : 'Ready for human approval.'}` }] };
+    }
+
+    case 'query_server_reputation': {
+      const sn = String(args?.serverName ?? '');
+      const entry = container.reputationNetwork.queryServerReputation(sn, args?.packageName as string | undefined);
+      if (!entry) {
+        return { content: [{ type: 'text', text: `No reputation entry for **${sn}**. Rate with certify_server or local observations.` }] };
+      }
+      const dims = Object.entries(entry.dimensions).map(([k, v]) => `- ${k}: ${v}`).join('\n');
+      return { content: [{ type: 'text', text: `**Reputation: ${sn}**\nLevel: ${entry.level}\nConsensus: ${entry.consensusScore}/100 (${entry.raterCount} raters)\n\n${dims}` }] };
+    }
+
+    case 'quantify_insurance_risk': {
+      const report = container.insuranceRiskQuantifier.quantify({
+        serverName: String(args?.serverName ?? 'unknown'),
+        toolCount: Number(args?.toolCount ?? 10),
+        networkExposure: Number(args?.networkExposure ?? 0.5),
+        recordsAtRisk: Number(args?.recordsAtRisk ?? 1000),
+      });
+      return { content: [{ type: 'text', text: `**Insurance Risk Report**\n\n${report.underwriterSummary}\n\nRisk tier: **${report.riskTier}**\nALE: $${report.aleUsd.toLocaleString()}\nBlast radius: $${Math.round(report.blastRadiusUsd).toLocaleString()}` }] };
     }
 
     // ── RL Handlers ───────────────────────────────────────────────

@@ -23,7 +23,27 @@ describe('parseAutoResearchLogTail', () => {
     expect(parsed.attempted).toBe(10);
     expect(parsed.skips.duplicate).toBe(7);
     expect(parsed.skips.belowMinConfidence).toBe(3);
+    expect(parsed.skips.replayFailed).toBe(0);
+    expect(parsed.skips.llmUnavailable).toBe(0);
+    expect(parsed.skips.llmDiscoveryNull).toBe(0);
     expect(parsed.skips.other).toBe(0);
+  });
+
+  it('categorizes replay and LLM skip reasons', () => {
+    const parsed = parseAutoResearchLogTail(`
+[auto-threat-research] wrote 0/4 fixture(s)
+  ✗ corpus fixture not blocked by current policy (replay smoke test failed)
+  ✗ LLM unavailable
+  ✗ LLM discovery returned null
+  ✗ classification normalization failed
+`);
+
+    expect(parsed.written).toBe(0);
+    expect(parsed.attempted).toBe(4);
+    expect(parsed.skips.replayFailed).toBe(1);
+    expect(parsed.skips.llmUnavailable).toBe(1);
+    expect(parsed.skips.llmDiscoveryNull).toBe(1);
+    expect(parsed.skips.other).toBe(1);
   });
 
   it('returns safe defaults when no summary line is present', () => {
@@ -33,6 +53,9 @@ describe('parseAutoResearchLogTail', () => {
     expect(parsed.attempted).toBe(0);
     expect(parsed.skips.duplicate).toBe(0);
     expect(parsed.skips.belowMinConfidence).toBe(0);
+    expect(parsed.skips.replayFailed).toBe(0);
+    expect(parsed.skips.llmUnavailable).toBe(0);
+    expect(parsed.skips.llmDiscoveryNull).toBe(0);
     expect(parsed.skips.other).toBe(0);
   });
 });

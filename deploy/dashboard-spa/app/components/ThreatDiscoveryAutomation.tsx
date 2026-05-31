@@ -191,6 +191,12 @@ export function ThreatDiscoveryAutomation() {
               <span className="badge">{autoResearch.parsed.written}/{autoResearch.parsed.attempted} written</span>
               <span className="badge">duplicate {autoResearch.parsed.skips.duplicate}</span>
               <span className="badge">low confidence {autoResearch.parsed.skips.belowMinConfidence}</span>
+              {autoResearch.parsed.skips.replayFailed > 0 ? (
+                <span className="badge">replay failed {autoResearch.parsed.skips.replayFailed}</span>
+              ) : null}
+              {autoResearch.parsed.skips.llmUnavailable > 0 ? (
+                <span className="badge">LLM offline {autoResearch.parsed.skips.llmUnavailable}</span>
+              ) : null}
             </div>
             <details style={{ marginTop: '0.5rem' }}>
               <summary>Show log tail</summary>

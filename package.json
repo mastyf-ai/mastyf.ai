@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "3.4.1",
+  "version": "4.0.0",
   "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
@@ -56,7 +56,7 @@
     "cost-tracking"
   ],
   "scripts": {
-    "build": "pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && turbo run build",
+    "build": "pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && mkdir -p dist/database/migrations && cp src/database/migrations/*.sql dist/database/migrations/ && turbo run build",
     "build:guardian": "pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json",
     "test": "vitest run && turbo run test",
     "test:policy-proxy-utils": "vitest run tests/policy/ tests/proxy/ tests/utils/ --reporter=dot",

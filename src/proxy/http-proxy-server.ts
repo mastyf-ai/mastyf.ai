@@ -37,6 +37,8 @@ import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
 import { runSyncSemanticRequestGate } from './proxy-post-policy-gates.js';
 import { runToolCallPreForwardGuard, toolCallGuardBlockResponse } from './tool-call-pre-guard.js';
+import { applyGeoToCallContext } from '../utils/request-geo-context.js';
+import { runMcpPrePipeline, applyMcpResponsePipeline, mcpResponseBlockJson } from './mcp-request-pipeline.js';
 import { hasJsonRpcId } from './json-rpc-utils.js';
 import {
   fingerprintJsonRpcToolsList,
@@ -258,6 +260,9 @@ export class HttpProxyServer {
 
     let toolsCallId: string | number | undefined;
     let toolsCallName: string | undefined;
+    let mcpResourcePromptId: string | number | undefined;
+    let mcpResourcePromptMethod: string | undefined;
+    let mcpResourceSessionId: string | undefined;
 
     // ── Policy evaluation (if tools/call) ────────────────────
     if (this.policyEngine) {
@@ -271,6 +276,24 @@ export class HttpProxyServer {
           id?: unknown;
           params?: { name?: string; arguments?: Record<string, unknown> };
         };
+
+        const pre = runMcpPrePipeline({
+          msg: msg as Record<string, unknown>,
+          serverName: this.serverName,
+          authenticated: authnSuccess,
+          fallbackSessionKey: requestId,
+        });
+        if (pre.blocked && hasJsonRpcId(msg.id)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(pre.response));
+          return;
+        }
+        if (!pre.blocked && pre.trackResponse && pre.requestMethod && msg.id != null) {
+          mcpResourcePromptId = msg.id as string | number;
+          mcpResourcePromptMethod = pre.requestMethod;
+          mcpResourceSessionId = pre.session.sessionId;
+        }
+
         if (msg.method === 'tools/call') {
           const toolName = msg.params?.name || 'unknown';
           if (msg.id != null) {
@@ -321,6 +344,11 @@ export class HttpProxyServer {
             toolName,
             requestArguments,
             String(msg.id),
+            {
+              agentId: agentIdentity?.sub,
+              meta: (msg.params as Record<string, unknown> | undefined)?._meta as Record<string, unknown> | undefined,
+              headers: req.headers,
+            },
           );
           if (preGuard.blocked && hasJsonRpcId(msg.id)) {
             releaseProxyInflight(this.serverName);
@@ -340,7 +368,7 @@ export class HttpProxyServer {
             requestArguments = preGuard.arguments;
           }
 
-          const context: CallContext = {
+          const context: CallContext = applyGeoToCallContext({
             serverName: this.serverName,
             toolName,
             arguments: requestArguments,
@@ -349,7 +377,7 @@ export class HttpProxyServer {
             timestamp: new Date().toISOString(),
             tenantId: requestTenantId,
             agentIdentity,
-          };
+          }, req.headers);
 
           const decision = await this.policyEngine.evaluateAsync(context);
 
@@ -453,6 +481,7 @@ export class HttpProxyServer {
         const safeHeaders = { ...upstreamRes.headers } as Record<string, string | string[] | undefined>;
         applySafeCorsHeaders(req.headers, safeHeaders);
         const gateResponse = toolsCallId != null && toolsCallName != null;
+        const gateResourcePrompt = mcpResourcePromptId != null && mcpResourcePromptMethod != null;
 
         const recordSuccess = () => {
           if (toolsCallId != null) {
@@ -471,7 +500,7 @@ export class HttpProxyServer {
           });
         };
 
-        if (!gateResponse) {
+        if (!gateResponse && !gateResourcePrompt) {
           const ct = String(upstreamRes.headers['content-type'] || '');
           if (ct.toLowerCase().includes('application/json')) {
             const respChunks: Buffer[] = [];
@@ -525,6 +554,61 @@ export class HttpProxyServer {
             tenantBreaker.recordFailure();
             Metrics.circuitBreakerState.set({ server_name: this.serverName }, 1);
           });
+          return;
+        }
+
+        if (gateResourcePrompt && !gateResponse) {
+          const rpChunks: Buffer[] = [];
+          let rpSize = 0;
+          upstreamRes.on('data', (chunk: Buffer) => {
+            rpSize += chunk.length;
+            if (rpSize > MAX_BODY_SIZE) {
+              upstreamRes.destroy();
+              return;
+            }
+            rpChunks.push(chunk);
+          });
+          upstreamRes.on('end', () => {
+            void (async () => {
+              try {
+                const raw = Buffer.concat(rpChunks).toString();
+                const parsed = parseJsonWithDepthLimit(raw);
+                if (!parsed.ok) {
+                  if (!res.headersSent) {
+                    res.writeHead(upstreamRes.statusCode || 200, safeHeaders);
+                    res.end(raw);
+                  }
+                  recordSuccess();
+                  return;
+                }
+                const msg = parsed.value as Record<string, unknown>;
+                const rp = applyMcpResponsePipeline({
+                  method: mcpResourcePromptMethod!,
+                  result: (msg as { result?: unknown }).result,
+                  sessionId: mcpResourceSessionId ?? requestId,
+                });
+                if (rp.blocked) {
+                  if (!res.headersSent) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(mcpResponseBlockJson(mcpResourcePromptId, rp.reason ?? 'blocked')));
+                  }
+                  return;
+                }
+                if (rp.result !== undefined) {
+                  (msg as { result: unknown }).result = rp.result;
+                }
+                const outbound = JSON.stringify(msg);
+                if (!res.headersSent) {
+                  res.writeHead(upstreamRes.statusCode || 200, safeHeaders);
+                  res.end(outbound);
+                }
+                recordSuccess();
+              } catch {
+                tenantBreaker.recordFailure();
+              }
+            })();
+          });
+          upstreamRes.on('error', () => tenantBreaker.recordFailure());
           return;
         }
 

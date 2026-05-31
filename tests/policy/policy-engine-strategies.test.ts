@@ -50,6 +50,9 @@ describe('policy-engine strategies', () => {
       'tool-deny',
       'semantic-guards',
       'session-flow',
+      'require-certification',
+      'behavioral-biometrics',
+      'zero-trust-score',
       'threat-intel',
       'yaml-rules',
     ]);

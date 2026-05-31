@@ -31,6 +31,48 @@ export interface StoredSemanticAudit {
 
 const MAX_RECORDS = parseInt(process.env.GUARDIAN_SEMANTIC_STORE_MAX || '5000', 10);
 
+/** Shared dashboard / investigator lookup window (matches /api/learning/semantic/outcomes). */
+export const SEMANTIC_AUDIT_DASHBOARD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function normalizeSemanticAuditTriggerId(triggerId: string): string {
+  const trimmed = triggerId.trim();
+  if (trimmed.startsWith('semantic:')) return trimmed.slice('semantic:'.length);
+  return trimmed;
+}
+
+export function findSemanticAuditRecord(
+  records: StoredSemanticAudit[],
+  triggerId: string,
+): StoredSemanticAudit | undefined {
+  const normalized = normalizeSemanticAuditTriggerId(triggerId);
+  return records.find(
+    (r) => r.id === normalized || r.id === triggerId || `semantic:${r.id}` === triggerId,
+  );
+}
+
+/** Load records for a tenant, falling back to default tenant when the scoped store is empty. */
+export async function loadSemanticAuditRecordsWithTenantFallback(opts?: {
+  tenantId?: string;
+  sinceMs?: number;
+  limit?: number;
+}): Promise<{ records: StoredSemanticAudit[]; resolvedTenantId: string }> {
+  const sinceMs = opts?.sinceMs ?? SEMANTIC_AUDIT_DASHBOARD_WINDOW_MS;
+  const limit = opts?.limit ?? 2000;
+  const tenantId = opts?.tenantId || resolveTenantId();
+  let records = await loadSemanticAuditRecordsAsync({ tenantId, sinceMs, limit });
+  if (records.length === 0 && tenantId !== DEFAULT_TENANT_ID) {
+    records = await loadSemanticAuditRecordsAsync({
+      tenantId: DEFAULT_TENANT_ID,
+      sinceMs,
+      limit,
+    });
+    if (records.length > 0) {
+      return { records, resolvedTenantId: DEFAULT_TENANT_ID };
+    }
+  }
+  return { records, resolvedTenantId: tenantId };
+}
+
 function storePath(tenantId?: string): string {
   const tid = tenantId || resolveTenantId();
   const base = join(homedir(), '.mcp-guardian', 'tenants', tid);

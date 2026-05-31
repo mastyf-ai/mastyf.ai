@@ -9,8 +9,8 @@ import {
   readdirSync,
   writeFileSync,
 } from 'fs';
-import { homedir } from 'os';
 import { join } from 'path';
+import { guardianHomeDir } from '../audit/tenant-audit-paths.js';
 import { resolveSwarmOutputDir } from '../tenant/swarm-tenant-paths.js';
 import type { ThreatLabDiscovery } from './threat-lab.js';
 
@@ -57,7 +57,7 @@ export function autoCorpusManifestPath(): string {
 }
 
 export function threatResearchProcessedPath(): string {
-  const base = process.env.GUARDIAN_THREAT_RESEARCH_STATE_PATH || join(homedir(), '.mcp-guardian');
+  const base = process.env.GUARDIAN_THREAT_RESEARCH_STATE_PATH || guardianHomeDir();
   return join(base, 'threat-research-processed.json');
 }
 

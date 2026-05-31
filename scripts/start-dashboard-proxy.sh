@@ -40,6 +40,12 @@ export GUARDIAN_WS_ENABLED="${GUARDIAN_WS_ENABLED:-true}"
 export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
 # Local dev: enable dashboard REST API without Pro license (see CHANGELOG / docs/PRO_SETUP.md)
 export GUARDIAN_CI_BYPASS_LICENSE="${GUARDIAN_CI_BYPASS_LICENSE:-true}"
+export GUARDIAN_LLM_ENABLED="${GUARDIAN_LLM_ENABLED:-true}"
+export GUARDIAN_CORPUS_REPLAY_POLICY_PATH="${GUARDIAN_CORPUS_REPLAY_POLICY_PATH:-default-policy.yaml}"
+export GUARDIAN_THREAT_RESEARCH_AUTO="${GUARDIAN_THREAT_RESEARCH_AUTO:-true}"
+export SWARM_THREAT_RESEARCH_AUTO="${SWARM_THREAT_RESEARCH_AUTO:-true}"
+export GUARDIAN_THREAT_RESEARCH_REQUIRE_REPLAY="${GUARDIAN_THREAT_RESEARCH_REQUIRE_REPLAY:-false}"
+export MCP_GUARDIAN_HOME="${MCP_GUARDIAN_HOME:-$PWD/reports/home}"
 export METRICS_ENABLED="${METRICS_ENABLED:-true}"
 export DASHBOARD_PORT="${DASHBOARD_PORT:-4000}"
 export METRICS_PORT="${METRICS_PORT:-9090}"
@@ -98,5 +104,12 @@ BLOCKING="${GUARDIAN_BLOCKING_MODE:-block}"
 echo "[dashboard-proxy] DB: $MCP_GUARDIAN_DB_PATH" >&2
 echo "[dashboard-proxy] Dashboard: http://localhost:${DASHBOARD_PORT}/" >&2
 echo "[dashboard-proxy] Config: $CONFIG  Policy: $POLICY  Mode: $BLOCKING" >&2
+echo "[dashboard-proxy] Corpus replay policy: $GUARDIAN_CORPUS_REPLAY_POLICY_PATH" >&2
+
+if command -v curl >/dev/null 2>&1; then
+  if ! curl -sf "${OLLAMA_BASE_URL}/api/tags" >/dev/null 2>&1; then
+    echo "[dashboard-proxy] WARNING: Ollama not reachable at $OLLAMA_BASE_URL — Auto Threat Research and semantic features need a running LLM (ollama serve)." >&2
+  fi
+fi
 
 exec node dist/cli.js proxy --config "$CONFIG" --policy "$POLICY" --blocking-mode "$BLOCKING"

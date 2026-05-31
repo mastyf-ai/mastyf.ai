@@ -23,6 +23,7 @@ import {
   type ThreatLabCandidateRecord,
   type AutoCorpusManifestEntry,
 } from './swarm-artifacts.js';
+import { parseAutoResearchLogTail } from './parse-auto-research-log.js';
 import { getThreatDiscoveryJobStatus, type ThreatDiscoveryJobStatus } from './threat-discovery-runner.js';
 import { isSwarmSessionActiveForTenant, swarmDataProvenance } from './swarm-session.js';
 
@@ -130,7 +131,9 @@ export interface ThreatDiscoveryStatus {
   };
   jobs: {
     threatLab: ThreatDiscoveryJobStatus;
-    autoResearch: ThreatDiscoveryJobStatus;
+    autoResearch: ThreatDiscoveryJobStatus & {
+      parsed: ReturnType<typeof parseAutoResearchLogTail>;
+    };
   };
   provenance: ReturnType<typeof swarmDataProvenance>;
 }
@@ -149,6 +152,8 @@ export async function buildThreatDiscoveryStatus(
     getLicenseClient().hasFeature('swarm')
     || isCiLicenseBypass()
     || isCiTokenCached();
+
+  const autoResearchJob = getThreatDiscoveryJobStatus(tenantId, 'auto-research');
 
   return {
     timestamp: new Date().toISOString(),
@@ -177,7 +182,10 @@ export async function buildThreatDiscoveryStatus(
     },
     jobs: {
       threatLab: getThreatDiscoveryJobStatus(tenantId, 'threat-lab'),
-      autoResearch: getThreatDiscoveryJobStatus(tenantId, 'auto-research'),
+      autoResearch: {
+        ...autoResearchJob,
+        parsed: parseAutoResearchLogTail(autoResearchJob.logTail),
+      },
     },
     provenance: swarmDataProvenance(tenantId),
   };

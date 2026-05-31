@@ -16,6 +16,7 @@ import { OAuthValidator } from '../auth/oauth.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
 import { createSessionCache, validateSessionToken, type GuardianSessionCache } from '../auth/session-factory.js';
 import type { CallContext } from '../policy/policy-types.js';
+import { applyGeoToCallContext } from '../utils/request-geo-context.js';
 import type { IDatabase } from '../database/database-interface.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { TokenCounter } from '../utils/token-counter.js';
@@ -132,7 +133,20 @@ export class StreamableHttpProxyServer {
     msg: Record<string, unknown>,
     req: IncomingMessage,
   ): Promise<unknown> {
-    const blocked = await this.maybeBlockMessage(msg, req);
+    const { runMcpPrePipeline, applyMcpResponsePipeline, mcpResponseBlockJson } = await import(
+      './mcp-request-pipeline.js'
+    );
+    const pre = runMcpPrePipeline({
+      msg,
+      serverName: this.opts.serverName,
+      authenticated: Boolean(req.headers.authorization),
+    });
+    if (pre.blocked) return pre.response;
+
+    const blocked = await this.maybeBlockMessage(msg, req, {
+      mcpSessionId: pre.session.sessionId,
+      agentId: pre.session.agentId !== 'unknown' ? pre.session.agentId : undefined,
+    });
     if (blocked) return blocked;
 
     if (!isUpstreamRelayEnabled()) {
@@ -207,6 +221,21 @@ export class StreamableHttpProxyServer {
         }
       }
     }
+
+    if (!pre.blocked && pre.trackResponse && pre.requestMethod && (upstream as { result?: unknown }).result != null) {
+      const rp = applyMcpResponsePipeline({
+        method: pre.requestMethod,
+        result: (upstream as { result: unknown }).result,
+        sessionId: pre.session.sessionId,
+      });
+      if (rp.blocked) {
+        return mcpResponseBlockJson(msg.id as string | number | null | undefined, rp.reason ?? 'Resource/prompt blocked');
+      }
+      if (rp.result !== undefined) {
+        (upstream as { result: unknown }).result = rp.result;
+      }
+    }
+
     return upstream;
   }
 
@@ -265,12 +294,14 @@ export class StreamableHttpProxyServer {
   private async maybeBlockMessage(
     msg: Record<string, unknown>,
     req: IncomingMessage,
+    fleetCtx?: { mcpSessionId?: string; agentId?: string },
   ): Promise<Record<string, unknown> | null> {
     if (msg.method !== 'tools/call' || !this.opts.policy) return null;
 
     let tenantId: string;
     let authenticated = false;
     let jwtTenantId: string | undefined;
+    let agentSub: string | undefined = fleetCtx?.agentId;
     let rotatedSessionToken: string | undefined;
     const authHeader = req.headers['authorization'];
     const token = OAuthValidator.extractToken(
@@ -282,6 +313,7 @@ export class StreamableHttpProxyServer {
       if (result.valid && result.identity) {
         authenticated = true;
         jwtTenantId = result.identity.tenantId;
+        agentSub = result.identity.sub ?? agentSub;
       }
     }
 
@@ -320,6 +352,7 @@ export class StreamableHttpProxyServer {
       if (sessionResult) {
         authenticated = true;
         jwtTenantId = sessionResult.identity.tenantId;
+        agentSub = sessionResult.identity.sub ?? agentSub;
         rotatedSessionToken = sessionResult.rotatedToken;
       }
     }
@@ -357,6 +390,12 @@ export class StreamableHttpProxyServer {
       toolName,
       params?.arguments,
       requestId,
+      {
+        meta: params?._meta,
+        headers: req.headers,
+        agentId: agentSub,
+        mcpSessionId: fleetCtx?.mcpSessionId,
+      },
     );
     if (preGuard.blocked) {
       releaseProxyInflight(this.opts.serverName);
@@ -381,7 +420,7 @@ export class StreamableHttpProxyServer {
       model,
       requestPayload: reqMsg,
     });
-    const context: CallContext = {
+    const context: CallContext = applyGeoToCallContext({
       serverName: this.opts.serverName,
       toolName,
       arguments: params?.arguments,
@@ -390,7 +429,7 @@ export class StreamableHttpProxyServer {
       timestamp: new Date().toISOString(),
       tenantId,
       idempotencyKey: idempotencyKeyFromRequest(params?._meta),
-    };
+    }, req.headers);
 
     const inflight = acquireProxyInflight(this.opts.serverName);
     if (!inflight.ok) {

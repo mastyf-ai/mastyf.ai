@@ -13,6 +13,7 @@ import { Logger } from '../utils/logger.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { waitProxyTimingNormalize } from '../policy/policy-timing-envelope.js';
 import { CallContext } from '../policy/policy-types.js';
+import { applyGeoToCallContext } from '../utils/request-geo-context.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
@@ -50,6 +51,7 @@ import {
   agenticPreForwardToolCall,
   agenticRecordCompletedToolCall,
   agenticRecordDeniedToolCall,
+  buildAgenticToolCallContext,
 } from './agentic-hooks-bridge.js';
 import {
   recordBlockLearningEvent,
@@ -78,6 +80,11 @@ import {
   checkRawPayloadSize,
   getMaxPayloadBytes,
 } from './payload-guard.js';
+import {
+  gateMcpMethodResponse,
+  recordMcpLifecycleRequest,
+  runMcpLifecyclePreCheck,
+} from './mcp-lifecycle-bridge.js';
 
 const RESTART_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000]; // Exponential
 
@@ -113,6 +120,8 @@ export class McpProxyServer {
   private pendingRequestTimer: ReturnType<typeof setTimeout> | null = null;
   /** Bearer token captured from initialize / env for the session (stdio OAuth). */
   private sessionAuthHeader: string | undefined;
+  private mcpSessionId: string | null = null;
+  private mcpAgentId: string | null = null;
 
   private requestTimeoutMs: number;
   private restartCount: number = 0;
@@ -257,6 +266,28 @@ export class McpProxyServer {
           }
           this.clearRequestTimeout();
           const proxyLatencyMs = Date.now() - reqCtx.requestStartTime;
+
+          if (reqCtx.requestMethod === 'resources/read' || reqCtx.requestMethod === 'prompts/get') {
+            const rpGate = gateMcpMethodResponse({
+              method: reqCtx.requestMethod,
+              result: msg.result,
+            });
+            recordMcpLifecycleRequest({
+              sessionId: reqCtx.sessionId ?? this.mcpSessionId ?? String(msg.id),
+              method: reqCtx.requestMethod,
+              blocked: rpGate.blocked,
+              latencyMs: proxyLatencyMs,
+            });
+            if (rpGate.blocked) {
+              this.sendError(msg.id, -32002, rpGate.reason ?? 'Resource/prompt blocked by MCP Guardian');
+              this.requestContexts.delete(msg.id);
+              return;
+            }
+            process.stdout.write(line + '\n');
+            this.requestContexts.delete(msg.id);
+            return;
+          }
+
           const reqMsg = {
             params: { name: reqCtx.requestToolName, arguments: reqCtx.requestArguments },
           };
@@ -607,6 +638,38 @@ export class McpProxyServer {
       if (msg.method === 'initialize') {
         const initAuth = OAuthValidator.extractAuthFromMcpMessage(msg);
         if (initAuth) this.sessionAuthHeader = initAuth;
+      }
+
+      const lifecycle = runMcpLifecyclePreCheck({
+        method: String(msg.method ?? ''),
+        serverName: this.serverName,
+        msg,
+        authenticated: Boolean(this.sessionAuthHeader),
+        fallbackSessionKey: this.mcpSessionId ?? undefined,
+      });
+      if (!lifecycle.allowed && hasJsonRpcId(msg.id)) {
+        this.sendError(msg.id, -32001, lifecycle.reason ?? 'MCP lifecycle guard blocked request', {
+          rule: 'mcp-lifecycle-guard',
+        });
+        return;
+      }
+      this.mcpSessionId = lifecycle.sessionId;
+      this.mcpAgentId = lifecycle.agentId;
+
+      if (
+        (msg.method === 'resources/read' || msg.method === 'prompts/get')
+        && hasJsonRpcId(msg.id)
+      ) {
+        this.requestContexts.set(msg.id, {
+          requestStartTime: proxyStartTime,
+          requestToolName: String(msg.method),
+          requestMethod: String(msg.method),
+          requestTokens: 0,
+          requestRaw: raw,
+          sessionId: lifecycle.sessionId,
+          agentId: lifecycle.agentId,
+          tenantId: this.defaultTenantId,
+        });
       }
 
       if (msg.method === 'tools/list' && msg.id != null) {
@@ -961,7 +1024,7 @@ export class McpProxyServer {
           const idempotencyKey = idempotencyKeyFromRequest(
             msg.params?._meta as Record<string, unknown> | undefined,
           );
-          const context: CallContext = {
+          const context: CallContext = applyGeoToCallContext({
             serverName: this.serverName,
             toolName,
             arguments: requestArguments,
@@ -971,7 +1034,7 @@ export class McpProxyServer {
             tenantId,
             agentIdentity,
             idempotencyKey,
-          };
+          });
 
           const decision = await engine.evaluateAsync(context);
           await waitProxyTimingNormalize(proxyStartTime);
@@ -1100,7 +1163,12 @@ export class McpProxyServer {
               this.serverName,
               toolName,
               requestArguments,
-              String(msg.id),
+              buildAgenticToolCallContext({
+                requestId: String(msg.id),
+                agentId: agentIdentity?.sub,
+                mcpSessionId: this.mcpSessionId ?? undefined,
+                meta: msg.params?._meta as Record<string, unknown> | undefined,
+              }),
             );
             if (agenticHook.blocked) {
               this.recordDeniedCall(

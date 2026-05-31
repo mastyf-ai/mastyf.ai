@@ -8,8 +8,9 @@ import { createDatabase } from '../database/create-database.js';
 import { resolveGuardianDbPath } from './guardian-db-path.js';
 import { getAllActiveServerNames, loadAllCallRecords } from './db-aggregate.js';
 import type { ProxyCallRecord } from '../types.js';
-import { resolveAttackLearningStatePath, resolveAiPendingSuggestionsPath } from '../ai/ai-paths.js';
+import { resolveAttackLearningStatePath, resolveAiPendingSuggestionsPath, resolveAiLearningStatePath, resolveAiBaselinesPath } from '../ai/ai-paths.js';
 import type { AttackLearningState } from '../ai/instant-attack-learning.js';
+import type { LearningState } from '../ai/self-improvement.js';
 import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { getEffectiveSwarmDir, resolveTenantSwarmDir } from '../tenant/swarm-tenant-paths.js';
 import { REPO_ROOT } from './swarm-artifacts.js';
@@ -88,13 +89,20 @@ export interface VisualsDataBundle {
     topBlockRules: Array<{ rule: string; count: number; plainEnglish: string }>;
   };
   instantLearning: {
-    source: 'live' | 'simulated-eval' | 'none';
+    source: 'live' | 'history-db-fallback' | 'simulated-eval' | 'none';
     totalEvents: number;
     queuedSuggestions: number;
     blocksPerMinute: Array<{ t: number; value: number }>;
     ruleToolPairs: Array<{ key: string; rule: string; tool: string; count: number }>;
     classConfidence: Array<{ class: string; confidence: number }>;
     medianBlocksToSuggestion?: number;
+    suggestionEngine?: {
+      learningInitialized: boolean;
+      cyclesCompleted: number;
+      baselinesCount: number;
+      recordsAnalyzed: number;
+      suggestionsGenerated: number;
+    };
   };
   semantic: {
     hasData: boolean;
@@ -191,6 +199,86 @@ function loadAttackLearningState(tenantId?: string): AttackLearningState | null 
   } catch {
     return null;
   }
+}
+
+function loadSuggestionEngineSlice(tenantId?: string): VisualsDataBundle['instantLearning']['suggestionEngine'] {
+  const learningPath = resolveAiLearningStatePath(tenantId);
+  let learning: LearningState | null = null;
+  if (existsSync(learningPath)) {
+    try {
+      learning = JSON.parse(readFileSync(learningPath, 'utf-8')) as LearningState;
+    } catch { /* ignore */ }
+  }
+  let baselinesCount = learning?.baselinesLearned ?? 0;
+  const baselinesPath = resolveAiBaselinesPath(tenantId);
+  if (existsSync(baselinesPath)) {
+    try {
+      const raw = JSON.parse(readFileSync(baselinesPath, 'utf-8')) as { baselines?: unknown[] } | unknown[];
+      if (Array.isArray(raw)) baselinesCount = raw.length;
+      else if (Array.isArray(raw.baselines)) baselinesCount = raw.baselines.length;
+    } catch { /* ignore */ }
+  }
+  if (!learning?.learningInitialized && baselinesCount === 0) return undefined;
+  return {
+    learningInitialized: learning?.learningInitialized ?? false,
+    cyclesCompleted: learning?.cyclesCompleted ?? 0,
+    baselinesCount,
+    recordsAnalyzed: learning?.recordsAnalyzed ?? 0,
+    suggestionsGenerated: learning?.suggestionsGenerated ?? 0,
+  };
+}
+
+function loadPendingSuggestionCount(tenantId?: string): number {
+  const pendingPath = resolveAiPendingSuggestionsPath(tenantId);
+  if (!existsSync(pendingPath)) return 0;
+  try {
+    const raw = JSON.parse(readFileSync(pendingPath, 'utf-8')) as { suggestions?: unknown[] };
+    return Array.isArray(raw.suggestions) ? raw.suggestions.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function blocksPerHourFromTraffic(hourly: HourlyBucket[]): Array<{ t: number; value: number }> {
+  return hourly
+    .filter((h) => h.blocked > 0)
+    .map((h, i) => ({ t: i * 3_600_000, value: h.blocked }));
+}
+
+function ruleToolPairsFromHistory(ruleCounts: Map<string, number>): Array<{ key: string; rule: string; tool: string; count: number }> {
+  return [...ruleCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([rule, count]) => ({
+      key: `${rule}:*`,
+      rule,
+      tool: '*',
+      count,
+    }));
+}
+
+function instantLearningFromHistory(
+  totalBlocked: number,
+  hourly: HourlyBucket[],
+  ruleCounts: Map<string, number>,
+  pendingSuggestions: number,
+  suggestionEngine: VisualsDataBundle['instantLearning']['suggestionEngine'],
+): VisualsDataBundle['instantLearning'] {
+  return {
+    source: 'history-db-fallback',
+    totalEvents: totalBlocked,
+    queuedSuggestions: pendingSuggestions,
+    blocksPerMinute: blocksPerHourFromTraffic(hourly),
+    ruleToolPairs: ruleToolPairsFromHistory(ruleCounts),
+    classConfidence: [],
+    suggestionEngine,
+  };
+}
+
+function attackStateHasChartSeries(state: AttackLearningState): boolean {
+  const pairs = Object.keys(state.ruleToolCounts ?? {}).length;
+  const recent = state.recentBlocks?.length ?? 0;
+  return pairs > 0 || recent > 0;
 }
 
 function blocksPerMinuteFromRecent(state: AttackLearningState): Array<{ t: number; value: number }> {
@@ -300,43 +388,51 @@ export async function buildVisualsData(opts: {
   }
 
   const attackState = loadAttackLearningState(tenantId);
+  const suggestionEngine = loadSuggestionEngineSlice(tenantId);
+  const pendingSuggestions = loadPendingSuggestionCount(tenantId);
   let instantLearning: VisualsDataBundle['instantLearning'] = {
     source: 'none',
     totalEvents: 0,
-    queuedSuggestions: 0,
+    queuedSuggestions: pendingSuggestions,
     blocksPerMinute: [],
     ruleToolPairs: [],
     classConfidence: [],
+    suggestionEngine,
   };
 
-  if (attackState && attackState.totalEvents > 0) {
+  if (attackState && attackState.totalEvents > 0 && attackStateHasChartSeries(attackState)) {
     const pairs: Array<{ key: string; rule: string; tool: string; count: number }> = [];
     for (const [key, stats] of Object.entries(attackState.ruleToolCounts ?? {})) {
       const [rule, tool] = key.split(':');
       pairs.push({ key, rule: rule || key, tool: tool || '?', count: stats.count });
     }
     pairs.sort((a, b) => b.count - a.count);
-    let pending = 0;
-    const pendingPath = resolveAiPendingSuggestionsPath(tenantId);
-    if (existsSync(pendingPath)) {
-      try {
-        const raw = JSON.parse(readFileSync(pendingPath, 'utf-8')) as { suggestions?: unknown[] };
-        pending = Array.isArray(raw.suggestions) ? raw.suggestions.length : 0;
-      } catch { /* ignore */ }
-    }
     instantLearning = {
       source: 'live',
       totalEvents: attackState.totalEvents,
-      queuedSuggestions: pending || (attackState.queuedSuggestionKeys?.length ?? 0),
+      queuedSuggestions: pendingSuggestions || (attackState.queuedSuggestionKeys?.length ?? 0),
       blocksPerMinute: blocksPerMinuteFromRecent(attackState),
       ruleToolPairs: pairs.slice(0, 20),
       classConfidence: Object.entries(attackState.knownClassConfidence ?? {}).map(([cls, confidence]) => ({
         class: cls,
         confidence,
       })),
+      suggestionEngine,
     };
+  } else if (totalBlocked > 0) {
+    instantLearning = instantLearningFromHistory(
+      totalBlocked,
+      hourly,
+      ruleCounts,
+      pendingSuggestions,
+      suggestionEngine,
+    );
+    emptyReasons.instantLearning = attackState?.totalEvents
+      ? 'Attack-learning counters exist but chart series are empty — showing history.db block trends.'
+      : 'Using history.db block counts — instant attack-learning state will populate after live proxy blocks.';
   } else {
-    emptyReasons.instantLearning = 'No live attack-learning state yet — blocks from the proxy will populate ~/.mcp-guardian/.attack-learning-state.json.';
+    emptyReasons.instantLearning =
+      'No live attack-learning state yet — blocks from the proxy will populate ~/.mcp-guardian/.attack-learning-state.json.';
   }
 
   const semanticRecords = await loadSemanticAuditRecordsAsync({
@@ -394,7 +490,7 @@ export async function buildVisualsData(opts: {
       dbPath,
       tenantId,
       hasTraffic: windowRecords.length > 0,
-      hasInstantLearning: instantLearning.source === 'live',
+      hasInstantLearning: instantLearning.source === 'live' || instantLearning.source === 'history-db-fallback',
       hasSemantic: semanticSlice.hasData,
       swarmSessionLive,
       recordCount: chartMeta.recordCount,

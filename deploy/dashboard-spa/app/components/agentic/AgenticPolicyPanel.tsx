@@ -2,6 +2,9 @@
 
 import { Card } from '../ui/Card';
 import { KpiCard } from '../dashboard/KpiCard';
+import { SemanticPolicyPanel } from './SemanticPolicyPanel';
+import { ThreatModelPanel } from './ThreatModelPanel';
+import { InsurancePanel } from './InsurancePanel';
 import { useAgenticDashboard } from './useAgenticDashboard';
 
 type Props = { refreshKey?: number };
@@ -50,6 +53,9 @@ export function AgenticPolicyPanel({ refreshKey = 0 }: Props) {
           </tbody>
         </table>
       </Card>
+      <SemanticPolicyPanel />
+      <ThreatModelPanel />
+      <InsurancePanel />
     </div>
   );
 }

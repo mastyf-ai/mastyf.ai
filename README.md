@@ -31,7 +31,18 @@
 
 See [CHANGELOG.md](CHANGELOG.md) for 3.4.1 production hardening (JWKS refresh, payload limits, SIEM on all block paths, audit retention).
 
-**Roadmap (planned):** Cross-MCP causal attack chains, digital twin policy sandbox, agent behavioral biometrics, decentralized reputation network, federated threat detection, and more — [docs/AGENTIC_ROADMAP.md](docs/AGENTIC_ROADMAP.md).
+**Roadmap (shipped in 4.0):** Semantic policy translator with approval flows, config provenance chain, STRIDE/LINDDUN threat modeling, behavioral biometrics, cross-MCP attack chains with SIEM export, digital twin sandbox, zero-trust SPIFFE scoring, decentralized reputation network, ecosystem observatory, insurance risk quantification + PDF export, and federated threat detection — [docs/AGENTIC_ROADMAP.md](docs/AGENTIC_ROADMAP.md).
+
+### Fleet mandate for CISO buyers
+
+Guardian v4 is designed as a **fleet-wide control plane**, not a single-proxy filter:
+
+- **Mandatory policy provenance** — every YAML change is hash-chained, signed, and exportable to SIEM/auditors
+- **Human-in-the-loop policy approval** — NL drafts must pass simulation + explicit approval before apply
+- **Cross-agent attack chain detection** — session graphs span servers; alerts export as CEF for Splunk/Datadog
+- **SPIFFE/mTLS identity** — zero-trust composite scores include workload identity from SPIFFE SVIDs
+- **Cloud observatory + reputation mesh** — anonymized fleet telemetry and server reputation consensus via MCP Guardian Cloud
+- **Insurance-ready risk reports** — ALE quantification with underwriter PDF export for cyber insurance workflows
 
 ---
 
@@ -420,9 +431,9 @@ These are **smart assistants inside Guardian** that watch, score, and recommend 
 
 **Dashboard:** Open **Agentic AI** in the web UI for overview charts, trust scores, audit tables, and admin tools. See [Agentic Features Guide](docs/AGENTIC_FEATURES.md).
 
-### Industry-standard roadmap (planned)
+### Industry-standard roadmap (shipped in 4.0)
 
-Guardian’s next layer is **cross-server, cross-agent, systemic** understanding — what enterprise CISOs need to mandate Guardian fleet-wide. Eleven capabilities are planned in three tiers:
+Guardian’s industry-standard layer delivers **cross-server, cross-agent, systemic** protection — what enterprise CISOs need to mandate Guardian fleet-wide. All eleven capabilities shipped in v4.0:
 
 | Tier | Features | Theme |
 |------|----------|--------|
@@ -433,6 +444,10 @@ Guardian’s next layer is **cross-server, cross-agent, systemic** understanding
 **Build order (12 months):** Phase 1 (C5, C1, C2, A3) → Phase 2 (A1, A2, C3) → Phase 3 (B1, B2, C4) → Phase 4 research (B3).
 
 Full detail, foundations already in code, and differentiation rationale: **[docs/AGENTIC_ROADMAP.md](docs/AGENTIC_ROADMAP.md)**.
+
+**Verify compliance:** Run `guardian roadmap audit` (or `--json` for machine-readable output). The dashboard **Agentic AI → Overview** tab shows the same runtime audit via **Industry Roadmap Compliance**. Additional CLI utilities: `guardian roadmap fleet-graph-train`, `federated-export|import`, `observatory-sync`, `reputation-sync`. See [Agentic Quickstart](docs/AGENTIC_QUICKSTART.md#industry-roadmap-cli).
+
+**Production env vars** (optional): fleet chain blocking (`GUARDIAN_FLEET_CHAIN_BLOCK_CONFIDENCE`), multi-region Redis (`GUARDIAN_FLEET_REGION`), observatory relay or dev stub (`GUARDIAN_OBSERVATORY_RELAY_URL`, `GUARDIAN_OBSERVATORY_STUB`), federated learning (`GUARDIAN_FEDERATED_LEARNING`, `GUARDIAN_FEDERATED_MPC`), ONNX graph model (`GUARDIAN_FLEET_GRAPH_ONNX_MODEL`). Full list in [`.env.example`](.env.example).
 
 ---
 
@@ -451,7 +466,7 @@ Full detail, foundations already in code, and differentiation rationale: **[docs
 | **Threats** | Active threats and quarantine actions. |
 | **Security** | Security score and trends. |
 | **Operations** | Traffic, errors, and cost charts over time. |
-| **Agentic AI** | Autonomous features: trust, threats, policy, operations, audit, and tools. |
+| **Agentic AI** | Autonomous features: trust, threats, policy, operations, audit, and tools. Industry roadmap panels (A1–C5, B1–B3) live here — plan compliance audit on **Overview**. |
 | **Settings** | Servers, policy, and setup checklist. |
 
 **Tip:** If charts say “no traffic in this time window,” widen the **Time window** dropdown (for example **Last 7 days**). Short windows only show very recent calls.

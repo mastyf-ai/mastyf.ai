@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { resolveThreatStatePath } from '../ai/ai-paths.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
 import type { CallContext, PolicyDecision } from './policy-types.js';
+import { getMtxThreatPatterns } from '../utils/mtx-threat-intel-bridge.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -68,11 +69,17 @@ function loadDynamicPatterns(): RegExp[] {
   }
 }
 
+function loadMtxHashPatterns(): RegExp[] {
+  return getMtxThreatPatterns()
+    .map((hash) => compilePattern(hash.slice(0, 64)))
+    .filter((p): p is RegExp => p !== null);
+}
+
 function getPatterns(): RegExp[] {
   if (process.env.GUARDIAN_DISABLE_THREAT_INTEL_GUARD === 'true') return [];
   const now = Date.now();
   if (cachedPatterns && now - cachedAt < CACHE_TTL_MS) return cachedPatterns;
-  cachedPatterns = [...loadBaselinePatterns(), ...loadDynamicPatterns()];
+  cachedPatterns = [...loadBaselinePatterns(), ...loadDynamicPatterns(), ...loadMtxHashPatterns()];
   cachedAt = now;
   return cachedPatterns;
 }

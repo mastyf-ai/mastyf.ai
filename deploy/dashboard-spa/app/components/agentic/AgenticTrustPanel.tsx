@@ -5,6 +5,9 @@ import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useAgenticDashboard } from './useAgenticDashboard';
 import { gradeColor } from './agentic-utils';
+import { BiometricsPanel } from './BiometricsPanel';
+import { ReputationPanel } from './ReputationPanel';
+import { ZeroTrustPanel } from './ZeroTrustPanel';
 
 function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = Math.min(100, Math.round((value / max) * 100));
@@ -106,6 +109,9 @@ export function AgenticTrustPanel({ refreshKey = 0 }: Props) {
           </tbody>
         </table>
       </Card>
+      <ReputationPanel />
+      <ZeroTrustPanel />
+      <BiometricsPanel />
     </div>
   );
 }

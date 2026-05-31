@@ -919,7 +919,7 @@ export async function investigateIncident(triggerId: string): Promise<Investigat
         message =
           'Incident API is unavailable on this dashboard host. Restart the Guardian proxy after `pnpm build` so it loads the latest dashboard routes.';
       } else if (body.error === 'Trigger record not found') {
-        message = 'Semantic audit record not found — it may have aged out of the 7-day window.';
+        message = 'No investigation anchor found for this trigger. Try refreshing Threat Lab candidates, or investigate from a semantic audit record in AI Learning.';
       } else if (body.error) {
         message = body.error;
       }

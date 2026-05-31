@@ -170,6 +170,88 @@ Navigate to **Agentic AI** workspace for real-time:
 
 ---
 
+## Industry-Standard Roadmap Quickstarts (v4.0)
+
+### Semantic policy (C5)
+
+```bash
+# MCP tools
+policy_to_natural_language --yaml "$(cat default-policy.yaml)"
+natural_language_to_policy --goal "Block curl and require gold certification"
+
+# Dashboard API
+curl -X POST http://localhost:4000/api/agentic/policy/translate \
+  -H 'Content-Type: application/json' \
+  -d '{"direction":"nl-to-yaml","goal":"Block execute_command in shell tools"}'
+```
+
+### Config provenance (C1)
+
+```bash
+guardian policy provenance-verify
+guardian policy provenance-export --format tarball --output provenance.tar.gz
+```
+
+### Threat modeling (C2)
+
+```bash
+guardian threat-model --config scenarios/real-life/proxy-filesystem-config.json --format markdown --output THREATS.md
+```
+
+### Cross-MCP fleet chains (A1)
+
+Set a stable session header on HTTP proxies:
+
+```http
+X-Guardian-Global-Session: my-agent-session-42
+```
+
+When an agent chains calls across MCP servers (e.g. read → exfil), Guardian blocks at `GUARDIAN_FLEET_CHAIN_BLOCK_CONFIDENCE` (default 0.65) and exports CEF to SIEM.
+
+### Zero-trust geo (C3)
+
+```http
+X-Guardian-Geo-Region: US
+```
+
+Optional allowlist: `GUARDIAN_ZERO_TRUST_ALLOWED_REGIONS=US,CA,GB`
+
+### Federated learning (B3, research)
+
+```bash
+export GUARDIAN_FEDERATED_LEARNING=true
+export GUARDIAN_FEDERATED_ONNX_MODEL=/path/to/model.onnx  # optional
+```
+
+### Industry roadmap CLI
+
+Verify all eleven shipped modules (A1–C5, B1–B3) at runtime:
+
+```bash
+guardian roadmap audit              # human summary; exit 0 when production-ready
+guardian roadmap audit --json       # full JSON report
+guardian roadmap fleet-graph-train --output graph-weights.json
+guardian roadmap federated-export --output model.json
+guardian roadmap observatory-sync   # cloud + mesh telemetry ingest
+guardian roadmap reputation-sync    # pull mesh reputation entries
+```
+
+Dashboard: **Agentic AI → Overview** shows the same compliance audit. API: `GET /api/agentic/plan-compliance/audit`.
+
+**Optional production env vars** (see `.env.example`):
+
+| Variable | Purpose |
+|----------|---------|
+| `GUARDIAN_FLEET_CHAIN_BLOCK_CONFIDENCE` | Cross-server chain block threshold (default 0.65) |
+| `GUARDIAN_FLEET_REGION` / `GUARDIAN_FLEET_PEER_REGIONS` | Multi-region fleet Redis keys |
+| `GUARDIAN_FLEET_GRAPH_ONNX_MODEL` | Optional ONNX graph classifier for A1 |
+| `GUARDIAN_OBSERVATORY_RELAY_URL` | Live ecosystem telemetry relay (B2) |
+| `GUARDIAN_OBSERVATORY_STUB=true` | Dev stub when no relay is configured |
+| `GUARDIAN_FEDERATED_MPC` / `GUARDIAN_FEDERATED_MPC_SECRET` | Pairwise-masked gradient upload (B3) |
+| `GUARDIAN_BIOMETRICS_MIN_SAMPLES` | Warmup samples before biometrics block (A3) |
+
+---
+
 ## Next Steps
 
 - [Full Feature Reference](./AGENTIC_FEATURES.md)

@@ -99,6 +99,7 @@ describe('E2E: Proxy with default-policy.yaml', () => {
           MCP_GUARDIAN_DB_PATH: E2E_DB_PATH,
           DASHBOARD_ENABLED: 'false',
           GUARDIAN_WS_ENABLED: 'false',
+          GUARDIAN_AGENTIC_ENABLED: 'false',
           GUARDIAN_SKIP_PREFLIGHT_SCAN: 'true',
           METRICS_ENABLED: 'false',
           GUARDIAN_ALLOW_MODE_OVERRIDE: 'true',

@@ -22,6 +22,10 @@ vi.mock('../../src/ai/semantic-audit-store.js', async (importOriginal) => {
   return {
     ...actual,
     loadSemanticAuditRecordsAsync: vi.fn(async () => [mockRecord]),
+    loadSemanticAuditRecordsWithTenantFallback: vi.fn(async () => ({
+      records: [mockRecord],
+      resolvedTenantId: 'default',
+    })),
   };
 });
 
@@ -47,5 +51,16 @@ describe('incident-investigator', () => {
     const { investigateIncident } = await import('../../src/ai/incident-investigator.js');
     const result = await investigateIncident({ triggerId: 'nonexistent-id', useLlm: false });
     expect(result).toBeNull();
+  });
+
+  it('resolves semantic: prefixed trigger ids', async () => {
+    const { investigateIncident } = await import('../../src/ai/incident-investigator.js');
+    const investigation = await investigateIncident({
+      triggerId: `semantic:${mockRecord.id}`,
+      triggerType: 'semantic_flag',
+      useLlm: false,
+    });
+    expect(investigation).not.toBeNull();
+    expect(investigation!.triggerId).toBe(`semantic:${mockRecord.id}`);
   });
 });

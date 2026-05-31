@@ -22,9 +22,22 @@ type Props = {
   status: ThreatDiscoveryStatus | null;
 };
 
+function skipSummary(parsed: NonNullable<ThreatDiscoveryStatus['jobs']['autoResearch']['parsed']>): string[] {
+  const lines: string[] = [];
+  const { skips } = parsed;
+  if (skips.llmUnavailable > 0) lines.push(`${skips.llmUnavailable} LLM unavailable`);
+  if (skips.replayFailed > 0) lines.push(`${skips.replayFailed} replay validation failed`);
+  if (skips.belowMinConfidence > 0) lines.push(`${skips.belowMinConfidence} below min confidence`);
+  if (skips.llmDiscoveryNull > 0) lines.push(`${skips.llmDiscoveryNull} LLM returned no discovery`);
+  if (skips.duplicate > 0) lines.push(`${skips.duplicate} duplicate fingerprint`);
+  if (skips.other > 0) lines.push(`${skips.other} other`);
+  return lines;
+}
+
 export function AutoResearchMonitor({ entries, status }: Props) {
   const [selected, setSelected] = useState<AutoCorpusEntry | null>(null);
   const pipeline = status?.pipeline;
+  const parsed = status?.jobs?.autoResearch?.parsed;
   const ratePct =
     pipeline && pipeline.maxPerHour > 0
       ? Math.round((pipeline.writesThisHour / pipeline.maxPerHour) * 100)
@@ -42,11 +55,42 @@ export function AutoResearchMonitor({ entries, status }: Props) {
     }),
   );
 
+  const lastJobZeroWrites =
+    parsed != null && parsed.attempted > 0 && parsed.written === 0;
+  const skipLines = parsed ? skipSummary(parsed) : [];
+
   return (
     <div className="auto-research-monitor">
       <p className="hint">
         Read-only audit of fixtures written by Auto Threat Research — policy is never auto-applied.
       </p>
+
+      {!status?.llm.ok ? (
+        <p className="status status-error banner-inline">
+          LLM unavailable — auto-fixtures require Ollama at{' '}
+          <code>OLLAMA_BASE_URL</code>: {status?.llm.reason || 'Configure Ollama and set GUARDIAN_LLM_ENABLED=true'}
+        </p>
+      ) : null}
+
+      {lastJobZeroWrites ? (
+        <p className="status status-warning banner-inline">
+          Last batch wrote 0/{parsed?.attempted ?? 0} fixtures
+          {skipLines.length ? ` — ${skipLines.join(', ')}` : ''}.
+          {parsed?.skips.duplicate && parsed.skips.duplicate >= (parsed.attempted ?? 0) ? (
+            <> All batch signals were already processed — new fixtures need fresh MCP blocks or bypass findings.</>
+          ) : null}
+          {parsed?.skips.replayFailed ? (
+            <> Corpus replay uses <code>GUARDIAN_CORPUS_REPLAY_POLICY_PATH</code> (default: strict default-policy.yaml).</>
+          ) : null}
+        </p>
+      ) : null}
+
+      {!status?.features.autoResearchEnabled ? (
+        <p className="hint banner-inline">
+          Auto research disabled — set <code>GUARDIAN_THREAT_RESEARCH_AUTO=true</code> and{' '}
+          <code>SWARM_THREAT_RESEARCH_AUTO=true</code> on the proxy, or use Run Auto Research.
+        </p>
+      ) : null}
 
       <div className="rate-limit-gauge">
         <div className="rate-limit-label">
@@ -94,6 +138,13 @@ export function AutoResearchMonitor({ entries, status }: Props) {
           )}
         </div>
       </div>
+
+      {parsed && (parsed.attempted > 0 || parsed.summaryLine) ? (
+        <p className="hint">
+          Last batch: {parsed.written}/{parsed.attempted} written
+          {parsed.summaryLine ? ` · ${parsed.summaryLine}` : ''}
+        </p>
+      ) : null}
 
       {entries.length === 0 ? (
         <p className="muted">No auto corpus additions yet.</p>

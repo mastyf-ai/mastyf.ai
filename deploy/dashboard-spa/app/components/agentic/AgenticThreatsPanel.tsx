@@ -2,6 +2,7 @@
 
 import { Card } from '../ui/Card';
 import { KpiCard } from '../dashboard/KpiCard';
+import { ChainGraphPanel } from './ChainGraphPanel';
 import { useAgenticDashboard } from './useAgenticDashboard';
 
 type Props = { refreshKey?: number };
@@ -45,6 +46,7 @@ export function AgenticThreatsPanel({ refreshKey = 0 }: Props) {
           container is initialized.
         </p>
       </Card>
+      <ChainGraphPanel refreshKey={refreshKey} />
     </div>
   );
 }

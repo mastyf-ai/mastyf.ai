@@ -15,6 +15,7 @@ import {
   resolveProxyTenantId,
 } from '../tenant/jwt-tenant-binding.js';
 import type { CallContext } from '../policy/policy-types.js';
+import { applyGeoToCallContext } from '../utils/request-geo-context.js';
 import type { IDatabase } from '../database/database-interface.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { createSessionCache, validateSessionToken, type GuardianSessionCache } from '../auth/session-factory.js';
@@ -56,6 +57,8 @@ export class WebSocketProxyServer {
   private wss: WebSocketServer | null = null;
   private rugPullState: ToolFingerprintState = { fingerprint: null, blocked: false };
   private pendingToolCalls = new Map<string | number, string>();
+  private pendingMcpMethods = new Map<string | number, string>();
+  private pendingMcpSessions = new Map<string | number, string>();
   private pendingToolTenants = new Map<string | number, string>();
   private pendingSessionTokens = new Map<string | number, string>();
   private sessionCache: GuardianSessionCache | null;
@@ -188,6 +191,30 @@ export class WebSocketProxyServer {
 
     if (msg.result && typeof msg.id !== 'undefined') {
       const requestId = msg.id as string | number;
+      const mcpMethod = this.pendingMcpMethods.get(requestId);
+      if (mcpMethod) {
+        this.pendingMcpMethods.delete(requestId);
+        const sessionId = this.pendingMcpSessions.get(requestId) ?? 'ws-session';
+        this.pendingMcpSessions.delete(requestId);
+        const { applyMcpResponsePipeline, mcpResponseBlockJson } = await import('./mcp-request-pipeline.js');
+        const rp = applyMcpResponsePipeline({
+          method: mcpMethod,
+          result: (msg as { result: unknown }).result,
+          sessionId,
+        });
+        if (rp.blocked) {
+          if (clientWs.readyState === WebSocket.OPEN) {
+            clientWs.send(JSON.stringify(mcpResponseBlockJson(requestId, rp.reason ?? 'blocked')));
+          }
+          return;
+        }
+        if (rp.result !== undefined) {
+          (msg as { result: unknown }).result = rp.result;
+        }
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(msg));
+        return;
+      }
+
       const toolName = this.pendingToolCalls.get(requestId) ?? 'unknown';
       const tenantId = this.pendingToolTenants.get(requestId);
       this.pendingToolCalls.delete(requestId);
@@ -290,6 +317,21 @@ export class WebSocketProxyServer {
     } catch {
       if (upstream.readyState === WebSocket.OPEN) upstream.send(raw);
       return;
+    }
+
+    const { runMcpPrePipeline } = await import('./mcp-request-pipeline.js');
+    const pre = runMcpPrePipeline({
+      msg,
+      serverName: this.opts.serverName,
+      authenticated: Boolean(req.headers.authorization),
+    });
+    if (pre.blocked) {
+      clientWs.send(JSON.stringify(pre.response));
+      return;
+    }
+    if (pre.trackResponse && pre.requestMethod && msg.id != null) {
+      this.pendingMcpMethods.set(msg.id as string | number, pre.requestMethod);
+      this.pendingMcpSessions.set(msg.id as string | number, pre.session.sessionId);
     }
 
     if (msg.method === 'tools/call') {
@@ -444,6 +486,11 @@ export class WebSocketProxyServer {
       toolName,
       params?.arguments,
       requestId,
+      {
+        agentId: agentIdentity?.sub,
+        meta: params?._meta,
+        headers: req.headers,
+      },
     );
     if (preGuard.blocked) {
       breaker.recordFailure();
@@ -481,7 +528,7 @@ export class WebSocketProxyServer {
       model,
       requestPayload: reqMsg,
     });
-    const context: CallContext = {
+    const context: CallContext = applyGeoToCallContext({
       serverName: this.opts.serverName,
       toolName,
       arguments: params?.arguments,
@@ -491,7 +538,7 @@ export class WebSocketProxyServer {
       tenantId,
       agentIdentity,
       idempotencyKey: idempotencyKeyFromRequest(params?._meta),
-    };
+    }, req.headers);
 
     const decision = await this.opts.policy.evaluateAsync(context);
     if (decision.action === 'block') {

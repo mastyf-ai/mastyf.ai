@@ -5,6 +5,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { fetchAgenticAudit, fetchAgenticDecisions } from '@/lib/guardian-api';
+import { ProvenanceTimelinePanel } from './ProvenanceTimelinePanel';
 
 type Props = { refreshKey?: number };
 
@@ -130,6 +131,7 @@ export function AgenticAuditPanel({ refreshKey = 0 }: Props) {
           </div>
         )}
       </Card>
+      <ProvenanceTimelinePanel />
     </div>
   );
 }

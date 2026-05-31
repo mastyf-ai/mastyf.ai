@@ -61,11 +61,9 @@ function findLinkedCandidate(
   );
 }
 
+/** Incident API resolves Threat Lab candidates by id, fingerprint, or linked semantic audit id. */
 function investigateTriggerId(c: ThreatLabCandidate): string {
-  if (c.provenance?.source === 'semantic-tp' && c.provenance?.inputFingerprint) {
-    return c.provenance.inputFingerprint;
-  }
-  return c.provenance?.inputFingerprint || c.id;
+  return c.id;
 }
 
 export function ThreatLabWorkbench({

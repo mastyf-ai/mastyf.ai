@@ -1,6 +1,15 @@
-# MCP Guardian — Agentic AI Features (v3.4.0)
+# MCP Guardian — Agentic AI Features (v4.0.0)
 
-MCP Guardian now includes **10 autonomous agentic AI features** that establish it as the industry standard for MCP protection.
+MCP Guardian includes **10 core autonomous agentic features** plus the **industry-standard roadmap (11 features)** for fleet-wide MCP protection.
+
+> **Industry-standard roadmap (shipped v4.0):** See [AGENTIC_ROADMAP.md](./AGENTIC_ROADMAP.md) for A1–C5 and B1–B3 (cross-MCP chains, digital twin, biometrics, reputation mesh, observatory, federated learning, provenance, threat modeling, zero-trust, insurance, semantic policy).
+
+| Tier | Features | Key APIs / CLI |
+|------|----------|----------------|
+| Paradigm | A1 chains, A2 twin, A3 biometrics | `GET /api/agentic/fleet-chains`, `POST /api/agentic/digital-twin/replay` |
+| Ecosystem | B1 reputation, B2 observatory, B3 federated | `POST /api/agentic/reputation/query`, `GET /api/agentic/federated/status`, `guardian roadmap observatory-sync` |
+| Enterprise | C1 provenance, C2 threat model, C3 zero-trust, C4 insurance, C5 semantic policy | `guardian threat-model`, `POST /api/agentic/policy/translate`, `GET /api/provenance/timeline` |
+| **Compliance** | Runtime audit (all 11 modules) | `guardian roadmap audit`, `GET /api/agentic/plan-compliance/audit`, dashboard **Agentic AI → Overview** |
 
 ---
 

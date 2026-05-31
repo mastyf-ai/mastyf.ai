@@ -10,6 +10,7 @@
  */
 
 import { Logger } from '../utils/logger.js';
+import { clearStepUpForRequest } from './zero-trust/step-up-session.js';
 
 // ── Result types ──────────────────────────────────────────────────────────
 
@@ -144,6 +145,10 @@ export class ApprovalGate {
     if (!req || req.status !== 'pending') return false;
     req.status = 'approved';
     Logger.info(`[ApprovalGate] Approved: ${requestId}`);
+    if (req.toolName === 'zero-trust-step-up') {
+      clearStepUpForRequest(requestId);
+    }
+    void this.recordApprovalProvenance('approval_granted', requestId, req);
     return true;
   }
 
@@ -153,7 +158,27 @@ export class ApprovalGate {
     if (!req || req.status !== 'pending') return false;
     req.status = 'denied';
     Logger.info(`[ApprovalGate] Denied: ${requestId}`);
+    void this.recordApprovalProvenance('approval_denied', requestId, req);
     return true;
+  }
+
+  private async recordApprovalProvenance(
+    eventType: 'approval_granted' | 'approval_denied',
+    requestId: string,
+    req: ApprovalRequest,
+  ): Promise<void> {
+    try {
+      const { recordConfigProvenance } = await import('./provenance/config-provenance-chain.js');
+      recordConfigProvenance({
+        actor: process.env.GUARDIAN_ACTOR ?? 'approval-gate',
+        eventType: 'policy_apply',
+        resourcePath: `approval://${req.toolName}`,
+        diff: { eventType, toolName: req.toolName, description: req.description },
+        approvalId: requestId,
+      });
+    } catch {
+      /* best-effort */
+    }
   }
 
   /** Get all pending requests (for dashboard display). */

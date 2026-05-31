@@ -16,6 +16,8 @@ import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js
 import type { MtlsConfig } from '../utils/mtls-config.js';
 import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import { resolveTenantContext, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
+import type { CallContext } from '../policy/policy-types.js';
+import { applyGeoToCallContext } from '../utils/request-geo-context.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
 import { runSyncSemanticRequestGate } from './proxy-post-policy-gates.js';
@@ -319,6 +321,17 @@ export class SseProxyServer extends EventEmitter {
     requestHeaders?: Record<string, string | string[] | undefined>,
     session?: SseSession,
   ): Promise<Record<string, unknown>> {
+    const { runMcpPrePipeline, applyMcpResponsePipeline, mcpResponseBlockJson } = await import(
+      './mcp-request-pipeline.js'
+    );
+    const pre = runMcpPrePipeline({
+      msg: jsonRpcRequest,
+      serverName: this.opts.serverName,
+      authenticated: Boolean(this.opts.authHeader),
+      fallbackSessionKey: session?.id,
+    });
+    if (pre.blocked) return pre.response;
+
     const isToolCall = jsonRpcRequest.method === 'tools/call';
     let resolvedTenantId = 'default';
 
@@ -374,6 +387,12 @@ export class SseProxyServer extends EventEmitter {
         toolName,
         requestArguments,
         requestId,
+        {
+          meta: (jsonRpcRequest.params as Record<string, unknown> | undefined)?._meta as Record<string, unknown> | undefined,
+          headers: requestHeaders,
+          mcpSessionId: session?.id ?? pre.session.sessionId,
+          agentId: pre.session.agentId !== 'unknown' ? pre.session.agentId : undefined,
+        },
       );
       if (preGuard.blocked) {
         releaseProxyInflight(this.opts.serverName);
@@ -393,7 +412,7 @@ export class SseProxyServer extends EventEmitter {
         if (params) params.arguments = requestArguments;
       }
 
-      const context = {
+      const context: CallContext = applyGeoToCallContext({
         serverName: this.opts.serverName,
         toolName,
         arguments: requestArguments,
@@ -401,7 +420,7 @@ export class SseProxyServer extends EventEmitter {
         requestTokens: this.tokenCounter.count(JSON.stringify(jsonRpcRequest)),
         timestamp: new Date().toISOString(),
         tenantId,
-      };
+      }, requestHeaders);
       const decision = await this.opts.policy.evaluateAsync(context);
       if (decision.action === 'block') {
         releaseProxyInflight(this.opts.serverName);
@@ -451,6 +470,21 @@ export class SseProxyServer extends EventEmitter {
       releaseProxyInflight(this.opts.serverName);
     }
     const durationMs = Date.now() - startMs;
+
+    if (!pre.blocked && pre.trackResponse && pre.requestMethod && (response as { result?: unknown }).result != null) {
+      const rp = applyMcpResponsePipeline({
+        method: pre.requestMethod,
+        result: (response as { result: unknown }).result,
+        sessionId: pre.session.sessionId,
+        latencyMs: durationMs,
+      });
+      if (rp.blocked) {
+        return mcpResponseBlockJson(jsonRpcRequest.id as string | number | null | undefined, rp.reason ?? 'Resource/prompt blocked');
+      }
+      if (rp.result !== undefined) {
+        (response as { result: unknown }).result = rp.result;
+      }
+    }
 
     if (isToolCall) {
       const toolName = (jsonRpcRequest.params as { name?: string } | undefined)?.name ?? 'unknown';

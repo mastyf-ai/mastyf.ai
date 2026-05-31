@@ -21,6 +21,7 @@ import { CHART_AXIS, CHART_GRID, CHART_SERIES, CHART_TOOLTIP_STYLE } from '@/lib
 import { useAgenticDashboard } from './useAgenticDashboard';
 import { gradeColor, formatUptime } from './agentic-utils';
 import { useDashboardWindow } from '../dashboard/DashboardWindowContext';
+import { PlanCompliancePanel } from './PlanCompliancePanel';
 
 type Props = { refreshKey?: number };
 
@@ -84,6 +85,8 @@ export function AgenticOverviewPanel({ refreshKey = 0 }: Props) {
           ) : null}
         </div>
       ) : null}
+
+      <PlanCompliancePanel refreshKey={refreshKey} />
 
       <Card className="p-5 border-2 border-indigo-200 dark:border-indigo-800">
         <div className="flex items-start gap-4">

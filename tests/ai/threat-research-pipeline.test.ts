@@ -6,6 +6,8 @@ import {
   processThreatResearchEvent,
   buildBypassEvent,
   buildBlockRepeatEvent,
+  buildBlockRepeatEventsFromAttackState,
+  filterUnprocessedEvents,
   threatResearchAutoEnabled,
   threatLabSourceToAutoCorpusSource,
   writeValidatedDiscoveryToAutoCorpus,
@@ -215,5 +217,16 @@ describe('threat-research-pipeline', () => {
     expect(event.bypass?.category).toBe('cross-tool-chain');
     expect(event.bypass?.payload).toContain('path=/home/user/.ssh/config');
     expect(event.bypass?.payload).toContain('Blocked path /etc/shadow');
+  });
+
+  it('filterUnprocessedEvents drops processed fingerprints', async () => {
+    const { markThreatResearchProcessed } = await import('../../src/ai/auto-corpus-writer.js');
+    markThreatResearchProcessed('fresh-fp');
+    const events = filterUnprocessedEvents([
+      buildBypassEvent({ fingerprint: 'fresh-fp', toolName: 'bash', category: 'shell-obfuscation' }),
+      buildBypassEvent({ fingerprint: 'new-fp', toolName: 'bash', category: 'shell-obfuscation' }),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.fingerprint).toBe('new-fp');
   });
 });

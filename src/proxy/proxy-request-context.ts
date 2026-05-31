@@ -4,15 +4,21 @@
 export interface ProxyRequestContext {
   requestStartTime: number;
   requestToolName: string;
+  requestMethod?: string;
   requestTokens: number;
   requestRaw: string;
   requestModel?: string;
   requestArguments?: Record<string, unknown>;
+  sessionId?: string;
+  agentId?: string;
   /** Resolved tenant for per-tenant circuit breaker / audit isolation */
   tenantId?: string;
   agentIdentity?: import('../auth/auth-types.js').AgentIdentity;
   /** Rotated MCP session token (L-6) returned to client in response _meta */
   rotatedSessionToken?: string;
+  /** Geo region from inbound HTTP headers */
+  geoRegion?: string;
+  hourUtc?: number;
 }
 
 export class ProxyRequestContextStore {

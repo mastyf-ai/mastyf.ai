@@ -48,6 +48,20 @@ import { ReinforceFuzzerSelector } from './agentic/rl/reinforce-fuzzer.js';
 import { StreamingResponseDlpInspector } from './agentic/response-dlp/streaming-inspector.js';
 import { McpLifecycleGuard } from './agentic/mcp-lifecycle/lifecycle-guard.js';
 import { RequestAuditor } from './agentic/audit/request-auditor.js';
+import { IndustryStandardStore } from './database/industry-standard-store.js';
+import { CapabilityGraphBuilder } from './agentic/capability-graph/graph-builder.js';
+import { IntentEngine } from './agentic/intent-binding/intent-engine.js';
+import { SandboxTierEnforcer } from './agentic/sandbox-tier/enforcer.js';
+import { ComplianceEvidenceRunner } from './agentic/compliance/compliance-evidence-runner.js';
+import { BehaviorFingerprintEngine } from './agentic/biometrics/behavior-fingerprint.js';
+import { ConfigProvenanceChain, getConfigProvenanceChain } from './agentic/provenance/config-provenance-chain.js';
+import { FleetChainDetector } from './agentic/cross-chain/fleet-chain-detector.js';
+import { DigitalTwinCapture } from './agentic/digital-twin/twin-capture.js';
+import { ZeroTrustVerificationEngine } from './agentic/zero-trust/verification-engine.js';
+import { ReputationNetwork } from './agentic/reputation/reputation-network.js';
+import { EcosystemObservatory } from './agentic/observatory/ecosystem-observatory.js';
+import { InsuranceRiskQuantifier } from './agentic/insurance/risk-quantifier.js';
+import { FederatedLearningCoordinator } from './agentic/federated/federated-learning.js';
 
 export interface Container {
   db: IDatabase;
@@ -92,6 +106,20 @@ export interface Container {
   streamingDlp: StreamingResponseDlpInspector;
   lifecycleGuard: McpLifecycleGuard;
   requestAuditor: RequestAuditor;
+  industryStore: IndustryStandardStore;
+  capabilityGraph: CapabilityGraphBuilder;
+  intentEngine: IntentEngine;
+  sandboxEnforcer: SandboxTierEnforcer;
+  complianceEvidence: ComplianceEvidenceRunner;
+  behaviorFingerprint: BehaviorFingerprintEngine;
+  configProvenance: ConfigProvenanceChain;
+  fleetChainDetector: FleetChainDetector;
+  digitalTwin: DigitalTwinCapture;
+  zeroTrustEngine: ZeroTrustVerificationEngine;
+  reputationNetwork: ReputationNetwork;
+  ecosystemObservatory: EcosystemObservatory;
+  insuranceRiskQuantifier: InsuranceRiskQuantifier;
+  federatedLearning: FederatedLearningCoordinator;
 }
 
 let startupWarningEmitted = false;
@@ -144,6 +172,9 @@ export async function createContainer(dbPath?: string): Promise<Container> {
   const taskQueue = new AgenticTaskQueue(3);
   const telemetry = new AgenticTelemetry();
   const approvalGate = new ApprovalGate();
+  const industryStore = new IndustryStandardStore(db);
+  const { bindPolicyApprovalStore } = await import('./agentic/semantic-policy/policy-approval-store.js');
+  bindPolicyApprovalStore(industryStore);
 
   // Feature modules
   const behaviorCollector = new BehaviorCollector();
@@ -158,17 +189,17 @@ export async function createContainer(dbPath?: string): Promise<Container> {
   const driftDetector = new DriftDetector();
   const controlMapper = new ControlMapper();
   const attackGenerator = new AttackGenerator();
-  const threatMeshNode = new ThreatMeshNode();
+  const threatMeshNode = new ThreatMeshNode(industryStore);
   const honeypotManager = new HoneypotManager();
   const trustProtocol = new TrustNegotiationProtocol();
   const guardianScore = new GuardianScore();
-  const responseDlp = new ResponseDlpScanner();
-  const certifier = new MCPCertifier();
-  const protocolFuzzer = new McpProtocolFuzzer();
-  const collusionDetector = new CollusionDetector();
+  const reputationNetwork = new ReputationNetwork(industryStore, guardianScore);
+  const certifier = new MCPCertifier(industryStore, guardianScore, reputationNetwork);
+  const protocolFuzzer = new McpProtocolFuzzer(industryStore);
+  const collusionDetector = new CollusionDetector(industryStore);
   const slaEnforcer = new SlaEnforcer();
-  const incidentPlaybook = new IncidentPlaybookRunner();
-  const reputationEngine = new ReputationEngine();
+  const incidentPlaybook = new IncidentPlaybookRunner(approvalGate, industryStore);
+  const reputationEngine = new ReputationEngine(industryStore);
   const configHardener = new ConfigHardener();
   const thompsonSampling = new ThompsonSamplingAgentTrust();
   const contextualBandit = new ContextualBanditPolicyTuner();
@@ -177,8 +208,89 @@ export async function createContainer(dbPath?: string): Promise<Container> {
   const streamingDlp = new StreamingResponseDlpInspector();
   const lifecycleGuard = new McpLifecycleGuard();
   const requestAuditor = new RequestAuditor();
+  const capabilityGraph = new CapabilityGraphBuilder(industryStore);
+  const intentEngine = new IntentEngine(industryStore);
+  const sandboxEnforcer = new SandboxTierEnforcer(industryStore);
+  const complianceEvidence = new ComplianceEvidenceRunner(db, industryStore);
+  const behaviorFingerprint = new BehaviorFingerprintEngine(industryStore);
+  behaviorCollector.setFingerprintEngine(behaviorFingerprint);
+  const configProvenance = getConfigProvenanceChain(industryStore);
+  const fleetChainDetector = new FleetChainDetector(industryStore);
+  const digitalTwin = new DigitalTwinCapture(industryStore);
+  const zeroTrustEngine = new ZeroTrustVerificationEngine(reputationEngine, behaviorFingerprint, intentEngine, certifier, approvalGate);
+  const responseDlp = new ResponseDlpScanner();
+  const ecosystemObservatory = new EcosystemObservatory(industryStore);
+  const insuranceRiskQuantifier = new InsuranceRiskQuantifier(threatPredictor, riskScorer, industryStore);
+  const federatedLearning = new FederatedLearningCoordinator(approvalGate, contextualBandit, industryStore);
+  if (process.env.GUARDIAN_FEDERATED_LEARNING === 'true') {
+    federatedLearning.getActiveWeights();
+    void federatedLearning.syncRemoteDeltas().then(() => {
+      const min = Number(process.env.GUARDIAN_FEDERATED_LEARNING_MIN_REPORTS ?? 3);
+      federatedLearning.aggregateDeltas(min);
+    });
+  }
 
-  Logger.info('[Container] Agentic AI services initialized (37 modules)');
+  Logger.info('[Container] Agentic AI services initialized (42 modules + roadmap)');
+
+  if (process.env.GUARDIAN_AGENTIC_ENABLED !== 'false') {
+    const { registerIndustryStandardTasks } = await import('./utils/industry-standard-bootstrap.js');
+    registerIndustryStandardTasks({
+      db,
+      securityScanner,
+      costAuditor,
+      healthMonitor,
+      agenticScheduler,
+      modelProvider,
+      taskQueue,
+      telemetry,
+      approvalGate,
+      behaviorCollector,
+      patternAnalyzer,
+      policySynthesizer,
+      policyDiff,
+      promptInjectionDetector,
+      argumentSanitizer,
+      riskScorer,
+      threatPredictor,
+      signatureVerifier,
+      driftDetector,
+      controlMapper,
+      attackGenerator,
+      threatMeshNode,
+      honeypotManager,
+      trustProtocol,
+      guardianScore,
+      responseDlp,
+      certifier,
+      protocolFuzzer,
+      collusionDetector,
+      slaEnforcer,
+      incidentPlaybook,
+      reputationEngine,
+      configHardener,
+      thompsonSampling,
+      contextualBandit,
+      sarsaThresholds,
+      reinforceFuzzer,
+      streamingDlp,
+      lifecycleGuard,
+      requestAuditor,
+      industryStore,
+      capabilityGraph,
+      intentEngine,
+      sandboxEnforcer,
+      complianceEvidence,
+      behaviorFingerprint,
+      configProvenance,
+      fleetChainDetector,
+      digitalTwin,
+      zeroTrustEngine,
+      reputationNetwork,
+      ecosystemObservatory,
+      insuranceRiskQuantifier,
+      federatedLearning,
+    });
+  }
 
   return {
     db,
@@ -221,5 +333,19 @@ export async function createContainer(dbPath?: string): Promise<Container> {
     streamingDlp,
     lifecycleGuard,
     requestAuditor,
+    industryStore,
+    capabilityGraph,
+    intentEngine,
+    sandboxEnforcer,
+    complianceEvidence,
+    behaviorFingerprint,
+    configProvenance,
+    fleetChainDetector,
+    digitalTwin,
+    zeroTrustEngine,
+    reputationNetwork,
+    ecosystemObservatory,
+    insuranceRiskQuantifier,
+    federatedLearning,
   };
 }

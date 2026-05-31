@@ -57,11 +57,42 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
     [data?.traffic?.hourly, granularity],
   );
 
-  const learningSeries = (data?.instantLearning?.blocksPerMinute ?? []).map((p, i) => ({
-    min: Math.round(p.t / 60_000),
-    blocks: p.value,
-    idx: i,
-  }));
+  const learningSource = data?.instantLearning?.source ?? 'none';
+  const learningEmptyReason = data?.meta?.emptyReasons?.instantLearning;
+
+  const learningSeries = useMemo(() => {
+    const perMin = data?.instantLearning?.blocksPerMinute ?? [];
+    if (perMin.length > 0) {
+      return perMin.map((p, i) => ({
+        label: String(Math.round(p.t / 60_000)),
+        blocks: p.value,
+        idx: i,
+      }));
+    }
+    const blockedHourly = hourly.filter((h) => h.blocked > 0 || h.calls > 0);
+    if (blockedHourly.length > 0) {
+      return blockedHourly.map((h, i) => ({ label: h.label, blocks: h.blocked, idx: i }));
+    }
+    return [];
+  }, [data?.instantLearning?.blocksPerMinute, hourly]);
+
+  const ruleToolChartData = useMemo(() => {
+    const pairs = data?.instantLearning?.ruleToolPairs ?? [];
+    if (pairs.length > 0) {
+      return pairs.slice(0, 8).map((p) => ({
+        name: `${p.rule}:${p.tool}`.slice(0, 20),
+        count: p.count,
+      }));
+    }
+    return (data?.traffic?.topBlockRules ?? []).slice(0, 8).map((r) => ({
+      name: r.plainEnglish?.slice(0, 20) || r.rule.slice(0, 20),
+      count: r.count,
+    }));
+  }, [data?.instantLearning?.ruleToolPairs, data?.traffic?.topBlockRules]);
+
+  const suggestionEngine = data?.instantLearning?.suggestionEngine;
+  const learningHasData =
+    learningSeries.length > 0 || ruleToolChartData.some((r) => r.count > 0);
 
   const tools = data?.traffic?.topTools?.slice(0, 8) ?? [];
   const rules = data?.traffic?.topBlockRules?.slice(0, 8) ?? [];
@@ -194,14 +225,29 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
 
       {tab === 'learning' ? (
         <div className="infra-charts-grid">
+          {!learningHasData && learningEmptyReason ? (
+            <p className="hint live-data-banner">{learningEmptyReason}</p>
+          ) : null}
+          {suggestionEngine?.learningInitialized ? (
+            <p className="hint">
+              Suggestion engine: {suggestionEngine.cyclesCompleted ?? 0} cycles ·{' '}
+              {suggestionEngine.baselinesCount ?? 0} baselines ·{' '}
+              {suggestionEngine.recordsAnalyzed ?? 0} records analyzed
+            </p>
+          ) : null}
           <ChartCard
-            title={`Blocks per minute (${data?.instantLearning?.source ?? 'none'})`}
+            title={
+              (data?.instantLearning?.blocksPerMinute?.length ?? 0) > 0
+                ? `Blocks per minute (${learningSource})`
+                : 'Blocks over time (history.db)'
+            }
             empty={!learningSeries.length}
+            emptyReason={learningEmptyReason}
           >
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={learningSeries}>
                 <CartesianGrid {...CHART_GRID} />
-                <XAxis dataKey="min" {...CHART_AXIS} />
+                <XAxis dataKey="label" {...CHART_AXIS} />
                 <YAxis {...CHART_AXIS} />
                 <Tooltip content={<ChartTooltip />} />
                 <Line type="monotone" dataKey="blocks" stroke={CHART_SERIES.accent} strokeWidth={2} dot={false} name="Blocks" />
@@ -209,15 +255,13 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Rule:tool clusters" empty={!(data?.instantLearning?.ruleToolPairs?.length)}>
+          <ChartCard
+            title={learningSource === 'history-db-fallback' ? 'Top block rules (history.db)' : 'Rule:tool clusters'}
+            empty={!ruleToolChartData.length}
+            emptyReason={learningEmptyReason}
+          >
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart
-                data={(data?.instantLearning?.ruleToolPairs ?? []).slice(0, 8).map((p) => ({
-                  name: `${p.rule}:${p.tool}`.slice(0, 20),
-                  count: p.count,
-                }))}
-                layout="vertical"
-              >
+              <BarChart data={ruleToolChartData} layout="vertical">
                 <CartesianGrid {...CHART_GRID} />
                 <XAxis type="number" {...CHART_AXIS} />
                 <YAxis type="category" dataKey="name" width={100} {...CHART_AXIS} />
@@ -230,7 +274,7 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
           <p className="hint">
             Events: {data?.instantLearning?.totalEvents ?? 0} · Queued suggestions:{' '}
             {data?.instantLearning?.queuedSuggestions ?? 0}
-            {data?.meta?.emptyReasons?.instantLearning ? ` · ${data.meta.emptyReasons.instantLearning}` : ''}
+            {learningEmptyReason && learningHasData ? ` · ${learningEmptyReason}` : ''}
           </p>
         </div>
       ) : null}

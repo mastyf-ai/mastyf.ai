@@ -354,6 +354,46 @@ export function readThreatLabCandidateById(
   return manifest.candidates.find((c) => c.id === id) ?? null;
 }
 
+/** Read Threat Lab candidates without dashboard session gating (incident investigator). */
+export function readThreatLabCandidatesUngated(tenantId?: string): ThreatLabCandidateRecord[] {
+  const tid = validateTenantId(tenantId?.trim() || DEFAULT_TENANT_ID);
+  const dirs = [resolveTenantSwarmDir(tid)];
+  if (tid === DEFAULT_TENANT_ID) {
+    dirs.push(join(REPO_ROOT, 'reports/security-swarm'), LEGACY_SWARM_DIR);
+  }
+  const byId = new Map<string, ThreatLabCandidateRecord>();
+  for (const dir of dirs) {
+    const p = join(dir, 'threat-lab-candidates.json');
+    if (!existsSync(p)) continue;
+    try {
+      const data = JSON.parse(readFileSync(p, 'utf-8')) as { candidates?: ThreatLabCandidateRecord[] };
+      if (!Array.isArray(data.candidates)) continue;
+      for (const c of data.candidates) {
+        if (c?.id && !byId.has(c.id)) byId.set(c.id, c);
+      }
+    } catch {
+      /* try next dir */
+    }
+  }
+  return [...byId.values()];
+}
+
+export function findThreatLabCandidateUngated(
+  tenantId: string | undefined,
+  triggerId: string,
+): ThreatLabCandidateRecord | null {
+  const needle = triggerId.trim();
+  if (!needle) return null;
+  return (
+    readThreatLabCandidatesUngated(tenantId).find(
+      (c) =>
+        c.id === needle
+        || c.fingerprint === needle
+        || c.provenance?.inputFingerprint === needle,
+    ) ?? null
+  );
+}
+
 export type AutoCorpusManifestEntry = {
   advId: string;
   relPath: string;

@@ -359,6 +359,62 @@ policyCmd
     }
   });
 
+policyCmd
+  .command('provenance-verify')
+  .description('Verify tamper-evident config provenance chain')
+  .action(async () => {
+    try {
+      const { runProvenanceVerify } = await import('./cli/provenance-cmd.js');
+      const result = await runProvenanceVerify();
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.valid) process.exit(1);
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
+policyCmd
+  .command('provenance-export')
+  .description('Export config provenance bundle (json | signed | tarball)')
+  .option('--format <format>', 'json | signed | tarball', 'json')
+  .option('--output <path>', 'Write to file instead of stdout')
+  .action(async (opts: { format: string; output?: string }) => {
+    try {
+      const { runProvenanceExport } = await import('./cli/provenance-cmd.js');
+      const format = ['json', 'signed', 'tarball'].includes(opts.format) ? opts.format as 'json' | 'signed' | 'tarball' : 'json';
+      const bundle = await runProvenanceExport('default', { format, output: opts.output });
+      if (!opts.output) console.log(JSON.stringify(bundle, null, 2));
+      else console.error(`Wrote ${opts.output}`);
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('threat-model')
+  .description('Generate STRIDE/LINDDUN threat model from MCP config')
+  .requiredOption('--config <path>', 'MCP client config JSON path')
+  .option('--format <format>', 'Output format: markdown | json', 'markdown')
+  .option('--output <path>', 'Write output to file')
+  .action(async (opts: { config: string; format: string; output?: string }) => {
+    try {
+      const { runThreatModelCli } = await import('./cli/threat-model-cmd.js');
+      const fmt = opts.format === 'json' ? 'json' : 'markdown';
+      const result = runThreatModelCli({ config: opts.config, format: fmt, output: opts.output });
+      if (!opts.output) {
+        if (result.markdown) console.log(result.markdown);
+        else console.log(JSON.stringify(result.report, null, 2));
+      } else {
+        console.error(chalk.green(`Wrote ${opts.output}`));
+      }
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
 program
   .command('onboard')
   .description('Solo-developer onboarding: detect IDE MCP servers, wrap with audit policy, save status')
@@ -494,6 +550,112 @@ fleetCmd
   .action(async (opts: { json?: boolean }) => {
     const { runFleetStatus } = await import('./cli/fleet-status.js');
     process.exit(await runFleetStatus(opts));
+  });
+
+const roadmapCmd = program.command('roadmap').description('Industry-standard roadmap utilities (A1–C5)');
+
+roadmapCmd
+  .command('fleet-graph-train')
+  .description('Train GNN weights from fleet chain alerts and export JSON (A1)')
+  .requiredOption('--output <path>', 'Write weights JSON (w1/w2 arrays)')
+  .option('--db <path>', 'History DB path (default: GUARDIAN_HISTORY_DB or :memory:)')
+  .action(async (opts: { output: string; db?: string }) => {
+    try {
+      const { runRoadmapFleetGraphTrain } = await import('./cli/roadmap-cmd.js');
+      runRoadmapFleetGraphTrain(opts);
+      console.error(chalk.green(`Wrote graph weights to ${opts.output}`));
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
+roadmapCmd
+  .command('federated-export')
+  .description('Export federated model bundle (B3)')
+  .option('--output <path>', 'Write JSON bundle')
+  .option('--db <path>', 'History DB path')
+  .action(async (opts: { output?: string; db?: string }) => {
+    try {
+      const { runRoadmapFederatedExport } = await import('./cli/roadmap-cmd.js');
+      const bundle = await runRoadmapFederatedExport(opts);
+      if (!opts.output) console.log(JSON.stringify(bundle, null, 2));
+      else console.error(chalk.green(`Wrote ${opts.output}`));
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
+roadmapCmd
+  .command('federated-import')
+  .description('Import federated model bundle (B3)')
+  .requiredOption('--input <path>', 'JSON bundle from federated-export')
+  .option('--db <path>', 'History DB path')
+  .action(async (opts: { input: string; db?: string }) => {
+    try {
+      const { runRoadmapFederatedImport } = await import('./cli/roadmap-cmd.js');
+      runRoadmapFederatedImport(opts);
+      console.error(chalk.green(`Imported federated model from ${opts.input}`));
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
+roadmapCmd
+  .command('observatory-sync')
+  .description('Sync cloud + mesh observatory telemetry (B2)')
+  .option('--db <path>', 'History DB path')
+  .action(async (opts: { db?: string }) => {
+    try {
+      const { runRoadmapObservatorySync } = await import('./cli/roadmap-cmd.js');
+      const result = await runRoadmapObservatorySync(opts);
+      console.log(JSON.stringify(result, null, 2));
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
+roadmapCmd
+  .command('reputation-sync')
+  .description('Pull mesh reputation entries (B1)')
+  .option('--db <path>', 'History DB path')
+  .action(async (opts: { db?: string }) => {
+    try {
+      const { runRoadmapReputationSync } = await import('./cli/roadmap-cmd.js');
+      const count = await runRoadmapReputationSync(opts);
+      console.log(JSON.stringify({ ingested: count }, null, 2));
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
+roadmapCmd
+  .command('audit')
+  .description('Run industry-standard roadmap plan compliance audit (A1–C5, B1–B3)')
+  .option('--json', 'Emit full JSON report')
+  .action(async (opts: { json?: boolean }) => {
+    try {
+      const { runRoadmapPlanComplianceAudit } = await import('./cli/roadmap-cmd.js');
+      const report = await runRoadmapPlanComplianceAudit();
+      if (opts.json) {
+        console.log(JSON.stringify(report, null, 2));
+      } else {
+        console.log(`Overall: ${report.overallScore}% | Production ready: ${report.productionReady}`);
+        console.log(report.summary);
+        for (const m of report.modules) {
+          const failed = m.checks.filter(c => !c.passed).map(c => c.id);
+          console.log(`  ${m.id} ${m.name}: ${m.score}%${failed.length ? ` (failed: ${failed.join(', ')})` : ''}`);
+        }
+      }
+      process.exit(report.productionReady ? 0 : 1);
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
   });
 
 program
@@ -842,6 +1004,35 @@ program
       tenantId: opts.tenant,
       projectRoot: opts.projectRoot,
     });
+  });
+
+program
+  .command('bench')
+  .description('Run Guardian benchmark scorecard from harness/swarm reports')
+  .option('--profile <name>', 'Benchmark profile name', 'enterprise')
+  .option('--reports <dir>', 'Reports directory', join(process.cwd(), 'reports'))
+  .option('--json', 'Output JSON only', false)
+  .option('--persist', 'Save scorecard to local history.db', false)
+  .option('--run-harness', 'Run adversarial harness before scoring', false)
+  .action(async (opts: { profile: string; reports: string; json: boolean; persist: boolean; runHarness: boolean }) => {
+    if (opts.runHarness) process.env.GUARDIAN_BENCH_RUN_HARNESS = 'true';
+    const { runHarnessThenScorecard, runGuardianBenchScorecard, persistBenchmarkScorecard } = await import('./utils/guardian-bench.js');
+    const scorecard = opts.runHarness
+      ? await runHarnessThenScorecard(opts.reports, opts.profile)
+      : runGuardianBenchScorecard(opts.reports, opts.profile);
+    if (opts.json) {
+      console.log(JSON.stringify(scorecard, null, 2));
+    } else {
+      console.log(scorecard.summary);
+      console.log(`Sources: ${scorecard.sources.join(', ') || 'none'}`);
+    }
+    if (opts.persist) {
+      const { createDatabase } = await import('./database/create-database.js');
+      const { IndustryStandardStore } = await import('./database/industry-standard-store.js');
+      const db = await createDatabase(process.env.MCP_GUARDIAN_DB_PATH);
+      persistBenchmarkScorecard(new IndustryStandardStore(db), scorecard);
+      console.log('Scorecard persisted to history.db');
+    }
   });
 
 const autopilotCmd = program

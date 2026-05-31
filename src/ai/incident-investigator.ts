@@ -1,7 +1,12 @@
 /**
  * Agentic Incident Investigator — multi-step analysis with cited audit records and Threat Lab bridge.
  */
-import { loadSemanticAuditRecordsAsync, type StoredSemanticAudit } from './semantic-audit-store.js';
+import {
+  findSemanticAuditRecord,
+  loadSemanticAuditRecordsWithTenantFallback,
+  SEMANTIC_AUDIT_DASHBOARD_WINDOW_MS,
+  type StoredSemanticAudit,
+} from './semantic-audit-store.js';
 import { getFlowHistory, type FlowEvent } from '../policy/session-flow-store.js';
 import { flowSessionKey } from '../policy/session-flow-guard.js';
 import type { CallContext } from '../policy/policy-types.js';
@@ -167,19 +172,127 @@ function buildRecommendations(
   return recs;
 }
 
+function incidentLookupWindowMs(): number {
+  const raw = parseInt(process.env.GUARDIAN_INCIDENT_LOOKUP_WINDOW_MS || '', 10);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return SEMANTIC_AUDIT_DASHBOARD_WINDOW_MS;
+}
+
+function mapCandidateTriggerType(
+  source?: string,
+): IncidentInvestigation['triggerType'] {
+  if (source === 'semantic-tp') return 'semantic_flag';
+  if (source === 'bypass' || source === 'corpus-proactive') return 'swarm_bypass';
+  return 'swarm_bypass';
+}
+
+function buildInvestigationFromThreatLabCandidate(
+  candidate: import('../utils/swarm-artifacts.js').ThreatLabCandidateRecord,
+  triggerId: string,
+): IncidentInvestigation {
+  const toolName = String(
+    (candidate.corpusCandidate as { toolName?: string } | undefined)?.toolName || 'unknown',
+  );
+  const ruleName = (candidate.policyRule as { name?: string } | undefined)?.name;
+  const citations: IncidentCitation[] = [
+    {
+      id: candidate.id,
+      kind: 'related_call',
+      summary: `${toolName} — Threat Lab ${candidate.provenance?.source || 'candidate'} (${candidate.attackClass})`,
+    },
+  ];
+  if (candidate.provenance?.inputFingerprint) {
+    citations.push({
+      id: candidate.provenance.inputFingerprint,
+      kind: 'related_call',
+      summary: `Source signal: ${candidate.provenance.inputFingerprint}`,
+    });
+  }
+  const hypotheses: IncidentHypothesis[] = [
+    {
+      attackClass: candidate.attackClass,
+      confidence: candidate.confidence,
+      reasoning: candidate.hypothesis,
+      citations: [candidate.id],
+    },
+  ];
+  const recommendations: IncidentRecommendation[] = [
+    {
+      action: 'open_threat_lab',
+      detail: 'Review and accept or reject this Threat Lab candidate',
+      threatLabContext: {
+        toolName,
+        category: candidate.attackClass,
+        semanticAuditId: candidate.provenance?.inputFingerprint || candidate.id,
+      },
+    },
+  ];
+  if (ruleName) {
+    recommendations.push({
+      action: 'review_policy',
+      detail: `Review proposed rule: ${ruleName}`,
+    });
+  }
+  const narrative = `${candidate.hypothesis} [${candidate.id}]`;
+  return {
+    incidentId: `inc-${Date.now()}`,
+    triggerId,
+    triggerType: mapCandidateTriggerType(candidate.provenance?.source),
+    generatedAt: new Date().toISOString(),
+    citations,
+    sessionFlow: [],
+    relatedRecords: [],
+    hypotheses,
+    recommendations,
+    narrative,
+    killChainNarrative: narrative,
+    threatLabReady: true,
+  };
+}
+
+async function resolveSemanticAnchor(
+  triggerId: string,
+  records: StoredSemanticAudit[],
+  tenantId?: string,
+): Promise<StoredSemanticAudit | undefined> {
+  const direct = findSemanticAuditRecord(records, triggerId);
+  if (direct) return direct;
+
+  try {
+    const { findThreatLabCandidateUngated } = await import('../utils/swarm-artifacts.js');
+    const candidate = findThreatLabCandidateUngated(tenantId, triggerId);
+    const fp = candidate?.provenance?.inputFingerprint;
+    if (fp && (candidate.provenance?.source === 'semantic-tp' || /^\d{10,}-/.test(fp))) {
+      return findSemanticAuditRecord(records, fp);
+    }
+  } catch {
+    /* non-fatal */
+  }
+
+  return undefined;
+}
+
 export async function investigateIncident(opts: {
   triggerId: string;
   triggerType?: IncidentInvestigation['triggerType'];
   tenantId?: string;
   useLlm?: boolean;
 }): Promise<IncidentInvestigation | null> {
-  const records = await loadSemanticAuditRecordsAsync({
+  const { records } = await loadSemanticAuditRecordsWithTenantFallback({
     tenantId: opts.tenantId,
-    sinceMs: 7 * 24 * 60 * 60 * 1000,
+    sinceMs: incidentLookupWindowMs(),
     limit: 500,
   });
 
-  const anchor = records.find((r) => r.id === opts.triggerId);
+  const { findThreatLabCandidateUngated } = await import('../utils/swarm-artifacts.js');
+  const threatLabCandidate = findThreatLabCandidateUngated(opts.tenantId, opts.triggerId);
+  const anchor = await resolveSemanticAnchor(opts.triggerId, records, opts.tenantId);
+  if (!anchor && threatLabCandidate) {
+    Logger.info(
+      `[IncidentInvestigator] Threat Lab candidate investigation ${opts.triggerId} (${threatLabCandidate.provenance?.source || 'unknown'})`,
+    );
+    return buildInvestigationFromThreatLabCandidate(threatLabCandidate, opts.triggerId);
+  }
   if (!anchor) return null;
 
   const related = findRelatedRecords(anchor, records);

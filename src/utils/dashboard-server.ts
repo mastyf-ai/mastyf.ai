@@ -269,7 +269,7 @@ export {
   ensureAgenticContainer,
   isAgenticDemoMode,
 } from './agentic-container.js';
-import { getAgenticContainer, isAgenticDemoMode } from './agentic-container.js';
+import { getAgenticContainer, ensureAgenticContainer, isAgenticDemoMode } from './agentic-container.js';
 
 type DashboardHandle = {
   auth: DashboardAuth;
@@ -1049,6 +1049,17 @@ export async function startDashboardServer(
           });
           return;
         }
+        try {
+          const { recordConfigProvenance } = await import('../agentic/provenance/config-provenance-chain.js');
+          recordConfigProvenance({
+            actor: String(req.headers['x-guardian-policy-approver'] || authResult.identity || 'dashboard'),
+            eventType: 'policy_apply',
+            resourcePath: policyPath,
+            diff: { source: 'dashboard_put', mode: parsePolicyConfig(parsed).policy.mode },
+          });
+        } catch {
+          /* best-effort */
+        }
         writeJson(res, 200, {
           status: 'ok',
           path: policyPath,
@@ -1155,6 +1166,21 @@ export async function startDashboardServer(
         });
         writeJson(res, 200, report);
         return;
+      }
+
+      {
+        const { handleRoadmapApiRoutes } = await import('../dashboard/roadmap-routes.js');
+        const handled = await handleRoadmapApiRoutes({
+          url,
+          method,
+          req,
+          res,
+          tenantId: requestTenantId,
+          writeJson,
+          readBody,
+          setCors,
+        });
+        if (handled) return;
       }
 
       if (url === '/api/incidents/investigate' && method === 'POST') {
@@ -3081,19 +3107,24 @@ export async function startDashboardServer(
       }
       if (url === '/api/learning/semantic/outcomes' && method === 'GET') {
         setCors();
-        const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
+        const {
+          loadSemanticAuditRecordsAsync,
+          loadSemanticAuditRecordsWithTenantFallback,
+          SEMANTIC_AUDIT_DASHBOARD_WINDOW_MS,
+        } = await import('../ai/semantic-audit-store.js');
         const { isSemanticAsyncEnabledForTenant } = await import('../tenant/tenant-semantic-config.js');
-        const sinceMs = 30 * 24 * 60 * 60 * 1000;
-        const records = await loadSemanticAuditRecordsAsync({
+        const sinceMs = SEMANTIC_AUDIT_DASHBOARD_WINDOW_MS;
+        const scoped = await loadSemanticAuditRecordsAsync({
           limit: 200,
           tenantId: requestTenantId,
           sinceMs,
         });
+        const records = scoped;
         let defaultTenantRecords = 0;
-        if (records.length === 0 && requestTenantId !== DEFAULT_TENANT_ID) {
-          const fallback = await loadSemanticAuditRecordsAsync({
+        if (scoped.length === 0 && requestTenantId !== DEFAULT_TENANT_ID) {
+          const { records: fallback } = await loadSemanticAuditRecordsWithTenantFallback({
             limit: 200,
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: requestTenantId,
             sinceMs,
           });
           defaultTenantRecords = fallback.length;
@@ -3461,11 +3492,15 @@ export async function startDashboardServer(
         }
         const { applySuggestionToPolicy } = await import('../ai/policy-applier.js');
         const policyPath = process.env.GUARDIAN_POLICY_PATH || join(REPO_ROOT, 'default-policy.yaml');
-        applySuggestionToPolicy(
+        const result = await applySuggestionToPolicy(
           candidate.policyRule as unknown as import('../policy/policy-types.js').PolicyRule,
           policyPath,
           null,
         );
+        if (!result.applied) {
+          writeJson(res, 400, { error: result.reason ?? 'apply_failed', simulationSummary: result.simulationSummary });
+          return;
+        }
         markThreatLabCandidate(requestTenantId, id, 'accepted');
         writeJson(res, 200, { status: 'accepted', id, ruleName: candidate.policyRule.name });
         return;
@@ -3773,6 +3808,188 @@ export async function startDashboardServer(
         }
         return;
       }
+      if (url === '/api/industry-standard/status' && method === 'GET') {
+        setCors();
+        try {
+          if (!runtimeHistoryDb) {
+            writeJson(res, 200, unavailable({ migration012: false }, 'History database unavailable'));
+            return;
+          }
+          const { IndustryStandardStore } = await import('../database/industry-standard-store.js');
+          const store = new IndustryStandardStore(runtimeHistoryDb);
+          const counts = store.getStatus(requestTenantId);
+          writeJson(res, 200, available({
+            tenantId: requestTenantId,
+            migration012: true,
+            ...counts,
+            generatedAt: new Date().toISOString(),
+          }));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : 'status_failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/policy/simulate' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const { simulatePolicyCounterfactual } = await import('../ai/policy-counterfactual.js');
+        const draftRule =
+          body.rule && typeof body.rule === 'object' && 'name' in body.rule && 'action' in body.rule
+            ? (body.rule as import('../policy/policy-types.js').PolicyRule)
+            : undefined;
+        const report = await simulatePolicyCounterfactual({
+          draftRule,
+          policyPath: body.policyPath ? String(body.policyPath) : undefined,
+          tenantId: requestTenantId,
+          windowDays: Number(body.windowDays) || 14,
+          limit: body.limit != null ? Number(body.limit) : undefined,
+        });
+        writeJson(res, 200, available(report as unknown as Record<string, unknown>));
+        return;
+      }
+
+      if (url === '/api/certification/registry' && method === 'GET') {
+        setCors();
+        try {
+          if (!runtimeHistoryDb) {
+            writeJson(res, 200, unavailable({ certifications: [] }, 'History database unavailable'));
+            return;
+          }
+          const { IndustryStandardStore } = await import('../database/industry-standard-store.js');
+          const store = new IndustryStandardStore(runtimeHistoryDb);
+          const limit = Number(new URL(req.url || url, 'http://localhost').searchParams.get('limit')) || 100;
+          const rows = store.listCertifications(requestTenantId, limit);
+          const certifications = rows.map((r) => ({
+            ...r,
+            checks: (() => {
+              try {
+                return JSON.parse(r.checksJson) as unknown[];
+              } catch {
+                return [];
+              }
+            })(),
+          }));
+          writeJson(res, 200, available({ tenantId: requestTenantId, certifications, count: certifications.length }));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : 'registry_failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/benchmark/submit-local' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const profile = String(body.profile || '').trim();
+        const blockRate = Number(body.blockRate);
+        const falsePositiveRate = Number(body.falsePositiveRate);
+        if (!profile || !Number.isFinite(blockRate) || !Number.isFinite(falsePositiveRate)) {
+          writeJson(res, 400, { error: 'profile, blockRate, falsePositiveRate required' });
+          return;
+        }
+        try {
+          if (!runtimeHistoryDb) {
+            writeJson(res, 503, unavailable({ ok: false }, 'History database unavailable'));
+            return;
+          }
+          const { IndustryStandardStore } = await import('../database/industry-standard-store.js');
+          const { randomUUID } = await import('crypto');
+          const store = new IndustryStandardStore(runtimeHistoryDb);
+          const id = randomUUID();
+          store.saveBenchmarkSubmission({
+            id,
+            profile,
+            packageName: body.packageName ? String(body.packageName) : undefined,
+            blockRate,
+            falsePositiveRate,
+            p95LatencyMs: body.p95LatencyMs != null ? Number(body.p95LatencyMs) : undefined,
+            scorecardJson: JSON.stringify(
+              body.scorecard && typeof body.scorecard === 'object' ? body.scorecard : {},
+            ),
+            submittedAt: new Date().toISOString(),
+            tenantId: requestTenantId,
+          });
+          writeJson(res, 201, available({ ok: true, id, tenantId: requestTenantId }));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : 'submit_failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/industry-standard/chain-graph' && method === 'GET') {
+        setCors();
+        try {
+          if (!runtimeHistoryDb) {
+            writeJson(res, 200, unavailable({ edges: [] }, 'History database unavailable'));
+            return;
+          }
+          const { IndustryStandardStore } = await import('../database/industry-standard-store.js');
+          const store = new IndustryStandardStore(runtimeHistoryDb);
+          const events = store.listChainEvents(requestTenantId, 300);
+          writeJson(res, 200, available({ tenantId: requestTenantId, events, count: events.length }));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : 'chain_graph_failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/industry-standard/capability-graph' && method === 'GET') {
+        setCors();
+        try {
+          if (!runtimeHistoryDb) {
+            writeJson(res, 200, unavailable({ edges: [] }, 'History database unavailable'));
+            return;
+          }
+          const { IndustryStandardStore } = await import('../database/industry-standard-store.js');
+          const store = new IndustryStandardStore(runtimeHistoryDb);
+          const edges = store.listCapabilityEdges(requestTenantId, 500);
+          writeJson(res, 200, available({ tenantId: requestTenantId, edges, count: edges.length }));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : 'capability_graph_failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/industry-standard/sandbox-tiers' && method === 'GET') {
+        setCors();
+        try {
+          const container = await ensureAgenticContainer();
+          if (!container) {
+            writeJson(res, 200, unavailable({ tiers: [] }, 'Agentic container unavailable'));
+            return;
+          }
+          const certs = container.certifier.listCertified();
+          const tiers = certs.map((c: { serverName: string; level: string }) => ({
+            serverName: c.serverName,
+            tier: container.sandboxEnforcer.getTier({ scopeType: 'server', scopeId: c.serverName }),
+            certLevel: c.level,
+          }));
+          writeJson(res, 200, available({ tenantId: requestTenantId, tiers }));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : 'sandbox_tiers_failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/agentic/playbook/approve' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const approvalId = String(body.approvalId ?? '');
+        const approve = body.approve !== false;
+        const container = await ensureAgenticContainer();
+        if (!container?.approvalGate || !approvalId) {
+          writeJson(res, 400, { error: 'approvalId required' });
+          return;
+        }
+        if (approve) {
+          container.approvalGate.approve(approvalId);
+        } else {
+          container.approvalGate.deny(approvalId);
+        }
+        writeJson(res, 200, available({ ok: true, approvalId, approve }));
+        return;
+      }
+
       if (url === '/api/certification/guardian-mcp' && method === 'GET') {
         setCors();
         const { evaluateGuardianCertification } = await import('./guardian-certified-mcp.js');

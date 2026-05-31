@@ -1,9 +1,14 @@
 /**
  * Shared pre-forward guards for tools/call across all proxy transports.
  */
-import { agenticPreForwardToolCall } from './agentic-hooks-bridge.js';
+import {
+  agenticPreForwardToolCall,
+  buildAgenticToolCallContext,
+  type AgenticToolCallContext,
+} from './agentic-hooks-bridge.js';
 import { checkExpandedPayload } from './payload-guard.js';
 import { hasJsonRpcId, jsonRpcErrorBody } from './json-rpc-utils.js';
+import type { IncomingHttpHeaders } from 'http';
 
 export type ToolCallPreGuardResult =
   | { blocked: false; arguments?: Record<string, unknown> }
@@ -14,6 +19,12 @@ export async function runToolCallPreForwardGuard(
   toolName: string,
   args: Record<string, unknown> | undefined,
   requestId: string,
+  opts?: {
+    agentId?: string;
+    mcpSessionId?: string;
+    meta?: Record<string, unknown>;
+    headers?: IncomingHttpHeaders | Record<string, string | string[] | undefined>;
+  },
 ): Promise<ToolCallPreGuardResult> {
   if (args !== undefined) {
     const expanded = checkExpandedPayload(args);
@@ -26,7 +37,14 @@ export async function runToolCallPreForwardGuard(
     }
   }
   if (args) {
-    const agentic = await agenticPreForwardToolCall(serverName, toolName, args, requestId);
+    const ctx: AgenticToolCallContext = buildAgenticToolCallContext({
+      requestId,
+      agentId: opts?.agentId,
+      mcpSessionId: opts?.mcpSessionId,
+      meta: opts?.meta ?? (args._meta as Record<string, unknown> | undefined),
+      headers: opts?.headers,
+    });
+    const agentic = await agenticPreForwardToolCall(serverName, toolName, args, ctx);
     if (agentic.blocked) {
       return {
         blocked: true,

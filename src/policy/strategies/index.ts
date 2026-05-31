@@ -9,6 +9,9 @@ export { threatIntelStrategy } from './threat-intel-strategy.js';
 export { timingGuardStrategy } from './timing-guard-strategy.js';
 export { toolDefinitionStrategy } from './tool-definition-strategy.js';
 export { semanticGuardsStrategy } from './semantic-guards-strategy.js';
+export { certificationStrategy } from './certification-strategy.js';
+export { behavioralBiometricsStrategy } from './behavioral-biometrics-strategy.js';
+export { zeroTrustStrategy } from './zero-trust-strategy.js';
 export { yamlRulesStrategy } from './yaml-rules-strategy.js';
 export { evaluateRedisRateLimit } from './rate-limit-strategy.js';
 export { evaluateIdempotency } from './idempotency-strategy.js';
@@ -27,6 +30,9 @@ import { threatIntelStrategy } from './threat-intel-strategy.js';
 import { timingGuardStrategy } from './timing-guard-strategy.js';
 import { toolDefinitionStrategy } from './tool-definition-strategy.js';
 import { semanticGuardsStrategy } from './semantic-guards-strategy.js';
+import { certificationStrategy } from './certification-strategy.js';
+import { behavioralBiometricsStrategy } from './behavioral-biometrics-strategy.js';
+import { zeroTrustStrategy } from './zero-trust-strategy.js';
 import { yamlRulesStrategy } from './yaml-rules-strategy.js';
 import type { PolicyStrategy } from './types.js';
 
@@ -42,6 +48,9 @@ export const SYNC_POLICY_STRATEGIES: PolicyStrategy[] = [
   toolDenyStrategy,
   semanticGuardsStrategy,
   sessionFlowStrategy,
+  certificationStrategy,
+  behavioralBiometricsStrategy,
+  zeroTrustStrategy,
   threatIntelStrategy,
   yamlRulesStrategy,
 ];

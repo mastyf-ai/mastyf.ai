@@ -25,11 +25,15 @@ import {
   isFingerprintProcessed,
   markThreatResearchProcessed,
   writeAutoCorpusFixture,
+  countProcessedFingerprints,
   type AutoCorpusSource,
 } from './auto-corpus-writer.js';
+
+export { countProcessedFingerprints } from './auto-corpus-writer.js';
 import type { StoredSemanticAudit } from './semantic-audit-store.js';
 import type { ThreatIntelEntry } from './threat-intel.js';
 import { promoteToCorpus, type CorpusPromotionProvenance } from './auto-corpus-promoter.js';
+import { loadAttackLearningState } from './instant-attack-learning.js';
 
 export type ThreatResearchEventType = AutoCorpusSource;
 
@@ -206,6 +210,11 @@ function maxPerHour(): number {
 }
 
 function minConfidence(): number {
+  if (process.env.GUARDIAN_THREAT_RESEARCH_MIN_CONFIDENCE !== undefined) {
+    const n = parseFloat(process.env.GUARDIAN_THREAT_RESEARCH_MIN_CONFIDENCE);
+    if (Number.isFinite(n)) return n;
+  }
+  if (process.env.GUARDIAN_CI_BYPASS_LICENSE === 'true') return 0.75;
   const n = parseFloat(process.env.GUARDIAN_THREAT_RESEARCH_MIN_CONFIDENCE || '0.85');
   return Number.isFinite(n) ? n : 0.85;
 }
@@ -512,4 +521,39 @@ export function buildCorpusProactiveEvents(limit: number): ThreatResearchEvent[]
     corpusSeed: seed,
     confidence: 1,
   }));
+}
+
+/** Live block-repeat signals from instant attack-learning state (batch job + runtime queue). */
+export function buildBlockRepeatEventsFromAttackState(
+  limit: number,
+  tenantId?: string,
+): ThreatResearchEvent[] {
+  if (!blocksEnabled()) return [];
+  const state = loadAttackLearningState(tenantId);
+  const events: ThreatResearchEvent[] = [];
+  const seen = new Set<string>();
+  for (const block of [...(state.recentBlocks ?? [])].reverse()) {
+    if (events.length >= limit) break;
+    const fp = `block:${block.blockRule}:${block.toolName}:${block.argsFingerprint}`;
+    if (seen.has(fp)) continue;
+    seen.add(fp);
+    events.push(
+      buildBlockRepeatEvent(
+        block.blockRule,
+        block.toolName,
+        block.blockReason,
+        block.argsFingerprint,
+        {
+          arguments: block.arguments,
+          argSnippets: block.argSnippets,
+        },
+      ),
+    );
+  }
+  return events;
+}
+
+/** Prefer signals not yet in the processed ledger (avoids wasted LLM calls on reruns). */
+export function filterUnprocessedEvents(events: ThreatResearchEvent[]): ThreatResearchEvent[] {
+  return events.filter((ev) => !isFingerprintProcessed(ev.fingerprint));
 }

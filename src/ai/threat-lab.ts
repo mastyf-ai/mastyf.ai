@@ -93,8 +93,12 @@ function defaultPolicyPath(): string {
   return process.env.GUARDIAN_POLICY_PATH || DEFAULT_POLICY_PATH;
 }
 
-function loadPolicyEngine(): PolicyEngine | null {
-  const path = defaultPolicyPath();
+/** Policy used for corpus fixture replay validation (independent of live proxy policy). */
+export function corpusReplayPolicyPath(): string {
+  return process.env.GUARDIAN_CORPUS_REPLAY_POLICY_PATH || DEFAULT_POLICY_PATH;
+}
+
+function loadPolicyEngineFromPath(path: string): PolicyEngine | null {
   if (!existsSync(path)) return null;
   try {
     const policy = load(readFileSync(path, 'utf-8')) as PolicyConfig;
@@ -102,6 +106,14 @@ function loadPolicyEngine(): PolicyEngine | null {
   } catch {
     return null;
   }
+}
+
+function loadPolicyEngine(): PolicyEngine | null {
+  return loadPolicyEngineFromPath(defaultPolicyPath());
+}
+
+export function loadCorpusReplayPolicyEngine(): PolicyEngine | null {
+  return loadPolicyEngineFromPath(corpusReplayPolicyPath());
 }
 
 function evalCtx(toolName: string, args: Record<string, unknown>): CallContext {
@@ -255,12 +267,12 @@ export function validatePolicyRuleSafe(rule: PolicyRule): string[] {
   return errors;
 }
 
-/** Smoke-test: attack fixtures should be blocked by current default policy. */
+/** Smoke-test: attack fixtures should be blocked by corpus replay policy (default-policy.yaml by default). */
 export function evaluateCorpusFixture(
   candidate: CorpusCandidate,
   engine?: PolicyEngine | null,
 ): { blocked: boolean; rule?: string } {
-  const eng = engine ?? loadPolicyEngine();
+  const eng = engine ?? loadCorpusReplayPolicyEngine();
   if (!eng) return { blocked: false };
   resetSessionFlowHistory();
   const decision = eng.evaluate(

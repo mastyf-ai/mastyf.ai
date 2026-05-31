@@ -178,7 +178,8 @@ describe('attack-driven learning', () => {
     resetBlockLearningDebounce();
   });
 
-  it('applySuggestionToPolicy merges rule without duplicates', () => {
+  it('applySuggestionToPolicy merges rule without duplicates', async () => {
+    process.env.GUARDIAN_POLICY_SIM_GATE = 'false';
     const dir = mkdtempSync(join(tmpdir(), 'guardian-policy-'));
     const policyPath = join(dir, 'policy.yaml');
     writeFileSync(
@@ -193,9 +194,9 @@ describe('attack-driven learning', () => {
       action: 'block' as const,
       tools: { deny: ['read_file'] },
     };
-    const first = applySuggestionToPolicy(rule, policyPath);
+    const first = await applySuggestionToPolicy(rule, policyPath);
     expect(first.applied).toBe(true);
-    const second = applySuggestionToPolicy(rule, policyPath);
+    const second = await applySuggestionToPolicy(rule, policyPath);
     expect(second.applied).toBe(false);
     const parsed = load(readFileSync(policyPath, 'utf-8')) as { policy: { rules: { name: string }[] } };
     expect(parsed.policy.rules.filter((r) => r.name === 'attack-learned-test')).toHaveLength(1);

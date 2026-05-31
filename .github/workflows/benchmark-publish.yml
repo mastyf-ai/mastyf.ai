@@ -1,0 +1,59 @@
+name: Benchmark Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'reports/**'
+      - 'adversarial-harness/**'
+      - 'src/utils/guardian-bench.ts'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Benchmark profile
+        default: enterprise
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm exec tsc
+
+      - name: Run adversarial harness
+        run: pnpm run harness
+        continue-on-error: true
+
+      - name: Generate scorecard
+        run: node dist/cli.js bench --profile "${{ github.event.inputs.profile || 'enterprise' }}" --json --persist
+        env:
+          GUARDIAN_BENCH_RUN_HARNESS: 'false'
+
+      - name: Submit to cloud registry
+        if: env.GUARDIAN_BENCHMARK_SUBMIT_URL != ''
+        run: |
+          SCORE=$(node dist/cli.js bench --profile "${{ github.event.inputs.profile || 'enterprise' }}" --json | tail -1)
+          curl -sf -X POST "$GUARDIAN_BENCHMARK_SUBMIT_URL/api/v1/benchmarks/submit" \
+            -H "Content-Type: application/json" \
+            -d "$SCORE" || echo "Cloud submit skipped"
+        env:
+          GUARDIAN_BENCHMARK_SUBMIT_URL: ${{ secrets.GUARDIAN_BENCHMARK_SUBMIT_URL }}
+
+      - name: Upload scorecard artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardian-bench-scorecard
+          path: reports/

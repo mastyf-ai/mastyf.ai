@@ -12,7 +12,37 @@
  */
 
 import type { Container } from '../container.js';
+import { createHash } from 'crypto';
 import { Logger } from '../utils/logger.js';
+import {
+  fleetChainBlockConfidenceThreshold,
+  resolveGlobalSessionId,
+  isEphemeralRequestSession,
+  deriveAgentIdForFleetChain,
+  type GlobalSessionInput,
+} from '../utils/global-session-id.js';
+
+export type AgenticToolCallContext = GlobalSessionInput;
+
+function resolveSessionContext(
+  ctx: AgenticToolCallContext | string,
+  legacyAgentId?: string,
+): { globalSessionId: string; agentId?: string; requestId: string } {
+  if (typeof ctx === 'string') {
+    const requestId = ctx;
+    const agentId = legacyAgentId;
+    return {
+      requestId,
+      agentId,
+      globalSessionId: resolveGlobalSessionId({ requestId, agentId }),
+    };
+  }
+  return {
+    requestId: ctx.requestId,
+    agentId: ctx.agentId,
+    globalSessionId: resolveGlobalSessionId(ctx),
+  };
+}
 
 /**
  * Hook: Record a tool call observation for policy generation.
@@ -26,6 +56,8 @@ export async function hookAgenticObservation(
   sessionHash: string,
   _latencyMs: number,
   _success: boolean,
+  agentId?: string,
+  credentialIdentity?: string,
 ): Promise<void> {
   if (!container.behaviorCollector.isActive()) return;
 
@@ -60,6 +92,8 @@ export async function hookAgenticObservation(
       latencyMs: _latencyMs,
       success: _success,
       sessionHash,
+      agentId: agentId ?? credentialIdentity,
+      credentialIdentity: credentialIdentity ?? agentId,
     });
   } catch (err: unknown) {
     Logger.debug(`[AgenticProxyIntegration] Observation hook error: ${err instanceof Error ? err.message : String(err)}`);
@@ -82,6 +116,23 @@ export async function hookPromptInjectionCheck(
     const result = await container.promptInjectionDetector.scan(toolName, serverName, args);
     const data = result.data!;
 
+    const requestId = String(args.requestId ?? toolName);
+    if (container.federatedLearning.shouldRouteToFederatedModel(requestId)) {
+      const features = [
+        JSON.stringify(args).length / 10_000,
+        data.confidence,
+        /https?:\/\//.test(JSON.stringify(args)) ? 0.8 : 0.1,
+      ];
+      const fl = await container.federatedLearning.runOnnxInference(features);
+      if (fl && fl.label === 'injection' && fl.score >= 0.55) {
+        container.federatedLearning.recordBlockedSignature(`${toolName}:fl-onnx:${fl.modelVersion}`, features);
+        return {
+          blocked: true,
+          reason: `Federated model blocked (${fl.modelVersion}, ${(fl.score * 100).toFixed(0)}%): ${fl.label}`,
+        };
+      }
+    }
+
     if (data.detected) {
       // Record the decision in telemetry
       container.telemetry.recordDecision(
@@ -103,6 +154,9 @@ export async function hookPromptInjectionCheck(
       // If high confidence (>0.7), block and sanitize
       if (data.confidence > 0.7) {
         const sanitized = container.argumentSanitizer.sanitize(args, data);
+        container.federatedLearning.recordBlockedSignature(
+          `${toolName}:${data.category ?? 'injection'}`,
+        );
         return {
           blocked: true,
           sanitizedArgs: sanitized.args,
@@ -181,23 +235,111 @@ export function recordAgenticAudit(container: Container, params: AgenticAuditPar
   }
 }
 
-/** Pre-forward hooks: prompt injection scan + behavior observation start. */
+/** Pre-forward hooks: sandbox tier, intent binding, collusion, reputation, injection scan. */
 export async function runAgenticPreForwardHooks(
   container: Container,
   serverName: string,
   toolName: string,
   args: Record<string, unknown>,
-  sessionHash: string,
+  sessionCtx: AgenticToolCallContext | string,
+  legacyAgentId?: string,
 ): Promise<{ blocked: boolean; sanitizedArgs?: Record<string, unknown>; reason?: string }> {
+  const { globalSessionId, agentId } = resolveSessionContext(sessionCtx, legacyAgentId);
+
+  if (container.incidentPlaybook.isAgentIsolated(agentId ?? globalSessionId)) {
+    return { blocked: true, reason: 'Agent session isolated by incident playbook' };
+  }
+
+  const cert = container.certifier.getCertification(serverName);
+  container.sandboxEnforcer.ensureDefaultTierForServer(serverName, Boolean(cert?.certified));
+
+  if (agentId) {
+    const argBytes = JSON.stringify(args).length;
+    container.reputationEngine.record(agentId, toolName, false, argBytes);
+    container.behaviorFingerprint.observe({
+      agentId,
+      toolName,
+      argBytes,
+      timestamp: Date.now(),
+      credentialIdentity: agentId,
+    });
+    const bioAnomaly = container.behaviorFingerprint.scoreAnomaly(agentId, {
+      agentId,
+      toolName,
+      argBytes,
+      timestamp: Date.now(),
+      credentialIdentity: agentId,
+    });
+    if (bioAnomaly.blocked) {
+      container.reputationEngine.recordBiometricSignal(agentId, bioAnomaly.score, bioAnomaly.reason.includes('credential'));
+      return {
+        blocked: true,
+        reason: `Behavioral biometrics blocked (${(bioAnomaly.score * 100).toFixed(0)}%): ${bioAnomaly.reason}`,
+      };
+    }
+    const repPolicy = container.reputationEngine.getPolicyForAgent(agentId);
+    if (repPolicy.mode === 'strict' && /exec|shell|write|delete|run/i.test(toolName)) {
+      return { blocked: true, reason: `Agent reputation tier strict: blocked sensitive tool ${toolName}` };
+    }
+  }
+
+  const tierScope = { scopeType: 'server' as const, scopeId: serverName };
+  const tier = container.sandboxEnforcer.getTier(tierScope);
+  if (container.sandboxEnforcer.shouldShadow(tierScope)) {
+    Logger.info(`[Sandbox] Shadow mode block: ${toolName} on ${serverName} (tier=${tier})`);
+    return { blocked: true, reason: `Sandbox shadow tier: ${toolName} logged but not forwarded` };
+  } else if (container.sandboxEnforcer.shouldRedact(tierScope)) {
+    const redacted = { ...args };
+    for (const k of Object.keys(redacted)) {
+      if (/password|secret|token|key/i.test(k)) redacted[k] = '[REDACTED]';
+    }
+    args = redacted;
+  }
+
+  const intentCheck = container.intentEngine.isCallAllowed(globalSessionId, toolName);
+  if (!intentCheck.allowed) {
+    return { blocked: true, reason: intentCheck.reason ?? 'Intent binding violation' };
+  }
+
+  container.capabilityGraph.recordObservedCall(serverName, toolName, toolName, { argsKeys: Object.keys(args) });
+
+  const collusion = container.collusionDetector.record(
+    agentId ?? globalSessionId,
+    serverName,
+    toolName,
+    { sessionId: globalSessionId },
+  );
+  if (collusion && collusion.confidence >= 0.65) {
+    return { blocked: true, reason: collusion.description };
+  }
+
+  if (!isEphemeralRequestSession(globalSessionId)) {
+    const fleetAgentId = deriveAgentIdForFleetChain(globalSessionId, agentId);
+    const chainAlert = container.fleetChainDetector.record({
+      globalSessionId,
+      agentId: fleetAgentId,
+      serverName,
+      toolName,
+      arguments: args,
+    });
+    const blockThreshold = fleetChainBlockConfidenceThreshold();
+    if (chainAlert && chainAlert.confidence >= blockThreshold) {
+      return {
+        blocked: true,
+        reason: `Cross-MCP attack chain blocked (${chainAlert.pattern}, ${(chainAlert.confidence * 100).toFixed(0)}%): ${chainAlert.description}`,
+      };
+    }
+  }
+
   const injection = await hookPromptInjectionCheck(container, serverName, toolName, args);
   if (injection.blocked) {
     return injection;
   }
-  await hookAgenticObservation(container, serverName, toolName, args, sessionHash, 0, true);
+  await hookAgenticObservation(container, serverName, toolName, args, globalSessionId, 0, true, agentId, agentId);
   return injection;
 }
 
-/** Post-response hooks: finalize observation metrics. */
+/** Post-response hooks: finalize observation metrics + digital twin capture (A2). */
 export async function runAgenticPostCallHooks(
   container: Container,
   serverName: string,
@@ -206,8 +348,23 @@ export async function runAgenticPostCallHooks(
   sessionHash: string,
   latencyMs: number,
   success: boolean,
+  agentId?: string,
+  responseSize?: number,
 ): Promise<void> {
-  await hookAgenticObservation(container, serverName, toolName, args, sessionHash, latencyMs, success);
+  await hookAgenticObservation(container, serverName, toolName, args, sessionHash, latencyMs, success, agentId, agentId);
+  if (success) {
+    const responseShape = createHash('sha256')
+      .update(`${responseSize ?? 0}:${JSON.stringify(args).slice(0, 512)}`)
+      .digest('hex')
+      .slice(0, 32);
+    container.digitalTwin.record({
+      serverName,
+      toolName,
+      latencyMs,
+      responseShape,
+      argsJson: args,
+    });
+  }
 }
 
 /** Denied call: audit + optional threat mesh contribution. */

@@ -26,6 +26,7 @@ import {
   encryptField,
   getFieldEncryptionKey,
 } from '../utils/field-encryption.js';
+import { applyIndustryStandardMigration } from './industry-standard-store.js';
 
 /** Configurable audit retention (default 30 days). */
 export function resolveRetentionDays(): number {
@@ -212,6 +213,16 @@ export class HistoryDatabase implements IDatabase {
     return this.openedReadOnly;
   }
 
+  /** Synchronous SQL exec — used by IndustryStandardStore migrations and CRUD. */
+  exec(sql: string): void {
+    this.db.exec(sql);
+  }
+
+  /** Prepared statement — delegates to better-sqlite3 for IndustryStandardStore. */
+  prepare(sql: string): ReturnType<Database.Database['prepare']> {
+    return this.db.prepare(sql);
+  }
+
   /** SQLCipher PRAGMA key when GUARDIAN_DB_ENCRYPTION_KEY is set (requires sqlcipher-enabled build). */
   private applySqlCipherKeyIfConfigured(): void {
     const key = getFieldEncryptionKey();
@@ -274,6 +285,7 @@ export class HistoryDatabase implements IDatabase {
     this.migrateCallRecordsColumns();
     this.migrateTenantAuditColumns();
     this.migrateQueryIndexes();
+    applyIndustryStandardMigration(this as unknown as import('./database-interface.js').IDatabase);
   }
 
   private migrateQueryIndexes(): void {

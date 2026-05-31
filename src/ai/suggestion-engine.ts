@@ -705,7 +705,7 @@ export async function recordSuggestionOutcome(
   const patterns = meta.pattern || meta.rule?.argPatterns?.join(' ');
   if (action === 'applied' && meta.rule) {
     const { applySuggestionToPolicy } = await import('./policy-applier.js');
-    applySuggestionToPolicy(meta.rule, meta.policyPath, meta.policyWatcher ?? null);
+    await applySuggestionToPolicy(meta.rule, meta.policyPath, meta.policyWatcher ?? null);
   }
 
   if (globalEngine) {

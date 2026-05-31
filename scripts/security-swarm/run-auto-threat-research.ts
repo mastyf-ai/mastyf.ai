@@ -8,8 +8,11 @@ import { exitUnlessProFeature } from '../../src/license/enforce-pro.js';
 import {
   buildBypassEvent,
   buildCorpusProactiveEvents,
+  buildBlockRepeatEventsFromAttackState,
   buildSemanticFlagEvent,
   buildThreatIntelEvent,
+  countProcessedFingerprints,
+  filterUnprocessedEvents,
   processThreatResearchBatch,
   threatResearchAutoEnabled,
   type ThreatResearchEvent,
@@ -73,20 +76,26 @@ async function main(): Promise<void> {
   }
 
   const max = parseInt(process.env.SWARM_THREAT_RESEARCH_MAX || '10', 10);
-  const events: ThreatResearchEvent[] = [];
+  const candidates: ThreatResearchEvent[] = [];
 
-  for (const b of collectBypasses().slice(0, max)) {
-    events.push(buildBypassEvent(b));
+  for (const ev of buildBlockRepeatEventsFromAttackState(max * 2)) {
+    if (candidates.length >= max * 3) break;
+    candidates.push(ev);
+  }
+
+  for (const b of collectBypasses()) {
+    if (candidates.length >= max * 3) break;
+    candidates.push(buildBypassEvent(b));
   }
 
   if (process.env.GUARDIAN_THREAT_RESEARCH_SEMANTIC !== 'false') {
     const records = await loadSemanticAuditRecordsAsync({ sinceMs: 7 * 24 * 60 * 60 * 1000, limit: 50 });
     for (const rec of records) {
-      if (events.length >= max) break;
+      if (candidates.length >= max * 3) break;
       if (isCalibratorSeededRecord(rec)) continue;
       if (!rec.semanticAudit?.suspicious) continue;
       if ((rec.semanticAudit.confidence ?? 0) < semanticFlagMinConfidence()) continue;
-      events.push(buildSemanticFlagEvent(rec));
+      candidates.push(buildSemanticFlagEvent(rec));
     }
   }
 
@@ -97,20 +106,28 @@ async function main(): Promise<void> {
     } catch (err) {
       console.log(`[auto-threat-research] ThreatIntel poll warning: ${err instanceof Error ? err.message : String(err)}`);
     }
-    for (const entry of ti.getCatalogEntries({ minSeverity: 'MEDIUM', limit: max })) {
-      if (events.length >= max) break;
-      events.push(buildThreatIntelEvent(entry));
+    for (const entry of ti.getCatalogEntries({ minSeverity: 'MEDIUM', limit: max * 2 })) {
+      if (candidates.length >= max * 3) break;
+      candidates.push(buildThreatIntelEvent(entry));
     }
   }
 
   if (process.env.SWARM_THREAT_RESEARCH_PROACTIVE !== 'false') {
-    for (const ev of buildCorpusProactiveEvents(max - events.length)) {
-      if (events.length >= max) break;
-      events.push(ev);
+    for (const ev of buildCorpusProactiveEvents(max * 2)) {
+      if (candidates.length >= max * 3) break;
+      candidates.push(ev);
     }
   }
 
-  const results = await processThreatResearchBatch(events.slice(0, max));
+  const events = filterUnprocessedEvents(candidates).slice(0, max);
+  if (events.length === 0) {
+    console.log(
+      `[auto-threat-research] wrote 0/0 fixture(s) — all ${candidates.length} candidate signal(s) already processed (${countProcessedFingerprints()} in ledger). Route new MCP blocks through Guardian for fresh block-repeat signals.`,
+    );
+    return;
+  }
+
+  const results = await processThreatResearchBatch(events);
   const ok = results.filter((r) => r.ok);
   console.log(`[auto-threat-research] wrote ${ok.length}/${results.length} fixture(s)`);
   for (const r of ok) {

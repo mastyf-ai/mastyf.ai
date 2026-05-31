@@ -44,6 +44,8 @@ export const PolicySchema = z.object({
     default_action: z.enum(['pass', 'block', 'flag']).optional(),
     semantic_shell: z.boolean().optional(),
     unicode_strict: z.boolean().optional(),
+    require_certification: z.enum(['bronze', 'silver', 'gold', 'platinum']).optional(),
+    default_sandbox_tier: z.enum(['shadow', 'redact', 'allow']).optional(),
     rules: z.array(PolicyRuleSchema),
   }),
 });

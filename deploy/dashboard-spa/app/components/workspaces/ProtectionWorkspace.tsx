@@ -18,6 +18,7 @@ import {
 import { HealthReportPanel } from '../reports/HealthReportPanel';
 import { ExecutiveOverviewPanel } from '../dashboard/ExecutiveOverviewPanel';
 import { FullAnalysisDrawer } from '../FullAnalysisDrawer';
+import { RoadmapComplianceStrip } from '../agentic/RoadmapComplianceStrip';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 
@@ -111,6 +112,11 @@ export function ProtectionWorkspace({
           run security analysis, then review AI suggestions.
         </p>
       </section>
+
+      <RoadmapComplianceStrip
+        refreshKey={refreshKey}
+        onOpenAgentic={() => onNavigateAdvanced?.('agentic', 'overview')}
+      />
 
       <Card title="Protection status" subtitle="Live Autopilot services">
         {status ? (

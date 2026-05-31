@@ -26,6 +26,21 @@ import { applyCertPinToAgentOptions } from './upstream-cert-pin.js';
 
 let spiffeLoaded = false;
 
+/** Active SPIFFE ID from env or client cert subject (spiffe://…). */
+export function getActiveSpiffeId(): string | undefined {
+  const fromEnv = process.env['GUARDIAN_SPIFFE_ID']?.trim();
+  if (fromEnv?.startsWith('spiffe://')) return fromEnv;
+  const certPath = process.env['MCP_TLS_CERT'];
+  if (!certPath) return undefined;
+  try {
+    const pem = readFileSync(certPath, 'utf-8');
+    const match = pem.match(/spiffe:\/\/[^\s/]+/);
+    return match?.[0];
+  } catch {
+    return undefined;
+  }
+}
+
 export function resetSpiffeSvidCacheForTests(): void {
   spiffeLoaded = false;
   delete process.env['MCP_TLS_CA'];

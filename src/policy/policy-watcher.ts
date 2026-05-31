@@ -106,6 +106,17 @@ export class PolicyWatcher {
       });
       if (pending) {
         this.current = pending;
+        try {
+          const { recordConfigProvenance } = await import('../agentic/provenance/config-provenance-chain.js');
+          recordConfigProvenance({
+            actor: process.env.GUARDIAN_POLICY_ACTOR ?? 'policy-watcher',
+            eventType: 'policy_reload',
+            resourcePath: this.policyPath,
+            diff: { mode: pending.getMode(), rules: pending.getRules?.()?.length ?? 0 },
+          });
+        } catch {
+          /* best-effort */
+        }
         if (this.onReload) this.onReload();
       }
     } finally {

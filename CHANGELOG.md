@@ -21,6 +21,34 @@ All notable changes to MCP Guardian will be documented in this file.
 - **Compliance evidence runner** — live policy + audit wired to ControlMapper
 - **Docs** — `docs/MTX_SPEC.md`, `docs/MCP_SECURITY_REFERENCE.md`
 
+### Industry-standard agentic roadmap (A1–C5, B1–B3) — compliance pass 2
+
+- **C1 Merkle checkpoints** — true Merkle tree with inclusion proofs (`merkle-tree.ts`, auto-checkpoint every 16 events)
+- **A1 Graph causal scorer** — argument-aware confidence boost + Redis cross-replica fleet sync + collusion correlation tags
+- **B1 Signed reputation** — HMAC attestations on every rating, weighted consensus, cert cross-check
+- **B3 Federated mesh** — delta publish via threat mesh, DB-backed aggregation, canary traffic split, hot-path ONNX routing
+
+- **C5 Semantic Policy Translator** — NL ↔ YAML, `/api/agentic/policy/translate`, approval gate, unsafe-rule rejection
+- **C1 Config Provenance Chain** — Merkle audit log, signed tarball export, SIEM hooks, CLI verify
+- **C2 Threat Modeling as Code** — STRIDE/LINDDUN, capability-graph DFD, CI golden diff, `guardian threat-model`
+- **A3 Behavioral Biometrics** — agent fingerprinting, policy strategy, reputation integration
+- **A1 Cross-MCP Attack Chains** — fleet session graph, cross-server blocking, DB-backed cross-restart correlation, persisted alerts, argument-aware graph, CEF/SIEM export, chain visualization
+- **A2 Digital Twin & Sandbox** — live proxy capture, observation persistence, captured-traffic replay harness, go/no-go scorecard with baseline p99
+- **C3 Zero-Trust Engine** — composite per-call score, SPIFFE, geo/time, step-up via ApprovalGate
+- **B1 Reputation Network** — 8-dimension scores, mesh-relay publish, cloud query API
+- **B2 Ecosystem Observatory** — bench/heartbeat/MTX ingest, cloud dashboard
+- **C4 Insurance Risk Quantification** — ALE modeling, underwriter PDF export
+- **B3 Federated Learning** — ε-DP delta exchange, optional ONNX, feature-flagged rollout (`GUARDIAN_FEDERATED_LEARNING=true`)
+
+### Industry-standard roadmap — compliance pass 7–8
+
+- **Plan compliance audit** — runtime verification of all A1–C5 / B1–B3 modules (`plan-compliance-audit.ts`, `guardian roadmap audit`, `GET /api/agentic/plan-compliance/audit`)
+- **A1 ONNX graph inference** — optional hot-path classifier via `GUARDIAN_FLEET_GRAPH_ONNX_MODEL`
+- **B3 MPC-lite masking** — pairwise-masked gradient aggregation (`GUARDIAN_FEDERATED_MPC`)
+- **B2/B1 mesh relays** — observatory and reputation mesh publish/pull; cloud relay ingest with dev stub (`GUARDIAN_OBSERVATORY_STUB`)
+- **Dashboard panels** — PlanCompliance, Reputation, ZeroTrust, FederatedLearning, Observatory mesh sync, captured-traffic scorecard (Agentic AI workspace)
+- **Migrations 016–019** — fleet alerts, twin observations, policy approvals, federated weights, web-of-trust, threat model reports
+
 ## [3.4.1] - 2026-05-30
 
 ### Security — production readiness (code review remediation)

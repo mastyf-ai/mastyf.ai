@@ -1,8 +1,10 @@
 # MCP Guardian — Agentic AI Roadmap (Industry Standard)
 
-This document describes **planned** capabilities that extend MCP Guardian from per-server, per-call protection to **cross-server, cross-agent, systemic** security — the layer enterprise CISOs need to mandate Guardian across an entire MCP fleet.
+This document describes capabilities that extend MCP Guardian from per-server, per-call protection to **cross-server, cross-agent, systemic** security — the layer enterprise CISOs need to mandate Guardian across an entire MCP fleet.
 
 **Status key:** Shipped = in `src/agentic/` today · Foundation = partial building blocks exist · Planned = roadmap
+
+**Industry-standard roadmap (A1–C5):** Shipped in v4.0 — see modules below and [`tests/agentic/roadmap-industry-standard.test.ts`](../tests/agentic/roadmap-industry-standard.test.ts).
 
 ---
 
@@ -32,85 +34,57 @@ This document describes **planned** capabilities that extend MCP Guardian from p
 
 ## Tier 1 — Paradigm-shifting
 
-### A1: Cross-MCP Causal Attack Chain Detection · Planned
+### A1: Cross-MCP Causal Attack Chain Detection · Shipped
 
-**Problem:** Sophisticated attacks chain innocent calls across multiple MCP servers. Per-call detection misses the pattern.
+**Module:** [`cross-chain/fleet-chain-detector.ts`](../src/agentic/cross-chain/fleet-chain-detector.ts) · API `GET /api/agentic/fleet-chains`
 
-**Approach:** Real-time causal graph of tool calls per session; detect multi-step patterns (read-sensitive → pass-as-arg → exfil); IR visualizations; extend [`collusion-detector/collusion-watch.ts`](../src/agentic/collusion-detector/collusion-watch.ts) and [`capability-graph/`](../src/agentic/capability-graph/).
+### A2: MCP Server Digital Twin & Policy Sandbox · Shipped
 
-**Unique value:** First MCP security tool with fleet-wide attack-chain visibility.
+**Module:** [`digital-twin/twin-capture.ts`](../src/agentic/digital-twin/twin-capture.ts) · API `POST /api/agentic/digital-twin/scorecard`
 
-### A2: MCP Server Digital Twin & Policy Sandbox · Planned (foundation: sandbox-tier)
+### A3: AI Agent Behavioral Biometrics · Shipped
 
-**Problem:** Policy changes are scary — no safe preview against real server behavior.
-
-**Approach:** Capture server twin (schema, call patterns, latency, response shapes); run proposed policies + red team + legitimate traffic in isolation; go/no-go score (% attacks blocked, % workflows preserved, latency impact).
-
-**Unique value:** “Terraform plan for MCP security policies.”
-
-### A3: AI Agent Behavioral Biometrics · Planned (foundation: reputation + abuse scores)
-
-**Problem:** Stolen agent credentials bypass explicit trust negotiation.
-
-**Approach:** Baseline fingerprints (timing, argument shapes, tool ordering, inter-call delays); real-time anomaly when credentials match agent A but behavior matches agent B; multi-signal model with reputation and trust registry.
-
-**Unique value:** Keystroke dynamics for AI agents.
+**Module:** [`biometrics/behavior-fingerprint.ts`](../src/agentic/biometrics/behavior-fingerprint.ts) · policy strategy `behavioral-biometrics` · API `GET /api/agentic/biometrics/*`
 
 ---
 
 ## Tier 2 — Ecosystem-level
 
-### B1: Decentralized MCP Reputation Network · Planned (foundation: certifier + MTX)
+### B1: Decentralized MCP Reputation Network · Shipped
 
-**Problem:** Trust scores are local; no shared web-of-trust for MCP servers.
+**Module:** [`reputation/reputation-network.ts`](../src/agentic/reputation/reputation-network.ts) · MCP `query_server_reputation` · Cloud `GET /api/v1/reputation/query`
 
-**Approach:** Opt-in anonymized score sharing; 8-dimension reputation; consensus weighted by rater reputation; `query_server_reputation`; network-validated Bronze/Silver/Gold/Platinum tiers.
+### B2: MCP Ecosystem Health Observatory · Shipped
 
-### B2: MCP Ecosystem Health Observatory · Planned
+**Module:** [`observatory/ecosystem-observatory.ts`](../src/agentic/observatory/ecosystem-observatory.ts) · API `GET /api/agentic/observatory/snapshot` · Cloud `GET /api/v1/observatory/snapshot`
 
-**Problem:** No industry-wide view of MCP adoption, abandonment, or emerging threats.
+### B3: Federated Learning for Threat Detection · Shipped (research flag)
 
-**Approach:** Opt-in aggregated telemetry; public dashboard (usage, threat heat map, version curves); proactive CVE alerts for servers you use.
-
-### B3: Federated Learning for Threat Detection · Research track
-
-**Problem:** Injection patterns evolve faster than static rules; mesh shares hashes but not model improvements.
-
-**Approach:** On-device ONNX models; federated training with differential privacy; secure aggregation; graduated A/B rollout via threat mesh.
+**Module:** [`federated/federated-learning.ts`](../src/agentic/federated/federated-learning.ts) · enable with `GUARDIAN_FEDERATED_LEARNING=true`
 
 ---
 
 ## Tier 3 — Enterprise-defining
 
-### C1: MCP Configuration Provenance & Verifiable Audit Chain · Planned
+### C1: MCP Configuration Provenance & Verifiable Audit Chain · Shipped
 
-**Problem:** Auditors need tamper-evident config lifecycle, not just decision logs.
+**Module:** [`provenance/config-provenance-chain.ts`](../src/agentic/provenance/config-provenance-chain.ts) · CLI `guardian policy provenance-verify|provenance-export`
 
-**Approach:** Signed append-only log (Merkle tree); actor, timestamp, diff, approval chain; exportable compliance bundle; SIEM integration.
+### C2: Threat Modeling as Code (STRIDE / LINDDUN) · Shipped
 
-### C2: Threat Modeling as Code (STRIDE / LINDDUN) · Planned
+**Module:** [`threat-modeling/stride-linddun.ts`](../src/agentic/threat-modeling/stride-linddun.ts) · CLI `guardian threat-model` · CI [`.github/workflows/threat-model-regen.yml`](../.github/workflows/threat-model-regen.yml)
 
-**Problem:** Threat models go stale when MCP configs change.
+### C3: Zero-Trust Continuous Verification Engine · Shipped
 
-**Approach:** Auto DFD from configs; STRIDE + LINDDUN per tool; CI: `guardian threat-model --format markdown > THREATS.md`; regen on config change.
+**Module:** [`zero-trust/verification-engine.ts`](../src/agentic/zero-trust/verification-engine.ts) · policy strategy `zero-trust-score`
 
-### C3: Zero-Trust Continuous Verification Engine · Planned (foundation: intent-binding, SPIFFE docs)
+### C4: Cyber Insurance Risk Quantification · Shipped
 
-**Problem:** One-time allow/deny is insufficient for zero-trust mandates.
+**Module:** [`insurance/risk-quantifier.ts`](../src/agentic/insurance/risk-quantifier.ts) · MCP `quantify_insurance_risk`
 
-**Approach:** Every call scored on identity, posture, geo, time, recent behavior, data sensitivity; mid-session step-up auth; dynamic policy; SPIFFE/SPIRE integration.
+### C5: Semantic Policy Translator · Shipped
 
-### C4: Cyber Insurance Risk Quantification · Planned
-
-**Problem:** No standard MCP risk language for underwriters or CFOs.
-
-**Approach:** ALE from CVEs × exploit probability, exposure, blast radius; insurance-ready report; integrates with `predict_threats` and trust scores.
-
-### C5: Semantic Policy Translator · Planned
-
-**Problem:** YAML policies are opaque to compliance and business stakeholders.
-
-**Approach:** `policy_to_natural_language` and `natural_language_to_policy` via existing LLM stack; drafts require human approval before enforce.
+**Module:** [`semantic-policy/translator.ts`](../src/agentic/semantic-policy/translator.ts) · MCP `policy_to_natural_language`, `natural_language_to_policy` · Dashboard Semantic Policy panel
 
 ---
 

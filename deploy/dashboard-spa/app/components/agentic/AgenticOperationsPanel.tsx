@@ -7,6 +7,10 @@ import { KpiCard } from '../dashboard/KpiCard';
 import { fetchAgenticTasksDetail, guardianFetch } from '@/lib/guardian-api';
 import { useAgenticDashboard } from './useAgenticDashboard';
 import { useAgenticActions, AgenticInlineResult } from './AgenticActionContext';
+import { AgenticIndustryPanel } from './AgenticIndustryPanel';
+import { SandboxWizardPanel } from './SandboxWizardPanel';
+import { ObservatoryPanel } from './ObservatoryPanel';
+import { FederatedLearningPanel } from './FederatedLearningPanel';
 
 type Props = { refreshKey?: number };
 
@@ -103,6 +107,10 @@ export function AgenticOperationsPanel({ refreshKey = 0 }: Props) {
           </table>
         )}
       </Card>
+      <SandboxWizardPanel />
+      <ObservatoryPanel />
+      <FederatedLearningPanel refreshKey={refreshKey} />
+      <AgenticIndustryPanel refreshKey={refreshKey} />
       <Button variant="secondary" size="sm" onClick={() => void reload()}>
         Refresh metrics
       </Button>
