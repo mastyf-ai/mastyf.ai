@@ -56,6 +56,16 @@ publish_pkg packages/plugin-sdk
 publish_pkg packages/core
 
 SERVER_VERSION=$(node -p "require('./package.json').version")
+for dep in core plugin-sdk; do
+  if npm view "@mcp-guardian/server@${SERVER_VERSION}" version &>/dev/null \
+    && ! npm view "@mcp-guardian/${dep}@${SERVER_VERSION}" version &>/dev/null; then
+    echo ""
+    echo "ERROR: @mcp-guardian/server@${SERVER_VERSION} is on npm but @mcp-guardian/${dep}@${SERVER_VERSION} is missing." >&2
+    echo "       Publish dependencies first, then retry install." >&2
+    exit 1
+  fi
+done
+
 if npm view "@mcp-guardian/server@${SERVER_VERSION}" version &>/dev/null; then
   echo ""
   echo "=== Skip @mcp-guardian/server@${SERVER_VERSION} (already on npm) ==="

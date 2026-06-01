@@ -858,6 +858,7 @@ Agentic features: [docs/AGENTIC_QUICKSTART.md](docs/AGENTIC_QUICKSTART.md) · [d
 | Symptom | Fix |
 |---------|-----|
 | **`InstallError` / `workspace:` on npm** | Use `@mcp-guardian/server@4.1.5+`, not 4.1.1–4.1.4 |
+| **`ETARGET` / `No matching version for @mcp-guardian/core`** | Server was published without `core`/`plugin-sdk` at the same version — run `./scripts/publish-npm-all.sh` from the repo to publish missing deps |
 | **BundlePhobia fails on `@mcp-guardian/server`** | Expected — it is a Node server, not a browser bundle. Use [@mcp-guardian/core](https://bundlephobia.com/package/@mcp-guardian/core@4.1.3) for size analysis |
 | **Empty dashboard charts** | Set `MCP_GUARDIAN_DB_PATH` to the same path as the proxy; widen time window; run `pnpm real-life:filesystem` |
 | **Port 4000 in use** | `lsof -ti :4000 \| xargs kill` or `DASHBOARD_PORT=4001 pnpm dashboard:proxy` |
