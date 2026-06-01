@@ -33,9 +33,24 @@ publish_from_tgz() {
 }
 
 echo "npm user: $(npm whoami)"
-echo "Building..."
-pnpm install --no-frozen-lockfile
-pnpm run build
+echo "Building workspace packages for publish (no root install — avoids fetching unpublished @mcp-guardian/* from npm)..."
+(
+  cd packages/plugin-sdk
+  pnpm install
+  pnpm run build
+)
+(
+  cd packages/core
+  pnpm install
+  pnpm run build
+)
+
+SERVER_VERSION=$(node -p "require('./package.json').version")
+if ! npm view "@mcp-guardian/server@${SERVER_VERSION}" version &>/dev/null; then
+  echo "Building @mcp-guardian/server (full monorepo build)..."
+  pnpm install --no-frozen-lockfile
+  pnpm run build
+fi
 
 publish_pkg() {
   local dir="$1"
@@ -55,13 +70,12 @@ publish_pkg() {
 publish_pkg packages/plugin-sdk
 publish_pkg packages/core
 
-SERVER_VERSION=$(node -p "require('./package.json').version")
+# After publishing deps, confirm chain is complete before we tell users to npm install
 for dep in core plugin-sdk; do
   if npm view "@mcp-guardian/server@${SERVER_VERSION}" version &>/dev/null \
     && ! npm view "@mcp-guardian/${dep}@${SERVER_VERSION}" version &>/dev/null; then
     echo ""
-    echo "ERROR: @mcp-guardian/server@${SERVER_VERSION} is on npm but @mcp-guardian/${dep}@${SERVER_VERSION} is missing." >&2
-    echo "       Publish dependencies first, then retry install." >&2
+    echo "ERROR: @mcp-guardian/server@${SERVER_VERSION} is on npm but @mcp-guardian/${dep}@${SERVER_VERSION} is still missing after publish." >&2
     exit 1
   fi
 done
