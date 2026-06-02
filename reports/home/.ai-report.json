@@ -1,8 +1,8 @@
 {
-  "updatedAt": "2026-06-02T10:41:24.357Z",
-  "plainText": "MCP Guardian — Comprehensive Analysis\nGenerated: 2026-06-02T10:41:24.357Z\n\nEXECUTIVE SUMMARY\n  Overall security score: 50/100\n  Active servers: 1\n  Blocked calls: 293\n  Total cost (snapshot): $0.0000\n  AI adaptive threshold: 0.85\n  True positive rate: 0%\n  False positive rate: 0%\n\nSECURITY\n  filesystem: score 50/100, 2 CVE(s) (0 critical), auth no\n\nCOST\n  filesystem: 0 tokens, $0.0000, trend flat\n  Projected monthly: $0.00\n\nHEALTH\n  filesystem: 724ms latency, 100% success, 14 tools\n\nBEHAVIORAL BASELINES\n  official-filesystem/read_text_file: 45680 samples, ~46 tokens, ~85ms\n  official-filesystem/write_file: 10212 samples, ~46 tokens, ~54ms\n  official-filesystem/list_directory: 5106 samples, ~108 tokens, ~45ms\n  e2e-echo/search: 5372 samples, ~40 tokens, ~197ms\n  e2e-echo/execute_command: 1343 samples, ~32 tokens, ~204ms\n\nCROSS-LAYER INSIGHTS\n  [info] filesystem security score is 50/100 (below 70). Review tool permissions, CVEs, and policy rules before production use. (confidence 65%)",
+  "updatedAt": "2026-06-02T10:49:53.771Z",
+  "plainText": "MCP Guardian — Comprehensive Analysis\nGenerated: 2026-06-02T10:49:53.771Z\n\nEXECUTIVE SUMMARY\n  Overall security score: 50/100\n  Active servers: 1\n  Blocked calls: 293\n  Total cost (snapshot): $0.0000\n  AI adaptive threshold: 0.85\n  True positive rate: 0%\n  False positive rate: 0%\n\nSECURITY\n  filesystem: score 50/100, 2 CVE(s) (0 critical), auth no\n\nCOST\n  filesystem: 0 tokens, $0.0000, trend flat\n  Projected monthly: $0.00\n\nHEALTH\n  filesystem: 724ms latency, 100% success, 14 tools\n\nBEHAVIORAL BASELINES\n  official-filesystem/read_text_file: 81404 samples, ~46 tokens, ~85ms\n  official-filesystem/write_file: 18636 samples, ~46 tokens, ~54ms\n  official-filesystem/list_directory: 9318 samples, ~108 tokens, ~45ms\n  e2e-echo/search: 9116 samples, ~40 tokens, ~197ms\n  e2e-echo/execute_command: 2279 samples, ~32 tokens, ~204ms\n\nCROSS-LAYER INSIGHTS\n  [info] filesystem security score is 50/100 (below 70). Review tool permissions, CVEs, and policy rules before production use. (confidence 65%)",
   "report": {
-    "timestamp": "2026-06-02T10:41:24.357Z",
+    "timestamp": "2026-06-02T10:49:53.771Z",
     "executiveSummary": {
       "overallScore": 50,
       "totalCost": 0,
@@ -51,35 +51,35 @@
         {
           "server": "official-filesystem",
           "tool": "read_text_file",
-          "sampleCount": 45680,
+          "sampleCount": 81404,
           "avgTokens": 46,
           "avgLatency": 85
         },
         {
           "server": "official-filesystem",
           "tool": "write_file",
-          "sampleCount": 10212,
+          "sampleCount": 18636,
           "avgTokens": 46,
           "avgLatency": 54
         },
         {
           "server": "official-filesystem",
           "tool": "list_directory",
-          "sampleCount": 5106,
+          "sampleCount": 9318,
           "avgTokens": 108,
           "avgLatency": 45
         },
         {
           "server": "e2e-echo",
           "tool": "search",
-          "sampleCount": 5372,
+          "sampleCount": 9116,
           "avgTokens": 40,
           "avgLatency": 197
         },
         {
           "server": "e2e-echo",
           "tool": "execute_command",
-          "sampleCount": 1343,
+          "sampleCount": 2279,
           "avgTokens": 32,
           "avgLatency": 204
         }

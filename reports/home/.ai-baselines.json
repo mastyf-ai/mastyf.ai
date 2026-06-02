@@ -1,10 +1,10 @@
 {
-  "updatedAt": "2026-06-02T10:41:42.415Z",
+  "updatedAt": "2026-06-02T10:50:11.871Z",
   "baselines": [
     {
       "serverName": "official-filesystem",
       "toolName": "read_text_file",
-      "sampleCount": 45680,
+      "sampleCount": 81404,
       "avgTokens": 46.47598253275109,
       "stddevTokens": 27.30136539095102,
       "avgLatencyMs": 85.1877729257642,
@@ -42,7 +42,7 @@
     {
       "serverName": "official-filesystem",
       "toolName": "write_file",
-      "sampleCount": 10212,
+      "sampleCount": 18636,
       "avgTokens": 46,
       "stddevTokens": 3.028169632097039,
       "avgLatencyMs": 54.05555555555556,
@@ -80,7 +80,7 @@
     {
       "serverName": "official-filesystem",
       "toolName": "list_directory",
-      "sampleCount": 5106,
+      "sampleCount": 9318,
       "avgTokens": 107.5925925925926,
       "stddevTokens": 40.637477264276114,
       "avgLatencyMs": 44.74074074074074,
@@ -118,7 +118,7 @@
     {
       "serverName": "e2e-echo",
       "toolName": "search",
-      "sampleCount": 5372,
+      "sampleCount": 9116,
       "avgTokens": 40.166666666666664,
       "stddevTokens": 11.99154291362356,
       "avgLatencyMs": 197.41666666666666,
@@ -156,7 +156,7 @@
     {
       "serverName": "e2e-echo",
       "toolName": "execute_command",
-      "sampleCount": 1343,
+      "sampleCount": 2279,
       "avgTokens": 32,
       "stddevTokens": 0,
       "avgLatencyMs": 203.5,

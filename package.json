@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "4.1.6",
+  "version": "4.1.7",
   "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
@@ -165,8 +165,8 @@
     "prepublishOnly": "npm run build && npm run dashboard:build && node scripts/validate-npm-pack.mjs && npm test"
   },
   "dependencies": {
-    "@mcp-guardian/core": "workspace:^4.1.6",
-    "@mcp-guardian/plugin-sdk": "workspace:^4.1.6",
+    "@mcp-guardian/core": "workspace:^4.1.7",
+    "@mcp-guardian/plugin-sdk": "workspace:^4.1.7",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.75.0",

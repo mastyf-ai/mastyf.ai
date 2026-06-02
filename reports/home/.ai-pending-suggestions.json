@@ -1,8 +1,8 @@
 {
-  "updatedAt": "2026-06-02T10:41:42.416Z",
+  "updatedAt": "2026-06-02T10:50:11.872Z",
   "suggestions": [
     {
-      "id": "attack-901",
+      "id": "attack-3241",
       "ruleName": "attack-learned-semantic-path-guard-search",
       "rule": {
         "name": "attack-learned-semantic-path-guard-search",
@@ -28,7 +28,7 @@
       }
     },
     {
-      "id": "attack-905",
+      "id": "attack-3245",
       "ruleName": "attack-learned-semantic-path-guard-read_text_file",
       "rule": {
         "name": "attack-learned-semantic-path-guard-read_text_file",
@@ -54,7 +54,7 @@
       }
     },
     {
-      "id": "cost-910",
+      "id": "cost-3250",
       "ruleName": "cost-optimize-read_text_file",
       "rule": {
         "name": "cost-optimize-read_text_file",
@@ -76,7 +76,7 @@
       }
     },
     {
-      "id": "attack-906",
+      "id": "attack-3246",
       "ruleName": "attack-learned-deny-multimodal-injection-write_file",
       "rule": {
         "name": "attack-learned-deny-multimodal-injection-write_file",
@@ -99,7 +99,7 @@
       }
     },
     {
-      "id": "attack-907",
+      "id": "attack-3247",
       "ruleName": "attack-learned-deny-request-prompt-injection-read_text_file",
       "rule": {
         "name": "attack-learned-deny-request-prompt-injection-read_text_file",
@@ -122,7 +122,7 @@
       }
     },
     {
-      "id": "attack-902",
+      "id": "attack-3242",
       "ruleName": "attack-learned-deny-request-prompt-injection-search",
       "rule": {
         "name": "attack-learned-deny-request-prompt-injection-search",
@@ -145,7 +145,7 @@
       }
     },
     {
-      "id": "attack-903",
+      "id": "attack-3243",
       "ruleName": "attack-learned-deny-semantic-shell-guard-search",
       "rule": {
         "name": "attack-learned-deny-semantic-shell-guard-search",
@@ -168,7 +168,7 @@
       }
     },
     {
-      "id": "attack-904",
+      "id": "attack-3244",
       "ruleName": "attack-learned-deny-deny-dangerous-tools-execute_command",
       "rule": {
         "name": "attack-learned-deny-deny-dangerous-tools-execute_command",
@@ -191,7 +191,7 @@
       }
     },
     {
-      "id": "attack-908",
+      "id": "attack-3248",
       "ruleName": "attack-learned-deny-require-certification-list_directory",
       "rule": {
         "name": "attack-learned-deny-require-certification-list_directory",
@@ -218,7 +218,7 @@
       }
     },
     {
-      "id": "attack-909",
+      "id": "attack-3249",
       "ruleName": "attack-learned-deny-require-certification-read_text_file",
       "rule": {
         "name": "attack-learned-deny-require-certification-read_text_file",
@@ -245,7 +245,7 @@
       }
     },
     {
-      "id": "cost-911",
+      "id": "cost-3251",
       "ruleName": "cost-burst-read_text_file",
       "rule": {
         "name": "cost-burst-read_text_file",
@@ -270,7 +270,7 @@
       }
     },
     {
-      "id": "threat-917",
+      "id": "threat-3257",
       "ruleName": "threat-pkg-osv-GHSA-345p-7cg4-v4c7",
       "rule": {
         "name": "threat-pkg-osv-GHSA-345p-7cg4-v4c7",
@@ -296,7 +296,7 @@
       }
     },
     {
-      "id": "threat-923",
+      "id": "threat-3263",
       "ruleName": "threat-pkg-osv-GHSA-8r9q-7v3j-jr4g",
       "rule": {
         "name": "threat-pkg-osv-GHSA-8r9q-7v3j-jr4g",
@@ -322,7 +322,7 @@
       }
     },
     {
-      "id": "threat-929",
+      "id": "threat-3269",
       "ruleName": "threat-pkg-osv-GHSA-w48q-cv73-mx4w",
       "rule": {
         "name": "threat-pkg-osv-GHSA-w48q-cv73-mx4w",
@@ -348,7 +348,7 @@
       }
     },
     {
-      "id": "baseline-900",
+      "id": "baseline-3240",
       "ruleName": "auto-token-cap-read_text_file",
       "rule": {
         "name": "auto-token-cap-read_text_file",

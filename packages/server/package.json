@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "4.1.6",
+  "version": "4.1.7",
   "description": "Runtime security, cost governance, and health monitoring proxy for MCP infrastructure",
   "type": "module",
   "main": "./dist/index.js",

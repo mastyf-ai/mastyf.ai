@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
 [![npm downloads](https://img.shields.io/npm/dm/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
-[![Socket Badge](https://badge.socket.dev/npm/package/@mcp-guardian/server/4.1.6)](https://badge.socket.dev/npm/package/@mcp-guardian/server/4.1.6)
+[![Socket Badge](https://badge.socket.dev/npm/package/@mcp-guardian/server/4.1.7)](https://badge.socket.dev/npm/package/@mcp-guardian/server/4.1.7)
 [![Website](https://img.shields.io/badge/Website-mcp--guardian--cloud.vercel.app-0070f3)](https://mcp-guardian-cloud.vercel.app/)
 [![mcp-guardian MCP server](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian/badges/score.svg)](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
@@ -12,7 +12,13 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-**Version 4.1.6** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Install & troubleshooting](docs/INSTALL.md) · [Changelog](CHANGELOG.md)
+**Version 4.1.7** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Install & troubleshooting](docs/INSTALL.md) · [Changelog](CHANGELOG.md)
+
+### What's new in 4.1.7
+
+- **Active Rules controls** — Security → Policy now includes list/search, soft disable/enable, and hard delete operations synced to YAML
+- **Policy runtime semantics** — `enabled: false` is honored across rule strategies with backward-compatible defaults
+- **Policy mutation APIs** — cloud + local dashboard endpoints for list/toggle/delete with updated README guidance
 
 ### What's new in 4.1.6
 

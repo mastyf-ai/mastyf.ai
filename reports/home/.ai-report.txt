@@ -1,5 +1,5 @@
 MCP Guardian — Comprehensive Analysis
-Generated: 2026-06-02T10:41:24.357Z
+Generated: 2026-06-02T10:49:53.771Z
 
 EXECUTIVE SUMMARY
   Overall security score: 50/100
@@ -21,11 +21,11 @@ HEALTH
   filesystem: 724ms latency, 100% success, 14 tools
 
 BEHAVIORAL BASELINES
-  official-filesystem/read_text_file: 45680 samples, ~46 tokens, ~85ms
-  official-filesystem/write_file: 10212 samples, ~46 tokens, ~54ms
-  official-filesystem/list_directory: 5106 samples, ~108 tokens, ~45ms
-  e2e-echo/search: 5372 samples, ~40 tokens, ~197ms
-  e2e-echo/execute_command: 1343 samples, ~32 tokens, ~204ms
+  official-filesystem/read_text_file: 81404 samples, ~46 tokens, ~85ms
+  official-filesystem/write_file: 18636 samples, ~46 tokens, ~54ms
+  official-filesystem/list_directory: 9318 samples, ~108 tokens, ~45ms
+  e2e-echo/search: 9116 samples, ~40 tokens, ~197ms
+  e2e-echo/execute_command: 2279 samples, ~32 tokens, ~204ms
 
 CROSS-LAYER INSIGHTS
   [info] filesystem security score is 50/100 (below 70). Review tool permissions, CVEs, and policy rules before production use. (confidence 65%)

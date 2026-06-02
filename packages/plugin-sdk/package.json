@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/plugin-sdk",
-  "version": "4.1.6",
+  "version": "4.1.7",
   "description": "Stable detector plugin SDK for MCP Guardian",
   "type": "module",
   "main": "./dist/index.js",
