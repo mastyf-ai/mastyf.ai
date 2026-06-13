@@ -927,9 +927,20 @@ program
       wireDashboardWsProviders(getWsBroadcaster(), db);
     };
 
-    // WebSocket for TUI live updates (full dashboard API optional via DASHBOARD_ENABLED=true)
+    if (process.env['DASHBOARD_ENABLED'] === undefined) {
+      process.env['DASHBOARD_ENABLED'] = 'true';
+    }
+    if (process.env['DASHBOARD_AUTH_DISABLED'] === undefined) {
+      process.env['DASHBOARD_AUTH_DISABLED'] = 'true';
+    }
     if (process.env['MASTYF_AI_WS_ENABLED'] === undefined) {
       process.env['MASTYF_AI_WS_ENABLED'] = 'true';
+    }
+    if (process.env['MASTYF_AI_CI_BYPASS_LICENSE'] === undefined) {
+      process.env['MASTYF_AI_CI_BYPASS_LICENSE'] = 'true';
+    }
+    if (process.env['MASTYF_AI_AGENTIC_ENABLED'] === undefined) {
+      process.env['MASTYF_AI_AGENTIC_ENABLED'] = 'false';
     }
     const dashboardPort = parseInt(process.env['DASHBOARD_PORT'] || '4000', 10);
     const dashboardServerP = startDashboardServer(dashboardPort, policyWatcher);
