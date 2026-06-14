@@ -6,56 +6,54 @@ import {
   fetchAudit,
   fetchAuthStatus,
   mastyfAiFetch,
+  rejectFp,
   fetchCost,
   fetchHealth,
   fetchFleetInstances,
   fetchSecurity,
-  rejectFp,
-  downloadMcpHealthReport,
   type FleetResponse,
   type AuditResponse,
   type AggregateMetrics,
   type CostResponse,
   type HealthResponse,
   type SecurityResponse,
+  type SwarmJobStatus,
 } from '@/lib/mastyf-ai-api';
 import { useDashboardWs } from '@/lib/use-dashboard-ws';
 import {
   DEFAULT_WORKSPACE,
-  WORKSPACES,
   parseNavFromUrl,
   syncNavToUrl,
   type WorkspaceId,
   type SecurityView,
-  type ThreatsView,
-  type OperationsView,
-  type SettingsView,
+  type CostView,
+  type ServersView,
+  type PolicyView,
   type ActivityView,
   type AgenticView,
+  type ComplianceView,
+  type SettingsView,
 } from '@/lib/workspace-nav';
 import { DashboardShell } from './DashboardShell';
 import { LoginGate } from './LoginGate';
 import { EnterpriseLayout } from './layout/EnterpriseLayout';
-import { WorkspaceSubNav } from './ui/WorkspaceSubNav';
-import { AgentFlowPanel } from './AgentFlowPanel';
-import { SetupChecklistPanel } from './setup/SetupChecklistPanel';
-import { AnalyticsDashboardPanel } from './analytics/AnalyticsDashboardPanel';
-import { SecurityDashboardPanel } from './security/SecurityDashboardPanel';
-import { QuarantinedIntelPanel } from './security/QuarantinedIntelPanel';
-import { SwarmPanel } from './SwarmPanel';
-import { AiLearningPanel } from './AiLearningPanel';
-import { ThreatDiscoveryPanel } from './ThreatDiscoveryPanel';
-import { EnterpriseAiPanel } from './EnterpriseAiPanel';
-import { PolicyPanel } from './PolicyPanel';
-import { AdminPanel } from './AdminPanel';
-import { TenantContextBar } from './TenantContextBar';
-import { ProUpgradeBanner } from './ProUpgradeBanner';
-import { CostGovernancePanel } from './dashboard/CostGovernancePanel';
-import { SecurityPosturePanel } from './dashboard/SecurityPosturePanel';
-import { HealthReliabilityPanel } from './dashboard/HealthReliabilityPanel';
-import { AuditExplorerPanel } from './dashboard/AuditExplorerPanel';
-import { FleetOverviewPanel } from './dashboard/FleetOverviewPanel';
-import { AnalyticsChartsHub } from './dashboard/AnalyticsChartsHub';
+import { useToast } from './ui/Toast';
+import { hasPermission } from '@/lib/dashboard-roles';
+import type { AuthStatus } from '@/lib/mastyf-ai-api';
+import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
+
+import { ExecutiveDashboard } from './dashboard/ExecutiveDashboard';
+import { AgenticWorkspace } from './workspaces/AgenticWorkspace';
+import { ActivityCenter } from './operations/ActivityCenter';
+import { SecurityOperationsCenter } from './operations/SecurityOperationsCenter';
+import { PolicyControlCenter } from './operations/PolicyControlCenter';
+import { CostIntelligenceCenter } from './operations/CostIntelligenceCenter';
+import { ServersFleetCenter } from './operations/ServersFleetCenter';
+import { ConfigurationHub } from './operations/ConfigurationHub';
+import { OperatorEnablementCenter } from './operations/OperatorEnablementCenter';
+import { GovernanceCenter } from './operations/GovernanceCenter';
+import { ComplianceCenter } from './operations/ComplianceCenter';
+
 import {
   DashboardWindowProvider,
   DashboardWindowSelector,
@@ -63,75 +61,25 @@ import {
 } from './dashboard/DashboardWindowContext';
 import { DashboardRegionProvider, DashboardRegionSelector } from './dashboard/DashboardRegionContext';
 import { VisualsProvider } from './dashboard/VisualsProvider';
-import { hasPermission } from '@/lib/dashboard-roles';
-import type { AuthStatus } from '@/lib/mastyf-ai-api';
-import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
-import { ProtectionWorkspace } from './workspaces/ProtectionWorkspace';
-import { AgenticWorkspace } from './workspaces/AgenticWorkspace';
-import { HelpWorkspace } from './workspaces/HelpWorkspace';
-import { LiveThreatIntelPanel } from './live/LiveThreatIntelPanel';
-import { LiveMcpServersPanel } from './live/LiveMcpServersPanel';
-import type { SwarmJobStatus } from '@/lib/mastyf-ai-api';
 
 const POLL_FAILURES_BEFORE_DOWN = 3;
 const STATUS_DEBOUNCE_MS = 400;
 const REST_POLL_MS = 30_000;
 
-const DEFAULT_VIEWS: Record<WorkspaceId, string | undefined> = {
-  home: undefined,
-  agentic: 'overview',
-  activity: 'analysis',
-  threats: 'overview',
-  security: 'overview',
-  operations: 'overview',
-  settings: 'setup',
-  help: undefined,
-};
-
-const WORKSPACE_VIEW_TABS: Partial<Record<WorkspaceId, Array<{ id: string; label: string }>>> = {
-  activity: [
-    { id: 'analysis', label: 'Security Analysis' },
-    { id: 'audit', label: 'Live Audit' },
-  ],
-  threats: [
-    { id: 'overview', label: 'Overview' },
-    { id: 'threat-lab', label: 'Threat Lab' },
-    { id: 'auto-research', label: 'Auto Research' },
-    { id: 'intel', label: 'Intel Catalog' },
-  ],
-  security: [
-    { id: 'overview', label: 'Overview' },
-    { id: 'policy', label: 'Policy' },
-    { id: 'enterprise-ai', label: 'Enterprise AI' },
-    { id: 'ai-copilot', label: 'AI Copilot' },
-    { id: 'quarantined-intel', label: 'Quarantined Intel' },
-  ],
-  operations: [
-    { id: 'analytics', label: 'Analytics' },
-    { id: 'overview', label: 'Overview' },
-    { id: 'cost', label: 'Cost' },
-    { id: 'health', label: 'Health' },
-    { id: 'fleet', label: 'Fleet' },
-    { id: 'swarm', label: 'Swarm' },
-  ],
-  settings: [
-    { id: 'setup', label: 'Setup' },
-    { id: 'mcp-servers', label: 'MCP Servers' },
-    { id: 'admin', label: 'Admin' },
-  ],
-};
-
 export function DashboardClient() {
   const [ready, setReady] = useState(false);
   const [workspace, setWorkspace] = useState<WorkspaceId>(DEFAULT_WORKSPACE);
+  const [activeView, setActiveView] = useState<string | undefined>();
+
   const [securityView, setSecurityView] = useState<SecurityView>('overview');
-  const [operationsView, setOperationsView] = useState<OperationsView>('overview');
-  const [settingsView, setSettingsView] = useState<SettingsView>('setup');
-  const [activityView, setActivityView] = useState<ActivityView>('analysis');
-  const [threatsView, setThreatsView] = useState<ThreatsView>('overview');
+  const [activityView, setActivityView] = useState<ActivityView>('realtime');
+  const [policyView, setPolicyView] = useState<PolicyView>('rules');
+  const [costView, setCostView] = useState<CostView>('overview');
+  const [serversView, setServersView] = useState<ServersView>('overview');
+  const [complianceView, setComplianceView] = useState<ComplianceView>('overview');
   const [agenticView, setAgenticView] = useState<AgenticView>('overview');
-  const [helpTopic, setHelpTopic] = useState<string | undefined>();
-  const [swarmJobStatus, setSwarmJobStatus] = useState<SwarmJobStatus | null>(null);
+  const [settingsView, setSettingsView] = useState<SettingsView>('general');
+
   const [status, setStatus] = useState('Loading…');
   const [statusIsError, setStatusIsError] = useState(false);
   const [apiUnreachable, setApiUnreachable] = useState(false);
@@ -143,178 +91,101 @@ export function DashboardClient() {
   const [security, setSecurity] = useState<SecurityResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [fleetMeta, setFleetMeta] = useState<FleetResponse | null>(null);
-  const [actionMsg, setActionMsg] = useState('');
+  const [statusMsg, setStatusMsg] = useState('');
   const [sessionKey, setSessionKey] = useState(0);
   const [roles, setRoles] = useState<string[]>([]);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [swarmJobStatus, setSwarmJobStatus] = useState<SwarmJobStatus | null>(null);
   const [auditAction, setAuditAction] = useState('');
   const [auditServer, setAuditServer] = useState('');
-  const [refreshTick, setRefreshTick] = useState(0);
   const [threatLabContext, setThreatLabContext] = useState<ThreatLabContext | null>(null);
-  const [threatDiscoverySubTab, setThreatDiscoverySubTab] = useState<
-    'overview' | 'threat-lab' | 'auto-research' | undefined
-  >();
+  const [threatDiscoverySubTab, setThreatDiscoverySubTab] = useState<'overview' | 'threat-lab' | 'auto-research' | undefined>();
   const [policyCopilotTab, setPolicyCopilotTab] = useState<'generate' | 'counterfactual'>('generate');
+  const [helpTopic, setHelpTopic] = useState<string | undefined>();
 
   const pollFailuresRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
-  const chartRefreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ws = useDashboardWs(ready, sessionKey);
-  const { windowDays: currentWindowDays, windowLabel: currentWindowLabel } = useCurrentWindowDays();
-  const visualsPollMs = currentWindowLabel === '1h' ? 10_000 : REST_POLL_MS;
+  const { toast } = useToast();
+  const { windowDays, windowLabel } = useCurrentWindowDays();
+  const visualsPollMs = windowLabel === '1h' ? 10_000 : REST_POLL_MS;
 
-  const scheduleChartRefresh = useCallback(() => {
-    if (chartRefreshDebounceRef.current) {
-      globalThis.clearTimeout(chartRefreshDebounceRef.current);
-    }
-    chartRefreshDebounceRef.current = globalThis.setTimeout(() => {
-      setRefreshTick((t) => t + 1);
-    }, 750);
-  }, []);
-
-  const applyView = useCallback((wsId: WorkspaceId, view?: string, topic?: string) => {
-    if (wsId === 'security' && view) setSecurityView(view as SecurityView);
-    if (wsId === 'threats' && view) {
-      const normalizedThreatsView = view === 'automation' || view === 'architecture' ? 'overview' : view;
-      setThreatsView(normalizedThreatsView as ThreatsView);
-    }
-    if (wsId === 'operations' && view) {
-      const normalizedOperationsView =
-        view === 'advanced' || view === 'benchmarks'
-          ? 'overview'
-          : view;
-      setOperationsView(normalizedOperationsView as OperationsView);
-    }
-    if (wsId === 'settings' && view) setSettingsView(view as SettingsView);
-    if (wsId === 'activity' && view) {
-      const v = view === 'flow' ? 'analysis' : view;
-      setActivityView(v as ActivityView);
-    }
-    if (wsId === 'help' && topic) setHelpTopic(topic);
-    if (wsId === 'agentic' && view) setAgenticView(view as AgenticView);
-  }, []);
-
-  const navigate = useCallback(
-    (wsId: WorkspaceId, view?: string, topic?: string) => {
-      setWorkspace(wsId);
-      const v = view ?? DEFAULT_VIEWS[wsId];
-      applyView(wsId, v, topic);
-      syncNavToUrl({ workspace: wsId, view: v, topic });
-    },
-    [applyView],
-  );
+  const onAction = useCallback((msg: string) => {
+    toast(msg, msg.toLowerCase().includes('fail') || msg.toLowerCase().includes('error') ? 'error' : 'success');
+  }, [toast]);
 
   const applyStatus = useCallback((text: string, isError: boolean, immediate = false) => {
     if (statusTimerRef.current) {
       window.clearTimeout(statusTimerRef.current);
       statusTimerRef.current = null;
     }
-    const apply = () => {
-      setStatus(text);
-      setStatusIsError(isError);
-    };
-    if (immediate) {
-      apply();
-      return;
-    }
+    const apply = () => { setStatus(text); setStatusIsError(isError); };
+    if (immediate) { apply(); return; }
     statusTimerRef.current = window.setTimeout(apply, STATUS_DEBOUNCE_MS);
+  }, []);
+
+  const navigate = useCallback((wsId: WorkspaceId, view?: string, topic?: string) => {
+    setWorkspace(wsId);
+    setActiveView(view);
+    if (wsId === 'activity' && view) setActivityView(view as ActivityView);
+    if (wsId === 'security' && view) setSecurityView(view as SecurityView);
+    if (wsId === 'policy' && view) setPolicyView(view as PolicyView);
+    if (wsId === 'cost' && view) setCostView(view as CostView);
+    if (wsId === 'servers' && view) setServersView(view as ServersView);
+    if (wsId === 'compliance' && view) setComplianceView(view as ComplianceView);
+    if (wsId === 'agentic' && view) setAgenticView(view as AgenticView);
+    if (wsId === 'settings' && view) setSettingsView(view as SettingsView);
+    if (wsId === 'help' && topic) setHelpTopic(topic);
+    syncNavToUrl({ workspace: wsId, view, topic });
   }, []);
 
   const refreshAll = useCallback(async () => {
     try {
-      const authProbe = await mastyfAiFetch('/api/auth/status');
-      const apiUp = authProbe.ok;
-
-      const loadCost = workspace === 'operations' && operationsView === 'cost';
       const [auditRes, metricsRes, costRes, secRes, healthRes, fleetRes, authRes] =
         await Promise.all([
-          fetchAudit({
-            windowDays: currentWindowDays,
-            limit: 100,
-            action: auditAction || undefined,
-            server: auditServer || undefined,
-          }),
-          fetchAggregateMetrics(currentWindowDays),
-          loadCost ? fetchCost(currentWindowDays) : Promise.resolve(null),
+          fetchAudit({ windowDays, limit: 100, action: auditAction || undefined, server: auditServer || undefined }),
+          fetchAggregateMetrics(windowDays),
+          fetchCost(windowDays),
           fetchSecurity(),
           fetchHealth(),
           fetchFleetInstances(),
           fetchAuthStatus(),
         ]);
-      if (authRes) {
-        setAuthStatus(authRes);
-        if (authRes.roles) setRoles(authRes.roles);
-      }
-
-      if (!auditRes && !metricsRes && !costRes) {
-        if (apiUp) {
-          pollFailuresRef.current = 0;
-          setApiUnreachable(false);
-          applyStatus(
-            'Dashboard API connected — no proxy history DB yet',
-            false,
-          );
-        } else {
-          pollFailuresRef.current += 1;
-          if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) {
-            setApiUnreachable(true);
-            if (!ws.connected) {
-              applyStatus('API unavailable — check proxy on :4000', true);
-            }
-          }
-        }
-        if (secRes) setSecurity(secRes);
-        if (healthRes) setHealth(healthRes);
-        setFleetMeta(fleetRes);
-        return;
-      }
-
-      pollFailuresRef.current = 0;
-      setApiUnreachable(false);
-      if (!ws.connected) {
-        applyStatus('Connected — live data from proxy', false);
-      } else {
-        applyStatus(ws.statusText, ws.statusIsError);
-      }
+      if (authRes) { setAuthStatus(authRes); if (authRes.roles) setRoles(authRes.roles); }
       if (auditRes) setAudit(auditRes);
       if (metricsRes) setMetrics(metricsRes);
       if (costRes) setCost(costRes);
       if (secRes) setSecurity(secRes);
       if (healthRes) setHealth(healthRes);
       setFleetMeta(fleetRes);
-      setRefreshTick((t) => t + 1);
-    } catch (e) {
-      pollFailuresRef.current += 1;
-      const message = e instanceof Error ? e.message : 'Network error';
-      if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) {
-        setApiUnreachable(true);
-        if (!ws.connected) {
-          applyStatus(`REST error: ${message}`, true);
-        }
+
+      if (!auditRes && !metricsRes && !costRes) {
+        pollFailuresRef.current += 1;
+        if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) { setApiUnreachable(true); applyStatus('API unavailable — check proxy on :4000', true); }
+      } else {
+        pollFailuresRef.current = 0;
+        setApiUnreachable(false);
+        applyStatus('Connected — live data from proxy', false);
+        setRefreshTick(t => t + 1);
       }
-    }
-  }, [
-    applyStatus,
-    auditAction,
-    auditServer,
-    currentWindowDays,
-    workspace,
-    operationsView,
-    ws.connected,
-    ws.statusText,
-    ws.statusIsError,
-  ]);
+    } catch { pollFailuresRef.current += 1; if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) setApiUnreachable(true); }
+  }, [applyStatus, windowDays, auditAction, auditServer]);
 
   useEffect(() => {
     setReady(true);
     const parsed = parseNavFromUrl(window.location.search);
     setWorkspace(parsed.workspace);
-    if (parsed.view || parsed.topic) applyView(parsed.workspace, parsed.view, parsed.topic);
-  }, [applyView]);
-
-  const onAuthenticated = useCallback(() => {
-    setSessionKey((k) => k + 1);
+    setActiveView(parsed.view);
+    if (parsed.view && parsed.workspace === 'activity') setActivityView(parsed.view as ActivityView);
+    if (parsed.view && parsed.workspace === 'security') setSecurityView(parsed.view as SecurityView);
+    if (parsed.view && parsed.workspace === 'policy') setPolicyView(parsed.view as PolicyView);
+    if (parsed.view && parsed.workspace === 'cost') setCostView(parsed.view as CostView);
+    if (parsed.view && parsed.workspace === 'servers') setServersView(parsed.view as ServersView);
+    if (parsed.view && parsed.workspace === 'compliance') setComplianceView(parsed.view as ComplianceView);
+    if (parsed.view && parsed.workspace === 'agentic') setAgenticView(parsed.view as AgenticView);
+    if (parsed.view && parsed.workspace === 'settings') setSettingsView(parsed.view as SettingsView);
   }, []);
 
   useEffect(() => {
@@ -324,354 +195,187 @@ export function DashboardClient() {
     return () => window.clearInterval(interval);
   }, [ready, sessionKey, refreshAll]);
 
-  useEffect(() => {
-    if (ws.connected) {
-      applyStatus(ws.statusText, ws.statusIsError, true);
-    }
-  }, [ws.connected, ws.statusText, ws.statusIsError, applyStatus]);
-
-  useEffect(() => {
-    if (ws.metricsPatch) setMetrics(ws.metricsPatch);
-  }, [ws.metricsPatch]);
-
-  useEffect(() => {
-    if (!ws.metricsPatch) return;
-    scheduleChartRefresh();
-  }, [ws.metricsPatch, scheduleChartRefresh]);
-
-  useEffect(() => {
-    if (!ws.auditPatch) return;
-    scheduleChartRefresh();
-  }, [ws.auditPatch, scheduleChartRefresh]);
-
-  useEffect(() => {
-    return () => {
-      if (chartRefreshDebounceRef.current) {
-        globalThis.clearTimeout(chartRefreshDebounceRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!ws.auditPatch) return;
-    const patch = ws.auditPatch;
-    setAudit((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        ...patch,
-        events: patch.events ?? prev.events,
-        total: patch.total ?? prev.total,
-        blocked: patch.blocked ?? prev.blocked,
-        passed: patch.passed ?? prev.passed,
-        flagged: patch.flagged ?? prev.flagged,
-        semanticAudit: patch.semanticAudit ?? prev.semanticAudit,
-      };
-    });
-  }, [ws.auditPatch]);
-
-  const onFpReject = async (rule: string, pattern: string) => {
-    if (!hasPermission(roles, 'policy_mutate')) {
-      setActionMsg('Requires operator role for FP reject');
-      return;
-    }
-    const res = await rejectFp({ rule, pattern: pattern || rule });
-    setActionMsg(res.ok ? 'FP rejection recorded' : res.error || 'FP reject failed');
-    if (res.ok) await refreshAll();
-  };
-
-  if (!ready) {
-    return <DashboardShell />;
-  }
+  if (!ready) return <DashboardShell />;
 
   const displayMetrics = metrics ?? ws.metricsPatch;
   const displayAudit = audit;
-  const lastBlocked = (displayAudit?.events || []).find((e) => e.action === 'block');
-
-  const liveTotal = displayMetrics?.totalRequests ?? displayAudit?.total ?? null;
-  const liveBlocked = displayMetrics?.blockedRequests ?? displayAudit?.blocked ?? null;
+  const lastBlocked = (displayAudit?.events || []).find(e => e.action === 'block');
   const proxyOnline: boolean | null = apiUnreachable ? false : metrics || audit || ws.connected ? true : null;
   const connection: 'live' | 'degraded' | 'offline' | 'connecting' =
     proxyOnline === true ? (ws.connected ? 'live' : 'degraded') : proxyOnline === false ? 'offline' : 'connecting';
 
   const topbarExtra = (
     <>
-      <p className={statusIsError ? 'status status-error' : 'status'} suppressHydrationWarning>
-        {status}
-      </p>
-      <TenantContextBar authStatus={authStatus} />
-      <ProUpgradeBanner authStatus={authStatus} />
       <DashboardWindowSelector />
       <DashboardRegionSelector />
     </>
   );
 
+  const statusBar = (
+    <span className={statusIsError ? 'text-danger' : ''}>
+      {status}
+      {statusMsg && <span className="text-info" style={{ marginLeft: 12 }}>{statusMsg}</span>}
+    </span>
+  );
+
   const openThreatLab = (ctx: ThreatLabContext) => {
     setThreatLabContext(ctx);
     setThreatDiscoverySubTab('threat-lab');
-    navigate('threats', 'threat-lab');
-    setActionMsg('Opened incident in Threat Lab');
+    navigate('security', 'threats');
   };
 
   const openThreats = (view: string) => {
-    navigate('threats', view);
+    navigate('security', view as SecurityView);
+  };
+
+  const onFpReject = async (rule: string, pattern: string) => {
+    if (!hasPermission(roles, 'policy_mutate')) { setStatusMsg('Requires operator role'); return; }
+    const res = await rejectFp({ rule, pattern: pattern || rule });
+    setStatusMsg(res.ok ? 'FP rejection recorded' : res.error || 'FP reject failed');
+    if (res.ok) await refreshAll();
   };
 
   return (
-    <LoginGate onAuthenticated={onAuthenticated}>
+    <LoginGate onAuthenticated={() => setSessionKey(k => k + 1)}>
       <DashboardWindowProvider>
         <DashboardRegionProvider>
           <VisualsProvider refreshKey={refreshTick} pollMs={visualsPollMs}>
             <EnterpriseLayout
-              workspaces={WORKSPACES}
               activeWorkspace={workspace}
-              onNavigate={(id) => navigate(id)}
+              activeView={activeView}
+              onNavigate={navigate}
               topbarExtra={topbarExtra}
+              statusBar={statusBar}
               connection={connection}
               wsConnected={ws.connected}
               wsEventCount={ws.entries.length}
-              liveBlocked={connection === 'live' ? liveBlocked : null}
-              liveTotal={connection === 'live' ? liveTotal : null}
               onRefresh={() => void refreshAll()}
-              onDownloadReport={
-                workspace === 'home'
-                  ? () => void downloadMcpHealthReport(currentWindowDays, false)
-                  : undefined
-              }
+              onDownloadReport={undefined}
               reportLoading={reportLoading}
             >
-              {apiUnreachable && <OfflineNotice />}
-              {actionMsg ? <p className="action-msg">{actionMsg}</p> : null}
+              {apiUnreachable && (
+                <div className="banner banner-warning" role="status">
+                  <div className="banner-content">
+                    <div className="banner-title">API Unreachable</div>
+                    <div>MCP Guardian API not reachable. Ensure the proxy is running on port 4000 with DASHBOARD_ENABLED=true.</div>
+                  </div>
+                </div>
+              )}
 
-              {workspace === 'home' && (
-                <ProtectionWorkspace
+              {/* DASHBOARD */}
+              {workspace === 'dashboard' && (
+                <ExecutiveDashboard
                   refreshKey={refreshTick}
-                  metrics={displayMetrics}
-                  audit={displayAudit}
-                  proxyOnline={proxyOnline}
-                  onReportLoading={setReportLoading}
-                  onAction={(m) => setActionMsg(m)}
                   onNavigateAdvanced={(ws, view) => navigate(ws as WorkspaceId, view)}
                 />
               )}
 
+              {/* ACTIVITY — Operational Activity Center */}
               {workspace === 'activity' && (
-                <>
-                  <WorkspaceSubNav
-                    tabs={WORKSPACE_VIEW_TABS.activity || []}
-                    active={activityView}
-                    onChange={(v) => {
-                      setActivityView(v as ActivityView);
-                      syncNavToUrl({ workspace: 'activity', view: v });
-                    }}
-                  />
-                  {activityView === 'analysis' && (
-                    <AgentFlowPanel
-                      ws={ws}
-                      roles={roles}
-                      swarmJobStatus={swarmJobStatus}
-                      onSwarmStatus={setSwarmJobStatus}
-                      onOpenThreats={openThreats}
-                    />
-                  )}
-                  {activityView === 'audit' && (
-                    <AuditExplorerPanel
-                      audit={displayAudit}
-                      refreshKey={refreshTick}
-                      auditAction={auditAction}
-                      auditServer={auditServer}
-                      onFilterChange={(action, server) => {
-                        setAuditAction(action);
-                        setAuditServer(server);
-                      }}
-                      onApplyFilters={() => void refreshAll()}
-                      onFpReject={(rule, pattern) => void onFpReject(rule, pattern)}
-                      canMutate={hasPermission(roles, 'policy_mutate')}
-                    />
-                  )}
-                </>
+                <ActivityCenter
+                  view={activityView}
+                  onViewChange={(v) => { setActivityView(v); syncNavToUrl({ workspace: 'activity', view: v }); }}
+                  roles={roles}
+                  refreshKey={refreshTick}
+                  ws={ws}
+                  swarmJobStatus={swarmJobStatus}
+                  onSwarmStatus={setSwarmJobStatus}
+                  onOpenThreats={openThreats}
+                  audit={displayAudit}
+                  auditAction={auditAction}
+                  auditServer={auditServer}
+                  onFilterChange={(action, server) => { setAuditAction(action); setAuditServer(server); }}
+                  onApplyFilters={() => void refreshAll()}
+                  onFpReject={(rule, pattern) => void onFpReject(rule, pattern)}
+                  canMutate={hasPermission(roles, 'policy_mutate')}
+                />
               )}
 
-              {workspace === 'threats' && (
-                <>
-                  <WorkspaceSubNav
-                    tabs={WORKSPACE_VIEW_TABS.threats || []}
-                    active={threatsView}
-                    onChange={(v) => {
-                      setThreatsView(v as ThreatsView);
-                      syncNavToUrl({ workspace: 'threats', view: v });
-                    }}
-                  />
-                  {threatsView === 'intel' ? (
-                    <LiveThreatIntelPanel />
-                  ) : (
-                    <ThreatDiscoveryPanel
-                      roles={roles}
-                      authStatus={authStatus}
-                      refreshKey={ws.threatDiscoveryTick}
-                      onAction={(m) => setActionMsg(m)}
-                      externalView={threatsView as 'overview' | 'threat-lab' | 'auto-research'}
-                      initialSubTab={threatDiscoverySubTab}
-                      threatLabContext={threatLabContext}
-                      onClearThreatLabContext={() => setThreatLabContext(null)}
-                    />
-                  )}
-                </>
-              )}
-
+              {/* SECURITY — Security Operations Center */}
               {workspace === 'security' && (
-                <>
-                  <WorkspaceSubNav
-                    tabs={WORKSPACE_VIEW_TABS.security || []}
-                    active={securityView}
-                    onChange={(v) => {
-                      setSecurityView(v as SecurityView);
-                      syncNavToUrl({ workspace: 'security', view: v });
-                    }}
-                  />
-                  {securityView === 'overview' && (
-                    <>
-                      <SecurityDashboardPanel
-                        refreshKey={refreshTick}
-                        roles={roles}
-                        onNavigate={navigate}
-                        onAction={(m) => setActionMsg(m)}
-                      />
-                      <details className="security-manifest-detail">
-                        <summary>Manifest scan detail</summary>
-                        <SecurityPosturePanel
-                          security={security}
-                          refreshKey={refreshTick}
-                          onOpenThreatDiscovery={() => navigate('threats', 'overview')}
-                        />
-                      </details>
-                    </>
-                  )}
-                  {securityView === 'policy' && (
-                    <PolicyPanel
-                      roles={roles}
-                      lastBlocked={lastBlocked ?? null}
-                      onAction={(m) => setActionMsg(m)}
-                      copilotInitialTab={policyCopilotTab}
-                    />
-                  )}
-                  {securityView === 'enterprise-ai' && (
-                    <EnterpriseAiPanel
-                      roles={roles}
-                      refreshTick={ws.aiRefreshTick}
-                      onAction={(m) => setActionMsg(m)}
-                      onOpenThreatLab={openThreatLab}
-                      onOpenPolicyCounterfactual={() => {
-                        setPolicyCopilotTab('counterfactual');
-                        navigate('security', 'policy');
-                        setActionMsg('Open Policy counterfactual');
-                      }}
-                    />
-                  )}
-                  {securityView === 'ai-copilot' && (
-                    <AiLearningPanel
-                      roles={roles}
-                      refreshTick={ws.aiRefreshTick}
-                      onAction={(m) => setActionMsg(m)}
-                      onOpenThreatLab={openThreatLab}
-                    />
-                  )}
-                  {securityView === 'quarantined-intel' && (
-                    <QuarantinedIntelPanel
-                      roles={roles}
-                      onAction={(m) => setActionMsg(m)}
-                    />
-                  )}
-                </>
+                <SecurityOperationsCenter
+                  view={securityView}
+                  onViewChange={(v) => { setSecurityView(v); syncNavToUrl({ workspace: 'security', view: v }); }}
+                  roles={roles}
+                  refreshKey={refreshTick}
+                  onAction={onAction}
+                />
               )}
 
-              {workspace === 'operations' && (
-                <>
-                  <WorkspaceSubNav
-                    tabs={WORKSPACE_VIEW_TABS.operations || []}
-                    active={operationsView}
-                    onChange={(v) => {
-                      setOperationsView(v as OperationsView);
-                      syncNavToUrl({ workspace: 'operations', view: v });
-                    }}
-                  />
-                  {operationsView === 'analytics' && (
-                    <AnalyticsDashboardPanel refreshKey={refreshTick} wsConnected={ws.connected} />
-                  )}
-                  {operationsView === 'overview' && (
-                    <AnalyticsChartsHub refreshKey={refreshTick} />
-                  )}
-                  {operationsView === 'cost' && (
-                    <CostGovernancePanel refreshKey={refreshTick} initialCost={cost} />
-                  )}
-                  {operationsView === 'health' && (
-                    <HealthReliabilityPanel health={health} refreshKey={refreshTick} />
-                  )}
-                  {operationsView === 'fleet' && (
-                    <FleetOverviewPanel fleet={fleetMeta?.instances ?? []} meta={fleetMeta} />
-                  )}
-                  {operationsView === 'swarm' && (
-                    <SwarmPanel
-                      pipeline={ws.pipeline}
-                      swarmDoneTick={ws.swarmDoneTick}
-                      swarmJobStatus={swarmJobStatus}
-                      onSwarmStatus={setSwarmJobStatus}
-                      onOpenThreats={openThreats}
-                      onGoAnalysis={() => navigate('activity', 'analysis')}
-                    />
-                  )}
-                </>
+              {/* POLICY — Policy Control Center */}
+              {workspace === 'policy' && (
+                <PolicyControlCenter
+                  view={policyView}
+                  onViewChange={(v) => { setPolicyView(v); syncNavToUrl({ workspace: 'policy', view: v }); }}
+                  roles={roles}
+                  lastBlocked={lastBlocked ?? null}
+                  onAction={onAction}
+                  copilotInitialTab={policyCopilotTab}
+                />
               )}
 
-              {workspace === 'settings' && (
-                <>
-                  <WorkspaceSubNav
-                    tabs={WORKSPACE_VIEW_TABS.settings || []}
-                    active={settingsView}
-                    onChange={(v) => {
-                      setSettingsView(v as SettingsView);
-                      syncNavToUrl({ workspace: 'settings', view: v });
-                    }}
-                  />
-                  {settingsView === 'setup' && (
-                    <SetupChecklistPanel
-                      onGoToAgentFlow={() => navigate('activity', 'analysis')}
-                      onAction={(m) => setActionMsg(m)}
-                    />
-                  )}
-                  {settingsView === 'mcp-servers' && <LiveMcpServersPanel />}
-                  {settingsView === 'admin' && (
-                    <AdminPanel roles={roles} tenantLocked={!!authStatus?.tenantLocked} />
-                  )}
-                </>
+              {/* COST — AI Usage & Cost Intelligence */}
+              {workspace === 'cost' && (
+                <CostIntelligenceCenter
+                  view={costView}
+                  onViewChange={(v) => { setCostView(v); syncNavToUrl({ workspace: 'cost', view: v }); }}
+                  refreshKey={refreshTick}
+                  initialCost={cost}
+                />
               )}
 
+              {/* SERVERS — Fleet Management */}
+              {workspace === 'servers' && (
+                <ServersFleetCenter
+                  view={serversView}
+                  onViewChange={(v) => { setServersView(v); syncNavToUrl({ workspace: 'servers', view: v }); }}
+                  health={health}
+                  refreshKey={refreshTick}
+                />
+              )}
+
+              {/* COMPLIANCE — Audit Readiness Center */}
+              {workspace === 'compliance' && (
+                <ComplianceCenter
+                  view={complianceView}
+                  onViewChange={(v) => { setComplianceView(v); syncNavToUrl({ workspace: 'compliance', view: v }); }}
+                  refreshKey={refreshTick}
+                />
+              )}
+
+              {/* AI OPERATIONS */}
               {workspace === 'agentic' && (
                 <AgenticWorkspace
                   view={agenticView}
                   refreshKey={refreshTick}
-                  onViewChange={(v) => {
-                    setAgenticView(v);
-                    syncNavToUrl({ workspace: 'agentic', view: v });
-                  }}
+                  onViewChange={(v) => { setAgenticView(v); syncNavToUrl({ workspace: 'agentic', view: v }); }}
                 />
               )}
 
-              {workspace === 'help' && <HelpWorkspace initialTopic={helpTopic} />}
+              {/* SETTINGS — Platform Configuration Hub */}
+              {workspace === 'settings' && (
+                <ConfigurationHub
+                  view={settingsView}
+                  onViewChange={(v) => { setSettingsView(v); syncNavToUrl({ workspace: 'settings', view: v }); }}
+                  roles={roles}
+                  tenantLocked={!!authStatus?.tenantLocked}
+                  onAction={onAction}
+                  onGoToAgentFlow={() => navigate('activity', 'realtime')}
+                />
+              )}
+
+              {/* HELP — Operator Enablement Center */}
+              {workspace === 'help' && (
+                <OperatorEnablementCenter
+                  initialTopic={helpTopic}
+                  onAction={onAction}
+                />
+              )}
+
             </EnterpriseLayout>
           </VisualsProvider>
         </DashboardRegionProvider>
       </DashboardWindowProvider>
     </LoginGate>
-  );
-}
-
-function OfflineNotice() {
-  return (
-    <div className="banner" role="status">
-      Mastyf AI API not reachable. Run the proxy with <code>DASHBOARD_ENABLED=true</code> on port
-      4000, restart after <code>pnpm dashboard:build</code>, or set{' '}
-      <code>?apiBase=http://localhost:4000</code>.
-    </div>
   );
 }

@@ -961,18 +961,23 @@ program
         console.error(chalk.yellow(`Dashboard/WS server warning: ${msg}`));
       });
 
-    // ─── Hot-reload UI-managed MCP servers ────────────────
+    // ─── Hot-reload MCP servers (UI-managed + CLI config) ──
     void (async () => {
       const { existsSync, readFileSync } = await import('fs');
       const { join } = await import('path');
       const { homedir } = await import('os');
       const { watch } = await import('chokidar');
-      const configPath = join(homedir(), '.mastyf-ai', 'servers.json');
+      const uiConfigPath = join(homedir(), '.mastyf-ai', 'servers.json');
+      const cliConfigPath = paths[0];
       const originalServers = servers;
 
-      const mergeAndReload = async () => {
+      const reload = async (reparseCli?: boolean) => {
         try {
-          const raw = existsSync(configPath) ? readFileSync(configPath, 'utf-8') : '[]';
+          let cliServers = originalServers;
+          if (reparseCli && cliConfigPath && existsSync(cliConfigPath)) {
+            cliServers = ConfigParser.parse(cliConfigPath);
+          }
+          const raw = existsSync(uiConfigPath) ? readFileSync(uiConfigPath, 'utf-8') : '[]';
           const uiConfigs = JSON.parse(raw) as Array<{ name: string; command: string; args?: string[]; env?: Record<string, string>; disabled?: boolean }>;
           const uiServers: McpServerConfig[] = uiConfigs
             .filter((u) => !u.disabled)
@@ -983,19 +988,26 @@ program
               env: u.env,
               transport: 'stdio',
             }));
-          const existingNames = new Set(originalServers.map((s) => s.name));
-          const merged = [...originalServers, ...uiServers.filter((u) => !existingNames.has(u.name))];
+          const existingNames = new Set(cliServers.map((s) => s.name));
+          const merged = [...cliServers, ...uiServers.filter((u) => !existingNames.has(u.name))];
           await manager.reloadServers(merged);
         } catch (err: unknown) {
           console.error(chalk.yellow(`Server config reload error: ${err instanceof Error ? err.message : String(err)}`));
         }
       };
 
-      if (existsSync(configPath)) {
-        watch(configPath, { awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 } }).on('change', () => {
-          void mergeAndReload();
+      if (existsSync(uiConfigPath)) {
+        watch(uiConfigPath, { awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 } }).on('change', () => {
+          void reload();
         });
-        console.error(chalk.dim(`[watch] UI-managed MCP servers: ${configPath}`));
+        console.error(chalk.dim(`[watch] UI-managed MCP servers: ${uiConfigPath}`));
+      }
+
+      if (cliConfigPath && existsSync(cliConfigPath)) {
+        watch(cliConfigPath, { awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 } }).on('change', () => {
+          void reload(true);
+        });
+        console.error(chalk.dim(`[watch] CLI config file: ${cliConfigPath}`));
       }
     })();
 

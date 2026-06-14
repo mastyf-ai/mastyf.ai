@@ -4,26 +4,28 @@ import type { ReactNode, CSSProperties } from 'react';
 
 type Props = {
   title?: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  variant?: 'default' | 'elevated';
+  bodyPadding?: boolean;
 };
 
-export function Card({ title, subtitle, actions, children, className = '', style }: Props) {
+export function Card({ title, subtitle, actions, children, className = '', style, variant = 'default', bodyPadding = true }: Props) {
   return (
-    <section className={`ui-card ${className}`.trim()} style={style}>
+    <section className={`card${variant === 'elevated' ? ' card-elevated' : ''} ${className}`.trim()} style={style}>
       {title ? (
-        <header className="ui-card-head">
+        <div className="card-header">
           <div>
-            <h3 className="ui-card-title">{title}</h3>
-            {subtitle ? <p className="ui-card-sub">{subtitle}</p> : null}
+            <h3 className="card-title">{title}</h3>
+            {subtitle ? <p className="card-subtitle">{subtitle}</p> : null}
           </div>
           {actions}
-        </header>
+        </div>
       ) : null}
-      <div className="ui-card-body">{children}</div>
+      <div className={bodyPadding ? 'card-body' : 'card-body-no-padding'}>{children}</div>
     </section>
   );
 }

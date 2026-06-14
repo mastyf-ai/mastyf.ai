@@ -69,22 +69,23 @@ export function DashboardRegionSelector() {
   if (loadingRegions || regions.length === 0) return null;
 
   return (
-    <div className="dashboard-window-toolbar">
-      <label>
-        Region
-        <select
-          value={region}
-          onChange={(e) => setRegion(e.target.value)}
-          aria-label="Dashboard region filter"
-        >
-          <option value="">All regions</option>
-          {regions.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
-      </label>
+    <div className="time-window-picker">
+      <button
+        className="btn btn-ghost btn-sm"
+        onClick={() => {
+          const idx = regions.indexOf(region);
+          const next = idx < regions.length - 1 ? regions[idx + 1] : '';
+          setRegion(next);
+        }}
+        aria-label="Toggle region filter"
+        style={{ gap: 6 }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+          <circle cx="12" cy="10" r="3" />
+        </svg>
+        {region || 'All regions'}
+      </button>
     </div>
   );
 }

@@ -39,8 +39,15 @@ export function listUiServers(): UiMcpServerConfig[] {
 }
 
 export function addUiServer(config: UiMcpServerConfig): { ok: boolean; error?: string } {
-  if (!config.name || !config.command) {
-    return { ok: false, error: 'name and command are required' };
+  if (!config.name) {
+    return { ok: false, error: 'name is required' };
+  }
+  const transport = config.transport ?? 'stdio';
+  if (transport === 'stdio' && !config.command) {
+    return { ok: false, error: 'command is required for stdio transport' };
+  }
+  if (transport !== 'stdio' && !config.url) {
+    return { ok: false, error: 'url is required for SSE/streamable HTTP transport' };
   }
   const servers = readConfig();
   if (servers.some((s) => s.name === config.name)) {
@@ -51,7 +58,9 @@ export function addUiServer(config: UiMcpServerConfig): { ok: boolean; error?: s
     command: config.command,
     args: config.args ?? [],
     env: config.env,
-    transport: config.transport ?? 'stdio',
+    transport: transport as 'stdio' | 'sse',
+    url: config.url,
+    disabled: config.disabled ?? false,
   });
   writeConfig(servers);
   return { ok: true };

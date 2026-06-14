@@ -2503,6 +2503,16 @@ export async function removeMcpServer(name: string): Promise<{ ok: boolean; erro
   return (await res.json()) as { ok: boolean; error?: string };
 }
 
+export async function updateMcpServer(name: string, patch: Partial<UiMcpServerConfig>): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(`/api/servers/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(patch),
+  });
+  return (await res.json()) as { ok: boolean; error?: string };
+}
+
 export type AgenticTrafficPoint = { bucket: string; requests: number; blocked: number };
 
 export type AgenticTrustScore = {

@@ -1,59 +1,202 @@
-/* MCP Mastyf AI — light enterprise design tokens */
 :root {
-  --bg: #f8fafc;
+  /* ── Brand ─────────────────────────────────────────── */
+  --brand-hue: 214;
+  --brand-primary: #1d4ed8;
+  --brand-primary-hover: #1e40af;
+  --brand-primary-muted: #dbeafe;
+  --brand-primary-subtle: #eff6ff;
+
+  /* ── Neutral palette ────────────────────────────────── */
+  --gray-50: #f8fafc;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-400: #94a3b8;
+  --gray-500: #64748b;
+  --gray-600: #475569;
+  --gray-700: #334155;
+  --gray-800: #1e293b;
+  --gray-900: #0f172a;
+  --gray-950: #020617;
+
+  /* ── Surface & Background ────────────────────────────── */
+  --bg: #f1f4f9;
   --bg-elevated: #ffffff;
-  --bg-muted: #f1f5f9;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
-  --text: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-  --text-faint: #94a3b8;
-  --accent: #2563eb;
-  --accent-muted: #dbeafe;
-  --accent-strong: #1d4ed8;
+  --bg-surface: #ffffff;
+  --bg-muted: #eef2f6;
+  --bg-subtle: #f4f7fb;
+  --bg-hover: #e6eaf0;
+  --bg-active: #dce1e9;
+
+  --border: #e2e6ed;
+  --border-light: #edf1f7;
+  --border-strong: #c8ced9;
+  --border-accent: var(--brand-primary);
+
+  /* ── Text ────────────────────────────────────────────── */
+  --text: #0b1830;
+  --text-secondary: #3d4f66;
+  --text-tertiary: #5e6f85;
+  --text-muted: #7b8ba0;
+  --text-faint: #99a8bb;
+  --text-inverse: #ffffff;
+
+  /* ── Semantic colors ─────────────────────────────────── */
   --success: #059669;
   --success-muted: #d1fae5;
-  --warn: #d97706;
-  --warn-muted: #fef3c7;
+  --success-subtle: #ecfdf5;
+  --success-text: #065f46;
+
+  --warning: #d97706;
+  --warning-muted: #fef3c7;
+  --warning-subtle: #fffbeb;
+  --warning-text: #92400e;
+
   --danger: #dc2626;
   --danger-muted: #fee2e2;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --content-max: 1120px;
-  --sidebar-width: 240px;
+  --danger-subtle: #fef2f2;
+  --danger-text: #991b1b;
+
+  --info: #2563eb;
+  --info-muted: #dbeafe;
+  --info-subtle: #eff6ff;
+  --info-text: #1e40af;
+
+  --neutral: var(--gray-500);
+  --neutral-muted: var(--gray-100);
+  --neutral-subtle: var(--gray-50);
+
+  /* ── Severity colors (security context) ──────────────── */
+  --severity-critical: #7f1d1d;
+  --severity-critical-bg: #fef2f2;
+  --severity-critical-border: #fecaca;
+  --severity-high: #991b1b;
+  --severity-high-bg: #fef2f2;
+  --severity-high-border: #fecaca;
+  --severity-medium: #92400e;
+  --severity-medium-bg: #fffbeb;
+  --severity-medium-border: #fde68a;
+  --severity-low: #6b7280;
+  --severity-low-bg: #f9fafb;
+  --severity-low-border: #e5e7eb;
+  --severity-info: #1e40af;
+  --severity-info-bg: #eff6ff;
+  --severity-info-border: #bfdbfe;
+
+  /* ── Typography ──────────────────────────────────────── */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
-  /* Chart tokens (chartTheme.ts) */
-  --chart-allow: #059669;
-  --chart-block: #dc2626;
-  --chart-warn: #d97706;
-  --chart-cost: #7c3aed;
-  --chart-neutral: #94a3b8;
-  --chart-accent: #2563eb;
-  --chart-purple: #7c3aed;
-  --chart-teal: #0d9488;
-  --chart-orange: #ea580c;
-  --chart-grid: #e2e8f0;
-  --chart-axis: #64748b;
-  --chart-tooltip-bg: #ffffff;
-  --chart-tooltip-border: #e2e8f0;
-  --chart-1: #2563eb;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.04em;
+  --letter-spacing-wider: 0.06em;
+
+  /* ── Spacing (4px base) ──────────────────────────────── */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Border radius ───────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 9999px;
+
+  /* ── Shadows ─────────────────────────────────────────── */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.03);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.1);
+  --shadow-xl: 0 12px 40px rgba(15, 23, 42, 0.14);
+  --shadow-2xl: 0 24px 64px rgba(15, 23, 42, 0.18);
+
+  /* ── Transitions ─────────────────────────────────────── */
+  --transition-fast: 100ms ease;
+  --transition-base: 150ms ease;
+  --transition-slow: 250ms ease;
+  --transition-modal: 300ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Layout ──────────────────────────────────────────── */
+  --sidebar-width: 232px;
+  --sidebar-collapsed-width: 56px;
+  --topbar-height: 68px;
+  --content-max: 1280px;
+  --content-padding: var(--space-6);
+  --panel-gap: var(--space-4);
+
+  /* ── Z-index scale ───────────────────────────────────── */
+  --z-sidebar: 30;
+  --z-topbar: 20;
+  --z-backdrop: 25;
+  --z-dropdown: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
+
+  /* ── Chart tokens ────────────────────────────────────── */
+  --chart-1: #1d4ed8;
   --chart-2: #059669;
   --chart-3: #d97706;
   --chart-4: #7c3aed;
   --chart-5: #dc2626;
-  --chart-6: #0d9488;
+  --chart-6: #0891b2;
   --chart-7: #ea580c;
-  --chart-8: #64748b;
+  --chart-8: #6b7280;
+  --chart-allow: #059669;
+  --chart-block: #dc2626;
+  --chart-flag: #d97706;
+  --chart-cost: #7c3aed;
+  --chart-grid: #e5e9f0;
+  --chart-axis: #94a3b8;
+  --chart-tooltip-bg: #ffffff;
+
+  /* ── Data visualization ──────────────────────────────── */
+  --viz-heatmap-empty: rgba(148, 163, 184, 0.06);
+  --viz-heatmap-low: rgba(37, 99, 235, 0.15);
+  --viz-heatmap-mid: rgba(37, 99, 235, 0.35);
+  --viz-heatmap-high: rgba(37, 99, 235, 0.6);
+  --viz-heatmap-max: rgba(37, 99, 235, 0.85);
+
+  /* ── Risk score gauge ────────────────────────────────── */
+  --risk-low: #059669;
+  --risk-moderate: #d97706;
+  --risk-elevated: #ea580c;
+  --risk-high: #dc2626;
+  --risk-critical: #7f1d1d;
 }

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -126,25 +127,66 @@ export function useDashboardWindow(): ContextValue {
   return ctx;
 }
 
+const WINDOW_OPTIONS: { value: DashboardWindow; short: string; label: string }[] = [
+  { value: '1h', short: '1h', label: 'Last hour' },
+  { value: '12h', short: '12h', label: 'Last 12 hours' },
+  { value: '24h', short: '24h', label: 'Last 24 hours' },
+  { value: '7d', short: '7d', label: 'Last 7 days' },
+  { value: '30d', short: '30d', label: 'Last 30 days' },
+  { value: '90d', short: '90d', label: 'Last 90 days' },
+];
+
 export function DashboardWindowSelector() {
   const { window: w, setWindow } = useDashboardWindow();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const current = WINDOW_OPTIONS.find((o) => o.value === w) ?? WINDOW_OPTIONS[3];
+
   return (
-    <div className="dashboard-window-toolbar">
-      <label>
-        Time window
-        <select
-          value={w}
-          onChange={(e) => setWindow(e.target.value as DashboardWindow)}
-          aria-label="Dashboard time window"
-        >
-          <option value="1h">Last 1 hour</option>
-          <option value="12h">Last 12 hours</option>
-          <option value="24h">Last 24 hours</option>
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-          <option value="90d">Last 90 days</option>
-        </select>
-      </label>
+    <div className="time-window-picker" ref={ref}>
+      <button
+        className="btn btn-ghost btn-sm"
+        onClick={() => setOpen((p) => !p)}
+        aria-label="Time window"
+        style={{ gap: 6 }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        {current.short}
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div className="time-window-dropdown">
+          {WINDOW_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              className={`time-window-option${opt.value === w ? ' active' : ''}`}
+              onClick={() => { setWindow(opt.value); setOpen(false); }}
+            >
+              <span className="time-window-short">{opt.short}</span>
+              <span className="time-window-label">{opt.label}</span>
+              {opt.value === w && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', color: 'var(--brand-primary)' }}>
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

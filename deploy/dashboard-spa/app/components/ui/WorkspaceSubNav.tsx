@@ -11,13 +11,15 @@ type Props<T extends string> = {
 
 export function WorkspaceSubNav<T extends string>({ tabs, active, onChange, className = '' }: Props<T>) {
   return (
-    <nav className={`workspace-subnav ${className}`.trim()} aria-label="Section views">
+    <nav className={`subnav ${className}`.trim()} aria-label="Section views" role="tablist">
       {tabs.map((t) => (
         <button
           key={t.id}
           type="button"
-          className={active === t.id ? 'workspace-subnav-item active' : 'workspace-subnav-item'}
+          className={active === t.id ? 'subnav-item active' : 'subnav-item'}
           aria-current={active === t.id ? 'page' : undefined}
+          role="tab"
+          aria-selected={active === t.id}
           onClick={() => onChange(t.id)}
         >
           {t.label}

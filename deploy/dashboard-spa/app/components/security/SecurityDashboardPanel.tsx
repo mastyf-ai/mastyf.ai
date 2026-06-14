@@ -21,11 +21,11 @@ type Props = {
 };
 
 const QUICK_NAV = [
-  { workspace: 'security', view: 'overview', label: 'Dashboard' },
-  { workspace: 'threats', view: 'overview', label: 'Threats' },
-  { workspace: 'activity', view: 'audit', label: 'Audit Log' },
-  { workspace: 'settings', view: 'admin', label: 'Access Control' },
-  { workspace: 'security', view: 'policy', label: 'Policies' },
+  { workspace: 'security' as const, view: 'overview', label: 'Dashboard' },
+  { workspace: 'security' as const, view: 'threats', label: 'Threat Detection' },
+  { workspace: 'activity' as const, view: 'audit', label: 'Audit Log' },
+  { workspace: 'settings' as const, view: 'admin', label: 'Access Control' },
+  { workspace: 'policy' as const, view: 'rules', label: 'Policies' },
 ] as const;
 
 function severityClass(s: SecurityDashboardThreat['severity']): string {
@@ -177,11 +177,7 @@ export function SecurityDashboardPanel({ refreshKey = 0, roles = [], onNavigate,
           <button
             key={`${item.workspace}-${item.view}`}
             type="button"
-            className={
-              item.workspace === 'security' && item.view === 'overview'
-                ? 'security-quick-nav-item active'
-                : 'security-quick-nav-item'
-            }
+            className={'security-quick-nav-item'}
             onClick={() => onNavigate?.(item.workspace, item.view)}
           >
             {item.label}

@@ -14,6 +14,7 @@ import helmet from 'helmet';
 import { LRUCache } from 'lru-cache';
 import { Logger } from './logger.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
+import type { UiMcpServerConfig } from './mcp-server-config.js';
 import {
   DashboardAuth,
   SESSION_COOKIE_NAME,
@@ -4199,8 +4200,34 @@ export async function startDashboardServer(
           args: Array.isArray(body.args) ? body.args.map(String) : [],
           env: body.env as Record<string, string> | undefined,
           transport: (body.transport as 'stdio' | 'sse') || 'stdio',
+          url: body.url ? String(body.url) : undefined,
+          disabled: body.disabled === true,
         });
         writeJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
+      if (url?.startsWith('/api/servers/') && method === 'DELETE') {
+        setCors();
+        const name = decodeURIComponent(url.slice('/api/servers/'.length));
+        const { removeUiServer } = await import('./mcp-server-config.js');
+        const result = removeUiServer(name);
+        writeJson(res, result.ok ? 200 : 404, result);
+        return;
+      }
+      if (url?.startsWith('/api/servers/') && method === 'PATCH') {
+        setCors();
+        const name = decodeURIComponent(url.slice('/api/servers/'.length));
+        const body = await readBody(req);
+        const { updateUiServer } = await import('./mcp-server-config.js');
+        const patch: Partial<UiMcpServerConfig> = {};
+        if (body.command !== undefined) patch.command = String(body.command);
+        if (body.args !== undefined) patch.args = Array.isArray(body.args) ? body.args.map(String) : [];
+        if (body.env !== undefined) patch.env = body.env as Record<string, string>;
+        if (body.transport !== undefined) patch.transport = body.transport as 'stdio' | 'sse';
+        if (body.url !== undefined) patch.url = body.url ? String(body.url) : undefined;
+        if (body.disabled !== undefined) patch.disabled = body.disabled === true;
+        const result = updateUiServer(name, patch);
+        writeJson(res, result.ok ? 200 : 404, result);
         return;
       }
       if (url?.startsWith('/api/servers/') && method === 'DELETE') {

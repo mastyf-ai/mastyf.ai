@@ -10,6 +10,7 @@ import {
   setTenantId,
   type AuthStatus,
 } from '@/lib/mastyf-ai-api';
+import { Button } from './ui/Button';
 
 type Props = {
   children: ReactNode;
@@ -35,9 +36,7 @@ export function LoginGate({ children, onAuthenticated }: Props) {
     return s;
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const canShowDashboard =
     status && (!status.authRequired || status.authenticated || !status.authConfigured);
@@ -72,85 +71,106 @@ export function LoginGate({ children, onAuthenticated }: Props) {
   };
 
   if (loading) {
-    return <p className="muted">Checking session…</p>;
+    return (
+      <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <p className="text-sm text-muted">Checking session…</p>
+      </div>
+    );
   }
 
   if (!canShowDashboard) {
     return (
-      <section className="login-panel" aria-label="Dashboard login">
-        <h2>Sign in</h2>
-        <p className="hint">Dashboard API requires authentication.</p>
-        <form onSubmit={(e) => void onLogin(e)}>
-          <label>
-            Username
-            <input
-              type="text"
-              autoComplete="username"
-              value={username}
-              onChange={(ev) => setUsername(ev.target.value)}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(ev) => setPassword(ev.target.value)}
-            />
-          </label>
-          <label>
-            API key (optional)
-            <input
-              type="password"
-              autoComplete="off"
-              value={apiKey}
-              onChange={(ev) => setApiKey(ev.target.value)}
-            />
-          </label>
-          <label>
-            Tenant ID
-            <input
-              type="text"
-              value={tenant}
-              onChange={(ev) => setTenant(ev.target.value)}
-            />
-          </label>
-          {error ? <p className="status status-error">{error}</p> : null}
-          <button type="submit" disabled={submitting}>
-            {submitting ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-      </section>
+      <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div className="card" style={{ maxWidth: 400, width: '100%', margin: '0 var(--space-4)' }}>
+          <div className="card-body">
+            <div className="sidebar-logo" style={{ margin: '0 auto 16px' }}>G</div>
+            <h2 className="card-title" style={{ textAlign: 'center', marginBottom: 4 }}>MCP Guardian</h2>
+            <p className="text-sm text-muted" style={{ textAlign: 'center', marginBottom: 20 }}>
+              Dashboard authentication required
+            </p>
+
+            {error && (
+              <div className="banner banner-danger" style={{ marginBottom: 16 }}>
+                <div className="banner-content">{error}</div>
+              </div>
+            )}
+
+            <form onSubmit={(e) => void onLogin(e)}>
+              <div style={{ marginBottom: 12 }}>
+                <label className="text-xs text-muted" style={{ display: 'block', marginBottom: 4 }}>Username</label>
+                <input
+                  className="input"
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(ev) => setUsername(ev.target.value)}
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label className="text-xs text-muted" style={{ display: 'block', marginBottom: 4 }}>Password</label>
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(ev) => setPassword(ev.target.value)}
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label className="text-xs text-muted" style={{ display: 'block', marginBottom: 4 }}>API Key (optional)</label>
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete="off"
+                  value={apiKey}
+                  onChange={(ev) => setApiKey(ev.target.value)}
+                />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label className="text-xs text-muted" style={{ display: 'block', marginBottom: 4 }}>Tenant ID</label>
+                <input
+                  className="input"
+                  type="text"
+                  value={tenant}
+                  onChange={(ev) => setTenant(ev.target.value)}
+                />
+              </div>
+              <Button variant="primary" type="submit" disabled={submitting} style={{ width: '100%' }}>
+                {submitting ? 'Signing in…' : 'Sign in'}
+              </Button>
+            </form>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
     <>
       {status?.authRequired && status.authenticated ? (
-        <div className="session-bar">
-          <span>
+        <div className="topbar-status">
+          <span className="text-xs text-muted">
             Signed in as <strong>{status.identity || 'operator'}</strong>
             {status.roles?.length ? ` (${status.roles.join(', ')})` : ''}
           </span>
           {status.tenantLocked ? (
-            <span>
+            <span className="text-xs text-muted">
               Tenant: <strong>{status.sessionTenantId || tenant}</strong>
             </span>
           ) : (
-            <span className="tenant-inline">
-              Tenant:
+            <span className="flex items-center gap-1">
+              <span className="text-xs text-muted">Tenant:</span>
               <input
+                className="input"
                 type="text"
+                style={{ width: 120, height: 24, fontSize: 11, padding: '2px 6px' }}
                 value={tenant}
                 onChange={(ev) => setTenant(ev.target.value)}
                 onBlur={() => setTenantId(tenant)}
               />
             </span>
           )}
-          <button type="button" className="secondary" onClick={() => void onLogout()}>
-            Sign out
-          </button>
+          <Button variant="ghost" size="sm" onClick={() => void onLogout()}>Sign out</Button>
         </div>
       ) : null}
       {children}

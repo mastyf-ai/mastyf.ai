@@ -1,177 +1,192 @@
-import type { ReactNode } from 'react';
-import { createElement } from 'react';
-import {
-  Activity,
-  BookOpen,
-  Bot,
-  Home,
-  Settings,
-  Shield,
-  ShieldAlert,
-  Wallet,
-} from 'lucide-react';
-
 export type WorkspaceId =
-  | 'home'
+  | 'dashboard'
   | 'activity'
-  | 'threats'
   | 'security'
+  | 'policy'
+  | 'cost'
+  | 'servers'
+  | 'compliance'
   | 'agentic'
-  | 'operations'
   | 'settings'
   | 'help';
 
-export type ThreatsView =
-  | 'overview'
-  | 'threat-lab'
-  | 'auto-research'
-  | 'intel';
+export type ActivityView = 'realtime' | 'audit';
+export type SecurityView = 'overview' | 'threats' | 'intel' | 'quarantine';
+export type PolicyView = 'rules' | 'editor' | 'test' | 'history';
+export type CostView = 'overview' | 'breakdown' | 'budgets';
+export type ServersView = 'overview' | 'health' | 'certifications';
+export type ComplianceView = 'overview' | 'frameworks' | 'evidence';
+// Legacy workspace IDs kept for backward compatibility with existing panels
+export type LegacyWorkspaceId = 'home' | 'operations' | 'threats';
+export type AgenticView = 'overview' | 'learning' | 'red-team' | 'prediction' | 'trust' | 'biometrics' | 'threats' | 'policy' | 'operations' | 'audit' | 'tools';
+export type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin';
 
-export type SecurityView = 'overview' | 'policy' | 'enterprise-ai' | 'ai-copilot' | 'quarantined-intel';
-
-export type OperationsView =
-  | 'analytics'
-  | 'overview'
-  | 'cost'
-  | 'health'
-  | 'fleet'
-  | 'swarm';
-
-export type AgenticView =
-  | 'overview'
-  | 'trust'
-  | 'threats'
-  | 'policy'
-  | 'operations'
-  | 'audit'
-  | 'tools';
-
-export type SettingsView = 'setup' | 'mcp-servers' | 'admin';
-
-export type ActivityView = 'analysis' | 'audit';
-
-export type HelpTopicId = string;
-
-export type WorkspaceNavItem = {
-  id: WorkspaceId;
+export const WORKSPACE_CONFIG: Record<WorkspaceId, {
   label: string;
-  icon: ReactNode;
-  description?: string;
+  icon: string;
+  badge?: number;
+  views?: Array<{ id: string; label: string }>;
+}> = {
+  dashboard: {
+    label: 'Dashboard',
+    icon: 'LayoutDashboard',
+  },
+  activity: {
+    label: 'Activity',
+    icon: 'Activity',
+    views: [
+      { id: 'realtime', label: 'Live Feed' },
+      { id: 'audit', label: 'Audit Trail' },
+    ],
+  },
+  security: {
+    label: 'Security',
+    icon: 'Shield',
+    badge: 0,
+    views: [
+      { id: 'overview', label: 'Posture Overview' },
+      { id: 'threats', label: 'Threat Detection' },
+      { id: 'intel', label: 'Threat Intel' },
+      { id: 'quarantine', label: 'Quarantine' },
+    ],
+  },
+  policy: {
+    label: 'Policy',
+    icon: 'FileCheck',
+    views: [
+      { id: 'rules', label: 'Active Rules' },
+      { id: 'editor', label: 'Policy Editor' },
+      { id: 'test', label: 'Test & Simulate' },
+      { id: 'history', label: 'Version History' },
+    ],
+  },
+  cost: {
+    label: 'Cost',
+    icon: 'DollarSign',
+    views: [
+      { id: 'overview', label: 'Cost Overview' },
+      { id: 'breakdown', label: 'Breakdown' },
+      { id: 'budgets', label: 'Budgets' },
+    ],
+  },
+  servers: {
+    label: 'MCP Servers',
+    icon: 'Server',
+    views: [
+      { id: 'overview', label: 'Inventory' },
+      { id: 'health', label: 'Health & Performance' },
+      { id: 'certifications', label: 'Certifications' },
+    ],
+  },
+  compliance: {
+    label: 'Compliance',
+    icon: 'ClipboardCheck',
+    views: [
+      { id: 'overview', label: 'Compliance Posture' },
+      { id: 'frameworks', label: 'Frameworks' },
+      { id: 'evidence', label: 'Evidence' },
+    ],
+  },
+  agentic: {
+    label: 'AI Operations',
+    icon: 'Brain',
+    views: [
+      { id: 'overview', label: 'Overview' },
+      { id: 'learning', label: 'ML Learning' },
+      { id: 'red-team', label: 'Red Team' },
+      { id: 'prediction', label: 'Threat Forecast' },
+      { id: 'trust', label: 'Trust & Reputation' },
+      { id: 'biometrics', label: 'Behavioral' },
+    ],
+  },
+  settings: {
+    label: 'Settings',
+    icon: 'Settings',
+    views: [
+      { id: 'general', label: 'General' },
+      { id: 'tenants', label: 'Tenants' },
+      { id: 'integrations', label: 'Integrations' },
+      { id: 'admin', label: 'Administration' },
+    ],
+  },
+  help: {
+    label: 'Help',
+    icon: 'BookOpen',
+  },
 };
 
-const icon = (C: typeof Home, size = 18) => createElement(C, { size });
-
-export const WORKSPACES: WorkspaceNavItem[] = [
-  { id: 'home', label: 'Protection', icon: icon(Home), description: 'Autopilot status, digests, and health report' },
-  { id: 'agentic', label: 'Agentic AI', icon: icon(Bot), description: 'Autonomous policy generation, threat prediction, compliance, red team, honeypots, and trust negotiation' },
-  {
-    id: 'activity',
-    label: 'Activity',
-    icon: icon(Activity),
-    description: 'Security analysis pipeline and live audit',
-  },
-  {
-    id: 'threats',
-    label: 'Threats',
-    icon: icon(ShieldAlert),
-    description: 'Threat Lab, auto research, intel',
-  },
-  { id: 'security', label: 'Security', icon: icon(Shield), description: 'Posture, policy, AI copilot' },
-  { id: 'operations', label: 'Operations', icon: icon(Wallet), description: 'Cost, fleet, charts' },
-  { id: 'settings', label: 'Settings', icon: icon(Settings), description: 'Setup and admin' },
-  { id: 'help', label: 'Help', icon: icon(BookOpen), description: 'Feature guide' },
+export const NAV_SECTIONS: Array<{
+  label: string;
+  items: WorkspaceId[];
+}> = [
+  { label: 'Overview', items: ['dashboard'] },
+  { label: 'Security', items: ['activity', 'security'] },
+  { label: 'Governance', items: ['policy', 'cost', 'servers'] },
+  { label: 'Assurance', items: ['compliance'] },
+  { label: 'Intelligence', items: ['agentic'] },
+  { label: 'System', items: ['settings', 'help'] },
 ];
 
-export const WORKSPACE_LABELS: Record<WorkspaceId, string> = {
-  home: 'Protection',
-  agentic: 'Agentic AI',
-  activity: 'Activity',
-  threats: 'Threats',
-  security: 'Security',
-  operations: 'Operations',
-  settings: 'Settings',
-  help: 'Help',
+export const DEFAULT_WORKSPACE: WorkspaceId = 'dashboard';
+export const DEFAULT_VIEW: Partial<Record<WorkspaceId, string>> = {
+  dashboard: undefined,
+  activity: 'realtime',
+  security: 'overview',
+  policy: 'rules',
+  cost: 'overview',
+  servers: 'overview',
+  compliance: 'overview',
+  agentic: 'overview',
+  settings: 'general',
+  help: undefined,
 };
 
-export const DEFAULT_WORKSPACE: WorkspaceId = 'home';
-
-const VALID = new Set<string>(Object.keys(WORKSPACE_LABELS));
-
-/** Legacy ?tab= → workspace + view */
-export const LEGACY_TAB_MAP: Record<string, { workspace: WorkspaceId; view?: string }> = {
-  flow: { workspace: 'activity', view: 'analysis' },
-  analysis: { workspace: 'activity', view: 'analysis' },
-  audit: { workspace: 'activity', view: 'audit' },
-  overview: { workspace: 'home' },
-  readiness: { workspace: 'home' },
-  'threat-discovery': { workspace: 'threats', view: 'overview' },
-  threats: { workspace: 'threats', view: 'overview' },
-  automation: { workspace: 'threats', view: 'overview' },
-  architecture: { workspace: 'threats', view: 'overview' },
-  'threat-intel': { workspace: 'threats', view: 'intel' },
-  policy: { workspace: 'security', view: 'policy' },
-  compliance: { workspace: 'security', view: 'overview' },
-  soar: { workspace: 'security', view: 'overview' },
-  simulations: { workspace: 'threats', view: 'overview' },
-  'ai-hub': { workspace: 'security', view: 'enterprise-ai' },
-  ai: { workspace: 'security', view: 'ai-copilot' },
-  'enterprise-ai': { workspace: 'security', view: 'enterprise-ai' },
-  'quarantined-intel': { workspace: 'security', view: 'quarantined-intel' },
-  security: { workspace: 'security', view: 'overview' },
-  'cost-health': { workspace: 'operations', view: 'analytics' },
-  analytics: { workspace: 'operations', view: 'analytics' },
-  'advanced-analytics': { workspace: 'operations', view: 'overview' },
-  advanced: { workspace: 'operations', view: 'overview' },
-  cost: { workspace: 'operations', view: 'cost' },
-  health: { workspace: 'operations', view: 'health' },
-  fleet: { workspace: 'operations', view: 'fleet' },
-  benchmarks: { workspace: 'operations', view: 'overview' },
-  swarm: { workspace: 'operations', view: 'swarm' },
-  agentic: { workspace: 'agentic', view: 'overview' },
-  'agentic-overview': { workspace: 'agentic', view: 'overview' },
-  'agentic-trust': { workspace: 'agentic', view: 'trust' },
-  'agentic-threats': { workspace: 'agentic', view: 'threats' },
-  'agentic-policy': { workspace: 'agentic', view: 'policy' },
-  'agentic-operations': { workspace: 'agentic', view: 'operations' },
-  'agentic-audit': { workspace: 'agentic', view: 'audit' },
-  'agentic-tools': { workspace: 'agentic', view: 'tools' },
-  'setup-admin': { workspace: 'settings', view: 'setup' },
-  setup: { workspace: 'settings', view: 'setup' },
-  'mcp-servers': { workspace: 'settings', view: 'mcp-servers' },
-  admin: { workspace: 'settings', view: 'admin' },
-  help: { workspace: 'help' },
-};
-
-export type UrlNavState = {
+export interface NavState {
   workspace: WorkspaceId;
   view?: string;
   topic?: string;
+}
+
+export function parseNavFromUrl(search: string): NavState {
+  const params = new URLSearchParams(search);
+  const ws = (params.get('workspace') || DEFAULT_WORKSPACE) as WorkspaceId;
+  const view = params.get('view') || DEFAULT_VIEW[ws];
+  const topic = params.get('topic') || undefined;
+  return { workspace: ws in WORKSPACE_CONFIG ? ws : DEFAULT_WORKSPACE, view, topic };
+}
+
+export function syncNavToUrl(state: NavState): void {
+  const params = new URLSearchParams();
+  params.set('workspace', state.workspace);
+  if (state.view && state.view !== DEFAULT_VIEW[state.workspace]) {
+    params.set('view', state.view);
+  }
+  if (state.topic) {
+    params.set('topic', state.topic);
+  }
+  const qs = params.toString();
+  const url = qs ? `?${qs}` : window.location.pathname;
+  window.history.replaceState(null, '', url);
+}
+
+export function workspaceLabel(id: WorkspaceId): string {
+  return WORKSPACE_CONFIG[id]?.label || id;
+}
+
+export function viewLabel(ws: WorkspaceId, viewId?: string): string {
+  if (!viewId) return '';
+  return WORKSPACE_CONFIG[ws]?.views?.find(v => v.id === viewId)?.label || viewId;
+}
+
+export const LEGACY_WORKSPACE_MAP: Record<string, WorkspaceId> = {
+  home: 'dashboard',
+  operations: 'activity',
+  threats: 'security',
 };
 
-export function parseNavFromUrl(search: string): UrlNavState {
-  const params = new URLSearchParams(search.startsWith('?') ? search : `?${search}`);
-  const workspaceParam = params.get('workspace');
-  const view = params.get('view') ?? undefined;
-  const topic = params.get('topic') ?? undefined;
-  if (workspaceParam && VALID.has(workspaceParam)) {
-    return { workspace: workspaceParam as WorkspaceId, view, topic };
-  }
-  const legacyTab = params.get('tab');
-  if (legacyTab && LEGACY_TAB_MAP[legacyTab]) {
-    const m = LEGACY_TAB_MAP[legacyTab];
-    return { workspace: m.workspace, view: m.view ?? view, topic };
-  }
-  return { workspace: DEFAULT_WORKSPACE, view, topic };
-}
-
-export function syncNavToUrl(state: UrlNavState): void {
-  if (typeof window === 'undefined') return;
-  const url = new URL(window.location.href);
-  url.searchParams.set('workspace', state.workspace);
-  if (state.view) url.searchParams.set('view', state.view);
-  else url.searchParams.delete('view');
-  if (state.topic) url.searchParams.set('topic', state.topic);
-  else url.searchParams.delete('topic');
-  url.searchParams.delete('tab');
-  window.history.replaceState({}, '', url.toString());
-}
+export const LEGACY_VIEW_MAP: Record<string, string> = {
+  analysis: 'realtime',
+  'threat-lab': 'threats',
+  'auto-research': 'intel',
+  'agent-overview': 'overview',
+};

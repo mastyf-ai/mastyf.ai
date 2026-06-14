@@ -21,6 +21,8 @@ import { FullAnalysisDrawer } from '../FullAnalysisDrawer';
 import { RoadmapComplianceStrip } from '../agentic/RoadmapComplianceStrip';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { EmptyState } from '../ui/EmptyState';
+import { SkeletonText } from '../ui/Skeleton';
 
 type Props = {
   refreshKey: number;
@@ -142,15 +144,15 @@ export function ProtectionWorkspace({
             ))}
           </ul>
         ) : (
-          <p className="muted">Autopilot status unavailable — ensure proxy is running on port 4000.</p>
+          <EmptyState title="Autopilot status unavailable" message="Ensure proxy is running on port 4000." />
         )}
         <div className="btn-row">
           <strong style={{ marginRight: 8 }}>Run</strong>
-          <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => void onRunAnalysis()}>
-            {busy === 'swarm' ? 'Starting…' : 'Start security analysis'}
+          <Button variant="secondary" size="sm" loading={busy === 'swarm'} onClick={() => void onRunAnalysis()}>
+            Start security analysis
           </Button>
-          <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => void onGenerateDigest()}>
-            {busy === 'digest' ? 'Generating…' : 'Generate health digest'}
+          <Button variant="secondary" size="sm" loading={busy === 'digest'} onClick={() => void onGenerateDigest()}>
+            Generate health digest
           </Button>
         </div>
         <div className="btn-row">
@@ -212,7 +214,7 @@ export function ProtectionWorkspace({
             ) : null}
           </>
         ) : (
-          <p className="muted">Continuous assurance report unavailable.</p>
+          <EmptyState title="Continuous assurance report unavailable" />
         )}
       </Card>
 
@@ -243,7 +245,7 @@ export function ProtectionWorkspace({
             </table>
           </div>
         ) : (
-          <p className="muted">No benchmark rows yet — route traffic through Mastyf AI first.</p>
+          <EmptyState title="No benchmark rows yet" message="Route traffic through Mastyf AI first." />
         )}
       </Card>
 

@@ -9,6 +9,8 @@ import {
   getTenantId,
 } from '@/lib/mastyf-ai-api';
 import { hasPermission } from '@/lib/dashboard-roles';
+import { Card } from './ui/Card';
+import { Button } from './ui/Button';
 
 type Props = {
   roles?: string[];
@@ -35,9 +37,7 @@ export function AdminPanel({ roles, tenantLocked = false }: Props) {
     }
   }, [canAdmin]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const applyTenant = () => {
     setTenantId(tenantId);
@@ -45,51 +45,58 @@ export function AdminPanel({ roles, tenantLocked = false }: Props) {
   };
 
   return (
-    <section>
-      <h2>Admin &amp; compliance</h2>
-
-      <div className="session-bar">
-        {tenantLocked ? (
-          <span>
-            Tenant ID: <strong>{tenantId}</strong> <span className="muted">(session-bound)</span>
-          </span>
-        ) : (
-          <>
-            <span className="tenant-inline">
-              Tenant ID:
+    <div>
+      <Card title="Tenant Configuration" subtitle="Manage multi-tenant isolation settings">
+        <div className="flex items-center gap-3">
+          {tenantLocked ? (
+            <span className="text-sm text-secondary">
+              Tenant ID: <strong>{tenantId}</strong>
+              <span className="text-muted" style={{ marginLeft: 8 }}>(session-bound)</span>
+            </span>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted">Tenant ID:</span>
               <input
                 type="text"
+                className="input"
+                style={{ width: 200 }}
                 value={tenantId}
                 onChange={(e) => setTenantIdLocal(e.target.value)}
               />
-            </span>
-            <button type="button" className="secondary" onClick={applyTenant}>
-              Apply tenant &amp; reload
-            </button>
-          </>
-        )}
-        {multiTenant ? <span className="muted">Multi-tenant mode on</span> : null}
-      </div>
+              <Button size="sm" onClick={applyTenant}>Apply & reload</Button>
+            </div>
+          )}
+          {multiTenant && <span className="badge badge-info">Multi-tenant mode</span>}
+        </div>
+      </Card>
 
       {canAdmin ? (
         <>
-          <h3>Policy audit trail</h3>
-          {trail.length === 0 ? (
-            <p className="muted">No audit trail entries.</p>
-          ) : (
-            <pre className="code-block">{JSON.stringify(trail.slice(0, 20), null, 2)}</pre>
-          )}
+          <Card title="Policy Audit Trail" subtitle="Recent configuration changes">
+            {trail.length === 0 ? (
+              <p className="text-sm text-muted">No audit trail entries.</p>
+            ) : (
+              <pre className="mono" style={{ fontSize: 11, background: 'var(--bg-muted)', padding: 12, borderRadius: 6, overflow: 'auto', maxHeight: 300 }}>
+                {JSON.stringify(trail.slice(0, 20), null, 2)}
+              </pre>
+            )}
+          </Card>
 
-          <h3>Operational logs</h3>
-          {logs.length === 0 ? (
-            <p className="muted">No log lines (swarm job.log when present).</p>
-          ) : (
-            <pre className="code-block log-tail">{logs.join('\n')}</pre>
-          )}
+          <Card title="Operational Logs" subtitle="Swarm job and system logs">
+            {logs.length === 0 ? (
+              <p className="text-sm text-muted">No log lines available.</p>
+            ) : (
+              <pre className="mono" style={{ fontSize: 11, background: 'var(--bg-muted)', padding: 12, borderRadius: 6, overflow: 'auto', maxHeight: 300, lineHeight: 1.4 }}>
+                {logs.join('\n')}
+              </pre>
+            )}
+          </Card>
         </>
       ) : (
-        <p className="muted">Admin role required for audit trail and logs.</p>
+        <Card>
+          <p className="text-sm text-muted">Admin role required for audit trail and logs.</p>
+        </Card>
       )}
-    </section>
+    </div>
   );
 }

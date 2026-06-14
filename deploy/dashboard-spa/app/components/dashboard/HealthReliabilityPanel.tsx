@@ -13,10 +13,10 @@ import {
 } from 'recharts';
 import { fetchVisualsLive, type HealthResponse, type VisualsData } from '@/lib/mastyf-ai-api';
 import { CHART_AXIS, CHART_COLORS, CHART_GRID, CHART_TOOLTIP_STYLE } from '@/lib/chartTheme';
-import { DashboardSection } from './DashboardSection';
-import { KpiCard } from './KpiCard';
-import { ChartCard } from './ChartCard';
-import { DataTablePro, type Column } from './DataTablePro';
+import { KpiCard } from '@/app/components/ui/KpiCard';
+import { Card } from '@/app/components/ui/Card';
+import { Badge } from '@/app/components/ui/Badge';
+import { EmptyState } from '@/app/components/ui/EmptyState';
 import { computeReliabilityRiskMetrics } from '@/lib/advanced-analytics';
 import { trackAdvancedAnalyticsEvent } from '@/lib/mastyf-ai-api';
 
@@ -40,11 +40,7 @@ export function HealthReliabilityPanel({ health, refreshKey = 0 }: Props) {
   }, [loadVisuals, refreshKey]);
 
   if (!health) {
-    return (
-      <DashboardSection title="Health & reliability" subtitle="Upstream MCP server health checks">
-        <p className="muted">No health data — connect proxy history DB.</p>
-      </DashboardSection>
-    );
+    return <EmptyState title="No health data" message="Connect proxy history database to see server health metrics." />;
   }
 
   const latencyChart = (visuals?.traffic?.byServer ?? []).map((s) => ({
@@ -53,26 +49,9 @@ export function HealthReliabilityPanel({ health, refreshKey = 0 }: Props) {
     p95: s.latencyP95Ms ?? 0,
   }));
 
-  const columns: Column<ServerRow>[] = [
-    { key: 'name', header: 'Server', render: (r) => r.name, sortValue: (r) => r.name },
-    {
-      key: 'latency',
-      header: 'Latency (ms)',
-      render: (r) => r.latency,
-      sortValue: (r) => r.latency,
-    },
-    {
-      key: 'successRate',
-      header: 'Success %',
-      render: (r) => (r.successRate != null ? `${r.successRate.toFixed(1)}%` : '—'),
-      sortValue: (r) => r.successRate ?? 0,
-    },
-    { key: 'circuitBreaker', header: 'Circuit breaker', render: (r) => r.circuitBreaker },
-    { key: 'tools', header: 'Tools', render: (r) => (r as { tools?: number }).tools ?? '—' },
-  ];
-
   const atRisk = health.atRisk || [];
   const reliability = computeReliabilityRiskMetrics(health, visuals?.traffic?.byServer ?? []);
+  const servers = health.serverReports || [];
 
   useEffect(() => {
     void trackAdvancedAnalyticsEvent({
@@ -84,61 +63,43 @@ export function HealthReliabilityPanel({ health, refreshKey = 0 }: Props) {
   }, [reliability.caveat.confidence, reliability.index]);
 
   return (
-    <div className="health-reliability-panel">
-      <DashboardSection
-        title="Health & reliability"
-        subtitle="Latency, success rate, and circuit breaker state per upstream MCP server"
-      >
-        <div className="kpi-row">
-          <KpiCard
-            label="Reliability risk index"
-            value={reliability.index}
-            variant={
-              reliability.status === 'critical'
-                ? 'danger'
-                : reliability.status === 'watch'
-                  ? 'warn'
-                  : 'success'
-            }
-            sub={`Status: ${reliability.status} · confidence ${reliability.caveat.confidence}`}
-            explanation="Composite index using p95 drift, success-rate gaps, and circuit-breaker state."
-          />
-          <KpiCard
-            label="Avg latency"
-            value={health.avgLatencyMs != null ? `${health.avgLatencyMs} ms` : health.avgLatency != null ? `${health.avgLatency} ms` : '—'}
-            variant={health.avgLatencyMs != null && health.avgLatencyMs > 200 ? 'warn' : 'default'}
-            explanation="Mean response latency across active servers."
-          />
-          <KpiCard
-            label="Total tools"
-            value={health.totalTools ?? '—'}
-            explanation="Tools registered across monitored MCP servers."
-          />
-          <KpiCard
-            label="At-risk servers"
-            value={atRisk.length}
-            variant={atRisk.length > 0 ? 'danger' : 'success'}
-            sub={atRisk.length ? atRisk.join(', ') : 'None'}
-            explanation="Servers with latency >200ms or success rate <70%."
-          />
-        </div>
-        <p className="hint">
-          Risk factors — p95 drift {reliability.p95DriftPct.toFixed(1)}%, success gap{' '}
-          {reliability.successGapPct.toFixed(1)}%, open circuit-breakers {reliability.circuitBreakerOpenPct.toFixed(1)}%.
-        </p>
-        {reliability.caveat.confidence === 'low' ? (
-          <p className="alert">
-            Reliability risk confidence is low due to limited healthy sample coverage.
-          </p>
-        ) : null}
+    <div>
+      <div className="kpi-grid">
+        <KpiCard
+          label="Reliability Risk Index"
+          value={reliability.index}
+          accent={reliability.status === 'critical' ? 'danger' : reliability.status === 'watch' ? 'warning' : 'success'}
+          secondary={`Status: ${reliability.status} · ${reliability.caveat.confidence} confidence`}
+        />
+        <KpiCard
+          label="Avg Latency"
+          value={health.avgLatencyMs != null ? `${health.avgLatencyMs}ms` : health.avgLatency != null ? `${health.avgLatency}ms` : '—'}
+          accent={health.avgLatencyMs != null && health.avgLatencyMs > 200 ? 'danger' : 'info'}
+        />
+        <KpiCard
+          label="Total Tools"
+          value={health.totalTools ?? '—'}
+          accent="neutral"
+        />
+        <KpiCard
+          label="At-Risk Servers"
+          value={atRisk.length}
+          accent={atRisk.length > 0 ? 'danger' : 'success'}
+          secondary={atRisk.length ? atRisk.join(', ') : undefined}
+        />
+      </div>
 
-        <div className="dash-grid">
-          <div className="dash-grid-span-8">
-            <ChartCard
-              title="Latency distribution"
-              subtitle="p50 vs p95 — widening gap indicates tail latency issues"
-              empty={latencyChart.length === 0}
-            >
+      <div className="text-sm text-muted mb-4">
+        Risk factors — p95 drift {reliability.p95DriftPct.toFixed(1)}%, success gap{' '}
+        {reliability.successGapPct.toFixed(1)}%, open circuit-breakers {reliability.circuitBreakerOpenPct.toFixed(1)}%.
+      </div>
+
+      <div className="grid grid-12" style={{ marginBottom: 'var(--space-5)' }}>
+        <div className="col-span-8">
+          <Card title="Latency Distribution" subtitle="p50 vs p95 — widening gap indicates tail latency issues">
+            {latencyChart.length === 0 ? (
+              <EmptyState title="No latency data" message="No traffic data available to compute latency distribution." />
+            ) : (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={latencyChart}>
                   <CartesianGrid {...CHART_GRID} />
@@ -149,46 +110,74 @@ export function HealthReliabilityPanel({ health, refreshKey = 0 }: Props) {
                   <Bar dataKey="p95" fill={CHART_COLORS[3]} name="p95" />
                 </BarChart>
               </ResponsiveContainer>
-            </ChartCard>
-          </div>
-          <div className="dash-grid-span-4">
-            <ChartCard
-              title="Success rate"
-              subtitle="Upstream tool call success percentage"
-              empty={(health.serverReports?.length ?? 0) === 0}
-            >
+            )}
+          </Card>
+        </div>
+        <div className="col-span-4">
+          <Card title="Success Rate" subtitle="Upstream tool call success percentage">
+            {servers.length === 0 ? (
+              <EmptyState title="No server data" message="No server reports available." />
+            ) : (
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart
-                  data={(health.serverReports || []).map((h) => ({
-                    name: h.name,
-                    rate: h.successRate ?? 0,
-                  }))}
-                >
+                <BarChart data={servers.map((h) => ({ name: h.name, rate: h.successRate ?? 0 }))}>
                   <CartesianGrid {...CHART_GRID} />
                   <XAxis dataKey="name" {...CHART_AXIS} />
                   <YAxis domain={[0, 100]} {...CHART_AXIS} />
                   <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
                   <Bar dataKey="rate" name="Success %">
-                    {(health.serverReports || []).map((h, i) => (
-                      <Cell
-                        key={h.name}
-                        fill={(h.successRate ?? 100) < 70 ? CHART_COLORS[2] : CHART_COLORS[1]}
-                      />
+                    {servers.map((h) => (
+                      <Cell key={h.name} fill={(h.successRate ?? 100) < 70 ? CHART_COLORS[2] : CHART_COLORS[1]} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </ChartCard>
-          </div>
+            )}
+          </Card>
         </div>
+      </div>
 
-        <DataTablePro
-          columns={columns}
-          rows={health.serverReports || []}
-          rowKey={(r) => r.name}
-          exportFilename="mastyf-ai-health.csv"
-        />
-      </DashboardSection>
+      <Card title="Server Health Details" subtitle="Latency, success rate, and circuit breaker state per upstream MCP server">
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Server</th>
+                <th>Latency (ms)</th>
+                <th>Success %</th>
+                <th>Circuit Breaker</th>
+                <th>Tools</th>
+              </tr>
+            </thead>
+            <tbody>
+              {servers.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>
+                    <EmptyState title="No servers" message="No server health reports available." />
+                  </td>
+                </tr>
+              ) : (
+                servers.map((srv) => (
+                  <tr key={srv.name} className={srv.successRate != null && srv.successRate < 70 ? 'row-warning' : ''}>
+                    <td className="font-medium">{srv.name}</td>
+                    <td className="mono">{srv.latency}ms</td>
+                    <td className="mono">
+                      <Badge variant={srv.successRate != null && srv.successRate < 70 ? 'danger' : 'success'}>
+                        {srv.successRate != null ? `${srv.successRate.toFixed(1)}%` : '—'}
+                      </Badge>
+                    </td>
+                    <td>
+                      <Badge variant={srv.circuitBreaker === 'open' ? 'danger' : srv.circuitBreaker === 'half-open' ? 'warning' : 'success'}>
+                        {srv.circuitBreaker}
+                      </Badge>
+                    </td>
+                    <td className="mono">{(srv as { tools?: number }).tools ?? '—'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

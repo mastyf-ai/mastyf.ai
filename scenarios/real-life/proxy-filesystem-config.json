@@ -4,7 +4,7 @@
       "command": "/nix/store/l62aza10kx0xp1f235q2lbrzzqj5lcs9-nodejs-20.19.4/bin/node",
       "args": [
         "/home/arjun/Desktop/mcp-guardian/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
-        "/tmp/nix-shell-77242-0/mastyf-ai-real-life-mmrWv3"
+        "/tmp/nix-shell-244033-0/mastyf-ai-real-life-igj4xL"
       ],
       "env": {},
       "transport": "stdio"

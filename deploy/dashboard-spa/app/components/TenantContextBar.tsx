@@ -8,6 +8,7 @@ import {
   setTenantId,
   type AuthStatus,
 } from '@/lib/mastyf-ai-api';
+import { Button } from './ui/Button';
 
 type Props = {
   authStatus: AuthStatus | null;
@@ -39,9 +40,7 @@ export function TenantContextBar({ authStatus }: Props) {
     }
   }, [authStatus]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const applyTenant = () => {
     if (locked) return;
@@ -50,25 +49,25 @@ export function TenantContextBar({ authStatus }: Props) {
   };
 
   return (
-    <div className="tenant-context-bar" role="status" aria-label="Active tenant">
-      <span className="tenant-label">Tenant</span>
+    <div className="flex items-center gap-2" role="status" aria-label="Active tenant">
+      <span className="text-xs text-muted">Tenant</span>
       {locked ? (
-        <strong className="tenant-chip">{tenantId}</strong>
+        <strong className="text-xs font-semibold" style={{ color: 'var(--brand-primary)' }}>{tenantId}</strong>
       ) : (
-        <span className="tenant-inline">
+        <div className="flex items-center gap-1">
           <input
+            className="input"
             type="text"
+            style={{ width: 120, height: 24, fontSize: 11, padding: '2px 6px' }}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             aria-label="Tenant ID"
           />
-          <button type="button" className="secondary" onClick={applyTenant}>
-            Apply
-          </button>
-        </span>
+          <Button size="sm" variant="ghost" onClick={applyTenant}>Apply</Button>
+        </div>
       )}
-      {multiTenant ? <span className="muted">Multi-tenant mode</span> : null}
-      {locked ? <span className="muted">Bound to session</span> : null}
+      {multiTenant && <span className="badge badge-info">Multi-tenant</span>}
+      {locked && <span className="text-xs text-muted">Bound to session</span>}
     </div>
   );
 }
