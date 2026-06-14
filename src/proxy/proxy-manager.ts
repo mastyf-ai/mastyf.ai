@@ -250,6 +250,13 @@ export class ProxyManager {
     );
   }
 
+  async reloadServers(configs: McpServerConfig[]): Promise<void> {
+    Logger.info('[proxy-manager] Hot-reloading server configs…');
+    await this.stopAll();
+    await this.startAll(configs);
+    Logger.info('[proxy-manager] Server configs hot-reloaded');
+  }
+
   async stopAll(): Promise<void> {
     for (const proxy of this.stdioProxies) {
       proxy.kill();

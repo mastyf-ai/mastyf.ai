@@ -961,6 +961,44 @@ program
         console.error(chalk.yellow(`Dashboard/WS server warning: ${msg}`));
       });
 
+    // ─── Hot-reload UI-managed MCP servers ────────────────
+    void (async () => {
+      const { existsSync, readFileSync } = await import('fs');
+      const { join } = await import('path');
+      const { homedir } = await import('os');
+      const { watch } = await import('chokidar');
+      const configPath = join(homedir(), '.mastyf-ai', 'servers.json');
+      const originalServers = servers;
+
+      const mergeAndReload = async () => {
+        try {
+          const raw = existsSync(configPath) ? readFileSync(configPath, 'utf-8') : '[]';
+          const uiConfigs = JSON.parse(raw) as Array<{ name: string; command: string; args?: string[]; env?: Record<string, string>; disabled?: boolean }>;
+          const uiServers: McpServerConfig[] = uiConfigs
+            .filter((u) => !u.disabled)
+            .map((u) => ({
+              name: u.name,
+              command: u.command,
+              args: u.args || [],
+              env: u.env,
+              transport: 'stdio',
+            }));
+          const existingNames = new Set(originalServers.map((s) => s.name));
+          const merged = [...originalServers, ...uiServers.filter((u) => !existingNames.has(u.name))];
+          await manager.reloadServers(merged);
+        } catch (err: unknown) {
+          console.error(chalk.yellow(`Server config reload error: ${err instanceof Error ? err.message : String(err)}`));
+        }
+      };
+
+      if (existsSync(configPath)) {
+        watch(configPath, { awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 } }).on('change', () => {
+          void mergeAndReload();
+        });
+        console.error(chalk.dim(`[watch] UI-managed MCP servers: ${configPath}`));
+      }
+    })();
+
     if (isAiLearningEnabled()) {
       const { initializeAiEngine } = await import('./ai/suggestion-engine.js');
       initializeAiEngine(db, servers)
