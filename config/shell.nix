@@ -30,6 +30,8 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
+    # Fix SSL cert issues inside --pure shell (pnpm install, npx, etc.)
+    export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
     echo "MCP Mastyf AI Dev Environment"
     echo "─────────────────────────────────────"
     echo "  Node.js: $(node --version)"
@@ -39,6 +41,7 @@ pkgs.mkShell {
     echo "─────────────────────────────────────"
     echo ""
     echo "Run: pnpm install && pnpm build"
+    echo "Run: pnpm dev -- --config mastyf-ai-configs/testbed-memory.json"
     echo ""
     export PATH="$PWD/node_modules/.bin:$PATH"
   '';

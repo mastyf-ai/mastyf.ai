@@ -58,6 +58,10 @@
   "scripts": {
     "build": "pnpm --filter @mastyf-ai/plugin-sdk run build && tsc --project tsconfig.json && mkdir -p dist/database/migrations && cp src/database/migrations/*.sql dist/database/migrations/ && turbo run build",
     "build:mastyf-ai": "pnpm --filter @mastyf-ai/plugin-sdk run build && tsc --project tsconfig.json",
+    "dev": "node scripts/dev.mjs mastyf-ai-configs/testbed-memory.json",
+    "dev:thinking": "node scripts/dev.mjs mastyf-ai-configs/testbed-thinking.json",
+    "dev:build": "pnpm build && node scripts/dev.mjs mastyf-ai-configs/testbed-memory.json",
+    "test:proxy": "MASTYF_AI_DB_PATH=/tmp/mastyf-ai-test-proxy.db vitest run tests/e2e/adversarial-proxy.e2e.test.ts --reporter=dot",
     "test": "vitest run && turbo run test",
     "test:report": "vitest run --coverage && echo '\n Reports generated in ./test-results/ and ./coverage/'",
     "report": "tsx scripts/generate-baseline-report.ts",
@@ -156,7 +160,6 @@
     "benchmark:proxy-slo": "tsx benchmarks/run.ts",
     "parity:control-data-plane": "tsx scripts/control-plane/run-parity-harness.mjs",
     "soak:data-plane": "node scripts/control-plane/run-data-plane-soak.mjs",
-    "dev": "tsx watch src/index.ts",
     "lint": "tsc --noEmit",
     "version:check": "node scripts/verify-version-alignment.cjs",
     "prepack": "node scripts/prepack-npm-deps.mjs",
