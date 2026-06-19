@@ -1,0 +1,33 @@
+node_modules/
+dist/
+.turbo/
+reports/
+*.db
+*.db-shm
+*.db-wal
+*.db.pid
+corpus/
+adversarial-harness/
+security-swarm/
+benchmarks/
+assets/
+installer/
+*.tgz
+coverage/
+test-results/
+corpus-eval-report.json
+benchmark-report.json
+.threat-state.json
+.ai-learning.json
+
+# Python harness
+.venv/
+adversarial-harness/python/
+
+# Dashboard build artifacts
+deploy/dashboard-spa/node_modules/
+deploy/dashboard-spa/out/
+deploy/dashboard-spa/.next/
+
+# Pnpm
+pnpm-lock.yaml
