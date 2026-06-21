@@ -20,6 +20,7 @@ import { archiveSwarmArtifacts } from './lib/archive-artifacts.mjs';
 import { applySwarmRetention } from './lib/retention-policy.mjs';
 import { sendSwarmFailureAlert } from './lib/swarm-alert.mjs';
 import { runParallelSwarmSteps } from './lib/parallel-steps.mjs';
+import { writeJob, loadJob, appendJobLog } from './lib/job-state.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..');
@@ -28,8 +29,13 @@ const VENV_PY = join(REPO, 'adversarial-harness', '.venv', 'bin', 'python3');
 
 const FAST = process.argv.includes('--fast');
 const FORCE_QUIET = process.argv.includes('--quiet');
-const FORCE_LIVE = process.argv.includes('--live');
-const LIVE = FORCE_LIVE || (!FORCE_QUIET && process.stdout.isTTY);
+/** Never inherit stdio when stdout is not a TTY (dashboard/CI) — prevents pipe deadlocks at ~75%. */
+const LIVE = !FORCE_QUIET && process.stdout.isTTY;
+
+const STEP_PLAN = FAST
+  ? ['scout', 'build', 'vitest', 'corpus', 'venv', 'node-tests', 'parity']
+  : ['scout', 'build', 'vitest', 'corpus', 'harness-full', 'attack-learning'];
+const TOTAL_STEPS = STEP_PLAN.length;
 
 const gates = JSON.parse(readFileSync(join(__dir, 'config', 'gates.json'), 'utf-8'));
 const steps = [];
@@ -73,19 +79,35 @@ function resolveVenvPython() {
   return out || 'python3';
 }
 
+function updateSwarmSubProgress(stepIndex, totalSteps, label) {
+  const job = loadJob();
+  if (!job || job.state !== 'running') return;
+  const base = 75;
+  const span = 12;
+  const pct = base + Math.floor(((stepIndex + 1) / Math.max(totalSteps, 1)) * span);
+  writeJob({
+    state: 'running',
+    phase: 'swarm',
+    phaseLabel: label,
+    progressPct: Math.min(pct, 87),
+  });
+  appendJobLog(`[swarm] ${label} (${Math.min(pct, 87)}%)`);
+}
+
 let consecutiveFailures = 0;
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 function run(cmd, args, opts = {}) {
   const label = opts.label ?? [cmd, ...args].join(' ');
-  const index = steps.length + 1;
-  const total = opts.totalSteps ?? '?';
+  const index = steps.length;
+  const total = opts.totalSteps ?? TOTAL_STEPS;
+  updateSwarmSubProgress(index, total, label);
   const started = Date.now();
 
   console.log('');
   console.log(
     paint(
-      `▶ [${index}/${total}] ${label}`,
+      `▶ [${index + 1}/${total}] ${label}`,
       c.bold + c.blue,
     ),
   );
@@ -200,10 +222,8 @@ if (process.env.SWARM_DISABLE_ARCHIVE !== 'true') {
   }
 }
 
-const stepPlan = FAST
-  ? ['scout', 'build', 'vitest', 'corpus', 'venv', 'node-tests', 'parity']
-  : ['scout', 'build', 'vitest', 'corpus', 'harness-full', 'attack-learning'];
-const totalSteps = stepPlan.length;
+const stepPlan = STEP_PLAN;
+const totalSteps = TOTAL_STEPS;
 
 banner(
   'MCP Mastyf AI — Security Swarm',
@@ -237,6 +257,7 @@ if (FAST && process.env.SWARM_PARALLEL_STEPS !== 'false') {
   );
   for (const step of parallel) {
     steps.push(step);
+    updateSwarmSubProgress(steps.length - 1, totalSteps, step.label);
     console.log(
       step.ok
         ? paint(`✓ ${step.label} — PASS (${step.elapsedSec}s)`, c.green)

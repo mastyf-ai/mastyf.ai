@@ -110,8 +110,9 @@ export function SocSwarmAnalysisView({ roles = [], refreshKey, onAction }: Props
   useEffect(() => { void load(); }, [load, refreshKey]);
 
   const refreshStatus = useCallback(async () => {
-    const st = await fetchSwarmStatus();
+    const [st, jl] = await Promise.all([fetchSwarmStatus(), fetchSwarmJobLog()]);
     if (st) setJobStatus(st);
+    if (jl?.log != null) setJobLog(jl.log);
     return st;
   }, []);
 

@@ -222,8 +222,7 @@ pnpm security-swarm:fast
 
 ## License
 
-- **Community Edition** — MIT ([LICENSE](LICENSE))
-- **Pro / Enterprise** — Commercial ([LICENSE-PRO](LICENSE-PRO))
+MIT — see [LICENSE](LICENSE).
 
 ---
 

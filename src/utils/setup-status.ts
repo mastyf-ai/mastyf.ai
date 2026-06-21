@@ -8,6 +8,7 @@ import { createDatabase } from '../database/create-database.js';
 import { resolveMastyfAiDbPath } from './mastyf-ai-db-path.js';
 import { getOnboardingStatus, type OnboardingStatus } from './server-registry.js';
 import { REPO_ROOT } from './swarm-artifacts.js';
+import { defaultControlPlaneUrl } from '../constants/cloud-url.js';
 
 const SETUP_DIR = join(homedir(), '.mastyf-ai');
 const SETUP_FILE = join(SETUP_DIR, 'setup.json');
@@ -111,7 +112,7 @@ export async function probeDatabaseHealth(): Promise<SetupDatabaseHealth> {
   }
 }
 
-import { defaultControlPlaneUrl } from '../constants/cloud-url.js';
+export function readCloudSetup(): SetupCloudView {
   const file = readSetupFile();
   const envUrl = process.env.MASTYF_AI_CONTROL_PLANE_URL?.trim();
   const connected = !!(envUrl || file.upstreamUrl?.includes('mastyf.ai') || file.upstreamUrl?.includes('vercel') || process.env.MASTYF_AI_CLOUD_API_KEY?.trim());

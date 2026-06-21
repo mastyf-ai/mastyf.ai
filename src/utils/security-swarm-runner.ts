@@ -51,6 +51,7 @@ const WATCHED_ARTIFACTS = [
 
 interface TenantWatcherState {
   lastBroadcastPhase: string;
+  lastBroadcastProgressKey: string;
   lastBroadcastState: string;
   artifactMtime: Map<string, number>;
 }
@@ -91,7 +92,7 @@ function readLogTail(tenantId: string, maxLines = 50): string {
 function getWatcherState(tenantId: string): TenantWatcherState {
   let s = watcherState.get(tenantId);
   if (!s) {
-    s = { lastBroadcastPhase: '', lastBroadcastState: '', artifactMtime: new Map() };
+    s = { lastBroadcastPhase: '', lastBroadcastProgressKey: '', lastBroadcastState: '', artifactMtime: new Map() };
     watcherState.set(tenantId, s);
   }
   return s;
@@ -155,7 +156,10 @@ function broadcastSwarmJob(tenantId: string, job: Record<string, unknown> | null
   const phaseLabel = String(job.phaseLabel ?? phase);
   const progressPct = Number(job.progressPct ?? 0);
 
-  if (jobState === 'running' && phase && phase !== state.lastBroadcastPhase) {
+  const progressKey = `${phase}:${phaseLabel}:${progressPct}`;
+
+  if (jobState === 'running' && progressKey !== state.lastBroadcastProgressKey) {
+    state.lastBroadcastProgressKey = progressKey;
     state.lastBroadcastPhase = phase;
     broadcastDashboardEvent({
       type: 'swarm:progress',
@@ -250,6 +254,7 @@ export function startSwarmJobWatcher(tenantId: string = DEFAULT_TENANT_ID): void
   watchedTenants.add(tenantId);
   const state = getWatcherState(tenantId);
   state.lastBroadcastPhase = '';
+  state.lastBroadcastProgressKey = '';
   state.lastBroadcastState = '';
   if (!jobWatchTimer) {
     tickAllWatchers();

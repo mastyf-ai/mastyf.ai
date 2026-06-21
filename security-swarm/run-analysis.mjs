@@ -42,18 +42,6 @@ let exitCode = 0;
 let liveOk = true;
 let swarmOk = true;
 
-function hasSwarmLicenseContext() {
-  if (process.env.MASTYF_AI_CI_BYPASS_LICENSE === 'true') return true;
-  if ((process.env.MASTYF_AI_CI_TOKEN || '').trim()) return true;
-  if (
-    process.env.NODE_ENV === 'development'
-    && process.env.MASTYF_AI_DEV_UNLOCK_ALL === 'true'
-  ) return true;
-  const hasKey = (process.env.MASTYF_AI_LICENSE_KEY || '').trim().length > 0;
-  const hasControlPlane = (process.env.MASTYF_AI_CONTROL_PLANE_URL || '').trim().length > 0;
-  return hasKey && hasControlPlane;
-}
-
 function log(msg) {
   if (QUIET) {
     appendJobLog(msg);
@@ -235,20 +223,13 @@ async function main() {
 
     if (!SKIP_SWARM) {
       setPhase('swarm');
-      if (!hasSwarmLicenseContext()) {
-        throw new Error(
-          'Security swarm gates require Pro license context before step 7/10. '
-          + 'Set MASTYF_AI_LICENSE_KEY and MASTYF_AI_CONTROL_PLANE_URL, '
-          + 'or provide MASTYF_AI_CI_TOKEN (or MASTYF_AI_CI_BYPASS_LICENSE=true in CI).',
-        );
-      }
-      const swarmScript = NIGHTLY ? 'security-swarm:live' : 'security-swarm:fast';
+      const swarmArgs = NIGHTLY ? ['--quiet'] : ['--fast', '--quiet'];
       log(
         NIGHTLY
           ? 'Swarm gates (nightly): corpus + full adversarial harness — typically 30–60 min, output streams below…'
           : 'Swarm gates (fast): corpus + harness parity — typically 3–5 min…',
       );
-      run('pnpm', [swarmScript], {
+      run('node', ['security-swarm/run.mjs', ...swarmArgs], {
         env: {
           MASTYF_AI_POLICY_TIMING_ENVELOPE: 'false',
           MASTYF_AI_DISABLE_SEMANTIC: 'true',

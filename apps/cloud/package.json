@@ -12,7 +12,7 @@
     "db:migrate": "node scripts/migrate.mjs",
     "oauth:setup": "node scripts/setup-github-oauth.mjs",
     "sync:default-policy": "node scripts/sync-default-policy-embed.mjs",
-    "prebuild": "node scripts/sync-default-policy-embed.mjs"
+    "prebuild": "node scripts/sync-default-policy-embed.mjs && node scripts/ensure-server-built.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",
