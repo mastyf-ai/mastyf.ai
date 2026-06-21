@@ -126,7 +126,19 @@ def _load_rules(*, full: bool = False) -> list[dict[str, Any]]:
     return _COMPILED_FAST
 
 
-def _scan_with_rules(scan_text: str, rules: list[dict[str, Any]], max_hits: int = 8) -> list[str]:
+def _is_postmark_token_context(target: str, scan_context: str, match_index: int | None = None) -> bool:
+    haystack = f"{scan_context}\n{target}".lower()
+    if re.search(r"postmark|server[_-]?token|x-postmark", haystack, re.I):
+        return True
+    if match_index is not None:
+        window_start = max(0, match_index - 80)
+        window = target[window_start : match_index + 80].lower()
+        if re.search(r"postmark|pm[_-]?token|server[_-]?token", window):
+            return True
+    return False
+
+
+def _scan_with_rules(scan_text: str, rules: list[dict[str, Any]], max_hits: int = 8, *, context: str = "harness") -> list[str]:
     hits: list[str] = []
     seen: set[str] = set()
     for rule in rules:
@@ -137,6 +149,10 @@ def _scan_with_rules(scan_text: str, rules: list[dict[str, Any]], max_hits: int 
         for m in rule["regex"].finditer(scan_text):
             subject = _entropy_subject(m)
             if rule.get("entropy") is not None and _shannon_entropy(subject) < rule["entropy"]:
+                continue
+            if rule["id"] == "postmark-api-token" and not _is_postmark_token_context(
+                scan_text, context, m.start()
+            ):
                 continue
             excluded = any(ex.search(scan_text) for ex in rule.get("exclusions") or [])
             if excluded:
@@ -159,7 +175,7 @@ def scan_secrets_in_blob(blob: str, context: str = "harness", *, full: bool = Fa
     else:
         scan_text = blob
     rules = _load_rules(full=full)
-    return _scan_with_rules(scan_text, rules)
+    return _scan_with_rules(scan_text, rules, context=context)
 
 
 def scan_secrets_in_response(blob: str, context: str) -> list[str]:

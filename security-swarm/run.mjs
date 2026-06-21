@@ -32,6 +32,15 @@ const FORCE_QUIET = process.argv.includes('--quiet');
 /** Never inherit stdio when stdout is not a TTY (dashboard/CI) — prevents pipe deadlocks at ~75%. */
 const LIVE = !FORCE_QUIET && process.stdout.isTTY;
 
+if (FORCE_QUIET && process.env.SWARM_PARALLEL_STEPS === undefined) {
+  process.env.SWARM_PARALLEL_STEPS = 'false';
+}
+
+function swarmLog(msg) {
+  if (FORCE_QUIET) appendJobLog(msg);
+  else console.log(msg);
+}
+
 const STEP_PLAN = FAST
   ? ['scout', 'build', 'vitest', 'corpus', 'venv', 'node-tests', 'parity']
   : ['scout', 'build', 'vitest', 'corpus', 'harness-full', 'attack-learning'];
@@ -60,12 +69,16 @@ function paint(s, color) {
 }
 
 function banner(title, sub = '') {
-  const line = '═'.repeat(Math.min(72, Math.max(title.length + 4, 40)));
-  console.log('');
-  console.log(paint(line, c.cyan));
-  console.log(paint(`  ${title}`, c.bold + c.cyan));
-  if (sub) console.log(paint(`  ${sub}`, c.dim));
-  console.log(paint(line, c.cyan));
+  if (!FORCE_QUIET) {
+    const line = '═'.repeat(Math.min(72, Math.max(title.length + 4, 40)));
+    console.log('');
+    console.log(paint(line, c.cyan));
+    console.log(paint(`  ${title}`, c.bold + c.cyan));
+    if (sub) console.log(paint(`  ${sub}`, c.dim));
+    console.log(paint(line, c.cyan));
+    return;
+  }
+  swarmLog(`[swarm] ${title}${sub ? ` — ${sub}` : ''}`);
 }
 
 function resolveVenvPython() {
@@ -104,15 +117,18 @@ function run(cmd, args, opts = {}) {
   updateSwarmSubProgress(index, total, label);
   const started = Date.now();
 
-  console.log('');
-  console.log(
-    paint(
-      `▶ [${index + 1}/${total}] ${label}`,
-      c.bold + c.blue,
-    ),
-  );
-  console.log(paint(`  ${cmd} ${args.join(' ')}`, c.dim));
-  console.log(paint(`  started ${new Date().toISOString()}`, c.dim));
+  swarmLog(`▶ [${index + 1}/${total}] ${label}`);
+  if (!FORCE_QUIET) {
+    console.log('');
+    console.log(
+      paint(
+        `▶ [${index + 1}/${total}] ${label}`,
+        c.bold + c.blue,
+      ),
+    );
+    console.log(paint(`  ${cmd} ${args.join(' ')}`, c.dim));
+    console.log(paint(`  started ${new Date().toISOString()}`, c.dim));
+  }
 
   const r = runStep(cmd, args, {
     cwd: opts.cwd ?? REPO,
@@ -164,14 +180,22 @@ function run(cmd, args, opts = {}) {
     }
   }
 
-  console.log(
-    ok
-      ? paint(`✓ ${label} — PASS (${elapsed}s)`, c.green)
-      : paint(
-          `✗ ${label} — FAIL (${elapsed}s, exit ${step.status}${timedOut ? ' timeout' : ''})`,
-          c.red,
-        ),
-  );
+  if (FORCE_QUIET) {
+    swarmLog(
+      ok
+        ? `✓ ${label} — PASS (${elapsed}s)`
+        : `✗ ${label} — FAIL (${elapsed}s, exit ${step.status}${timedOut ? ' timeout' : ''})`,
+    );
+  } else {
+    console.log(
+      ok
+        ? paint(`✓ ${label} — PASS (${elapsed}s)`, c.green)
+        : paint(
+            `✗ ${label} — FAIL (${elapsed}s, exit ${step.status}${timedOut ? ' timeout' : ''})`,
+            c.red,
+          ),
+    );
+  }
   if (!ok && !LIVE && step.stderr) {
     console.log(paint(step.stderr, c.red));
   }
@@ -301,6 +325,7 @@ if (!FAST) {
   run('node', ['--import', 'tsx', 'adversarial-harness/scripts/compare-node-python.ts'], {
     label: 'harness-parity',
     totalSteps,
+    timeoutMs: 900_000,
     env: {
       MASTYF_AI_DISABLE_SEMANTIC: 'true',
       PYTHONPATH: join(REPO, 'adversarial-harness', 'python'),

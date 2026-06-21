@@ -62,6 +62,7 @@ function main() {
   );
   const filtered = filterIds.size > 0;
 
+  console.error('[parity] node batch eval…');
   const nodeBatch = spawnSync(
     'node',
     ['--import', 'tsx', 'adversarial-harness/scripts/batch-node-eval.ts'],
@@ -75,6 +76,7 @@ function main() {
     console.error(nodeBatch.stderr || nodeBatch.stdout);
     process.exit(1);
   }
+  console.error('[parity] python batch eval…');
 
   const fixtures = [
     ...loadFixtures(join(REPO, 'corpus'), 'corpus'),
@@ -95,6 +97,7 @@ function main() {
     console.error(py.stderr || py.stdout);
     process.exit(1);
   }
+  console.error('[parity] comparing decisions…');
 
   const pyOut = JSON.parse(py.stdout) as { byId: Record<string, { blocked: boolean; action: string; rule: string }> };
   const nodeOut = JSON.parse(readFileSync(NODE_BATCH, 'utf-8')) as {

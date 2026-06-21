@@ -200,17 +200,17 @@ policy:
             - \bdelete\s+from\b
             - \bselect\s+\*\s+from\b.+\b(payments|transactions|credentials|users)\b
             - \\$ne
-            - </script>
-            - <script[\s>/]
-            - onerror\s*=
+            - '</script>'
+            - '<script[\s>/]'
+            - 'onerror\s*='
         - field: message
           patterns:
-            - \r\n
-            - \nFATAL:
+            - '\\r\\n'
+            - '\\nFATAL:'
         - field: assertion
           patterns:
-            - <saml:Assertion
-            - <saml:AttributeValue>admin</saml:AttributeValue>
+            - '<saml:Assertion'
+            - '<saml:AttributeValue>admin</saml:AttributeValue>'
         - field: template
           patterns:
             - '%25%[0-9a-fA-F]{2}%[0-9a-fA-F]{2}'

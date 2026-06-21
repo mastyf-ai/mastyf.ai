@@ -41,11 +41,18 @@ def _load_baseline_patterns() -> list[re.Pattern[str]]:
         return []
 
 
+def _resolve_threat_state_path() -> Path:
+    env_path = os.environ.get("MASTYF_AI_THREAT_STATE_PATH")
+    if env_path:
+        return Path(env_path)
+    home = os.environ.get("MASTYF_AI_HOME")
+    if home:
+        return Path(home) / ".threat-state.json"
+    return Path.home() / ".mastyf-ai" / ".threat-state.json"
+
+
 def _load_dynamic_patterns() -> list[re.Pattern[str]]:
-    state_path = os.environ.get("MASTYF_AI_THREAT_STATE_PATH")
-    if not state_path:
-        state_path = str(REPO_ROOT / ".threat-state.json")
-    path = Path(state_path)
+    path = _resolve_threat_state_path()
     if not path.is_file():
         return []
     try:

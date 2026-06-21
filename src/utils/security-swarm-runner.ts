@@ -35,9 +35,15 @@ export interface SwarmJobStatus {
   error: string | null;
   analysisPath: string;
   logTail: string;
+  pid?: number | null;
   hasRun?: boolean;
   sessionArtifactsVisible?: boolean;
 }
+
+/** No job.log writes for this long while state=running → treat as stuck. */
+const SWARM_LOG_STALE_MS = 20 * 60 * 1000;
+/** Absolute cap for dashboard-triggered fast swarm runs. */
+const SWARM_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 
 const WATCHED_ARTIFACTS = [
   'report.json',
@@ -89,6 +95,84 @@ function readLogTail(tenantId: string, maxLines = 50): string {
   return lines.slice(-maxLines).join('\n');
 }
 
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function markSwarmJobFailed(
+  tenantId: string,
+  job: Record<string, unknown>,
+  error: string,
+  exitCode = 1,
+): void {
+  const next = {
+    ...job,
+    state: 'failed',
+    finishedAt: new Date().toISOString(),
+    exitCode,
+    error,
+    progressPct: Number(job.progressPct ?? 0),
+  };
+  writeFileSync(jobPath(tenantId), JSON.stringify(next, null, 2));
+}
+
+/**
+ * Detect orphaned jobs (process died without updating job.json) and mark them failed
+ * so the dashboard can start a new run.
+ */
+export function reconcileStaleSwarmJob(tenantId: string = DEFAULT_TENANT_ID): boolean {
+  const job = loadJobFile(tenantId);
+  if (!job || job.state !== 'running') return false;
+
+  const pid = job.pid != null ? Number(job.pid) : null;
+  if (pid && !isProcessAlive(pid)) {
+    markSwarmJobFailed(
+      tenantId,
+      job,
+      'Analysis process exited unexpectedly (orphaned job — re-run Security Swarm)',
+    );
+    return true;
+  }
+
+  const logPath = join(swarmDir(tenantId), 'job.log');
+  let logMtime = 0;
+  if (existsSync(logPath)) {
+    try {
+      logMtime = statSync(logPath).mtimeMs;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const startedAt = job.startedAt ? Date.parse(String(job.startedAt)) : 0;
+  const now = Date.now();
+  const logStale = logMtime > 0 && now - logMtime > SWARM_LOG_STALE_MS;
+  const ageStale = startedAt > 0 && now - startedAt > SWARM_MAX_AGE_MS;
+
+  if (pid && isProcessAlive(pid)) {
+    return false;
+  }
+
+  if (logStale || ageStale) {
+    markSwarmJobFailed(
+      tenantId,
+      job,
+      logStale
+        ? 'Analysis stalled with no progress for 20+ minutes — re-run Security Swarm'
+        : 'Analysis exceeded maximum runtime — re-run Security Swarm',
+    );
+    return true;
+  }
+
+  return false;
+}
+
 function getWatcherState(tenantId: string): TenantWatcherState {
   let s = watcherState.get(tenantId);
   if (!s) {
@@ -99,6 +183,7 @@ function getWatcherState(tenantId: string): TenantWatcherState {
 }
 
 export function getSwarmJobStatus(tenantId: string = DEFAULT_TENANT_ID): SwarmJobStatus {
+  reconcileStaleSwarmJob(tenantId);
   const job = loadJobFile(tenantId);
   const analysis = analysisPath(tenantId);
   const hasRun = !!(job?.jobId || job?.startedAt);
@@ -115,12 +200,14 @@ export function getSwarmJobStatus(tenantId: string = DEFAULT_TENANT_ID): SwarmJo
     error: job?.error ? String(job.error) : null,
     analysisPath: analysis,
     logTail: readLogTail(tenantId),
+    pid: job?.pid != null ? Number(job.pid) : null,
     hasRun,
     sessionArtifactsVisible: isSwarmSessionActiveForTenant(tenantId),
   };
 }
 
 export function isSwarmJobRunning(tenantId: string = DEFAULT_TENANT_ID): boolean {
+  reconcileStaleSwarmJob(tenantId);
   const job = loadJobFile(tenantId);
   return job?.state === 'running';
 }
@@ -231,6 +318,7 @@ function broadcastSwarmJob(tenantId: string, job: Record<string, unknown> | null
 }
 
 function tickSwarmJobWatcher(tenantId: string): void {
+  reconcileStaleSwarmJob(tenantId);
   const job = loadJobFile(tenantId);
   if (!job || job.state !== 'running') {
     if (job) broadcastSwarmJob(tenantId, job);
@@ -319,6 +407,7 @@ export function startSwarmAnalysis(opts: {
         finishedAt: null,
         exitCode: null,
         error: null,
+        pid: null,
         analysisPath: join(swarmOut, 'analysis.txt'),
       },
       null,
@@ -326,7 +415,6 @@ export function startSwarmAnalysis(opts: {
     ),
   );
 
-  const logPath = join(swarmOut, 'job.log');
   const child = spawn(process.execPath, args, {
     cwd: REPO_ROOT,
     detached: true,
@@ -344,28 +432,30 @@ export function startSwarmAnalysis(opts: {
   });
   child.unref();
 
-  // Watch for immediate exit — if the license gate or preflight fails
-  // before run-analysis.mjs gets to write the job file, patch it ourselves
-  child.once('exit', (code) => {
-    if (code === 0) return; // normal exit — run-analysis.mjs will have written job.json
-    const existingJob = loadJobFile(tenantId);
-    // Only patch if the job file still shows the state we wrote (not updated by the child)
-    if (existingJob?.jobId === jobId && existingJob?.state === 'running') {
-      writeFileSync(
-        join(swarmOut, 'job.json'),
-        JSON.stringify(
-          {
-            ...existingJob,
-            state: 'failed',
-            finishedAt: new Date().toISOString(),
-            exitCode: code,
-            error: `Analysis process exited ${code} before starting — check gate-pro.mjs / pnpm build`,
-          },
-          null,
-          2,
-        ),
+  const existingAfterSpawn = loadJobFile(tenantId);
+  if (existingAfterSpawn?.jobId === jobId && child.pid) {
+    writeFileSync(
+      join(swarmOut, 'job.json'),
+      JSON.stringify({ ...existingAfterSpawn, pid: child.pid }, null, 2),
+    );
+  }
+
+  // If the child exits while job.json is still "running", mark failed after a short grace period.
+  child.once('exit', (code, signal) => {
+    setTimeout(() => {
+      const existingJob = loadJobFile(tenantId);
+      if (!existingJob || existingJob.state !== 'running') return;
+      if (existingJob.jobId !== jobId) return;
+      markSwarmJobFailed(
+        tenantId,
+        existingJob,
+        code === 0
+          ? 'Analysis process ended without writing final job state — re-run Security Swarm'
+          : `Analysis process exited ${code ?? signal ?? 'unknown'} — check job.log and gate-pro.mjs / pnpm build`,
+        code ?? 1,
       );
-    }
+      tickSwarmJobWatcher(tenantId);
+    }, 2500);
   });
 
   startSwarmJobWatcher(tenantId);

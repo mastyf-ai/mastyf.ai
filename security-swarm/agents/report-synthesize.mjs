@@ -193,7 +193,10 @@ export function synthesizeReport(input) {
     (corpus.totalEntries ?? 0) >= (gates.corpus?.minEntries ?? 228) &&
     (attackBlockRate ?? 1) >= (gates.corpus?.minAttackBlockRate ?? 1) &&
     (benignPassRate ?? 1) >= 1 - (gates.corpus?.maxBenignFalsePositiveRate ?? 0);
+  const parityStep = steps.find((s) => s.label === 'harness-parity');
+  const parityStepOk = parityStep?.ok === true && parityStep?.timedOut !== true;
   const parityOk =
+    parityStepOk &&
     parity &&
     (parity.corpusMismatches?.length ?? 0) === 0 &&
     (parity.agreementRate ?? 0) >= (gates.parity?.minOverallAgreementRate ?? 0.97);

@@ -4,7 +4,7 @@
       "command": "/Users/rudraneeldas/.nvm/versions/node/v23.11.0/bin/node",
       "args": [
         "/Users/rudraneeldas/Desktop/mastyf.ai-1/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
-        "/var/folders/8k/zjxbk9cj4q369h37ybgy6r7c0000gn/T/mastyf-ai-real-life-XgTP7b"
+        "/var/folders/8k/zjxbk9cj4q369h37ybgy6r7c0000gn/T/mastyf-ai-real-life-KqxZih"
       ],
       "env": {},
       "transport": "stdio"

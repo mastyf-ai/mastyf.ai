@@ -21,6 +21,7 @@ import {
   SWARM_DIR,
   JOB_LOG_PATH,
   writeJob,
+  loadJob,
   appendJobLog,
   phaseById,
 } from './lib/job-state.mjs';
@@ -84,6 +85,7 @@ function run(cmd, args, opts = {}) {
     cwd: opts.cwd ?? REPO_ROOT,
     label,
     stepKey: opts.stepKey ?? label,
+    timeoutMs: opts.timeoutMs,
     live: !QUIET,
     env: { ...process.env, ...opts.env },
   });
@@ -131,13 +133,15 @@ async function main() {
     writeFileSync(JOB_LOG_PATH, '');
   }
 
+  const presetJob = QUIET ? loadJob() : null;
   writeJob({
-    jobId: randomUUID(),
+    jobId: presetJob?.jobId || randomUUID(),
+    pid: process.pid,
     state: 'running',
     phase: 'preflight',
     phaseLabel: 'Preflight',
     progressPct: 0,
-    startedAt,
+    startedAt: presetJob?.startedAt || startedAt,
     finishedAt: null,
     exitCode: null,
     error: null,
@@ -230,9 +234,13 @@ async function main() {
           : 'Swarm gates (fast): corpus + harness parity — typically 3–5 min…',
       );
       run('node', ['security-swarm/run.mjs', ...swarmArgs], {
+        stepKey: 'security-swarm-gates',
+        timeoutMs: NIGHTLY ? 3_600_000 : 900_000,
         env: {
           MASTYF_AI_POLICY_TIMING_ENVELOPE: 'false',
           MASTYF_AI_DISABLE_SEMANTIC: 'true',
+          SWARM_PARALLEL_STEPS: 'false',
+          TSX_DISABLE_IPC: '1',
         },
       });
       const latest = existsSync(join(SWARM_DIR, 'latest.json'))

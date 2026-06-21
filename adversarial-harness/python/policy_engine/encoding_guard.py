@@ -16,8 +16,14 @@ RAW_HEX_BLOB_RE = re.compile(r"\b([0-9a-fA-F]{16,})\b")
 PERCENT_ENCODED_RUN_RE = re.compile(r"(?:%[0-9a-fA-F]{2}){4,}", re.I)
 SUSPICIOUS_DECODED_RE = re.compile(
     r"\b(?:ignore|disregard|bypass|jailbreak|delete|drop|exec|eval|curl|wget|"
-    r"rm\s+-rf|union\s+select|sleep\s*\(|benchmark\s*\(|/etc/passwd|bash|/bin/sh|"
-    r"select\s+\*|\bselect\b|/dev/tcp)\b",
+    r"passwd|pretend|forget|exfiltrate|malicious|unrestricted|benchmark|"
+    r"rm\s+-rf|union\s+select|sleep\s*\(|/etc/passwd|bash|/bin/sh|"
+    r"select\s+\*|\bselect\b|/dev/tcp|delete\s+account|drop\s+table)\b",
+    re.I,
+)
+SHELL_FRAGMENT_RE = re.compile(
+    r"\b(?:rm\s+-rf|union\s+select|sleep\s*\(|benchmark\s*\(|/etc/passwd|/bin/sh|"
+    r"select\s+\*|/dev/tcp|delete\s+account|drop\s+table)\b",
     re.I,
 )
 OVERRIDE_ATTACK_RE = re.compile(
@@ -26,8 +32,29 @@ OVERRIDE_ATTACK_RE = re.compile(
 )
 
 
-def _decoded_suspicious(text: str) -> bool:
-    return bool(SUSPICIOUS_DECODED_RE.search(text) or OVERRIDE_ATTACK_RE.search(text))
+def _encoding_transform_applied(original: str, decoded: str) -> bool:
+    if not decoded or decoded == original:
+        return False
+    norm = lambda s: re.sub(r"\s+", " ", s.replace("\r\n", "\n")).strip()
+    return norm(original) != norm(decoded)
+
+
+def _decoded_suspicious(original: str, decoded: str) -> bool:
+    if not _encoding_transform_applied(original, decoded):
+        return False
+    if (
+        SUSPICIOUS_DECODED_RE.search(decoded)
+        or OVERRIDE_ATTACK_RE.search(decoded)
+        or SHELL_FRAGMENT_RE.search(decoded)
+    ):
+        return True
+    try:
+        from .prompt_injection import scan_tool_call_arguments
+
+        hits = scan_tool_call_arguments({"payload": decoded}, critical_only=True)
+        return len(hits) > 0
+    except Exception:
+        return False
 
 
 def is_encoding_guard_enabled() -> bool:
@@ -63,25 +90,24 @@ def scan_encoding_evasion(blob: str) -> tuple[bool, str]:
         return False, ""
     deobfuscated = deobfuscate_recursive(blob)
     stripped_invisible = ZERO_WIDTH_RE.sub("", blob)
-    if deobfuscated and _decoded_suspicious(deobfuscated):
-        if deobfuscated != blob or (
-            stripped_invisible != blob and _decoded_suspicious(stripped_invisible)
-        ):
-            return True, "multi-layer encoding reveals blocked content after decode"
-    if PERCENT_ENCODED_RUN_RE.search(blob) and _decoded_suspicious(deobfuscated):
+    if _decoded_suspicious(blob, deobfuscated):
+        return True, "multi-layer encoding reveals blocked content after decode"
+    if stripped_invisible != blob and _decoded_suspicious(blob, stripped_invisible):
+        return True, "zero-width stripped content is suspicious after decode"
+    if PERCENT_ENCODED_RUN_RE.search(blob) and _decoded_suspicious(blob, deobfuscated):
         return True, "percent-encoded payload decodes to suspicious content"
     for match in BASE64_BLOB_RE.finditer(blob):
         decoded = _try_decode_base64(match.group(1))
-        if decoded and _decoded_suspicious(decoded):
+        if decoded and _decoded_suspicious(match.group(1), decoded):
             return True, "base64 blob decodes to suspicious instruction text"
     for match in RAW_HEX_BLOB_RE.finditer(blob):
         decoded = _try_decode_raw_hex(match.group(1))
-        if decoded and _decoded_suspicious(decoded):
+        if decoded and _decoded_suspicious(match.group(1), decoded):
             return True, "raw hex blob decodes to suspicious instruction text"
     trimmed = blob.strip()
     if re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", trimmed):
         whole = _try_decode_base64(trimmed)
-        if whole and _decoded_suspicious(whole):
+        if whole and _decoded_suspicious(trimmed, whole):
             return True, "whole-string base64 decodes to suspicious content"
     return False, ""
 
