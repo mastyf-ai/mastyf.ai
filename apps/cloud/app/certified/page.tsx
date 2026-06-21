@@ -30,7 +30,8 @@ export default async function CertifiedDirectoryPage() {
         </h1>
         <p className="socket-hero-lead">
           Enter any npm MCP package name for an instant security score — CVE posture, supply chain
-          signals, and plain-English guidance. Optional deep scan probes the live MCP server.
+          signals, and plain-English guidance. Optional deep scan probes the live MCP server.{' '}
+          <Link href="/tutorials/site-walkthrough">Watch walkthrough video →</Link>
         </p>
         <BadgeLookupWidget variant="hero" />
       </section>

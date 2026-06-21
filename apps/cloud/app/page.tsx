@@ -85,6 +85,9 @@ export default async function HomePage() {
             <a href={GITHUB_REPO_URL} className="btn" rel="noopener noreferrer">
               View source on GitHub
             </a>
+            <Link href="/tutorials/site-walkthrough" className="btn">
+              Watch walkthrough
+            </Link>
           </div>
         </header>
 
