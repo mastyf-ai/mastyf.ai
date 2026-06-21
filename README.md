@@ -1,16 +1,63 @@
-# mastyf.ai
+<p align="center">
+  <img src="docs/assets/logo.jpeg" alt="mastyf.ai logo" width="120" />
+</p>
 
-**A safety layer between your AI assistant and the MCP tools it uses.**
+<h1 align="center">mastyf.ai</h1>
+
+<p align="center"><strong>A safety layer between your AI assistant and the MCP tools it uses.</strong></p>
 
 [![Website](https://img.shields.io/badge/Website-live-blue)](https://mastyf-ai-cloud-jet.vercel.app/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-blue)](https://github.com/mastyf-ai/mastyf.ai/actions)
 
-**Version 4.1.7** · [Website](https://mastyf-ai-cloud-jet.vercel.app/) · [GitHub](https://github.com/mastyf-ai/mastyf.ai) · [Install from source](#getting-started--install-clone-and-run)
+**Version 4.1.7** · [Website](https://mastyf-ai-cloud-jet.vercel.app/) · [Architecture](#architecture-diagrams) · [GitHub](https://github.com/mastyf-ai/mastyf.ai) · [Install from source](#getting-started--install-clone-and-run)
 
 > **Live website:** [https://mastyf-ai-cloud-jet.vercel.app/](https://mastyf-ai-cloud-jet.vercel.app/) — trust scores, badges, and a free cloud console.  
 > **Self-hosted proxy:** this repository (`@mastyf-ai/server`, CLI `mastyf-ai`) is **not published to npm yet** — clone and build from source below.
+
+---
+
+## Architecture diagrams
+
+Visual overview of how mastyf.ai detects threats, learns from blocks, and improves policy over time. The same PNGs power the [live website architecture section](https://mastyf-ai-cloud-jet.vercel.app/#architecture) and live in [`docs/assets/`](docs/assets/).
+
+| File | What it shows |
+| ---- | ------------- |
+| [`security-swarm-architecture.png`](docs/assets/security-swarm-architecture.png) | **Security Swarm** — CI red-team (Scout → Report) + runtime agents (BlockGuard → Calibrator) on every tool call |
+| [`llm-threat-discovery-architecture.png`](docs/assets/llm-threat-discovery-architecture.png) | **Threat Lab** — local LLM proposes new attacks; you approve before policy changes |
+| [`auto-threat-research-architecture.png`](docs/assets/auto-threat-research-architecture.png) | **Auto Threat Research** — live blocks feed new harness fixtures 24/7 (no silent policy apply) |
+| [`logo.jpeg`](docs/assets/logo.jpeg) | mastyf.ai brand mark (same as `apps/cloud/public/logo.jpeg`) |
+
+These are the **rebranded mastyf.ai** diagrams (replacing the former [MCP Guardian](https://github.com/rudraneel93/mcp-guardian/tree/master/docs/assets) assets).
+
+### Security Swarm
+
+![mastyf.ai Security Swarm architecture](docs/assets/security-swarm-architecture.png)
+
+Two tracks work together: **CI** runs corpus regression, evasion probes, and Node/Python parity before merge; **runtime** applies policy on every `tools/call`, learns from blocks, and optionally runs semantic audit. [Full explanation →](#1-security-swarm--closed-loop-red-team)
+
+### LLM Threat Discovery (Threat Lab)
+
+![mastyf.ai LLM Threat Discovery architecture](docs/assets/llm-threat-discovery-architecture.png)
+
+Local Ollama LLM turns real signals (bypasses, CVEs, corpus seeds) into validated test fixtures and optional rule ideas — **you review before anything is applied**. [Full explanation →](#3-llm-threat-discovery-threat-lab)
+
+### Auto Threat Research
+
+![mastyf.ai Auto Threat Research architecture](docs/assets/auto-threat-research-architecture.png)
+
+Background loop: suspicious blocks are queued, researched, classified, and written as `adv-*.json` harness fixtures so CI catches similar attacks next time. [Full explanation →](#4-self-sustaining-threat-research-auto-threat-research)
+
+### Three-layer detection (every tool call)
+
+| Layer | What it catches |
+| ----- | --------------- |
+| **Regex triage** | Obvious injection, path traversal, secrets, Unicode tricks — microseconds, no LLM |
+| **Schema analysis** | Oversized or malformed payloads before policy runs |
+| **Semantic LLM audit** (optional) | Subtle abuse; rate-capped with Ollama fallback |
+
+[Detailed architecture walkthrough →](#architecture-diagrams-explained)
 
 ---
 
@@ -118,7 +165,7 @@ You stay in control: mastyf.ai does not silently change your rules unless you ap
 
 This section shows how mastyf.ai is wired together: what runs where, how a tool call flows through governance, and how Security Swarm / Threat Lab pipelines connect to the proxy.
 
-**In this section:** System overview · Tool call path · Transports · Agentic AI · Dashboard · Security Swarm pipelines · Learning loop · Cloud app
+**In this section:** System overview · Tool call path · Transports · Agentic AI · Dashboard · [Architecture diagrams (explained)](#architecture-diagrams-explained) · Cloud app
 
 ### System overview
 
@@ -210,33 +257,117 @@ Proxy writes → history.db → Dashboard REST API → Next.js SPA (Protection, 
 
 The dashboard is not a separate database — it reads the same `call_records` the proxy writes. Set `MASTYF_AI_DB_PATH` consistently when running `pnpm real-life:filesystem` or other tests so charts match proxy traffic.
 
-### Security Swarm pipeline architecture
+### Architecture diagrams (explained)
 
-These workflows run **alongside** the live proxy. They consume audit data, swarm reports, and LLM output to improve detection — they do not sit in the hot path of every tool call.
+These diagrams also appear on the [live website](https://mastyf-ai-cloud-jet.vercel.app/#architecture). Source files live in [`docs/assets/`](docs/assets/) (copied from the rebranded mastyf.ai cloud app).
 
-#### Security Swarm
+---
 
-Automated red-team loop: generate attacks, run the harness, detect bypasses, feed learning.
+#### 1. Security Swarm — closed-loop red team
 
-- **What it does:** Runs scripted steps (build, corpus eval, parity, harness) and records bypasses when policy allows an attack that should be blocked.
-- **How it connects:** Reads/writes under `reports/security-swarm/`; bypasses and proposals can inform Threat Lab and runtime attack-learning.
-- **Run:** `pnpm security-swarm:fast` (PR gate) or `pnpm security-swarm:analyze` (full analysis). See [`security-swarm/README.md`](security-swarm/README.md).
+![mastyf.ai Security Swarm architecture](docs/assets/security-swarm-architecture.png)
 
-#### Threat Lab (LLM discovery)
+*mastyf.ai Security Swarm — CI regression, evasion probes, Node/Python parity, and runtime learning on the hot path.*
 
-Human-reviewed LLM proposals for new attack fixtures and policy ideas.
+**What this diagram shows, in plain language:**
 
-- **What it does:** Collects signals (bypasses, semantic TPs, ThreatIntel), asks a local LLM for new corpus candidates, validates them, writes `threat-lab-candidates.json` for **you to accept**.
-- **How it connects:** Outputs feed the adversarial harness and optional policy-applier after review — nothing is applied silently.
-- **Run:** `pnpm security-swarm:threat-lab` (requires Ollama at `http://127.0.0.1:11434`).
+Security Swarm is mastyf.ai’s automated red team. It keeps testing your policy the way an attacker would — in CI before you merge, and at runtime while the proxy is live — so weak rules are found before production traffic hits them.
 
-#### Auto Threat Research
+The diagram has **two tracks** that work together:
 
-Background LLM research when the proxy blocks suspicious traffic; writes validated `adv-*.json` fixtures.
+| Track | Agents (in the diagram) | What they do |
+| ----- | ----------------------- | ------------ |
+| **CI track** (offline, before merge) | **Scout** | Scans dependencies and config for CVEs, risky tools, and policy gaps. |
+| | **Corpus** | Replays the policy evaluation corpus (~300 JSON attack/benign entries) and fails if an attack slips through or a safe call is blocked. |
+| | **Evasion** | Runs obfuscation probes — tricks like Unicode hiding and encoding — to see if regex rules can be fooled. |
+| | **Parity** | Compares the TypeScript and Python policy engines on ~813 harness fixtures so both implementations agree. |
+| | **Report** | Writes `reports/security-swarm/latest.json`, plain-English analysis, and dashboard figures. |
+| **Runtime track** (live, on every tool call) | **BlockGuard** | Applies your YAML policy on every `tools/call` before the real MCP server runs. |
+| | **InstantLearner** | Watches block patterns and suggests new rules from rolling stats — suggestions only, not auto-applied. |
+| | **SemanticAuditor** | Optional tier-2 LLM review on suspicious arguments (rate-capped, with local Ollama fallback). |
+| | **Calibrator** | Tunes semantic thresholds from labeled outcomes in the dashboard. |
 
-- **What it does:** Debounces block events, classifies attack types, writes harness fixtures when validation passes (dedupe + rate caps).
-- **How it connects:** Uses the same auto-corpus writer as Threat Lab when both `MASTYF_AI_THREAT_RESEARCH_AUTO` and `SWARM_THREAT_RESEARCH_AUTO` are enabled.
-- **Run:** Enable env flags on the proxy host; or trigger from dashboard **Threat Discovery**.
+**How the pieces connect:** CI agents feed the adversarial harness and corpus under `adversarial-harness/` and `corpus/`. Runtime agents read and write the same `history.db` audit log the dashboard uses. When CI finds a bypass, Threat Lab can propose a fix; when runtime blocks something new, Auto Threat Research can add it to the fixture library — always with human review before policy changes.
+
+**Run it:**
+
+```bash
+pnpm security-swarm:fast      # PR gate (~5–15 min)
+pnpm security-swarm:analyze   # full analysis + live MCP scenarios
+```
+
+More detail: [`security-swarm/README.md`](security-swarm/README.md).
+
+---
+
+#### 2. Three-layer detection (every `tools/call`)
+
+Before Threat Lab or Swarm even run, every tool call passes through three fast checks:
+
+| Layer | What it catches | Why it exists |
+| ----- | --------------- | ------------- |
+| **1. Regex triage** | Obvious injection, path traversal, secret exfiltration, Unicode confusables | Blocks the majority of attacks in microseconds — no LLM needed. |
+| **2. Schema analysis** | Oversized payloads, malformed JSON, excessive nesting | Stops crash and DoS-style abuse before policy rules run. |
+| **3. Semantic LLM audit** (optional) | Subtle prompt injection and context-dependent abuse | Catches attacks that look innocent to regex; rate-capped with Ollama/local fallback. |
+
+If any layer blocks, the upstream MCP server never receives the call.
+
+---
+
+#### 3. LLM Threat Discovery (Threat Lab)
+
+![mastyf.ai LLM Threat Discovery architecture](docs/assets/llm-threat-discovery-architecture.png)
+
+*Human-in-the-loop discovery — the LLM proposes new attacks and rules; you approve before anything changes.*
+
+**What this diagram shows, in plain language:**
+
+Threat Lab uses a **local LLM** (Ollama) to suggest new test cases when mastyf.ai sees interesting security signals. Nothing is applied automatically — you always review first.
+
+| Step | Label in diagram | What happens |
+| ---- | ---------------- | ------------ |
+| 1 | **Inputs** | Real signals only: swarm bypasses, semantic true-positives, ThreatIntel CVE hits, and corpus attack seeds. |
+| 2 | **Discover** | Ollama proposes an attack class, a test hypothesis, a new corpus fixture, and sometimes a YAML rule line. |
+| 3 | **Validate** | Automated gates: JSON schema check, dangerous-regex rejection, replay block test, fingerprint dedupe. |
+| 4 | **Manifest** | Valid proposals land in `threat-lab-candidates.json` with provenance — ready for dashboard review. |
+| 5 | **Review** | You accept or reject in the dashboard. Accept can apply a policy rule; reject discards. Fixtures always go to the harness for future regression either way. |
+
+**Run:**
+
+```bash
+pnpm security-swarm:threat-lab
+# Requires Ollama at http://127.0.0.1:11434
+```
+
+---
+
+#### 4. Self-Sustaining Threat Research (Auto Threat Research)
+
+![mastyf.ai Auto Threat Research architecture](docs/assets/auto-threat-research-architecture.png)
+
+*Continuous research loop — live proxy blocks feed new adversarial fixtures around the clock.*
+
+**What this diagram shows, in plain language:**
+
+Auto Threat Research runs in the background while your proxy is live. When something suspicious is blocked, it queues the event, researches it with the same LLM path as Threat Lab, and — if validation passes — writes a new `adv-*.json` fixture to `adversarial-harness/fixtures/`. **It does not change live policy by itself** — it grows the test library so CI and Swarm catch similar attacks next time.
+
+| Step | Label in diagram | What happens |
+| ---- | ---------------- | ------------ |
+| 1 | **Detect** | Semantic flags, repeat blocks, ThreatIntel alerts, swarm bypasses, and corpus seeds enqueue events. |
+| 2 | **Queue** | Events are debounced and rate-capped (duplicate fingerprints skipped). |
+| 3 | **Research** | Same Threat Lab LLM path with a minimum confidence gate (default 0.85). |
+| 4 | **Classify** | Discoveries are mapped to corpus categories before write. |
+| 5 | **Write** | Validated `adv-*.json` files are added to the harness — audit trail only, no silent policy apply. |
+
+**Enable:**
+
+```bash
+export MASTYF_AI_THREAT_RESEARCH_AUTO=true
+export SWARM_THREAT_RESEARCH_AUTO=true
+pnpm security-swarm:auto-threat-research
+```
+
+---
 
 ### Continuous improvement loop
 
@@ -247,6 +378,8 @@ Live proxy blocks → history.db → Security Swarm + Threat Lab + Auto Threat R
                                       ↓
                          adversarial harness + corpus → stronger default policy
 ```
+
+All three diagrams above are the same assets used on [mastyf-ai-cloud-jet.vercel.app](https://mastyf-ai-cloud-jet.vercel.app/#architecture).
 
 ### Cloud app (`apps/cloud`)
 
@@ -453,10 +586,12 @@ In **Security → Policy**, you can manage rules without hand-editing YAML:
 
 **What it is:** A team of automated testers that keep trying to break your policy the way an attacker would.
 
+![Security Swarm architecture](docs/assets/security-swarm-architecture.png)
+
 **How it works:**
 
-- One track **generates and runs attacks**, checks for bypasses, and writes reports.
-- Another track **learns from real blocks** on your proxy and improves detection over time.
+- **CI track** (Scout, Corpus, Evasion, Parity, Report) — runs offline before merge: corpus regression, obfuscation probes, and Node/Python parity on ~813 fixtures.
+- **Runtime track** (BlockGuard, InstantLearner, SemanticAuditor, Calibrator) — runs on the live proxy: policy blocks, pattern learning, optional semantic audit, threshold tuning.
 - The two tracks feed each other so tests get better as your deployment sees real traffic.
 
 **Why it matters:** Your policy is only as strong as the attacks you have tested against; the swarm expands that set continuously.
@@ -468,7 +603,7 @@ pnpm security-swarm:fast      # PR gate (~5–15 min)
 pnpm security-swarm:analyze   # full analysis + live MCP scenarios
 ```
 
-Architecture and artifacts: [`security-swarm/README.md`](security-swarm/README.md) · [Architecture § Security Swarm pipeline](#security-swarm-pipeline-architecture) above.
+Full walkthrough of the diagram: [Architecture § Security Swarm](#1-security-swarm--closed-loop-red-team) · Artifacts: [`security-swarm/README.md`](security-swarm/README.md)
 
 ---
 
@@ -476,12 +611,17 @@ Architecture and artifacts: [`security-swarm/README.md`](security-swarm/README.m
 
 **What it is:** Uses a local AI model to **propose** new attack patterns and rule ideas based on what mastyf.ai has seen.
 
+![LLM Threat Discovery architecture](docs/assets/llm-threat-discovery-architecture.png)
+
 **How it works:**
 
-1. Collects signals from recent blocks, CVE data, and swarm findings.
-2. The model suggests new test cases and possible policy lines.
-3. Automated checks validate proposals.
-4. **You review and approve** — nothing is applied automatically.
+1. **Inputs** — swarm bypasses, semantic true-positives, ThreatIntel CVEs, corpus attacks (real signals only).
+2. **Discover** — local Ollama LLM proposes attack class, hypothesis, fixture, and optional YAML rule.
+3. **Validate** — schema, dangerous-regex, replay block test, fingerprint dedupe.
+4. **Manifest** — signed `threat-lab-candidates.json` for dashboard review.
+5. **Review** — you accept or reject; nothing is applied automatically.
+
+Full walkthrough: [Architecture § LLM Threat Discovery](#3-llm-threat-discovery-threat-lab)
 
 **Run:**
 
@@ -496,7 +636,11 @@ pnpm security-swarm:threat-lab
 
 **What it is:** Background research when something interesting is blocked.
 
-**How it works:** When the proxy blocks a suspicious call, events can be queued, grouped, and analyzed by an LLM to classify the attack type and add it to your research corpus. **It does not change your live policy by itself** — it builds knowledge for you to use later.
+![Auto Threat Research architecture](docs/assets/auto-threat-research-architecture.png)
+
+**How it works:** When the proxy blocks a suspicious call, events are debounced, researched by the same LLM path as Threat Lab, classified, and — if validation passes — written as `adv-*.json` harness fixtures. **It does not change your live policy by itself** — it builds the test library for CI and Swarm.
+
+Full walkthrough: [Architecture § Auto Threat Research](#4-self-sustaining-threat-research-auto-threat-research)
 
 **Enable:**
 
@@ -1002,6 +1146,7 @@ Verify: `APP_URL=https://mastyf-ai-cloud-jet.vercel.app pnpm cloud:verify-prod`
 
 ```
 mastyf.ai/
+├── docs/assets/          # Logo + architecture diagrams (README & website)
 ├── apps/cloud/           # Next.js — scores, badges, cloud console (not on npm)
 ├── apps/proxy-core/      # Go data-plane proxy
 ├── packages/             # @mastyf-ai/core, plugin-sdk, mtx, cli
@@ -1021,6 +1166,7 @@ mastyf.ai/
 
 | Topic | Document |
 | ----- | -------- |
+| **Architecture diagrams** | [`docs/assets/`](docs/assets/) (PNG sources + this README [§ explained](#architecture-diagrams-explained)) |
 | Security Swarm | [`security-swarm/README.md`](security-swarm/README.md) |
 | Adversarial harness | [`adversarial-harness/README.md`](adversarial-harness/README.md) |
 | Corpus evaluation | [`corpus/README.md`](corpus/README.md) |
