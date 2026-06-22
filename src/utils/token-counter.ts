@@ -11,7 +11,6 @@ import { get_encoding, type TiktokenEncoding } from 'tiktoken';
 import { spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import { createRequire } from 'module';
-import https from 'https';
 import { Logger } from './logger.js';
 
 const requireOptional = createRequire(import.meta.url);
