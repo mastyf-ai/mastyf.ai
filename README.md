@@ -358,6 +358,15 @@ Auto Threat Research runs in the background while your proxy is live. When somet
 | 3 | **Research** | Same Threat Lab LLM path with a minimum confidence gate (default 0.85). |
 | 4 | **Classify** | Discoveries are mapped to corpus categories before write. |
 | 5 | **Write** | Validated `adv-*.json` files are added to the harness — audit trail only, no silent policy apply. |
+| 6 | **Promote (optional)** | High-confidence discoveries (≥0.90) can auto-append to the core learned-rules overlay (`~/.mastyf-ai/learned-rules.json`) for immediate argument + local-semantic detection — separate from YAML policy accept. |
+
+**Enable learned-rules promotion (core scanners, not policy YAML):**
+
+```bash
+export MASTYF_AI_LEARNED_RULES_ENABLED=true
+export MASTYF_AI_LEARNED_RULES_PROMOTE=true
+export MASTYF_AI_LEARNED_RULES_MIN_CONFIDENCE=0.90
+```
 
 **Enable:**
 
