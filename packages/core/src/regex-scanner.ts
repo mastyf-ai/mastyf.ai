@@ -1,14 +1,11 @@
 import type { Issue, ToolDefinition } from "./types.js";
 import { hasConfusableDelta, normalizeUnicode } from "./confusables.js";
+import { findUnsafeUrls } from "./url-allowlist.js";
 
 export interface RegexScanOptions {
   /** TR39 confusables + NFKC before pattern match (default: true). */
   unicodeStrict?: boolean;
 }
-
-/** Safe documentation / schema hosts excluded from MCPG-R-020. */
-const SAFE_URL_HOSTS =
-  "schema\\.org|json-schema\\.org|openapi\\.org|docs\\.openai\\.com";
 
 interface PatternRule {
   id: string;               // Stable MCPG-R-### ID
@@ -64,10 +61,7 @@ const CRITICAL_RULES: PatternRule[] = [
     pattern: /your\s+new\s+(?:primary\s+)?(?:goal|objective|mission|task|directive)/i,
     message: "Goal replacement injection" },
 
-  // Exfiltration
-  { id: "MCPG-R-020", category: "exfiltration", severity: "critical",
-    pattern: new RegExp(`https?:\\/\\/(?!(?:${SAFE_URL_HOSTS}))\\S+`, "i"),
-    message: "Embedded URL — potential exfiltration endpoint" },
+  // Exfiltration (embedded URLs handled separately via url-allowlist)
   { id: "MCPG-R-021", category: "exfiltration", severity: "critical",
     pattern: /send\s+(?:the\s+)?(?:result|data|output|response|content|this)\s+to/i,
     message: "Explicit data forwarding directive" },
@@ -210,6 +204,18 @@ export function runRegexScan(
         confidence: 1.0,  // Regex is deterministic
       });
     }
+  }
+
+  for (const unsafeUrl of findUnsafeUrls(text)) {
+    issues.push({
+      id: "MCPG-R-020",
+      layer: "regex",
+      severity: "critical",
+      category: "exfiltration",
+      message: "Embedded URL — potential exfiltration endpoint",
+      evidence: unsafeUrl.trim(),
+      confidence: 1.0,
+    });
   }
 
   return issues;

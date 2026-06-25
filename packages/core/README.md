@@ -24,6 +24,8 @@ It works as a **transparent proxy**, a **standalone CLI**, an **MCP server** (so
 
 See [ENTERPRISE_DEPLOYMENT.md](../../docs/ENTERPRISE_DEPLOYMENT.md) for Redis, multi-replica, and license requirements.
 
+**Semantic queue note:** `@mastyf-ai/core` semantic queue caps are **per Node.js process** (and per worker thread). Multi-replica proxy deployments should use proxy-level Redis caps or run semantic scans on the main thread.
+
 ---
 
 ## Quick Start
@@ -354,6 +356,37 @@ docker run -v $(pwd)/mcp.json:/etc/mastyf-ai/config.json \
 | `ALERT_WEBHOOK_URL` | — | Slack or Discord webhook for critical alerts |
 | `ALERT_MIN_SEVERITY` | `warning` | Minimum severity for webhook alerts |
 | `ANTHROPIC_API_KEY` | — | API key for LLM semantic analysis layer |
+| `MASTYF_AI_SEMANTIC_CIRCUIT_THRESHOLD` | `5` | Consecutive failures before semantic circuit opens |
+| `MASTYF_AI_SEMANTIC_CIRCUIT_RESET_MS` | `60000` | Cooldown before half-open semantic probe |
+| `MASTYF_AI_SEMANTIC_MAX_QUEUE` | `1000` | In-process concurrent semantic scan cap (per process/worker) |
+| `MASTYF_AI_SEMANTIC_PER_TENANT_MAX` | `50` | Per-tenant semantic scan cap (in-process) |
+| `MASTYF_AI_SEMANTIC_QUEUE_COORD` | — | Set to `parent` for worker-thread queue delegation hooks |
+| `MASTYF_AI_SCAN_CONCURRENCY` | `32` | Parallel tool scans in `scanServer()` |
+| `MASTYF_AI_SCAN_TOOL_TIMEOUT_MS` | LLM timeout + 5000 | Per-tool wall clock in `scanServer()` |
+| `MASTYF_AI_SCAN_SERVER_BUDGET_MS` | `300000` | Total wall clock budget for `scanServer()` |
+| `MASTYF_AI_SAFE_URL_HOSTS` | — | Extra comma-separated URL host suffixes allowed in tool descriptions (MCPG-R-020) |
+| `MASTYF_AI_UNICODE_MAX_CHARS` | `16384` | Skip full TR39 confusables map above this description length |
+| `MASTYF_AI_UNICODE_MAX_OPS_PER_MINUTE` | `2000` | Rate cap for full TR39 normalization per process |
+| `MASTYF_AI_ARG_SCAN_MAX_CHARS` | `8192` | Max characters per argument string tested by regex scanners (ReDoS cap) |
+| `MASTYF_AI_LOCAL_SEMANTIC` | `true` | Enable deterministic local heuristic fallback when LLM is unavailable |
+| `MASTYF_AI_LOCAL_SEMANTIC_THRESHOLD` | `0.55` | Minimum aggregate confidence score before local heuristic issues are emitted |
+| `MASTYF_AI_LEARNED_RULES_ENABLED` | `false` | Load runtime learned-rules JSON overlay into argument + local-semantic scanners |
+| `MASTYF_AI_LEARNED_RULES_PATH` | `~/.mastyf-ai/learned-rules.json` | Overlay file path |
+| `MASTYF_AI_LEARNED_RULES_MAX_TOTAL` | `200` | Maximum learned rules in overlay |
+| `MASTYF_AI_LEARNED_RULES_RELOAD_MS` | `60000` | Periodic overlay reload interval (0 = load once at startup) |
+| `MASTYF_AI_MANIFEST_SECRET` | — | **Required in production/strict mode.** HMAC secret for tool manifest pinning (min 32 chars). No hardcoded default is used. |
+| `MASTYF_AI_MANIFEST_REQUIRE_SECRET` | `false` | When `true`, refuse file-based auto secret — require `MASTYF_AI_MANIFEST_SECRET` |
+| `MASTYF_AI_MANIFEST_PATH` | `~/.mastyf-ai/tool-manifest.json` | Tool pinning manifest file path |
+
+**Tool manifest pinning:** `verifyToolDefinitions()` / `approveToolDefinitions()` sign entries with HMAC-SHA256. Set `MASTYF_AI_MANIFEST_SECRET` explicitly in production (`MASTYF_AI_STRICT_MODE=true` enforces this). Local dev may use an auto-generated secret in `~/.mastyf-ai/.local-secret` (mode `0600`) when not in strict mode.
+ Threat Lab discoveries promoted at runtime merge with static rules in `runArgumentScan()` (`MCPG-A-LRN-*`) and `runLocalSemanticFallback()` (`MCPG-LOC-LRN-*`). Each candidate passes ReDoS timing, true-positive probe match, and benign-corpus false-positive gates before append. Enable with `MASTYF_AI_LEARNED_RULES_ENABLED=true`; promotion from Threat Lab requires `MASTYF_AI_LEARNED_RULES_PROMOTE=true` on the proxy (confidence ≥ `MASTYF_AI_LEARNED_RULES_MIN_CONFIDENCE`, default 0.90).
+
+**Local semantic fallback (`runLocalSemanticFallback`):** When no LLM key is configured or the semantic circuit is open, 80 bounded-regex heuristics (`MCPG-LOC-001`–`080`) cover instruction suppression, jailbreak (DAN, leetspeak), exfiltration (webhook, cloud CLI, git/scp, encode-then-transfer), credential theft, system-prompt injection, goal/memory poisoning, tool chaining, shell/meterpreter payloads, obfuscation, stealth, and multilingual attacks (FR/ES/DE/PT/IT/AR/JA/CJK). Each matching rule contributes its weight; all hits above the threshold are returned. Allowlisted documentation URLs are excluded from exfiltration rules.
+
+**HTTP tool fetcher (`fetchToolsFromHttp`):** Each JSON-RPC request (`initialize`, `tools/list`) gets its own `timeoutMs` budget (default 10s). Optional `totalTimeoutMs` caps combined handshake time (default `timeoutMs * 2`). Connections are pooled per origin via undici `Agent` keep-alive. Streamable HTTP servers returning `mcp-session-id` on initialize have that header forwarded to `tools/list`.
+
+**Argument layer (Layer 1b):** `runArgumentScan()` includes prompt-injection detection (`MCPG-A-PI-*`) on every string argument leaf, ported from the main-repo `INJECTION_RULES` in `src/scanners/prompt-injection-detector.ts`. Keep both rule sets in sync; `packages/core/tests/argument-pi-corpus.test.ts` enforces 32/32 recall on `corpus/attacks/prompt-injection/`.
+
 | `NVD_API_KEY` | — | NIST NVD API key for CVE lookups |
 | `MCP_PRICING_MODEL` | `gpt-4o` | Default model for cost estimation |
 

@@ -1,24 +1,80 @@
 import type { Issue, ToolDefinition } from "./types.js";
+import {
+  LOCAL_SEMANTIC_RULES,
+  type LocalSemanticRuleDef,
+} from "./local-semantic-rules.js";
+import { execPattern } from "./safe-pattern-match.js";
+import { extractHttpUrls, isSafeUrlHost } from "./url-allowlist.js";
+import { listLearnedRules, reloadLearnedRules as reloadLearnedRulesStore } from "./learned-rules-store.js";
+import { reloadArgumentInjectionRules } from "./argument-prompt-injection.js";
 
-const LOCAL_PATTERNS: { id: string; category: string; severity: "critical" | "warning"; weight: number; re: RegExp; message: string }[] = [
-  { id: "MCPG-LOC-001", category: "prompt-injection", severity: "critical", weight: 0.85, re: /ignore\s+(?:all\s+)?(?:previous|prior)\s+instructions/i, message: "Local heuristic: instruction override in tool description" },
-  { id: "MCPG-LOC-002", category: "privilege-escalation", severity: "critical", weight: 0.8, re: /bypass\s+(?:security|safety|restrictions)/i, message: "Local heuristic: security bypass language" },
-  { id: "MCPG-LOC-003", category: "exfiltration", severity: "critical", weight: 0.75, re: /send\s+(?:the\s+)?(?:result|data|output)\s+to/i, message: "Local heuristic: data exfiltration directive" },
-  { id: "MCPG-LOC-004", category: "cross-tool-chaining", severity: "warning", weight: 0.7, re: /\bbefore\b[\s\S]{0,80}?\bthen\b/i, message: "Local heuristic: multi-step tool chain (before…then)" },
-  { id: "MCPG-LOC-005", category: "cross-tool-chaining", severity: "warning", weight: 0.7, re: /\bfirst\b[\s\S]{0,80}?\bthen\b/i, message: "Local heuristic: multi-step tool chain (first…then)" },
-  { id: "MCPG-LOC-005", category: "stealth", severity: "warning", weight: 0.65, re: /do\s+not\s+(?:tell|inform|mention)\s+(?:the\s+)?user/i, message: "Local heuristic: concealment directive" },
-];
+type CompiledLocalRule = LocalSemanticRuleDef & { re: RegExp; learned?: boolean };
 
-const THRESHOLD = parseFloat(
-  process.env["MASTYF_AI_LOCAL_SEMANTIC_THRESHOLD"] ||
-    process.env["MASTYF_AI_LOCAL_SEMANTIC_THRESHOLD"] ||
-    "0.55",
-);
+let compiledRules: CompiledLocalRule[] | null = null;
+
+function compileStaticLocalRules(): CompiledLocalRule[] {
+  return LOCAL_SEMANTIC_RULES.map((rule) => ({
+    ...rule,
+    re: new RegExp(rule.regex, "ims"),
+  }));
+}
+
+function compileLearnedLocalRules(): CompiledLocalRule[] {
+  return listLearnedRules("local-semantic").map((rule) => ({
+    id: rule.id,
+    category: rule.category,
+    severity: rule.severity,
+    weight: rule.weight,
+    regex: rule.regex,
+    message: rule.message,
+    re: new RegExp(rule.regex, "ims"),
+    learned: true,
+  }));
+}
+
+function getCompiledLocalRules(): CompiledLocalRule[] {
+  if (!compiledRules) {
+    compiledRules = [...compileStaticLocalRules(), ...compileLearnedLocalRules()];
+  }
+  return compiledRules;
+}
+
+/** @internal */
+export function resetLocalSemanticRulesForTests(): void {
+  compiledRules = null;
+}
+
+/** Reload learned overlay and bust compiled rule caches. */
+export function reloadLearnedRules(): void {
+  reloadLearnedRulesStore();
+  compiledRules = null;
+  reloadArgumentInjectionRules();
+}
+
+const THRESHOLD = (): number => {
+  const n = parseFloat(process.env["MASTYF_AI_LOCAL_SEMANTIC_THRESHOLD"] || "0.55");
+  return Number.isFinite(n) && n > 0 ? n : 0.55;
+};
 
 export function isCoreLocalSemanticEnabled(): boolean {
-  const v = process.env["MASTYF_AI_LOCAL_SEMANTIC"] ?? process.env["MASTYF_AI_LOCAL_SEMANTIC"];
+  const v = process.env["MASTYF_AI_LOCAL_SEMANTIC"];
   if (v === "false" || v === "0") return false;
   return true;
+}
+
+function shouldSkipExfilHit(ruleId: string, fullText: string): boolean {
+  if (ruleId !== "MCPG-LOC-014" && ruleId !== "MCPG-LOC-015") {
+    return false;
+  }
+  const urls = extractHttpUrls(fullText);
+  if (urls.length === 0) return false;
+  return urls.every((raw) => {
+    try {
+      return isSafeUrlHost(new URL(raw).hostname);
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** Deterministic heuristic when no LLM API key is configured. */
@@ -29,22 +85,25 @@ export function runLocalSemanticFallback(
   let score = 0;
   const hits: Issue[] = [];
 
-  for (const p of LOCAL_PATTERNS) {
-    const m = p.re.exec(text);
-    if (m) {
-      score += p.weight;
-      hits.push({
-        id: p.id,
-        layer: "semantic",
-        severity: p.severity,
-        category: p.category,
-        message: p.message,
-        evidence: m[0].trim().slice(0, 80),
-        confidence: p.weight,
-      });
+  for (const rule of getCompiledLocalRules()) {
+    const m = execPattern(rule.re, text);
+    if (!m || shouldSkipExfilHit(rule.id, text)) {
+      continue;
     }
+    score += rule.weight;
+    hits.push({
+      id: rule.id,
+      layer: "semantic",
+      severity: rule.severity,
+      category: rule.category,
+      message: rule.message,
+      evidence: m[0].trim().slice(0, 80),
+      confidence: rule.weight,
+    });
   }
 
-  if (score < THRESHOLD) return [];
-  return hits.sort((a, b) => b.confidence - a.confidence).slice(0, 3);
+  if (score < THRESHOLD()) return [];
+  return hits.sort((a, b) => b.confidence - a.confidence);
 }
+
+export { LOCAL_SEMANTIC_RULES, LOCAL_SEMANTIC_RULE_PROBES } from "./local-semantic-rules.js";

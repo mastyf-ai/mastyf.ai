@@ -8,6 +8,9 @@ export interface LlmCacheKeyInput {
   system: string;
   temperature: number;
   policyMode?: string;
+  /** Engine scan mode — must differ so onlyOnHits vs thorough scans do not share verdicts. */
+  onlyOnHits?: boolean;
+  alwaysRun?: boolean;
 }
 
 let sharedCache: LlmCache | null = null;
@@ -34,8 +37,15 @@ export function resetLlmCacheForTests(): void {
 
 function hashCacheKey(input: LlmCacheKeyInput): string {
   const mode = input.policyMode?.trim() || 'block';
-  const payload = `${mode}\0${input.model}\0${input.system}\0${input.prompt}\0${input.temperature}`;
+  const onlyOnHits = input.onlyOnHits ? '1' : '0';
+  const alwaysRun = input.alwaysRun ? '1' : '0';
+  const payload = `${mode}\0${onlyOnHits}\0${alwaysRun}\0${input.model}\0${input.system}\0${input.prompt}\0${input.temperature}`;
   return createHash('sha256').update(payload).digest('hex');
+}
+
+/** @internal Exposed for cache-key regression tests. */
+export function hashLlmCacheKeyForTests(input: LlmCacheKeyInput): string {
+  return hashCacheKey(input);
 }
 
 function ttlSec(): number {

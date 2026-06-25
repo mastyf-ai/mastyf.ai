@@ -1,5 +1,5 @@
 export type Severity = "critical" | "warning" | "info";
-export type DetectionLayer = "regex" | "schema" | "semantic";
+export type DetectionLayer = "regex" | "schema" | "semantic" | "argument";
 
 export interface Issue {
   id: string;               // e.g. "MCPG-001"
@@ -51,6 +51,13 @@ export interface ServerScanResult {
     warnings: number;
     critical: number;
   };
+  /** Present when scan stopped early due to server budget or tool cap. */
+  truncated?: {
+    reason: string;
+    budgetMs: number;
+    scanned: number;
+    total: number;
+  };
 }
 
 // Manifest (tool pinning)
@@ -71,4 +78,6 @@ export interface ManifestVerifyResult {
   newTools: string[];
   removedTools: string[];
   tamperedEntries: string[];
+  /** Present when status is "error" (e.g. missing manifest secret in strict mode). */
+  error?: string;
 }

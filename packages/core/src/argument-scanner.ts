@@ -18,10 +18,13 @@
  *   - Dangerous JS patterns (MCPG-A-JS-*)
  *   - File inclusion / traversal (MCPG-A-FI-*)
  *   - Log injection / forging (MCPG-A-LOG-*)
+ *   - Prompt injection in argument values (MCPG-A-PI-*)
  */
 import type { Issue } from './types.js';
 import { runEntropyScan } from './entropy-detector.js';
 import { normalizeUnicode } from './confusables.js';
+import { scanArgumentPromptInjection } from './argument-prompt-injection.js';
+import { testPattern } from './safe-pattern-match.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PATTERN DEFINITIONS
@@ -57,8 +60,8 @@ const SQL_INJECTION_PATTERNS = [
   /;\s*--\s/,
   /;\s*#/,
   /\s--\s+(?:SELECT|DROP|DELETE|INSERT)/i,
-  /\/\*[\s\S]{0,40}\*\/\s*(?:SELECT|DROP|DELETE|INSERT|UPDATE|ALTER|CREATE)/i,
-  /UNION\s*\/\*[\s\S]{0,20}\*\/\s*SELECT/i,
+  /\/\*[^*]{0,40}\*\/\s*(?:SELECT|DROP|DELETE|INSERT|UPDATE|ALTER|CREATE)/i,
+  /UNION\s*\/\*[^*]{0,20}\*\/\s*SELECT/i,
 
   // === information schema / system catalog probes ===
   /\bFROM\s+(?:information_schema|sys\.|mysql\.|pg_catalog\.|master\.\.|msdb\.\.)/i,
@@ -571,13 +574,14 @@ const DESERIALIZATION_PATTERNS = [
 ];
 
 // ── ReDoS / Regex Bombing ──────────────────────────────────────────────────
+/** Detect regex-bomb payloads; patterns are bounded — matching uses testPattern(). */
 const REDOS_PATTERNS = [
   /(?:a+){10,}/i,
   /(?:a+a+)+b/i,
-  /\(.*\)\s*\+\s*\(.*\)\s*\+\s*\(.*\)/,  // nested quantifiers
-  /\(\\w\+\)\+\\w\+/,   // catastrophic backtracking pattern
-  /\{0,\d+\}\{0,\d+\}\{0,\d+\}/,  // nested quantifier abuse
-  /(?:\(.*\)\*){3,}/,    // heavy repetition
+  /\([^)]{0,20}\)\s*\+\s*\([^)]{0,20}\)\s*\+\s*\([^)]{0,20}\)/,
+  /(\w\+)\+\w\+/,
+  /\{0,\d+\}\{0,\d+\}\{0,\d+\}/,
+  /(?:\([^)]{0,20}\)\*){3,}/,
 ];
 
 // ── Dangerous JavaScript Patterns ──────────────────────────────────────────
@@ -621,7 +625,7 @@ const DANGEROUS_JS_PATTERNS = [
 // ── XSS / HTML / CSS Injection Patterns (Phase 5B) ─────────────────────────
 const XSS_INJECTION_PATTERNS: RegExp[] = [
   // === Reflected XSS ===
-  /<script[^>]*>[\s\S]{0,100}<\/script>/i,
+  /<script[^>]*>[^<]{0,100}<\/script>/i,
   /<img[^>]+onerror\s*=/i,
   /<img[^>]+onload\s*=/i,
   /<svg[^>]+onload\s*=/i,
@@ -646,11 +650,11 @@ const XSS_INJECTION_PATTERNS: RegExp[] = [
   /<link[^>]+rel\s*=\s*['"]stylesheet['"][^>]+href\s*=\s*['"]data:/i,
   /<meta[^>]+http-equiv\s*=\s*['"]refresh['"][^>]+url\s*=\s*['"]javascript:/i,
   // === HTML smuggling ===
-  /data:text\/html[\s\S]{0,50}base64/i,
+  /data:text\/html[^;]{0,50}base64/i,
   /<a[^>]+href\s*=\s*['"]javascript:/i,
   /<form[^>]+action\s*=\s*['"]javascript:/i,
   // === SVG-based XSS ===
-  /<svg[^>]*>[\s\S]{0,100}<script[\s\S]{0,100}<\/script>/i,
+  /<svg[^>]*>[^<]{0,100}<script[^>]*>[^<]{0,100}<\/script>/i,
   /<animate[^>]+onbegin\s*=/i,
   /<set[^>]+onbegin\s*=/i,
   /<use[^>]+href\s*=\s*['"]data:/i,
@@ -687,7 +691,7 @@ const HTTP_SMUGGLING_PATTERNS: RegExp[] = [
   // === TE.CL smuggling ===
   /Transfer-Encoding\s*:\s*chunked\s*\r?\n\s*Content-Length\s*:\s*\d+/i,
   // === TE.TE confusion ===
-  /Transfer-Encoding\s*:\s*[\s\S]{0,50}\n\s*Transfer-Encoding\s*:/i,
+  /Transfer-Encoding\s*:\s*[^\n]{0,50}\n\s*Transfer-Encoding\s*:/i,
   // === Cache poisoning headers ===
   /X-Forwarded-Host\s*:\s*[^\n]+/i,
   /X-Original-URL\s*:\s*/i,
@@ -733,10 +737,10 @@ const DESERIALIZATION_GADGET_PATTERNS: RegExp[] = [
 // ── GraphQL Injection (expanded) ─────────────────────────────────────────────
 const GRAPHQL_INJECTION_PATTERNS: RegExp[] = [
   /\b(?:__schema|__type|__typename|__directive)\b/i,
-  /\{[\s\S]{0,50}(?:__schema|__type)\{/i,
-  /\bfragment\s+\w+\s+on\s+\w+\s*\{[\s\S]{0,100}(?:password|secret|token|credential)\}/i,
-  /\bquery\s*\{[\s\S]{0,50}(?:__schema|__type|__typename)\b/i,
-  /\b(?:query|mutation|subscription)\s*\{[\s\S]{0,500}\}/i,
+  /\{[^}]{0,50}(?:__schema|__type)\{/i,
+  /\bfragment\s+\w+\s+on\s+\w+\s*\{[^}]{0,100}(?:password|secret|token|credential)\}/i,
+  /\bquery\s*\{[^}]{0,50}(?:__schema|__type|__typename)\b/i,
+  /\b(?:query|mutation|subscription)\s*\{[\s\S]{1,200}?\}/i,
   /\b(?:alias|batch)\s*:\s*\{/i,
   /\b(?:introspection|schema)\s*\{/i,
 ];
@@ -969,37 +973,13 @@ function makeIssue(
 ): Issue {
   return {
     id,
-    layer: 'regex',
+    layer: 'argument',
     severity,
     category,
     message,
     evidence: evidence.slice(0, 200),
     confidence,
   };
-}
-
-/** Lightweight recursive decode: base64, hex, URL decode (up to depth 3). */
-function tryDecode(value: string): string[] {
-  const decoded: string[] = [value];
-  // Base64 decode
-  if (/^[A-Za-z0-9+/]{12,}={0,2}$/.test(value.trim())) {
-    try { const d = Buffer.from(value.trim(), 'base64').toString('utf-8'); if (d.length >= 4) decoded.push(d); } catch {}
-  }
-  // Hex decode
-  if (/^[0-9a-fA-F]{12,}$/.test(value.trim()) && value.trim().length % 2 === 0) {
-    try { const d = Buffer.from(value.trim(), 'hex').toString('utf-8'); if (/[\x20-\x7E]/.test(d)) decoded.push(d); } catch {}
-  }
-  // URL decode
-  if (/%[0-9a-fA-F]{2}/.test(value)) {
-    try { decoded.push(decodeURIComponent(value)); } catch {}
-  }
-  // Decode chains: decode then try base64 again on result
-  for (const d of decoded.slice(1)) {
-    if (/^[A-Za-z0-9+/]{12,}={0,2}$/.test(d.trim())) {
-      try { const dd = Buffer.from(d.trim(), 'base64').toString('utf-8'); if (dd.length >= 4) decoded.push(dd); } catch {}
-    }
-  }
-  return [...new Set(decoded)]; // deduplicate
 }
 
 export function runArgumentScan(
@@ -1019,14 +999,20 @@ export function runArgumentScan(
   const flat = walkArgs(args);
 
   // ── Entropy-based secret detection (Shannon entropy) ────────────
-  const entropyIssues = runEntropyScan(flat);
+  const entropyIssues = runEntropyScan(flat).map((i) => ({ ...i, layer: 'argument' as const }));
   issues.push(...entropyIssues);
 
   for (const item of flat) {
     // ── Unicode normalization + recursive decode before regex ────────
     // Fixes 88% Cyrillic homoglyph evasion + 50%+ encoding-based evasion
     const normalized = normalizeUnicode(item.value, true);
-    const decodedVariants = tryDecode(item.value);
+
+    // ══════════════════════════════════════════════════════════════════
+    // Prompt Injection (all string leaves)
+    // ══════════════════════════════════════════════════════════════════
+    for (const pi of scanArgumentPromptInjection(item.value)) {
+      issues.push({ ...pi, message: `${pi.message} in argument "${item.keyPath}"` });
+    }
 
     // ══════════════════════════════════════════════════════════════════
     // SQL Injection
@@ -1258,14 +1244,16 @@ export function runArgumentScan(
     // ══════════════════════════════════════════════════════════════════
     // GraphQL Injection (expanded)
     // ══════════════════════════════════════════════════════════════════
-    for (const pattern of GRAPHQL_INJECTION_PATTERNS) {
-      if (pattern.test(item.value)) {
+    if (item.value.includes('{')) {
+      for (const pattern of GRAPHQL_INJECTION_PATTERNS) {
+        if (testPattern(pattern, item.value, 2048)) {
         issues.push(makeIssue(
           'MCPG-A-GQL-001', 'graphql-injection', 'warning',
           `GraphQL injection/introspection in "${item.keyPath}"`,
           item.value, 0.75,
         ));
-        break;
+          break;
+        }
       }
     }
 
@@ -1273,7 +1261,7 @@ export function runArgumentScan(
     // ReDoS / Regex Bombing
     // ══════════════════════════════════════════════════════════════════
     for (const pattern of REDOS_PATTERNS) {
-      if (pattern.test(item.value)) {
+      if (testPattern(pattern, item.value)) {
         issues.push(makeIssue(
           'MCPG-A-REDOS-001', 'redos', 'warning',
           `Potential ReDoS / regex bombing in "${item.keyPath}"`,
@@ -1362,4 +1350,32 @@ export function runArgumentScan(
     issues,
     addedLayers: { argument: { ran: true, durationMs: Math.round(performance.now() - t0) } },
   };
+}
+
+/** All scanner regexes — for ReDoS safety audit tests. */
+export function getArgumentScannerPatterns(): RegExp[] {
+  return [
+    ...SQL_INJECTION_PATTERNS,
+    ...NOSQL_INJECTION_PATTERNS,
+    ...BOUNDARY_EVASION_PATTERNS,
+    ...CREDENTIAL_ARG_PATTERNS,
+    ...SHELL_OBFUSCATION_ARG_PATTERNS,
+    ...CONTEXT_INJECTION_PATTERNS,
+    ...SSRF_PATTERNS,
+    ...OBFUSCATION_PATTERNS,
+    ...COMMAND_INJECTION_PATTERNS,
+    ...XML_INJECTION_PATTERNS,
+    ...LDAP_INJECTION_PATTERNS,
+    ...DESERIALIZATION_PATTERNS,
+    ...REDOS_PATTERNS,
+    ...DANGEROUS_JS_PATTERNS,
+    ...XSS_INJECTION_PATTERNS,
+    ...EXFILTRATION_PATTERNS,
+    ...HTTP_SMUGGLING_PATTERNS,
+    ...DESERIALIZATION_GADGET_PATTERNS,
+    ...GRAPHQL_INJECTION_PATTERNS,
+    ...FILE_INCLUSION_PATTERNS,
+    ...LOG_INJECTION_PATTERNS,
+    ...POLYGLOT_PATTERNS,
+  ];
 }

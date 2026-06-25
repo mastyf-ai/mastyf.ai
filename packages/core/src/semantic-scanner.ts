@@ -12,6 +12,7 @@ export interface SemanticScanOptions {
   apiKey?: string;               // Falls back to ANTHROPIC_API_KEY env var
   model?: string;                // Default from getLlmConfig()
   alwaysRun?: boolean;           // Run even when regex is clean (thorough mode)
+  onlyOnHits?: boolean;          // Run only when regex/schema already flagged hits
   timeoutMs?: number;            // Default from getLlmConfig()
   temperature?: number;
 }
@@ -92,6 +93,19 @@ function parseVerdictFromText(rawText: string): SemanticVerdict {
   return JSON.parse(cleanJson) as SemanticVerdict;
 }
 
+/** Strip API keys and truncate LLM error bodies before logging or surfacing. */
+export function sanitizeLlmErrorBody(body: string, secrets: string[] = []): string {
+  let sanitized = body.slice(0, 512);
+  for (const secret of secrets) {
+    if (secret.length >= 8) {
+      sanitized = sanitized.split(secret).join("[REDACTED]");
+    }
+  }
+  sanitized = sanitized.replace(/sk-ant-[a-zA-Z0-9_-]{10,}/g, "[REDACTED]");
+  sanitized = sanitized.replace(/Bearer\s+[a-zA-Z0-9._-]+/gi, "Bearer [REDACTED]");
+  return sanitized;
+}
+
 async function runSemanticViaOllama(
   userPrompt: string,
   model: string,
@@ -133,12 +147,16 @@ export async function runSemanticScan(
   const userPrompt = buildUserPrompt(tool, priorIssues);
   const cache = getLlmCache();
   const policyMode = process.env.MASTYF_AI_POLICY_MODE || "block";
+  const onlyOnHits = options.onlyOnHits ?? false;
+  const alwaysRun = options.alwaysRun ?? !onlyOnHits;
   const cacheKey = {
     model,
     prompt: userPrompt,
     system: SYSTEM_PROMPT,
     temperature,
     policyMode,
+    onlyOnHits,
+    alwaysRun,
   };
 
   const cachedResponse = await cache.get(cacheKey);
@@ -215,7 +233,8 @@ export async function runSemanticScan(
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Anthropic API error ${response.status}: ${errorText}`);
+        const safeBody = sanitizeLlmErrorBody(errorText, apiKey ? [apiKey] : []);
+        throw new Error(`Anthropic API error ${response.status}: ${safeBody}`);
       }
 
       const data = await response.json() as {
@@ -293,7 +312,7 @@ export async function runSemanticScan(
       layer: "semantic",
       severity: "info",
       category: "error",
-      message: `Semantic scan failed: ${(err as Error).message}`,
+      message: `Semantic scan failed: ${sanitizeLlmErrorBody((err as Error).message, apiKey ? [apiKey] : [])}`,
       evidence: "",
       confidence: 1.0,
     }];

@@ -160,10 +160,46 @@ export function normalizeConfusables(input: string): string {
   return result;
 }
 
+type UnicodeNormalizeMode = "full" | "light";
+
+let unicodeOpsWindowStart = Date.now();
+let unicodeOpsCount = 0;
+
+function unicodeMaxChars(): number {
+  const n = parseInt(process.env["MASTYF_AI_UNICODE_MAX_CHARS"] || "16384", 10);
+  return Number.isFinite(n) && n > 0 ? n : 16384;
+}
+
+function unicodeMaxOpsPerMinute(): number {
+  const n = parseInt(process.env["MASTYF_AI_UNICODE_MAX_OPS_PER_MINUTE"] || "2000", 10);
+  return Number.isFinite(n) && n > 0 ? n : 2000;
+}
+
+function resolveUnicodeNormalizeMode(input: string, unicodeStrict: boolean): UnicodeNormalizeMode {
+  if (!unicodeStrict) return "light";
+  if (input.length > unicodeMaxChars()) return "light";
+
+  const now = Date.now();
+  if (now - unicodeOpsWindowStart >= 60_000) {
+    unicodeOpsWindowStart = now;
+    unicodeOpsCount = 0;
+  }
+  unicodeOpsCount += 1;
+  if (unicodeOpsCount > unicodeMaxOpsPerMinute()) return "light";
+  return "full";
+}
+
+/** @internal */
+export function resetUnicodeBudgetForTests(): void {
+  unicodeOpsWindowStart = Date.now();
+  unicodeOpsCount = 0;
+}
+
 /** Homoglyph fold → TR39 confusables → NFKC (offline regex pre-pass). */
 export function normalizeUnicode(input: string, unicodeStrict = true): string {
+  const mode = resolveUnicodeNormalizeMode(input, unicodeStrict);
   let current = foldHomoglyphs(input);
-  if (unicodeStrict) {
+  if (unicodeStrict && mode === "full") {
     current = normalizeConfusables(current);
   }
   return current.normalize("NFKC");

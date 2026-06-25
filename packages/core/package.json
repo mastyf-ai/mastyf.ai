@@ -22,17 +22,20 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
+    "test:regex-safety": "vitest run tests/argument-regex-safety.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "ajv": "^8.17.1",
     "ioredis": "^5.10.1",
-    "lru-cache": "^11.3.6"
+    "lru-cache": "^11.3.6",
+    "undici": "^7.28.0"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
+    "safe-regex": "^2.1.1",
     "typescript": "^5.4.0",
-    "vitest": "^3.2.4",
-    "@types/node": "^20.0.0"
+    "vitest": "^3.2.4"
   },
   "keywords": [
     "mcp",

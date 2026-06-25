@@ -5,9 +5,10 @@ import { runRegexScan } from "./regex-scanner.js";
 import { runSchemaScan } from "./schema-scanner.js";
 import { runSemanticScan, type SemanticScanOptions } from "./semantic-scanner.js";
 import { tryAcquireSemanticSlot, releaseSemanticSlot, semanticQueueMax, semanticPerTenantMax } from "./semantic-queue.js";
-import { isCoreSemanticCircuitOpen } from "./semantic-circuit-breaker.js";
+import { isCoreSemanticCircuitOpen, tryBeginCoreSemanticScan, abortCoreSemanticProbe } from "./semantic-circuit-breaker.js";
 import { isCoreLocalSemanticEnabled, runLocalSemanticFallback } from "./local-semantic-fallback.js";
 import { runArgumentScan } from "./argument-scanner.js";
+import { getLlmConfig } from "./config/llm-config.js";
 
 export interface ScanEngineOptions {
   /** TR39 confusables before offline regex (default: true). */
@@ -48,6 +49,7 @@ function deduplicateIssues(issues: Issue[]): Issue[] {
     issues.filter((i) => i.layer === "semantic").map((i) => i.category),
   );
   return issues.filter((i) => {
+    if (i.layer === "argument" || i.layer === "semantic") return true;
     if (i.layer !== "regex" && i.layer !== "schema") return true;
     const mapped = REGEX_TO_SEMANTIC_CATEGORY[i.category] ?? i.category;
     return !semanticCategories.has(mapped);
@@ -56,32 +58,68 @@ function deduplicateIssues(issues: Issue[]): Issue[] {
 
 const DEFAULT_MAX_TOOLS_PER_SCAN = 200;
 
+function scanToolTimeoutMs(): number {
+  const explicit = parseInt(process.env["MASTYF_AI_SCAN_TOOL_TIMEOUT_MS"] || "", 10);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  return getLlmConfig().timeoutMs + 5000;
+}
+
+function scanServerBudgetMs(): number {
+  const n = parseInt(process.env["MASTYF_AI_SCAN_SERVER_BUDGET_MS"] || "300000", 10);
+  return Number.isFinite(n) && n > 0 ? n : 300_000;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function toolScanTimeoutResult(toolName: string, timeoutMs: number): ToolScanResult {
+  return {
+    toolName,
+    status: "warning",
+    issues: [{
+      id: "MCPG-META-004",
+      layer: "semantic",
+      severity: "info",
+      category: "timeout",
+      message: `Tool scan exceeded ${timeoutMs}ms budget`,
+      evidence: toolName,
+      confidence: 1.0,
+    }],
+    layers: {
+      regex: { ran: false, durationMs: 0 },
+      schema: { ran: false, durationMs: 0 },
+      semantic: { ran: false, durationMs: 0, skipped: "tool scan budget exceeded" },
+    },
+  };
+}
+
 function scanConcurrency(): number {
   const n = parseInt(process.env["MASTYF_AI_SCAN_CONCURRENCY"] || "32", 10);
   return Number.isFinite(n) && n > 0 ? n : 32;
-}
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let idx = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (idx < items.length) {
-      const i = idx++;
-      results[i] = await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
-  return results;
 }
 
 export async function scanTool(
   tool: ToolDefinition,
   options: ScanEngineOptions = {}
 ): Promise<ToolScanResult> {
+  const testDelayMs = parseInt(process.env["MASTYF_AI_SCAN_TEST_DELAY_MS"] || "0", 10);
+  if (testDelayMs > 0) {
+    await new Promise((r) => setTimeout(r, testDelayMs));
+  }
+
   const confidenceThreshold = options.semantic?.confidenceThreshold ?? 0.7;
   const onlyOnHits = options.semantic?.onlyOnHits ?? false;
 
@@ -144,7 +182,14 @@ export async function scanTool(
         durationMs: Math.round(performance.now() - t0),
         skipped: "circuit open — local fallback",
       };
+    } else if (!tryBeginCoreSemanticScan()) {
+      timings.semantic = {
+        ran: false,
+        durationMs: 0,
+        skipped: "circuit half-open — probe in flight",
+      };
     } else if (!tryAcquireSemanticSlot(options.tenantId)) {
+      abortCoreSemanticProbe();
       const cap = options.tenantId
         ? `per-tenant cap (${semanticPerTenantMax()})`
         : `global queue cap (${semanticQueueMax()})`;
@@ -159,7 +204,11 @@ export async function scanTool(
         const rawSemantic = await runSemanticScan(
           tool,
           priorHits,
-          options.semantic ?? {}
+          {
+            ...(options.semantic ?? {}),
+            onlyOnHits,
+            alwaysRun: !onlyOnHits,
+          }
         );
         const skipMeta = rawSemantic.find((i) => i.category === "configuration" || i.category === "error");
         if (skipMeta && skipMeta.layer === "semantic") {
@@ -217,18 +266,18 @@ export async function scanToolCall(
   // ── Definition scan (existing layers) ────────────────────────────
   const defResult = await scanTool(tool, options);
 
-  // ── Argument scan (NEW layer) ─────────────────────────────────────
-  let argumentIssues: Issue[] = [];
+  // ── Argument scan (runtime layer) ─────────────────────────────────
+  let rawArgumentIssues: Issue[] = [];
   if (args && !options.skipRegex) {
     const argResult = runArgumentScan(args, tool.name);
-    argumentIssues = argResult.issues;
+    rawArgumentIssues = argResult.issues;
   }
 
-  // Merge argument issues into the full issue list
   const allIssues = deduplicateIssues([
     ...defResult.issues,
-    ...argumentIssues,
+    ...rawArgumentIssues,
   ]);
+  const argumentIssues = allIssues.filter((i) => i.layer === "argument");
 
   return {
     ...defResult,
@@ -247,17 +296,53 @@ export async function scanServer(
   options: ScanEngineOptions = {}
 ): Promise<ServerScanResult> {
   const capped = tools.slice(0, DEFAULT_MAX_TOOLS_PER_SCAN);
-  const toolResults = await mapWithConcurrency(
-    capped,
-    scanConcurrency(),
-    (tool) => scanTool(tool, options),
+  const toolTimeoutMs = scanToolTimeoutMs();
+  const serverBudgetMs = scanServerBudgetMs();
+  const startedAt = Date.now();
+  const toolResults: ToolScanResult[] = [];
+  let truncated: ServerScanResult["truncated"];
+  let budgetExceeded = false;
+
+  const limit = scanConcurrency();
+  let idx = 0;
+
+  async function worker(): Promise<void> {
+    while (idx < capped.length) {
+      if (budgetExceeded) return;
+      if (Date.now() - startedAt >= serverBudgetMs) {
+        budgetExceeded = true;
+        truncated = {
+          reason: "server scan budget exceeded",
+          budgetMs: serverBudgetMs,
+          scanned: toolResults.filter(Boolean).length,
+          total: capped.length,
+        };
+        return;
+      }
+      const i = idx++;
+      const tool = capped[i]!;
+      try {
+        toolResults[i] = await withTimeout(
+          scanTool(tool, options),
+          toolTimeoutMs,
+          `scanTool(${tool.name})`,
+        );
+      } catch {
+        toolResults[i] = toolScanTimeoutResult(tool.name, toolTimeoutMs);
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, capped.length) }, () => worker()),
   );
 
+  const completed = toolResults.filter(Boolean);
   const summary = {
-    total: toolResults.length,
-    clean: toolResults.filter(r => r.status === "clean").length,
-    warnings: toolResults.filter(r => r.status === "warning").length,
-    critical: toolResults.filter(r => r.status === "critical").length,
+    total: completed.length,
+    clean: completed.filter(r => r.status === "clean").length,
+    warnings: completed.filter(r => r.status === "warning").length,
+    critical: completed.filter(r => r.status === "critical").length,
   };
 
   const serverStatus =
@@ -269,7 +354,8 @@ export async function scanServer(
     transport,
     scannedAt: new Date().toISOString(),
     status: serverStatus,
-    tools: toolResults,
+    tools: completed,
     summary,
+    ...(truncated ? { truncated } : {}),
   };
 }
