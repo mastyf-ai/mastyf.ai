@@ -64,7 +64,7 @@
     "cost-tracking"
   ],
   "scripts": {
-    "build": "pnpm --filter @mastyf-ai/plugin-sdk run build && pnpm --filter @mastyf-ai/core run build && pnpm --filter @mastyf-ai/mcp-server run build && tsc --project tsconfig.json && mkdir -p dist/database/migrations dist/policy && cp src/database/migrations/*.sql dist/database/migrations/ && cp src/policy/regex-eval-worker.mjs dist/policy/ && turbo run build",
+    "build": "pnpm --filter @mastyf-ai/plugin-sdk run build && pnpm --filter @mastyf-ai/core run build && pnpm --filter @mastyf-ai/mcp-server run build && tsc --project tsconfig.json && mkdir -p dist/database/migrations dist/policy dist/scripts/redis && cp src/database/migrations/*.sql dist/database/migrations/ && cp src/policy/regex-eval-worker.mjs dist/policy/ && cp scripts/redis/*.lua dist/scripts/redis/ && turbo run build",
     "build:mastyf-ai": "pnpm --filter @mastyf-ai/plugin-sdk run build && pnpm --filter @mastyf-ai/core run build && pnpm --filter @mastyf-ai/mcp-server run build && tsc --project tsconfig.json && cp src/policy/regex-eval-worker.mjs dist/policy/",
     "pretest": "node scripts/ensure-workspace-built.mjs",
     "dev": "node scripts/dev.mjs mastyf-ai-configs/testbed-memory.json",
@@ -133,6 +133,7 @@
     "enterprise:red-team": "node scripts/continuous-red-team.mjs",
     "enterprise:compliance-evidence": "node scripts/generate-compliance-evidence.mjs",
     "enterprise:evidence-check": "node scripts/compliance-evidence-check.mjs",
+    "scenario:budget-flood": "pnpm run build && node scenarios/real-life/budget-flood-live.mjs",
     "enterprise:rotate-encryption": "node scripts/rotate-field-encryption.mjs",
     "enterprise:preflight": "sh scripts/verify-enterprise-preflight.sh",
     "enterprise:preflight:multi-region": "sh scripts/verify-multi-region-preflight.sh",

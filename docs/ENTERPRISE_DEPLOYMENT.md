@@ -55,9 +55,22 @@ Threat Lab and dashboard policy PUT require operator+ role. Production merges us
 | `MASTYF_AI_LOOP_BURST_MAX_SIMILAR` | Cost control | Similar tool-call burst threshold (default 8 / 10s) |
 | `MASTYF_AI_DB_ENCRYPTION_KEY` | Compliance | Field-level encryption at rest for audit DB |
 
+### Semantic profiles (balanced vs max-security)
+
+Set `MASTYF_AI_SEMANTIC_PROFILE=balanced|max-security` or use Helm overlays `values-balanced.yaml` / `values-enterprise.yaml`.
+
+| Setting | Balanced | Max-security (enterprise) |
+|---------|----------|---------------------------|
+| `MASTYF_AI_SEMANTIC_STRICT` | `false` | `true` |
+| `MASTYF_AI_SEMANTIC_SYNC_REQUEST_LLM` | `false` | `true` |
+| `MASTYF_AI_CORE_SEMANTIC_FAIL_CLOSED` | `false` | `true` |
+| `MASTYF_AI_SEMANTIC_ASYNC` | `true` | `true` |
+| Hot-path block P99 target | Policy + local semantic ~50–100ms | Sync LLM gate ≤ 2500ms |
+| Async audit timeout metric | `mastyf_ai_semantic_async_timeout_total` | Same |
+
 ### Max-security semantic SLO (enterprise)
 
-Enterprise Helm sets `MASTYF_AI_SEMANTIC_STRICT=true`, `MASTYF_AI_SEMANTIC_SYNC_REQUEST_LLM=true`, and `MASTYF_AI_CORE_SEMANTIC_FAIL_CLOSED=true`. Sync request semantic scans are **bounded by design**, not loopers-class sub-millisecond latency:
+Enterprise Helm sets `MASTYF_AI_SEMANTIC_STRICT=true`, `MASTYF_AI_SEMANTIC_SYNC_REQUEST_LLM=true`, and `MASTYF_AI_CORE_SEMANTIC_FAIL_CLOSED=true`. Sync request semantic scans are **bounded by design** (not sub-millisecond hot-path latency):
 
 | Metric | Target | Notes |
 |--------|--------|-------|

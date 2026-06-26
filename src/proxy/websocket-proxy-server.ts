@@ -44,7 +44,7 @@ import {
 } from './tool-fingerprint.js';
 import { publishRugPullAlert } from './rug-pull-cluster.js';
 import { isProxyInflightExceeded, proxyMaxInflight } from './proxy-inflight.js';
-import { runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
+import { isPostPolicyGateBlock, runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
 import {
   runWithExtractedTrace,
   withMcpToolCallSpan,
@@ -620,23 +620,25 @@ export class WebSocketProxyServer {
       };
     }
 
-    const semGate = await runPostPolicyAllowGates(context, decision, this.opts.serverName);
-    if (semGate?.block) {
+    const gateOutcome = await runPostPolicyAllowGates(context, decision, this.opts.serverName);
+    if (isPostPolicyGateBlock(gateOutcome)) {
       breaker.recordFailure();
       StructuredLogger.logBlocked({
         event: 'tool_blocked',
         requestId,
         serverName: this.opts.serverName,
         toolName,
-        reason: semGate.reason,
+        reason: gateOutcome.reason,
         rule: 'semantic_gate',
       });
       return {
         jsonrpc: '2.0',
         id: msg.id,
-        error: { code: -32001, message: `Blocked by MCP Mastyf AI semantic gate: ${semGate.reason}` },
+        error: { code: -32001, message: `Blocked by MCP Mastyf AI semantic gate: ${gateOutcome.reason}` },
       };
     }
+    const spendReservationId =
+      gateOutcome && 'allowed' in gateOutcome ? gateOutcome.spendReservationId : undefined;
 
     // ── Anomaly detection (ML pipeline) ────────────────────────────
     try {
@@ -690,6 +692,7 @@ export class WebSocketProxyServer {
           model,
           durationMs: 0,
           tenantId,
+          spendReservationId,
         },
         msg,
       ).catch(() => undefined);

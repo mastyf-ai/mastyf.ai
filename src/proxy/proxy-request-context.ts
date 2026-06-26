@@ -24,6 +24,8 @@ export interface ProxyRequestContext {
   /** Geo region from inbound HTTP headers */
   geoRegion?: string;
   hourUtc?: number;
+  /** Unified spend pool reservation — release on block/error, commit on persist */
+  spendReservationId?: string;
 }
 
 export class ProxyRequestContextStore {

@@ -27,6 +27,7 @@ import {
 import type { PolicyWatcher } from '../policy/policy-watcher.js';
 import { getAlertDestinationsForLogging, isAppAlertingConfigured } from '../alerting/alert-env.js';
 import { isFieldEncryptionEnabled } from './field-encryption.js';
+import { applySemanticSecurityProfile } from '../tenant/semantic-security-profile.js';
 
 let exporterManager: ExporterManager | null = null;
 let policyAuditor: PolicyAuditor | null = null;
@@ -72,6 +73,7 @@ export async function bootstrapSecrets(): Promise<void> {
 }
 
 export async function bootstrapCompliance(db: IDatabase): Promise<void> {
+  applySemanticSecurityProfile();
   const { initTracing } = await import('./tracing.js');
   await initTracing();
 

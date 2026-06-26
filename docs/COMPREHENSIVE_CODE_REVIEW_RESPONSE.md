@@ -1,6 +1,6 @@
 # Comprehensive Code Review — Response (mastyf.ai)
 
-Maps findings from the external **COMPREHENSIVE_CODE_REVIEW.md** (June 2026) to this repository. Loopers-OSS (Go) items are **N/A** — native parity implemented in mastyf.ai.
+Maps findings from the external **COMPREHENSIVE_CODE_REVIEW.md** (June 2026) to this repository.
 
 ## Part 1.2 — Critical & high issues
 
@@ -29,7 +29,7 @@ Maps findings from the external **COMPREHENSIVE_CODE_REVIEW.md** (June 2026) to 
 
 | Scenario | Review claim | Status | Notes |
 |----------|--------------|--------|-------|
-| Multi-team budget | No centralized budget | **FIXED** | [`src/services/unified-spend-pool.ts`](../src/services/unified-spend-pool.ts) + tenant-budget |
+| Multi-team budget | No centralized budget | **FIXED** | Atomic unified spend pool + reservation lifecycle |
 | SOC 2 / ISO | No TLS, audit, encryption | **FIXED** | TLS + SIEM + `MASTYF_AI_DB_ENCRYPTION_KEY` required in enterprise |
 | Agent loops / overspend | Cannot stop loops | **FIXED** | Token-aware loop guard + streaming cost cutoff |
 | Heterogeneous LLM | No cross-provider budget | **FIXED** | Unified spend pool (provider-agnostic tokens/USD) |
@@ -46,15 +46,13 @@ Maps findings from the external **COMPREHENSIVE_CODE_REVIEW.md** (June 2026) to 
 | MEDIUM | Learned rules signature | **FIXED** |
 | MEDIUM | Payload size limits | **FIXED** |
 
-## Native parity (supersedes loopers hybrid)
+## Native enterprise parity
 
 | Review item | Status |
 |-------------|--------|
-| Hybrid mastyf + loopers | **SUPERSEDED** — native Redis spend pool + loop guard |
+| Atomic multi-window budget | **FIXED** — `scripts/redis/unified-spend-acquire.lua`, reservation rollback, `pnpm scenario:budget-flood` |
 | Zero-storage credentials | **FIXED** — [`src/security/ephemeral-credential-vault.ts`](../src/security/ephemeral-credential-vault.ts) |
-| Match loopers P99 1–2ms | **DOCUMENTED** — architectural limit with max-security semantic; SLO in enterprise docs |
-| Loopers-OSS Part 2 | **N/A** — different product |
-| Go/TypeScript loopers client | **N/A** |
+| Sub-millisecond proxy P99 | **DOCUMENTED** — architectural limit with max-security semantic; SLO in enterprise docs |
 | Maintainability / coverage | **FIXED** — module headers, CI coverage artifact, README badge |
 
 Validate: `pnpm enterprise:evidence-check`

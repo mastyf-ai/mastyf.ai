@@ -19,7 +19,7 @@ import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
 import { createSessionCache, validateSessionToken, type MastyfAiSessionCache } from '../auth/session-factory.js';
 import { getCircuitBreaker } from '../utils/circuit-breaker-registry.js';
-import { ProxyRequestContextStore } from './proxy-request-context.js';
+import { ProxyRequestContextStore, withProxyRequestVault } from './proxy-request-context.js';
 import { resolveTenantContext, DEFAULT_TENANT_ID, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
 import { JwtTenantRequiredError, resolveProxyTenantId } from '../tenant/jwt-tenant-binding.js';
 import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
@@ -37,10 +37,9 @@ import { scanForSecrets } from '../scanners/secret-scanner.js';
 import { isProxyEntropyCheckEnabled, scanArgumentEntropy } from '../utils/arg-entropy.js';
 import * as Metrics from '../utils/metrics.js';
 import { notifyToolBlock } from '../alerting/notify-tool-block.js';
-import { withMcpToolCallSpan } from './trace-context.js';
+import { withMcpToolCallSpan, runWithExtractedTraceAsync } from './trace-context.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import {
-  agenticPreForwardToolCall,
   agenticRecordCompletedToolCall,
   agenticRecordDeniedToolCall,
   buildAgenticToolCallContext,
@@ -52,7 +51,7 @@ import {
   redactArguments,
   ingestPolicyDecision,
 } from '../ai/block-learning.js';
-import { runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
+import { isPostPolicyGateBlock, runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
 import { publishRugPullAlert, isClusterRugPullActive } from './rug-pull-cluster.js';
 import {
   applyToolFingerprintFromResult,
@@ -71,10 +70,10 @@ import {
   getMaxPayloadBytes,
 } from './payload-guard.js';
 import {
-  gateMcpMethodResponse,
-  recordMcpLifecycleRequest,
-  runMcpLifecyclePreCheck,
-} from './mcp-lifecycle-bridge.js';
+  applyMcpResponsePipeline,
+  mcpResponseBlockJson,
+  runMcpPrePipeline,
+} from './mcp-request-pipeline.js';
 
 const RESTART_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000]; // Exponential
 
@@ -258,22 +257,22 @@ export class McpProxyServer {
           const proxyLatencyMs = Date.now() - reqCtx.requestStartTime;
 
           if (reqCtx.requestMethod === 'resources/read' || reqCtx.requestMethod === 'prompts/get') {
-            const rpGate = gateMcpMethodResponse({
+            const rp = applyMcpResponsePipeline({
               method: reqCtx.requestMethod,
               result: msg.result,
-            });
-            recordMcpLifecycleRequest({
               sessionId: reqCtx.sessionId ?? this.mcpSessionId ?? String(msg.id),
-              method: reqCtx.requestMethod,
-              blocked: rpGate.blocked,
               latencyMs: proxyLatencyMs,
             });
-            if (rpGate.blocked) {
-              this.sendError(msg.id, -32002, rpGate.reason ?? 'Resource/prompt blocked by Mastyf AI');
+            if (rp.blocked) {
+              const blockJson = mcpResponseBlockJson(msg.id, rp.reason ?? 'Resource/prompt blocked by Mastyf AI');
+              process.stdout.write(`${JSON.stringify(blockJson)}\n`);
               this.requestContexts.delete(msg.id);
               return;
             }
-            process.stdout.write(line + '\n');
+            if (rp.result !== undefined) {
+              msg.result = rp.result;
+            }
+            process.stdout.write(`${JSON.stringify(msg)}\n`);
             this.requestContexts.delete(msg.id);
             return;
           }
@@ -300,6 +299,7 @@ export class McpProxyServer {
             tokenSource: counts.tokenSource,
             model,
             tenantId: reqCtx.tenantId || this.defaultTenantId,
+            spendReservationId: reqCtx.spendReservationId,
           };
 
           if (msg?.result && !isResponseScanSkipped()) {
@@ -599,10 +599,23 @@ export class McpProxyServer {
     } catch {
       /* non-JSON handled in processClientInput */
     }
-    return this.clientInputQueue.enqueue(requestKey, () => this.processClientInput(raw));
+    return this.clientInputQueue.enqueue(requestKey, () =>
+      withProxyRequestVault(raw, undefined, () => {
+        let traceHeaders: Record<string, string | string[] | undefined> | undefined;
+        try {
+          const peek = JSON.parse(raw) as { params?: { _meta?: Record<string, unknown> } };
+          const tp = peek.params?._meta?.traceparent;
+          if (typeof tp === 'string') traceHeaders = { traceparent: tp };
+        } catch {
+          // non-JSON handled in processClientInput
+        }
+        return runWithExtractedTraceAsync(traceHeaders, () => this.processClientInput(raw));
+      }),
+    );
   }
 
-  private async processClientInput(raw: string): Promise<void> {
+  private async processClientInput(inboundRaw: string): Promise<void> {
+    let raw = inboundRaw;
     // ── Payload size guard ──────────────────────────────────
     const rawGuard = checkRawPayloadSize(raw);
     if (!rawGuard.ok) {
@@ -630,36 +643,35 @@ export class McpProxyServer {
       }
 
       const lifecycleAuthRequired = Boolean(this.authValidator?.getConfig().required);
-      const lifecycle = runMcpLifecyclePreCheck({
-        method: String(msg.method ?? ''),
+      const pre = runMcpPrePipeline({
+        msg: msg as Record<string, unknown>,
         serverName: this.serverName,
-        msg,
-        // If proxy auth is optional/disabled, lifecycle methods should not be blocked
-        // as "unauthenticated" (e.g. tools/list during local stdio scenarios).
         authenticated: lifecycleAuthRequired ? Boolean(this.sessionAuthHeader) : true,
         fallbackSessionKey: this.mcpSessionId ?? undefined,
       });
-      if (!lifecycle.allowed && hasJsonRpcId(msg.id)) {
-        this.sendError(msg.id, -32001, lifecycle.reason ?? 'MCP lifecycle guard blocked request', {
-          rule: 'mcp-lifecycle-guard',
-        });
+      if (pre.blocked && hasJsonRpcId(msg.id)) {
+        const err = pre.response.error as { code?: number; message?: string } | undefined;
+        this.sendError(msg.id, err?.code ?? -32001, err?.message ?? 'MCP pre-pipeline blocked request');
         return;
       }
-      this.mcpSessionId = lifecycle.sessionId;
-      this.mcpAgentId = lifecycle.agentId;
+      if (!pre.blocked) {
+        this.mcpSessionId = pre.session.sessionId;
+        this.mcpAgentId = pre.session.agentId;
+      }
 
       if (
-        (msg.method === 'resources/read' || msg.method === 'prompts/get')
+        !pre.blocked
+        && pre.trackResponse
         && hasJsonRpcId(msg.id)
       ) {
         this.requestContexts.set(msg.id, {
           requestStartTime: proxyStartTime,
-          requestToolName: String(msg.method),
-          requestMethod: String(msg.method),
+          requestToolName: String(pre.requestMethod ?? msg.method),
+          requestMethod: pre.requestMethod,
           requestTokens: 0,
           requestRaw: raw,
-          sessionId: lifecycle.sessionId,
-          agentId: lifecycle.agentId,
+          sessionId: pre.session.sessionId,
+          agentId: pre.session.agentId,
           tenantId: this.defaultTenantId,
         });
       }
@@ -745,7 +757,44 @@ export class McpProxyServer {
         const imageTokens = countImageTokensInPayload(msg.params?.arguments);
         const audioTokens = countAudioTokensInPayload(msg.params?.arguments);
         const requestTokens = reqEstimate + imageTokens + audioTokens;
-        const requestArguments = msg.params?.arguments;
+        let requestArguments = msg.params?.arguments as Record<string, unknown> | undefined;
+
+        if (requestArguments !== undefined) {
+          const { runToolCallPreForwardGuard, toolCallGuardBlockResponse } = await import(
+            './tool-call-pre-guard.js'
+          );
+          const preGuard = await runToolCallPreForwardGuard(
+            this.serverName,
+            toolName,
+            requestArguments,
+            requestId,
+            {
+              agentId: this.mcpAgentId ?? undefined,
+              meta,
+              mcpSessionId: this.mcpSessionId ?? undefined,
+            },
+          );
+          if (preGuard.blocked) {
+            this.recordDeniedCall(
+              toolName,
+              requestTokens,
+              Date.now() - proxyStartTime,
+              'payload_or_agentic',
+              preGuard.message || 'Pre-forward guard blocked',
+              requestArguments,
+              requestTenantId,
+              msg.id,
+            );
+            const blockResp = toolCallGuardBlockResponse(msg.id, preGuard);
+            process.stdout.write(`${JSON.stringify(blockResp)}\n`);
+            return;
+          }
+          if (preGuard.arguments) {
+            requestArguments = preGuard.arguments;
+            if (msg.params) msg.params.arguments = requestArguments;
+            raw = JSON.stringify(msg);
+          }
+        }
 
         if (requestArguments !== undefined) {
           const expandedGuard = checkExpandedPayload(requestArguments);
@@ -1008,6 +1057,7 @@ export class McpProxyServer {
         // ── RBAC + policy evaluation ────────────────────────
         let authzAllowed = true;
         let blockReason: string | undefined;
+        let spendReservationId: string | undefined;
 
         const engine =
           this.tenantPolicyRegistry?.getEngine(requestTenantId) ?? this.policyEngine;
@@ -1113,53 +1163,25 @@ export class McpProxyServer {
             return;
           }
 
-          const semGate = await runPostPolicyAllowGates(context, decision, this.serverName);
-          if (semGate?.block) {
+          const gateOutcome = await runPostPolicyAllowGates(context, decision, this.serverName);
+          if (isPostPolicyGateBlock(gateOutcome)) {
             this.recordDeniedCall(
               toolName,
               requestTokens,
               Date.now() - proxyStartTime,
-              semGate.rule,
-              semGate.reason,
+              gateOutcome.rule,
+              gateOutcome.reason,
               requestArguments,
               requestTenantId,
             );
-            this.sendError(msg.id, -32001, `Blocked by MCP Mastyf AI semantic gate: ${semGate.reason}`, {
-              rule: semGate.rule,
+            this.sendError(msg.id, -32001, `Blocked by MCP Mastyf AI semantic gate: ${gateOutcome.reason}`, {
+              rule: gateOutcome.rule,
               policy: 'block',
             });
             return;
           }
-
-          if (requestArguments) {
-            const agenticHook = await agenticPreForwardToolCall(
-              this.serverName,
-              toolName,
-              requestArguments,
-              buildAgenticToolCallContext({
-                requestId: String(msg.id),
-                agentId: agentIdentity?.sub,
-                mcpSessionId: this.mcpSessionId ?? undefined,
-                meta: msg.params?._meta as Record<string, unknown> | undefined,
-              }),
-            );
-            if (agenticHook.blocked) {
-              this.recordDeniedCall(
-                toolName,
-                requestTokens,
-                Date.now() - proxyStartTime,
-                'prompt-injection',
-                agenticHook.reason || 'Prompt injection detected',
-                requestArguments,
-                requestTenantId,
-                msg.id,
-              );
-              this.sendError(msg.id, -32001, `Blocked by Mastyf AI: ${agenticHook.reason}`, {
-                rule: 'prompt-injection',
-                policy: 'block',
-              });
-              return;
-            }
+          if (gateOutcome && 'allowed' in gateOutcome) {
+            spendReservationId = gateOutcome.spendReservationId;
           }
         }
 
@@ -1174,6 +1196,7 @@ export class McpProxyServer {
           tenantId: requestTenantId,
           agentIdentity,
           rotatedSessionToken: pendingRotatedSessionToken,
+          spendReservationId,
         });
 
         // ── Log successful forwarding ───────────────────────

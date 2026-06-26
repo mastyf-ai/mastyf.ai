@@ -34,10 +34,6 @@ import {
 import { broadcastDashboardEvent, emitFlowStep } from '../utils/dashboard-events.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
 import { routeSemanticModelForTenant } from './tenant-semantic-model.js';
-import {
-  getEstimatedSemanticCostUsd,
-  tryReserveTenantDailyBudget,
-} from '../services/tenant-budget.js';
 
 export interface SemanticAuditJob {
   requestId: string | number;
@@ -183,16 +179,6 @@ export function enqueueSemanticAudit(job: SemanticAuditJob): void {
 
 async function reserveAndEnqueue(job: SemanticAuditJob): Promise<void> {
   if (!isSemanticAsyncEnabled(job.tenantId)) return;
-
-  const estimated = getEstimatedSemanticCostUsd();
-  const reserved = await tryReserveTenantDailyBudget(job.tenantId, estimated);
-  if (!reserved) {
-    reportSemanticAuditSkipped('tenant_budget', job.tenantId);
-    if (isLocalSemanticEnabled(job.tenantId)) {
-      void runLocalSemanticAudit(job);
-    }
-    return;
-  }
 
   if (!getLlm(job.tenantId).isAvailable() || !isSemanticLlmConfigured()) {
     if (isLocalSemanticEnabled(job.tenantId)) {

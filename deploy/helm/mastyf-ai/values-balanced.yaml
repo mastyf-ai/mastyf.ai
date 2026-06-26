@@ -1,0 +1,21 @@
+# Balanced semantic profile — lower hot-path latency, async semantic audit on.
+# Use with:
+#   helm upgrade --install mastyf-ai ./deploy/helm/mastyf-ai \
+#     -f deploy/helm/mastyf-ai/values.yaml \
+#     -f deploy/helm/mastyf-ai/values-balanced.yaml
+
+replicaCount: 2
+
+config:
+  policy:
+    mode: block
+  env:
+    MASTYF_AI_SEMANTIC_PROFILE: balanced
+    MASTYF_AI_SEMANTIC_STRICT: "false"
+    MASTYF_AI_CORE_SEMANTIC_FAIL_CLOSED: "false"
+    MASTYF_AI_SEMANTIC_SYNC_REQUEST: "false"
+    MASTYF_AI_SEMANTIC_SYNC_REQUEST_LLM: "false"
+    MASTYF_AI_SEMANTIC_ASYNC: "true"
+    MASTYF_AI_LOCAL_SEMANTIC: "true"
+    MASTYF_AI_SEMANTIC_TIMEOUT_MS: "500"
+    MASTYF_AI_TENANT_TOKENS_PER_MIN: "500000"

@@ -54,6 +54,13 @@ export const semanticSyncRequestBlocksTotal = new Counter({
   registers: [registry],
 });
 
+export const semanticAsyncTimeoutTotal = new Counter({
+  name: 'mastyf_ai_semantic_async_timeout_total',
+  help: 'Async semantic audit LLM timeouts (off hot path)',
+  labelNames: ['label'],
+  registers: [registry],
+});
+
 export const policyCacheHitsTotal = new Counter({
   name: 'mastyf_ai_policy_cache_hits_total',
   help: 'Policy evaluation cache hits',

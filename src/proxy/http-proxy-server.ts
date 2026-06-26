@@ -41,7 +41,7 @@ import { inspectToolResponse as sharedInspectToolResponse } from './response-ins
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
-import { runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
+import { isPostPolicyGateBlock, runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
 import { runToolCallPreForwardGuard, toolCallGuardBlockResponse } from './tool-call-pre-guard.js';
 import { applyGeoToCallContext } from '../utils/request-geo-context.js';
 import { runMcpPrePipeline, applyMcpResponsePipeline, mcpResponseBlockJson } from './mcp-request-pipeline.js';
@@ -490,15 +490,15 @@ export class HttpProxyServer {
             return;
           }
 
-          const semGate = await runPostPolicyAllowGates(context, decision, this.serverName);
-          if (semGate?.block) {
+          const gateOutcome = await runPostPolicyAllowGates(context, decision, this.serverName);
+          if (isPostPolicyGateBlock(gateOutcome)) {
             releaseProxyInflight(this.serverName);
             StructuredLogger.logBlocked({
               event: 'tool_blocked',
               requestId,
               serverName: this.serverName,
               toolName,
-              reason: semGate.reason,
+              reason: gateOutcome.reason,
               rule: 'semantic_gate',
             });
             res.writeHead(403, { 'Content-Type': 'application/json' });
@@ -508,7 +508,7 @@ export class HttpProxyServer {
                 id: msg.id,
                 error: {
                   code: -32001,
-                  message: `Blocked by MCP Mastyf AI semantic gate: ${semGate.reason}`,
+                  message: `Blocked by MCP Mastyf AI semantic gate: ${gateOutcome.reason}`,
                 },
               }),
             );

@@ -31,7 +31,7 @@ import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import { parseJsonWithDepthLimit } from './http-proxy-security.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
-import { runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
+import { isPostPolicyGateBlock, runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
 import { withProxyRequestVault } from './proxy-request-context.js';
 import {
   fingerprintJsonRpcToolsList,
@@ -506,15 +506,15 @@ export class StreamableHttpProxyServer {
       };
     }
 
-    const semGate = await runPostPolicyAllowGates(context, decision, this.opts.serverName);
-    if (semGate?.block) {
+    const gateOutcome = await runPostPolicyAllowGates(context, decision, this.opts.serverName);
+    if (isPostPolicyGateBlock(gateOutcome)) {
       releaseProxyInflight(this.opts.serverName);
       StructuredLogger.logBlocked({
         event: 'tool_blocked',
         requestId,
         serverName: this.opts.serverName,
         toolName,
-        reason: semGate.reason,
+        reason: gateOutcome.reason,
         rule: 'semantic_gate',
       });
       return {
@@ -522,10 +522,12 @@ export class StreamableHttpProxyServer {
         id: msg.id,
         error: {
           code: -32001,
-          message: `Blocked by MCP Mastyf AI semantic gate: ${semGate.reason}`,
+          message: `Blocked by MCP Mastyf AI semantic gate: ${gateOutcome.reason}`,
         },
       };
     }
+    const spendReservationId =
+      gateOutcome && 'allowed' in gateOutcome ? gateOutcome.spendReservationId : undefined;
 
     if (this.opts.db) {
       persistCallRecord(
@@ -541,6 +543,7 @@ export class StreamableHttpProxyServer {
           model,
           durationMs: 0,
           tenantId,
+          spendReservationId,
         },
         msg,
       ).catch(() => undefined);

@@ -48,6 +48,11 @@ export async function withSemanticTimeout<T>(
             label,
             timeoutMs,
           });
+          if (label === 'async_semantic_audit') {
+            void import('./metrics.js').then((m) => {
+              m.semanticAsyncTimeoutTotal.inc({ label });
+            });
+          }
           resolve(fallback);
         }, timeoutMs);
       }),

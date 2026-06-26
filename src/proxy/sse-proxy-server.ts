@@ -26,7 +26,7 @@ import { applyGeoToCallContext } from '../utils/request-geo-context.js';
 import { getHttpMaxBodyBytes } from './http-proxy-security.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
-import { runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
+import { isPostPolicyGateBlock, runPostPolicyAllowGates } from './proxy-post-allow-gates.js';
 import { hasJsonRpcId } from './json-rpc-utils.js';
 import {
   fingerprintJsonRpcToolsList,
@@ -359,6 +359,7 @@ export class SseProxyServer extends EventEmitter {
 
     const isToolCall = jsonRpcRequest.method === 'tools/call';
     let resolvedTenantId = 'default';
+    let spendReservationId: string | undefined;
 
     if (isToolCall && this.opts.policy) {
       let tenantId: string;
@@ -477,17 +478,20 @@ export class SseProxyServer extends EventEmitter {
         };
       }
 
-      const semGate = await runPostPolicyAllowGates(context, decision, this.opts.serverName);
-      if (semGate?.block) {
+      const gateOutcome = await runPostPolicyAllowGates(context, decision, this.opts.serverName);
+      if (isPostPolicyGateBlock(gateOutcome)) {
         releaseProxyInflight(this.opts.serverName);
         return {
           jsonrpc: '2.0',
           id: jsonRpcRequest.id,
           error: {
             code: -32001,
-            message: `Blocked by MCP Mastyf AI semantic gate: ${semGate.reason}`,
+            message: `Blocked by MCP Mastyf AI semantic gate: ${gateOutcome.reason}`,
           },
         };
+      }
+      if (gateOutcome && 'allowed' in gateOutcome) {
+        spendReservationId = gateOutcome.spendReservationId;
       }
     }
 
@@ -563,6 +567,8 @@ export class SseProxyServer extends EventEmitter {
         timestamp: new Date().toISOString(),
         tokenSource: counts.tokenSource,
         model,
+        tenantId: resolvedTenantId,
+        spendReservationId,
       };
       try {
         persistCallRecord(this.opts.db, record, jsonRpcRequest).catch((err: Error) => {

@@ -1,8 +1,12 @@
 /**
- * Unified cross-provider spend pool — tokens/min, USD/min, USD/day (Redis Lua + in-process fallback).
+ * Unified cross-provider spend pool — tokens/min, USD/min, USD/day (atomic Redis Lua + in-process fallback).
  *
  * All proxied tool traffic (any upstream model/provider) debits the same tenant pool.
  */
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getDailyBudgetCapUsd } from './cost-auditor.js';
 import { Logger } from '../utils/logger.js';
 import { isRedisConfigured, getSharedRedisClient } from '../utils/redis-client.js';
@@ -12,7 +16,51 @@ const REDIS_DAY_PREFIX = 'mastyf_ai:unified_spend:day:';
 const REDIS_TOKENS_MIN_PREFIX = 'mastyf_ai:unified_spend:tokens_min:';
 const REDIS_USD_MIN_PREFIX = 'mastyf_ai:unified_spend:usd_min:';
 
-const pendingReserveMicro = new Map<string, number>();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function loadLuaScript(name: string): string {
+  const candidates = [
+    join(__dirname, '../../scripts/redis', name),
+    join(process.cwd(), 'scripts/redis', name),
+    join(process.cwd(), 'dist/scripts/redis', name),
+  ];
+  for (const path of candidates) {
+    try {
+      return readFileSync(path, 'utf-8');
+    } catch {
+      // try next
+    }
+  }
+  throw new Error(`[unified-spend-pool] Lua script not found: ${name}`);
+}
+
+let acquireScript: string | null = null;
+let releaseScript: string | null = null;
+let commitScript: string | null = null;
+
+function getAcquireScript(): string {
+  acquireScript ??= loadLuaScript('unified-spend-acquire.lua');
+  return acquireScript;
+}
+
+function getReleaseScript(): string {
+  releaseScript ??= loadLuaScript('unified-spend-release.lua');
+  return releaseScript;
+}
+
+function getCommitScript(): string {
+  commitScript ??= loadLuaScript('unified-spend-commit.lua');
+  return commitScript;
+}
+
+interface LocalReservation {
+  tenantId: string;
+  tokens: number;
+  usdMicro: number;
+  windows: Array<{ key: string; delta: number; kind: 'tokens' | 'usd' }>;
+}
+
+const localReservations = new Map<string, LocalReservation>();
 
 function utcDayKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -48,6 +96,11 @@ function getUsdPerMinCap(tenantId: string): number {
   return 0;
 }
 
+function isEnterpriseSpendStrict(): boolean {
+  return process.env['MASTYF_AI_ENTERPRISE_MODE'] === 'true'
+    || process.env['MASTYF_AI_STRICT_MODE'] === 'true';
+}
+
 export interface ReserveSpendInput {
   tenantId?: string;
   sessionKey?: string;
@@ -57,6 +110,7 @@ export interface ReserveSpendInput {
 
 export interface ReserveSpendResult {
   ok: boolean;
+  reservationId?: string;
   rule?: string;
   reason?: string;
 }
@@ -78,13 +132,116 @@ const localDaySpend = new Map<string, number>();
 const localTokensMin = new Map<string, { count: number; resetAt: number }>();
 const localUsdMin = new Map<string, { usd: number; resetAt: number }>();
 
+interface SpendWindow {
+  key: string;
+  cap: number;
+  ttl: number;
+  delta: number;
+}
+
+function buildSpendWindows(
+  tid: string,
+  sessionKey: string | undefined,
+  tokens: number,
+  usdMicro: number,
+  tokensCap: number,
+  usdMinCap: number,
+  dayCap: number,
+): SpendWindow[] {
+  const windows: SpendWindow[] = [];
+  if (tokens > 0 && tokensCap > 0) {
+    windows.push({
+      key: tokensMinKey(tid, sessionKey),
+      cap: tokensCap,
+      ttl: 60,
+      delta: tokens,
+    });
+  }
+  if (usdMicro > 0 && usdMinCap > 0) {
+    windows.push({
+      key: usdMinKey(tid),
+      cap: Math.ceil(usdMinCap * 1_000_000),
+      ttl: 60,
+      delta: usdMicro,
+    });
+  }
+  if (usdMicro > 0 && dayCap > 0) {
+    windows.push({
+      key: dayKey(tid),
+      cap: Math.ceil(dayCap * 1_000_000),
+      ttl: ttlSecondsUntilUtcMidnight(),
+      delta: usdMicro,
+    });
+  }
+  return windows;
+}
+
+function localReserve(
+  reservationId: string,
+  tid: string,
+  tokens: number,
+  usdMicro: number,
+  windows: SpendWindow[],
+): ReserveSpendResult {
+  const now = Date.now();
+  const applied: LocalReservation['windows'] = [];
+
+  for (const w of windows) {
+    if (w.key.startsWith(REDIS_TOKENS_MIN_PREFIX)) {
+      let b = localTokensMin.get(w.key);
+      if (!b || now >= b.resetAt) b = { count: 0, resetAt: now + 60_000 };
+      if (b.count + w.delta > w.cap) {
+        void releaseReservedSpend(reservationId);
+        return { ok: false, rule: 'token-budget-per-minute', reason: 'Tenant tokens per minute exceeded' };
+      }
+      b.count += w.delta;
+      localTokensMin.set(w.key, b);
+      applied.push({ key: w.key, delta: w.delta, kind: 'tokens' });
+    } else if (w.key.startsWith(REDIS_USD_MIN_PREFIX)) {
+      let b = localUsdMin.get(w.key);
+      if (!b || now >= b.resetAt) b = { usd: 0, resetAt: now + 60_000 };
+      const deltaUsd = w.delta / 1_000_000;
+      const capUsd = w.cap / 1_000_000;
+      if (b.usd + deltaUsd > capUsd) {
+        void releaseReservedSpend(reservationId);
+        return { ok: false, rule: 'usd-budget-per-minute', reason: 'Tenant USD per minute exceeded' };
+      }
+      b.usd += deltaUsd;
+      localUsdMin.set(w.key, b);
+      applied.push({ key: w.key, delta: w.delta, kind: 'usd' });
+    } else if (w.key.startsWith(REDIS_DAY_PREFIX)) {
+      const dk = `${utcDayKey()}:${tid}`;
+      const spent = localDaySpend.get(dk) ?? 0;
+      const deltaUsd = w.delta / 1_000_000;
+      const capUsd = w.cap / 1_000_000;
+      if (spent + deltaUsd > capUsd) {
+        void releaseReservedSpend(reservationId);
+        return { ok: false, rule: 'unified-spend-pool', reason: 'Tenant daily USD cap exceeded' };
+      }
+      localDaySpend.set(dk, spent + deltaUsd);
+      applied.push({ key: w.key, delta: w.delta, kind: 'usd' });
+    }
+  }
+
+  localReservations.set(reservationId, {
+    tenantId: tid,
+    tokens,
+    usdMicro,
+    windows: applied,
+  });
+  refreshSpendGauges(tid, tokens);
+  return { ok: true, reservationId };
+}
+
 export async function tryReserveSpend(input: ReserveSpendInput): Promise<ReserveSpendResult> {
   const tid = input.tenantId?.trim() || 'default';
   const tokens = Math.max(0, Math.floor(input.tokens || 0));
   const estimatedUsd = Math.max(0, input.estimatedUsd || 0);
+  const usdMicro = Math.ceil(estimatedUsd * 1_000_000);
   const tokensCap = getTokensPerMinCap();
   const usdMinCap = getUsdPerMinCap(tid);
   const dayCap = getDailyBudgetCapUsd(tid);
+  const reservationId = randomUUID();
 
   if (tokensCap > 0 && tokens > tokensCap) {
     return {
@@ -94,111 +251,119 @@ export async function tryReserveSpend(input: ReserveSpendInput): Promise<Reserve
     };
   }
 
+  const windows = buildSpendWindows(tid, input.sessionKey, tokens, usdMicro, tokensCap, usdMinCap, dayCap);
+  if (windows.length === 0) {
+    return { ok: true, reservationId };
+  }
+
   if (isRedisConfigured()) {
     try {
       const redis = getSharedRedisClient();
-      const tKey = tokensMinKey(tid, input.sessionKey);
-      const uKey = usdMinKey(tid);
-      const dKey = dayKey(tid);
-
-      if (tokens > 0 && tokensCap > 0) {
-        const tokScript = `
-local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-local cap = tonumber(ARGV[1])
-local delta = tonumber(ARGV[2])
-if current + delta > cap then return 0 end
-redis.call('INCRBY', KEYS[1], delta)
-redis.call('EXPIRE', KEYS[1], 60)
-return 1`;
-        const tokOk = await redis.eval(tokScript, 1, tKey, tokensCap, tokens);
-        if (tokOk !== 1) {
-          return { ok: false, rule: 'token-budget-per-minute', reason: 'Tenant tokens per minute exceeded' };
-        }
+      const argv: (string | number)[] = [
+        reservationId,
+        tokens,
+        usdMicro,
+        windows.length,
+      ];
+      for (const w of windows) {
+        argv.push(w.key, w.cap, w.ttl, w.delta);
       }
-
-      if (estimatedUsd > 0 && usdMinCap > 0) {
-        const micro = Math.ceil(estimatedUsd * 1_000_000);
-        const capMicro = Math.ceil(usdMinCap * 1_000_000);
-        const usdScript = `
-local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-local cap = tonumber(ARGV[1])
-local delta = tonumber(ARGV[2])
-if current + delta > cap then return 0 end
-redis.call('INCRBY', KEYS[1], delta)
-redis.call('EXPIRE', KEYS[1], 60)
-return 1`;
-        const usdOk = await redis.eval(usdScript, 1, uKey, capMicro, micro);
-        if (usdOk !== 1) {
-          return { ok: false, rule: 'usd-budget-per-minute', reason: 'Tenant USD per minute exceeded' };
-        }
-      }
-
-      if (estimatedUsd > 0 && dayCap > 0) {
-        const micro = Math.ceil(estimatedUsd * 1_000_000);
-        const capMicro = Math.ceil(dayCap * 1_000_000);
-        const dayScript = `
-local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-local cap = tonumber(ARGV[1])
-local delta = tonumber(ARGV[2])
-if current + delta > cap then return 0 end
-redis.call('INCRBY', KEYS[1], delta)
-redis.call('EXPIRE', KEYS[1], ARGV[3])
-return 1`;
-        const dayOk = await redis.eval(dayScript, 1, dKey, capMicro, micro, ttlSecondsUntilUtcMidnight());
-        if (dayOk !== 1) {
-          return { ok: false, rule: 'unified-spend-pool', reason: 'Tenant daily USD cap exceeded' };
-        }
-      }
-
-      if (estimatedUsd > 0) {
-        pendingReserveMicro.set(tid, (pendingReserveMicro.get(tid) ?? 0) + Math.ceil(estimatedUsd * 1_000_000));
+      const result = await redis.eval(getAcquireScript(), 0, ...argv.map(String)) as [number, string] | number;
+      const ok = Array.isArray(result) ? result[0] === 1 : result === 1;
+      if (!ok) {
+        return { ok: false, rule: 'unified-spend-pool', reason: 'Spend cap exceeded' };
       }
       refreshSpendGauges(tid, tokens);
-      return { ok: true };
+      return { ok: true, reservationId };
     } catch (err: unknown) {
-      if (process.env['MASTYF_AI_STRICT_MODE'] === 'true') {
+      if (isEnterpriseSpendStrict()) {
         Logger.error(`[unified-spend-pool] Redis reserve failed: ${err instanceof Error ? err.message : String(err)}`);
         return { ok: false, rule: 'unified-spend-pool', reason: 'Spend pool unavailable' };
       }
     }
+  } else if (isEnterpriseSpendStrict()) {
+    return { ok: false, rule: 'unified-spend-pool', reason: 'Redis required for enterprise spend enforcement' };
   }
 
-  const now = Date.now();
-  if (tokens > 0 && tokensCap > 0) {
-    const k = tokensMinKey(tid, input.sessionKey);
-    let b = localTokensMin.get(k);
-    if (!b || now >= b.resetAt) b = { count: 0, resetAt: now + 60_000 };
-    if (b.count + tokens > tokensCap) {
-      return { ok: false, rule: 'token-budget-per-minute', reason: 'Tenant tokens per minute exceeded' };
-    }
-    b.count += tokens;
-    localTokensMin.set(k, b);
-  }
-
-  if (estimatedUsd > 0 && usdMinCap > 0) {
-    const k = usdMinKey(tid);
-    let b = localUsdMin.get(k);
-    if (!b || now >= b.resetAt) b = { usd: 0, resetAt: now + 60_000 };
-    if (b.usd + estimatedUsd > usdMinCap) {
-      return { ok: false, rule: 'usd-budget-per-minute', reason: 'Tenant USD per minute exceeded' };
-    }
-    b.usd += estimatedUsd;
-    localUsdMin.set(k, b);
-  }
-
-  if (estimatedUsd > 0 && dayCap > 0) {
-    const dk = `${utcDayKey()}:${tid}`;
-    const spent = localDaySpend.get(dk) ?? 0;
-    if (spent + estimatedUsd > dayCap) {
-      return { ok: false, rule: 'unified-spend-pool', reason: 'Tenant daily USD cap exceeded' };
-    }
-    localDaySpend.set(dk, spent + estimatedUsd);
-  }
-
-  refreshSpendGauges(tid, tokens);
-  return { ok: true };
+  return localReserve(reservationId, tid, tokens, usdMicro, windows);
 }
 
+export async function releaseReservedSpend(reservationId: string | undefined): Promise<void> {
+  if (!reservationId) return;
+
+  if (isRedisConfigured()) {
+    try {
+      const redis = getSharedRedisClient();
+      await redis.eval(getReleaseScript(), 0, reservationId);
+    } catch {
+      // best-effort
+    }
+  }
+
+  const local = localReservations.get(reservationId);
+  if (!local) return;
+
+  for (const w of local.windows) {
+    if (w.kind === 'tokens') {
+      const b = localTokensMin.get(w.key);
+      if (b) {
+        b.count = Math.max(0, b.count - w.delta);
+        localTokensMin.set(w.key, b);
+      }
+    } else {
+      const deltaUsd = w.delta / 1_000_000;
+      if (w.key.startsWith(REDIS_USD_MIN_PREFIX)) {
+        const b = localUsdMin.get(w.key);
+        if (b) {
+          b.usd = Math.max(0, b.usd - deltaUsd);
+          localUsdMin.set(w.key, b);
+        }
+      } else {
+        const dk = `${utcDayKey()}:${local.tenantId}`;
+        localDaySpend.set(dk, Math.max(0, (localDaySpend.get(dk) ?? 0) - deltaUsd));
+      }
+    }
+  }
+  localReservations.delete(reservationId);
+}
+
+export async function commitSpend(
+  reservationId: string | undefined,
+  tenantId: string | undefined,
+  actualUsd: number,
+): Promise<void> {
+  if (!reservationId) return;
+  const tid = tenantId?.trim() || 'default';
+  const actualMicro = Math.ceil(Math.max(0, actualUsd) * 1_000_000);
+
+  if (isRedisConfigured()) {
+    try {
+      const redis = getSharedRedisClient();
+      await redis.eval(
+        getCommitScript(),
+        0,
+        reservationId,
+        String(actualMicro),
+        dayKey(tid),
+        String(ttlSecondsUntilUtcMidnight()),
+      );
+    } catch {
+      // best-effort
+    }
+  }
+
+  const local = localReservations.get(reservationId);
+  if (local) {
+    const deltaUsd = actualUsd - local.usdMicro / 1_000_000;
+    if (Math.abs(deltaUsd) >= 0.000001) {
+      const dk = `${utcDayKey()}:${tid}`;
+      localDaySpend.set(dk, (localDaySpend.get(dk) ?? 0) + deltaUsd);
+    }
+    localReservations.delete(reservationId);
+  }
+}
+
+/** @deprecated Use commitSpend with reservationId */
 export async function recordActualSpend(
   tenantId: string | undefined,
   actualUsd: number,
@@ -219,8 +384,7 @@ export async function recordActualSpend(
     }
   }
   const dk = `${utcDayKey()}:${tid}`;
-  localDaySpend.set(dk, (localDaySpend.get(dk) ?? 0) + actualUsd);
-  pendingReserveMicro.delete(tid);
+  localDaySpend.set(dk, (localDaySpend.get(dk) ?? 0) + delta);
 }
 
 function refreshSpendGauges(tenantId: string, tokensAdded: number): void {
@@ -238,5 +402,5 @@ export function resetUnifiedSpendPoolForTests(): void {
   localDaySpend.clear();
   localTokensMin.clear();
   localUsdMin.clear();
-  pendingReserveMicro.clear();
+  localReservations.clear();
 }

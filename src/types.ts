@@ -147,4 +147,6 @@ export interface ProxyCallRecord {
   tokenSource?: 'api' | 'estimated';
   /** Multi-tenant isolation label */
   tenantId?: string;
+  /** Unified spend pool reservation id for commit/release */
+  spendReservationId?: string;
 }
