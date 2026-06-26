@@ -42,7 +42,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "safe-regex": "^2.1.1",
-    "typescript": "^5.4.0",
+    "typescript": "^6.0.3",
     "vitest": "^3.2.4"
   },
   "keywords": [
