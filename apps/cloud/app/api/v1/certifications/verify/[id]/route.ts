@@ -1,4 +1,9 @@
 import { verifyPublicCertification } from '@/lib/industry-standard';
+import {
+  databaseUnavailableResponse,
+  isDatabaseUnavailableError,
+} from '@/lib/cloud-db-guard';
+import { cloudDbAvailable } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -7,6 +12,10 @@ export async function GET(_request: Request, context: RouteContext) {
   const { id } = await context.params;
   if (!id?.trim()) {
     return NextResponse.json({ error: 'id required' }, { status: 400 });
+  }
+
+  if (!cloudDbAvailable()) {
+    return databaseUnavailableResponse();
   }
 
   try {
@@ -22,6 +31,9 @@ export async function GET(_request: Request, context: RouteContext) {
       certification: verification.certification,
     });
   } catch (err: unknown) {
+    if (isDatabaseUnavailableError(err)) {
+      return databaseUnavailableResponse();
+    }
     const message = err instanceof Error ? err.message : 'verify_failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }

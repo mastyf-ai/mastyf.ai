@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { extractBearerToken } from '@/lib/api-keys';
 import {
+  certificationsUnavailablePayload,
+  databaseUnavailableResponse,
+  isDatabaseUnavailableError,
+} from '@/lib/cloud-db-guard';
+import { cloudDbAvailable } from '@/lib/db';
+import {
   listPublicCertifications,
   submitPublicCertification,
 } from '@/lib/industry-standard';
@@ -8,6 +14,10 @@ import { resolveOrgFromApiKey } from '@/lib/org-context';
 import { queryReputation, upsertReputation } from '@/lib/cloud-observatory-store';
 
 export async function GET(request: Request) {
+  if (!cloudDbAvailable()) {
+    return NextResponse.json(certificationsUnavailablePayload());
+  }
+
   const url = new URL(request.url);
   const packageName = url.searchParams.get('package') ?? undefined;
   const limit = Number(url.searchParams.get('limit')) || 100;
@@ -27,12 +37,19 @@ export async function GET(request: Request) {
     });
     return NextResponse.json({ certifications: withReputation, count: withReputation.length });
   } catch (err: unknown) {
+    if (isDatabaseUnavailableError(err)) {
+      return NextResponse.json(certificationsUnavailablePayload());
+    }
     const message = err instanceof Error ? err.message : 'list_failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  if (!cloudDbAvailable()) {
+    return databaseUnavailableResponse();
+  }
+
   let orgId: string | null = null;
   const bearer = extractBearerToken(request.headers.get('authorization'));
   if (bearer) {
@@ -87,6 +104,9 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, id: result.id }, { status: 201 });
   } catch (err: unknown) {
+    if (isDatabaseUnavailableError(err)) {
+      return databaseUnavailableResponse();
+    }
     const message = err instanceof Error ? err.message : 'submit_failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }

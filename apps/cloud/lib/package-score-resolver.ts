@@ -83,6 +83,48 @@ function rowToResult(row: CacheRow, source: PackageScoreSource, id?: string): Pa
   };
 }
 
+async function readStaleCache(
+  packageName: string,
+  tier?: PackageScoreTier,
+): Promise<CacheRow | null> {
+  try {
+    const db = getDb();
+    const result = tier
+      ? await db.execute(sql`
+          SELECT package_name, version, scan_tier, score, level, grade,
+                 score_report, checks, computed_at, expires_at
+          FROM package_score_cache
+          WHERE package_name = ${packageName}
+            AND scan_tier = ${tier}
+          ORDER BY computed_at DESC
+          LIMIT 1
+        `)
+      : await db.execute(sql`
+          SELECT package_name, version, scan_tier, score, level, grade,
+                 score_report, checks, computed_at, expires_at
+          FROM package_score_cache
+          WHERE package_name = ${packageName}
+          ORDER BY CASE scan_tier WHEN 'live' THEN 0 ELSE 1 END, computed_at DESC
+          LIMIT 1
+        `);
+    const rows = result as unknown as CacheRow[];
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolvePackageScoreWithStale(
+  packageName: string,
+): Promise<{ score: PackageScoreResult; stale: boolean }> {
+  const fresh = await readCache(packageName);
+  if (fresh) return { score: rowToResult(fresh, 'computed'), stale: false };
+  const staleRow = await readStaleCache(packageName);
+  if (staleRow) return { score: rowToResult(staleRow, 'computed'), stale: true };
+  const score = await resolvePackageScore(packageName);
+  return { score, stale: false };
+}
+
 async function readCache(
   packageName: string,
   tier?: PackageScoreTier,

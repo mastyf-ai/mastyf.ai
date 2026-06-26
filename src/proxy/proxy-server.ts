@@ -32,7 +32,6 @@ import {
   reportSemanticDegradation,
 } from '../utils/semantic-layer.js';
 import { reportSemanticAuditSkipped } from '../ai/semantic-llm-rate-limit.js';
-import { isSemanticAsyncEnabled } from '../ai/async-semantic-audit.js';
 import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
 import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { injectRedactionMeta } from '../utils/redaction-meta.js';
@@ -45,7 +44,6 @@ import { scanForSecrets } from '../scanners/secret-scanner.js';
 import { isProxyEntropyCheckEnabled, scanArgumentEntropy } from '../utils/arg-entropy.js';
 import * as Metrics from '../utils/metrics.js';
 import { alertPolicyBlock } from '../alerting/webhook-alerter.js';
-import { evaluateCveGate } from '../utils/cve-gate.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import {
   agenticPreForwardToolCall,
@@ -60,7 +58,7 @@ import {
   redactArguments,
   ingestPolicyDecision,
 } from '../ai/block-learning.js';
-import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semantic-audit.js';
+import { buildSemanticAuditJob, enqueueSemanticAudit, isSemanticAsyncEnabled } from '../ai/async-semantic-audit.js';
 import { isSyncSemanticRequestEnabled } from '../ai/sync-semantic-request.js';
 import { publishRugPullAlert, isClusterRugPullActive } from './rug-pull-cluster.js';
 import {
@@ -968,6 +966,7 @@ export class McpProxyServer {
 
         // ── CVE gate (latest security_scans row; run preflight or `mastyf-ai scan`) ──
         if (this.policyEngine?.getMode() === 'block') {
+          const { evaluateCveGate } = await import('../utils/cve-gate.js');
           const cveGate = await evaluateCveGate(this.db, this.serverName);
           if (cveGate.block) {
             const cveReason = cveGate.reason || 'CVE policy violation';

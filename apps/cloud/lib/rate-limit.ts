@@ -11,6 +11,7 @@ export type RateLimitResult =
 let badgeLimiter: Ratelimit | null | undefined;
 let deepScanLimiter: Ratelimit | null | undefined;
 let reportsLimiter: Ratelimit | null | undefined;
+let certificationsLimiter: Ratelimit | null | undefined;
 let rateLimitUnavailableLogged = false;
 
 function getRedis(): Redis | null {
@@ -38,6 +39,12 @@ function getDeepScanLimit(): number {
 
 function getReportsLimit(): number {
   const raw = process.env.MASTYF_AI_CLOUD_REPORTS_RATE_LIMIT;
+  const n = raw ? parseInt(raw, 10) : 30;
+  return Number.isFinite(n) && n > 0 ? n : 30;
+}
+
+function getCertificationsLimit(): number {
+  const raw = process.env.MASTYF_AI_CLOUD_CERTIFICATIONS_RATE_LIMIT;
   const n = raw ? parseInt(raw, 10) : 30;
   return Number.isFinite(n) && n > 0 ? n : 30;
 }
@@ -85,6 +92,21 @@ function getReportsLimiter(): Ratelimit | null {
     prefix: 'mastyf-ai:cloud:reports',
   });
   return reportsLimiter;
+}
+
+function getCertificationsLimiter(): Ratelimit | null {
+  if (certificationsLimiter !== undefined) return certificationsLimiter;
+  const redis = getRedis();
+  if (!redis) {
+    certificationsLimiter = null;
+    return null;
+  }
+  certificationsLimiter = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(getCertificationsLimit(), '1 h'),
+    prefix: 'mastyf-ai:cloud:certifications',
+  });
+  return certificationsLimiter;
 }
 
 type IpTrustMode = 'proxy-secret' | 'vercel' | 'cloudflare' | 'trusted-proxy' | 'untrusted';
@@ -175,9 +197,10 @@ export function rateLimitKeyFromRequest(request: NextRequest): string {
   return `ip:${clientIpFromRequest(request)}`;
 }
 
-function resolveRateLimitScope(pathname: string): 'deep-scan' | 'reports' | 'badge' {
+function resolveRateLimitScope(pathname: string): 'deep-scan' | 'reports' | 'badge' | 'certifications' {
   if (pathname.startsWith('/api/v1/deep-scan/')) return 'deep-scan';
   if (pathname.startsWith('/api/v1/reports/')) return 'reports';
+  if (pathname.startsWith('/api/v1/certifications')) return 'certifications';
   return 'badge';
 }
 
@@ -185,6 +208,7 @@ function getLimiterForPath(pathname: string): Ratelimit | null {
   const scope = resolveRateLimitScope(pathname);
   if (scope === 'deep-scan') return getDeepScanLimiter();
   if (scope === 'reports') return getReportsLimiter();
+  if (scope === 'certifications') return getCertificationsLimiter();
   return getBadgeLimiter();
 }
 
@@ -221,5 +245,6 @@ export function resetRateLimitClientsForTests(): void {
   badgeLimiter = undefined;
   deepScanLimiter = undefined;
   reportsLimiter = undefined;
+  certificationsLimiter = undefined;
   rateLimitUnavailableLogged = false;
 }

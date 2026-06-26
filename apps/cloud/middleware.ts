@@ -6,6 +6,7 @@ const RATE_LIMITED_PREFIXES = [
   '/api/v1/badge/',
   '/api/v1/deep-scan/',
   '/api/v1/reports/',
+  '/api/v1/certifications',
 ] as const;
 
 function isRateLimitedPath(path: string): boolean {
@@ -36,6 +37,9 @@ export const config = {
     '/dashboard/:path*',
     '/api/v1/badge/:path*',
     '/api/v1/deep-scan/:path*',
+    '/api/v1/deep-scan/jobs/:path*',
     '/api/v1/reports/:path*',
+    '/api/v1/certifications',
+    '/api/v1/certifications/:path*',
   ],
 };

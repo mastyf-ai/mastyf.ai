@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   InvalidPackageNameError,
   PackageNotFoundError,
-  resolvePackageScore,
+  resolvePackageScoreWithStale,
 } from '@/lib/package-score-resolver';
 import { computeTrustGrade, scoreToLevel } from '@/lib/trust-badge-grade';
 import { BADGE_RENDERER_VERSION } from '@/lib/badge-brand';
@@ -13,6 +13,8 @@ import {
   normalizeBadgeStyle,
 } from '@/lib/trust-badge-svg';
 
+export const runtime = 'nodejs';
+
 type RouteContext = { params: Promise<{ package: string[] }> };
 
 function wantsJson(segments: string[], request: Request): boolean {
@@ -20,6 +22,14 @@ function wantsJson(segments: string[], request: Request): boolean {
   const url = new URL(request.url);
   return url.searchParams.get('format') === 'json';
 }
+
+function badgeEtag(score: { computedAt: string; score: number; scanTier: string }): string {
+  return `"${score.computedAt}-${score.score}-${score.scanTier}"`;
+}
+
+const CACHE_HEADERS = {
+  'Cache-Control': 'public, max-age=300, stale-while-revalidate=86400, must-revalidate',
+} as const;
 
 export async function GET(request: Request, context: RouteContext) {
   const segments = (await context.params).package ?? [];
@@ -32,27 +42,36 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   try {
-    const score = await resolvePackageScore(packageName);
+    const { score, stale } = await resolvePackageScoreWithStale(packageName);
     const grade = computeTrustGrade(score.score);
+    const etag = badgeEtag(score);
+    const ifNoneMatch = request.headers.get('if-none-match');
+    if (ifNoneMatch === etag) {
+      return new NextResponse(null, { status: 304, headers: { ETag: etag, ...CACHE_HEADERS } });
+    }
 
     if (wantsJson(segments, request)) {
-      return NextResponse.json({
-        found: true,
-        packageName: score.packageName,
-        serverName: score.serverName,
-        version: score.version,
-        score: score.score,
-        grade,
-        level: score.level || scoreToLevel(score.score),
-        scanTier: score.scanTier,
-        source: score.source,
-        certificationId: score.id,
-        checks: score.checks,
-        computedAt: score.computedAt,
-        expiresAt: score.expiresAt,
-        badgeUrl: `${resolveCloudBaseUrl(request)}/api/v1/badge/${encodeURIComponent(packageName)}?style=github&v=${BADGE_RENDERER_VERSION}`,
-        verifyUrl: `${resolveCloudBaseUrl(request)}/certified/${encodeURIComponent(packageName)}`,
-      });
+      return NextResponse.json(
+        {
+          found: true,
+          stale,
+          packageName: score.packageName,
+          serverName: score.serverName,
+          version: score.version,
+          score: score.score,
+          grade,
+          level: score.level || scoreToLevel(score.score),
+          scanTier: score.scanTier,
+          source: score.source,
+          certificationId: score.id,
+          checks: score.checks,
+          computedAt: score.computedAt,
+          expiresAt: score.expiresAt,
+          badgeUrl: `${resolveCloudBaseUrl(request)}/api/v1/badge/${encodeURIComponent(packageName)}?style=github&v=${BADGE_RENDERER_VERSION}`,
+          verifyUrl: `${resolveCloudBaseUrl(request)}/certified/${encodeURIComponent(packageName)}`,
+        },
+        { headers: { ETag: etag, ...CACHE_HEADERS } },
+      );
     }
 
     const svg = renderTrustBadgeSvg({
@@ -62,24 +81,12 @@ export async function GET(request: Request, context: RouteContext) {
       style,
     });
 
-    const etag = `"${score.computedAt}-${score.score}-${score.scanTier}"`;
-    const ifNoneMatch = request.headers.get('if-none-match');
-    if (ifNoneMatch === etag) {
-      return new NextResponse(null, {
-        status: 304,
-        headers: {
-          ETag: etag,
-          'Cache-Control': 'public, max-age=300, must-revalidate',
-        },
-      });
-    }
-
     return new NextResponse(svg, {
       status: 200,
       headers: {
         'Content-Type': 'image/svg+xml; charset=utf-8',
-        'Cache-Control': 'public, max-age=300, must-revalidate',
         ETag: etag,
+        ...CACHE_HEADERS,
       },
     });
   } catch (err: unknown) {

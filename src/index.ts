@@ -83,20 +83,38 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             {
               uri: request.params.uri,
               mimeType: 'application/json',
-              text: JSON.stringify({ scans: recentScans, count: recentScans.length }, null, 2),
+              text: JSON.stringify({ status: 'ok', scans: recentScans, count: recentScans.length }, null, 2),
             },
           ],
         };
       }
-    } catch {
-      // DB read failed — fall through to note
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      Logger.warn(`[mcp-resource] latest-scan DB read failed: ${detail}`);
+      return {
+        contents: [
+          {
+            uri: request.params.uri,
+            mimeType: 'application/json',
+            text: JSON.stringify({
+              status: 'error',
+              error: 'database_unavailable',
+              message: detail,
+            }, null, 2),
+          },
+        ],
+      };
     }
     return {
       contents: [
         {
           uri: request.params.uri,
           mimeType: 'application/json',
-          text: JSON.stringify(latestScan, null, 2),
+          text: JSON.stringify({
+            status: 'empty',
+            note: 'Run scan_security or full_report to populate',
+            timestamp: latestScan.timestamp,
+          }, null, 2),
         },
       ],
     };

@@ -61,7 +61,7 @@ import { ZeroTrustVerificationEngine } from './agentic/zero-trust/verification-e
 import { ReputationNetwork } from './agentic/reputation/reputation-network.js';
 import { EcosystemObservatory } from './agentic/observatory/ecosystem-observatory.js';
 import { InsuranceRiskQuantifier } from './agentic/insurance/risk-quantifier.js';
-import { FederatedLearningCoordinator } from './agentic/federated/federated-learning.js';
+import type { FederatedLearningCoordinator } from './agentic/federated/federated-learning.js';
 
 export interface Container {
   db: IDatabase;
@@ -119,7 +119,7 @@ export interface Container {
   reputationNetwork: ReputationNetwork;
   ecosystemObservatory: EcosystemObservatory;
   insuranceRiskQuantifier: InsuranceRiskQuantifier;
-  federatedLearning: FederatedLearningCoordinator;
+  federatedLearning: FederatedLearningCoordinator | null;
 }
 
 let startupWarningEmitted = false;
@@ -221,12 +221,14 @@ export async function createContainer(dbPath?: string): Promise<Container> {
   const responseDlp = new ResponseDlpScanner();
   const ecosystemObservatory = new EcosystemObservatory(industryStore);
   const insuranceRiskQuantifier = new InsuranceRiskQuantifier(threatPredictor, riskScorer, industryStore);
-  const federatedLearning = new FederatedLearningCoordinator(approvalGate, contextualBandit, industryStore);
+  let federatedLearning: FederatedLearningCoordinator | null = null;
   if (process.env.MASTYF_AI_FEDERATED_LEARNING === 'true') {
+    const { FederatedLearningCoordinator: FederatedCtor } = await import('./agentic/federated/federated-learning.js');
+    federatedLearning = new FederatedCtor(approvalGate, contextualBandit, industryStore);
     federatedLearning.getActiveWeights();
     void federatedLearning.syncRemoteDeltas().then(() => {
       const min = Number(process.env.MASTYF_AI_FEDERATED_LEARNING_MIN_REPORTS ?? 3);
-      federatedLearning.aggregateDeltas(min);
+      federatedLearning?.aggregateDeltas(min);
     });
   }
 

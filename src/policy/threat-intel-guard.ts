@@ -5,6 +5,7 @@ import { resolveThreatStatePath } from '../ai/ai-paths.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
 import type { CallContext, PolicyDecision } from './policy-types.js';
 import { getMtxThreatPatterns } from '../utils/mtx-threat-intel-bridge.js';
+import { compilePolicyRegex, safeRegexTest, UnsafePolicyRegexError } from './regex-compile.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -14,17 +15,16 @@ let cachedPatterns: RegExp[] | null = null;
 let cachedAt = 0;
 const CACHE_TTL_MS = 60_000;
 
-function escapeRegexLiteral(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+const MAX_THREAT_INTEL_INPUT_CHARS = 64_000;
 
 function compilePattern(source: string): RegExp | null {
   const trimmed = source.trim();
   if (!trimmed) return null;
   try {
-    return new RegExp(trimmed, 'i');
-  } catch {
-    return new RegExp(escapeRegexLiteral(trimmed), 'i');
+    return compilePolicyRegex(trimmed, 'i');
+  } catch (err) {
+    if (err instanceof UnsafePolicyRegexError) return null;
+    return null;
   }
 }
 
@@ -101,7 +101,7 @@ export function evaluateThreatIntelGuard(ctx: CallContext): PolicyDecision | nul
   if (!blob) return null;
 
   for (const pattern of patterns) {
-    if (pattern.test(blob)) {
+    if (safeRegexTest(pattern, blob, MAX_THREAT_INTEL_INPUT_CHARS)) {
       return {
         action: 'block',
         rule: 'threat-intel',

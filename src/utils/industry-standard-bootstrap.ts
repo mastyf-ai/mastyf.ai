@@ -98,10 +98,10 @@ export function registerIndustryStandardTasks(container: Container): void {
   if (process.env.MASTYF_AI_FEDERATED_LEARNING === 'true') {
     const flInterval = process.env.MASTYF_AI_FEDERATED_SYNC_INTERVAL || '30m';
     agenticScheduler.register('federated-learning-sync', 'Federated Learning Mesh Sync + Aggregate', flInterval, async () => {
-      await container.federatedLearning.syncRemoteDeltas();
+      await container.federatedLearning?.syncRemoteDeltas();
       const min = Number(process.env.MASTYF_AI_FEDERATED_LEARNING_MIN_REPORTS ?? 3);
-      const result = container.federatedLearning.aggregateDeltas(min);
-      if (result.aggregated) {
+      const result = container.federatedLearning?.aggregateDeltas(min);
+      if (result?.aggregated) {
         Logger.info(`[IndustryStandard] Federated aggregate: ${result.newVersion} contributors=${result.contributorCount}`);
       }
     });

@@ -20,6 +20,7 @@ import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import { resolveTenantContext, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
 import type { CallContext } from '../policy/policy-types.js';
 import { applyGeoToCallContext } from '../utils/request-geo-context.js';
+import { getHttpMaxBodyBytes } from './http-proxy-security.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
 import { runSyncSemanticRequestGate } from './proxy-post-policy-gates.js';
@@ -299,7 +300,13 @@ export class SseProxyServer extends EventEmitter {
       const req = client.request(reqOpts, (res) => {
         let data = '';
         res.on('data', (chunk: Buffer) => {
-          data += chunk.toString();
+          const next = appendSseChunk(data, chunk);
+          if (next === null) {
+            req.destroy();
+            resolve(null);
+            return;
+          }
+          data = next;
           const parsed = parseEndpointFromSse(data, sseUrl);
           if (parsed) {
             req.destroy();
@@ -646,7 +653,13 @@ export class SseProxyServer extends EventEmitter {
       const req = client.request(reqOpts, (res) => {
         let data = '';
         res.on('data', (chunk: Buffer) => {
-          data += chunk.toString();
+          const next = appendSseChunk(data, chunk);
+          if (next === null) {
+            req.destroy();
+            reject(new Error('Upstream SSE response exceeded max body size'));
+            return;
+          }
+          data = next;
         });
         res.on('end', () => {
           try {
@@ -666,6 +679,12 @@ export class SseProxyServer extends EventEmitter {
       req.end();
     });
   }
+}
+
+function appendSseChunk(current: string, chunk: Buffer): string | null {
+  const max = getHttpMaxBodyBytes();
+  if (current.length + chunk.length > max) return null;
+  return current + chunk.toString();
 }
 
 function parseEndpointFromSse(

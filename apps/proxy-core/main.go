@@ -15,6 +15,34 @@ import (
 	"time"
 )
 
+func maxBodyBytes() int64 {
+	raw := strings.TrimSpace(os.Getenv("PROXY_CORE_MAX_BODY_BYTES"))
+	if raw == "" {
+		return 10 << 20
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n <= 0 {
+		return 10 << 20
+	}
+	return n
+}
+
+func authorizeProxyCore(w http.ResponseWriter, r *http.Request) bool {
+	expected := strings.TrimSpace(os.Getenv("PROXY_CORE_API_KEY"))
+	if expected == "" {
+		return true
+	}
+	got := strings.TrimSpace(r.Header.Get("X-Proxy-Core-Api-Key"))
+	if got == "" {
+		got = strings.TrimPrefix(strings.TrimSpace(r.Header.Get("Authorization")), "Bearer ")
+	}
+	if got != expected {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return false
+	}
+	return true
+}
+
 type mcpRequest struct {
 	Method string `json:"method"`
 	Params struct {
@@ -247,11 +275,15 @@ func main() {
 		_ = json.NewEncoder(w).Encode(cache.snapshot())
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if !authorizeProxyCore(w, r) {
+			return
+		}
 		if r.Method != http.MethodPost {
 			proxy.ServeHTTP(w, r)
 			return
 		}
 
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes())
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)

@@ -7,6 +7,11 @@ export type Db = PostgresJsDatabase<typeof schema>;
 let client: ReturnType<typeof postgres> | null = null;
 let dbInstance: Db | null = null;
 
+/** True when DATABASE_URL is configured for the cloud control plane. */
+export function cloudDbAvailable(): boolean {
+  return Boolean(process.env.DATABASE_URL?.trim());
+}
+
 export function getDb(): Db {
   if (dbInstance) return dbInstance;
   const connectionString = process.env.DATABASE_URL;

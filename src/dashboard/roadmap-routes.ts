@@ -551,9 +551,9 @@ export async function handleRoadmapApiRoutes(params: {
     const { ensureAgenticContainer } = await import('../utils/agentic-container.js');
     const container = await ensureAgenticContainer();
     writeJson(res, 200, {
-      enabled: container?.federatedLearning.isEnabled() ?? false,
-      activeVersion: container?.federatedLearning.getActiveVersion() ?? 'baseline-v1',
-      stats: container?.federatedLearning.getStats() ?? {},
+      enabled: container?.federatedLearning?.isEnabled() ?? false,
+      activeVersion: container?.federatedLearning?.getActiveVersion() ?? 'baseline-v1',
+      stats: container?.federatedLearning?.getStats() ?? {},
     });
     return true;
   }
@@ -564,10 +564,10 @@ export async function handleRoadmapApiRoutes(params: {
     const { ensureAgenticContainer } = await import('../utils/agentic-container.js');
     const container = await ensureAgenticContainer();
     if (body.syncRemote !== false) {
-      await container?.federatedLearning.syncRemoteDeltas();
+      await container?.federatedLearning?.syncRemoteDeltas();
     }
     const minContributors = Number(body.minContributors ?? 3);
-    const result = container?.federatedLearning.aggregateDeltas(minContributors) ?? { aggregated: false, contributorCount: 0 };
+    const result = container?.federatedLearning?.aggregateDeltas(minContributors) ?? { aggregated: false, contributorCount: 0 };
     writeJson(res, 200, result);
     return true;
   }
@@ -578,7 +578,7 @@ export async function handleRoadmapApiRoutes(params: {
     const features = Array.isArray(body.features) ? body.features.map(Number) : [];
     const { ensureAgenticContainer } = await import('../utils/agentic-container.js');
     const container = await ensureAgenticContainer();
-    const result = await container?.federatedLearning.runOnnxInference(features);
+    const result = await container?.federatedLearning?.runOnnxInference(features);
     writeJson(res, 200, { result });
     return true;
   }
@@ -588,7 +588,7 @@ export async function handleRoadmapApiRoutes(params: {
     const body = await readBody(req);
     const { ensureAgenticContainer } = await import('../utils/agentic-container.js');
     const container = await ensureAgenticContainer();
-    const delta = container?.federatedLearning.submitLocalDelta({
+    const delta = container?.federatedLearning?.submitLocalDelta({
       signatureHash: String(body.signatureHash ?? ''),
       sampleCount: Number(body.sampleCount ?? 0),
       privacyBudgetEpsilon: body.privacyBudgetEpsilon != null ? Number(body.privacyBudgetEpsilon) : undefined,
@@ -601,8 +601,8 @@ export async function handleRoadmapApiRoutes(params: {
     setCors();
     const { ensureAgenticContainer } = await import('../utils/agentic-container.js');
     const container = await ensureAgenticContainer();
-    const decision = container?.federatedLearning.promoteRolloutStage() ?? null;
-    writeJson(res, decision ? 200 : 400, { decision, stage: container?.federatedLearning.getRolloutStage() });
+    const decision = container?.federatedLearning?.promoteRolloutStage() ?? null;
+    writeJson(res, decision ? 200 : 400, { decision, stage: container?.federatedLearning?.getRolloutStage() });
     return true;
   }
 
@@ -610,7 +610,7 @@ export async function handleRoadmapApiRoutes(params: {
     setCors();
     const { ensureAgenticContainer } = await import('../utils/agentic-container.js');
     const container = await ensureAgenticContainer();
-    writeJson(res, 200, container?.federatedLearning.exportModelBundle() ?? {});
+    writeJson(res, 200, container?.federatedLearning?.exportModelBundle() ?? {});
     return true;
   }
 
@@ -620,7 +620,7 @@ export async function handleRoadmapApiRoutes(params: {
     const { ensureAgenticContainer } = await import('../utils/agentic-container.js');
     const container = await ensureAgenticContainer();
     const weights = Array.isArray(body.weights) ? body.weights.map(Number) : [];
-    container?.federatedLearning.importModelBundle({
+    container?.federatedLearning?.importModelBundle({
       modelVersion: String(body.modelVersion ?? `import-${Date.now()}`),
       weights,
     });

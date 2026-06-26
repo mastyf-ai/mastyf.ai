@@ -11,6 +11,7 @@ import { CallContext } from '../policy/policy-types.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { auditPolicyDecision } from './audit-policy-decision.js';
 import { checkHttpClientRateLimit } from './client-rate-limit.js';
+import { checkIngressRateLimit } from './ingress-rate-limit.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
 import { createSessionCache, validateSessionToken, type MastyfAiSessionCache } from '../auth/session-factory.js';
@@ -147,6 +148,13 @@ export class HttpProxyServer {
     }
 
     const tenantBreaker = this.breakerFor(requestTenantId);
+
+    const ingressLimit = await checkIngressRateLimit(requestTenantId);
+    if (!ingressLimit.allowed) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: ingressLimit.reason ?? 'Too many requests' }));
+      return;
+    }
 
     const pathError = validateRequestUrlPath(req.url);
     if (pathError) {

@@ -117,15 +117,15 @@ export async function hookPromptInjectionCheck(
     const data = result.data!;
 
     const requestId = String(args.requestId ?? toolName);
-    if (container.federatedLearning.shouldRouteToFederatedModel(requestId)) {
+    if (container.federatedLearning?.shouldRouteToFederatedModel(requestId)) {
       const features = [
         JSON.stringify(args).length / 10_000,
         data.confidence,
         /https?:\/\//.test(JSON.stringify(args)) ? 0.8 : 0.1,
       ];
-      const fl = await container.federatedLearning.runOnnxInference(features);
+      const fl = await container.federatedLearning!.runOnnxInference(features);
       if (fl && fl.label === 'injection' && fl.score >= 0.55) {
-        container.federatedLearning.recordBlockedSignature(`${toolName}:fl-onnx:${fl.modelVersion}`, features);
+        container.federatedLearning!.recordBlockedSignature(`${toolName}:fl-onnx:${fl.modelVersion}`, features);
         return {
           blocked: true,
           reason: `Federated model blocked (${fl.modelVersion}, ${(fl.score * 100).toFixed(0)}%): ${fl.label}`,
@@ -154,7 +154,7 @@ export async function hookPromptInjectionCheck(
       // If high confidence (>0.7), block and sanitize
       if (data.confidence > 0.7) {
         const sanitized = container.argumentSanitizer.sanitize(args, data);
-        container.federatedLearning.recordBlockedSignature(
+        container.federatedLearning?.recordBlockedSignature(
           `${toolName}:${data.category ?? 'injection'}`,
         );
         return {
