@@ -41,7 +41,7 @@ export function inspectStreamingEconomicsChunk(
     return { abort: true, reason: 'stream already aborted' };
   }
   const costCheck = inspectCostStreamingChunk(state.costState, chunk, state.tenantId);
-  if (costCheck.abort) {
+  if (costCheck.terminateStream) {
     state.aborted = true;
     if (state.spendReservationId) {
       void releaseReservedSpend(state.spendReservationId);

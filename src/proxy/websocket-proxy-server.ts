@@ -596,10 +596,10 @@ export class WebSocketProxyServer {
     // ── Anomaly detection (ML pipeline) ────────────────────────────
     try {
       const anomalyDetector = getAnomalyDetector();
-      const sessionKey = (params?._meta?.['sessionId'] as string | undefined) || String(context.requestId);
+      const sessionKey = (params?._meta?.['sessionId'] as string | undefined) || String(requestId);
       const anomaly = await anomalyDetector.evaluate(
         this.opts.serverName,
-        context.toolName,
+        toolName,
         0,    // criticalCount (filled by argument scanner integration)
         0,    // warningCount
         0,    // maxConfidence
@@ -610,7 +610,7 @@ export class WebSocketProxyServer {
 
       if (anomaly.aboveThreshold && anomaly.confidence > 0.7) {
         Logger.warn(
-          `[ws-proxy:${this.opts.serverName}] Anomaly detected: ${context.toolName} ` +
+          `[ws-proxy:${this.opts.serverName}] Anomaly detected: ${toolName} ` +
           `score=${anomaly.confidence.toFixed(3)} layer=${anomaly.primaryLayer}`,
         );
         if (process.env['MASTYF_AI_ANOMALY_BLOCK'] === 'true') {
@@ -636,8 +636,8 @@ export class WebSocketProxyServer {
         this.opts.db,
         {
           serverName: this.opts.serverName,
-          toolName: context.toolName,
-          timestamp: context.timestamp,
+          toolName: toolName,
+          timestamp: new Date().toISOString(),
           requestTokens: tokenCounts.requestTokens,
           responseTokens: tokenCounts.responseTokens,
           totalTokens: tokenCounts.totalTokens,
