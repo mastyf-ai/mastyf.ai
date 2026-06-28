@@ -30,7 +30,10 @@ export function fingerprintJsonRpcToolsList(
   if (!msg.result) return;
   const tools = (msg.result as { tools?: ToolListEntry[] }).tools;
   if (Array.isArray(tools) && tools.length > 0) {
-    onToolsListObserved(serverName, tools as ToolListEntry[]);
+    const namedTools = tools.filter(
+      (t): t is ToolListEntry & { name: string } => typeof t?.name === 'string',
+    );
+    onToolsListObserved(serverName, namedTools as unknown as Parameters<typeof onToolsListObserved>[1]);
   }
   applyToolFingerprintFromResult(state, msg.result, {
     serverName,

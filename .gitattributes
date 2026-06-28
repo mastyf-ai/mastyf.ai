@@ -3,3 +3,8 @@
 *.tsx linguist-language=TypeScript
 dist/* linguist-generated=true
 node_modules/** linguist-vendored
+
+# Force LF for all shell scripts so they work in Linux containers
+# even when checked out on Windows (which defaults to CRLF)
+*.sh text eol=lf
+*.bash text eol=lf
