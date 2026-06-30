@@ -4,6 +4,7 @@
 import { Logger } from './logger.js';
 import { broadcastDashboardEvent } from './dashboard-events.js';
 import { getTribunalPolicyFromConfig } from '../policy/tribunal-policy.js';
+import { loadSemanticAuditRecordsAsync } from '../ai/semantic-audit-store.js';
 
 export type TribunalTimeoutAction = 'block' | 'allow' | 'escalate-to-oncall';
 
