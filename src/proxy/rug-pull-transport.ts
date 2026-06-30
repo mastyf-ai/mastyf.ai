@@ -30,7 +30,7 @@ export function fingerprintJsonRpcToolsList(
   if (!msg.result) return;
   const tools = (msg.result as { tools?: ToolListEntry[] }).tools;
   if (Array.isArray(tools) && tools.length > 0) {
-    onToolsListObserved(serverName, tools as ToolListEntry[]);
+    onToolsListObserved(serverName, tools.filter((t): t is typeof t & { name: string } => typeof t.name === 'string') as unknown as import('@mastyf-ai/core').ToolDefinition[]);
   }
   applyToolFingerprintFromResult(state, msg.result, {
     serverName,

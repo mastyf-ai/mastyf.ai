@@ -32,9 +32,11 @@ export function getTribunalTimeoutAction(): TribunalTimeoutAction {
 
 export async function countPendingTribunalRecords(): Promise<number> {
   try {
+    const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
     const records = await loadSemanticAuditRecordsAsync({ limit: 500 });
     return records.filter(
-      (r) => r.semanticAudit.suspicious && !r.label && !r.labeled,
+      (r: { semanticAudit: { suspicious: boolean }; label?: string; labeled?: boolean }) =>
+        r.semanticAudit.suspicious && !r.label && !r.labeled,
     ).length;
   } catch {
     return 0;

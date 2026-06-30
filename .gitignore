@@ -63,3 +63,4 @@ sca/ai-learning-metrics.json
 deploy/dashboard.html
 deploy/dashboard-spa/out/
 deploy/dashboard-spa/.next/
+.next/

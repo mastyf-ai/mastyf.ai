@@ -1,11 +1,10 @@
-# Production: keep unicode_strict: true for homoglyph bypass protection (do not set false).
 version: '1.0'
 policy:
   mode: block
   default_action: pass
-  default_sandbox_tier: shadow
   semantic_shell: true
   unicode_strict: true
+  default_sandbox_tier: shadow
   rules:
     - name: deny-dangerous-tools
       description: Explicitly deny tools that can execute arbitrary code
@@ -58,6 +57,7 @@ policy:
     - name: allowlist-common-tools
       description: Read-only / query tools; all others blocked by default_action
       action: block
+      enabled: false
       tools:
         allow:
           - read_file
@@ -73,7 +73,6 @@ policy:
           - echo
           - puppeteer_navigate
           - puppeteer_screenshot
-      enabled: false
     - name: block-dangerous-urls
       description: Block SSRF-prone URLs (metadata, localhost, file/javascript/data schemes, private IPs)
       action: block
@@ -159,8 +158,10 @@ policy:
       argPatterns:
         - field: sql
           patterns:
-            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
-            - \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - >-
+              \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - >-
+              \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
             - \bunion\b.+\bselect\b
             - \bdelete\s+from\b
             - \b(?:drop|truncate)\s+table\b
@@ -176,8 +177,10 @@ policy:
             - admin\)\(&
         - field: query
           patterns:
-            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
-            - \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - >-
+              \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - >-
+              \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
             - \bunion\b.+\bselect\b
             - \bdelete\s+from\b
             - \badmin'\s*--
@@ -201,24 +204,24 @@ policy:
             - \bdelete\s+from\b
             - \bselect\s+\*\s+from\b.+\b(payments|transactions|credentials|users)\b
             - \\$ne
-            - '</script>'
-            - '<script[\s>/]'
-            - 'onerror\s*='
+            - </script>
+            - <script[\s>/]
+            - onerror\s*=
         - field: message
           patterns:
-            - '\\r\\n'
+            - \\r\\n
             - '\\nFATAL:'
         - field: assertion
           patterns:
-            - '<saml:Assertion'
-            - '<saml:AttributeValue>admin</saml:AttributeValue>'
+            - <saml:Assertion
+            - <saml:AttributeValue>admin</saml:AttributeValue>
         - field: template
           patterns:
             - '%25%[0-9a-fA-F]{2}%[0-9a-fA-F]{2}'
         - field: '*'
           patterns:
-            - "\\.unsigned(?:\"|'|\\s|$)"
-            - 'JTY0ZWNobw=='
+            - \.unsigned(?:"|'|\s|$)
+            - JTY0ZWNobw==
     - name: block-encoding-evasion
       description: Block base64 and raw hex blobs used to hide instructions (layered decode in encoding-guard)
       action: block
@@ -301,3 +304,10 @@ policy:
           - run
       patterns:
         - \{"x":"ignore all previous instructions developer mode"\}
+    - name: attack-learned-semantic-path-guard-read_file
+      description: Learned from 8 blocks (semantic-path-guard on read_file@filesystem) — pending approval
+      action: block
+      argPatterns:
+        - field: path
+          patterns:
+            - /etc

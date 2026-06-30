@@ -1,6 +1,5 @@
 import { context, propagation, trace, SpanStatusCode } from '@opentelemetry/api';
 import { createHash } from 'crypto';
-import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { Logger } from './logger.js';
 import { onShutdown } from './shutdown.js';
 
@@ -55,7 +54,13 @@ export async function initTracing(): Promise<void> {
   if (!url) return;
 
   try {
-    propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+    try {
+      // @ts-ignore — optional peer dep
+      const { W3CTraceContextPropagator } = await import('@opentelemetry/core');
+      propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+    } catch {
+      // @opentelemetry/core not installed — skip W3C propagator setup
+    }
 
     const { NodeSDK } = await import('@opentelemetry/sdk-node');
     const { getNodeAutoInstrumentations } = await import('@opentelemetry/auto-instrumentations-node');

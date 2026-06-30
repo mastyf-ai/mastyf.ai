@@ -237,7 +237,9 @@
   "license": "MIT",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3"
+      "better-sqlite3",
+      "esbuild",
+      "sharp"
     ],
     "overrides": {
       "protobufjs": ">=8.6.4",

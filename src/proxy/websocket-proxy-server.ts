@@ -532,6 +532,7 @@ export class WebSocketProxyServer {
 
     const toolName = params?.name || 'unknown';
     const requestId = String(msg.id ?? randomUUID());
+    const context = { toolName, requestId, timestamp: new Date().toISOString() };
     const reqMsg = { params: { name: params?.name, arguments: params?.arguments } };
     const model = resolveModelIdForServer(this.opts.serverName);
     const tokenCounts = this.tokenCounter.countProxyCall({

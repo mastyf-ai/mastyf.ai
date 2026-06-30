@@ -19,8 +19,8 @@
 
           buildInputs = with pkgs; [
             # Node.js 20 (matches .nvmrc and Dockerfile)
-            nodejs_20
-            nodePackages.pnpm # use pnpm directly; corepack can't write to nix store
+            nodejs_22
+            pnpm # use pnpm directly; corepack can't write to nix store
 
             # Native build toolchain (required for better-sqlite3)
             python3
