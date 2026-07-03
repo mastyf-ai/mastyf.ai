@@ -132,4 +132,64 @@ describe('dashboard security threat quarantine actions', () => {
     const policy = readFileSync(policyPath, 'utf-8');
     expect(policy.includes('quarantine-semantic-restore-1')).toBe(false);
   });
+
+  it('restores monitor group and removes all distinct applied rules', async () => {
+    writeFileSync(policyPath, [
+      'version: "1.0"',
+      'policy:',
+      '  mode: block',
+      '  rules:',
+      '    - name: quarantine-semantic-rule-a',
+      '      action: block',
+      '      patterns: ["prompt-a"]',
+      '    - name: quarantine-semantic-rule-b',
+      '      action: block',
+      '      patterns: ["prompt-b"]',
+      '',
+    ].join('\n'));
+    writeFileSync(quarantinePath, JSON.stringify({
+      entries: [
+        {
+          id: 'THR-G1',
+          threatKey: 'semantic:group-restore-a',
+          type: 'Semantic Prompt Injection',
+          source: '10.1.1.1',
+          severity: 'critical',
+          status: 'resolved',
+          quarantinedAt: new Date().toISOString(),
+          enforcementStatus: 'applied',
+          sourceKind: 'semantic',
+          appliedRuleName: 'quarantine-semantic-rule-a',
+          policyPath,
+        },
+        {
+          id: 'THR-G2',
+          threatKey: 'semantic:group-restore-b',
+          type: 'Semantic Prompt Injection',
+          source: '10.1.1.1',
+          severity: 'critical',
+          status: 'resolved',
+          quarantinedAt: new Date().toISOString(),
+          enforcementStatus: 'applied',
+          sourceKind: 'semantic',
+          appliedRuleName: 'quarantine-semantic-rule-b',
+          policyPath,
+        },
+      ],
+    }, null, 2));
+
+    const restore = await fetch(`http://127.0.0.1:${PORT}/api/security/threats/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threatKey: 'semantic:group-restore-a', removeRule: true }),
+    });
+    expect(restore.ok).toBe(true);
+    const body = (await restore.json()) as { removedRule?: boolean; restored?: number };
+    expect(body.removedRule).toBe(true);
+    expect(body.restored).toBe(2);
+
+    const policy = readFileSync(policyPath, 'utf-8');
+    expect(policy.includes('quarantine-semantic-rule-a')).toBe(false);
+    expect(policy.includes('quarantine-semantic-rule-b')).toBe(false);
+  });
 });

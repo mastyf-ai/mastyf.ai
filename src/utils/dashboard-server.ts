@@ -2500,14 +2500,22 @@ export async function startDashboardServer(
           }
           const primary = result.records?.[0];
           let removedRule = false;
-          if (removeRule && primary?.appliedRuleName) {
+          if (removeRule && result.records?.length) {
             const { removeSuggestionRuleFromPolicy } = await import('../ai/policy-applier.js');
-            const removed = removeSuggestionRuleFromPolicy(
-              primary.appliedRuleName,
-              primary.policyPath || defaultPolicyPath(),
-              policyWatcher ?? null,
-            );
-            removedRule = removed.removed;
+            const seenRuleKeys = new Set<string>();
+            for (const record of result.records) {
+              if (!record.appliedRuleName) continue;
+              const policyForRule = record.policyPath || defaultPolicyPath();
+              const ruleKey = `${policyForRule}\0${record.appliedRuleName}`;
+              if (seenRuleKeys.has(ruleKey)) continue;
+              seenRuleKeys.add(ruleKey);
+              const removed = removeSuggestionRuleFromPolicy(
+                record.appliedRuleName,
+                policyForRule,
+                policyWatcher ?? null,
+              );
+              if (removed.removed) removedRule = true;
+            }
           }
           appendThreatIntelActionAudit({
             action: 'monitor_restore',
