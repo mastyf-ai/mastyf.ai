@@ -51,28 +51,31 @@ export async function enrichCallRecord(
 ): Promise<ProxyCallRecord> {
   const pricing = getRuntimeModelPricing();
   const cost = await pricing.computeCostForCall(record.requestTokens, record.responseTokens, msg);
-  const fallbackModel = resolveModelIdForServer(record.serverName, serverEnv, serverArgs);
-  const model = cost.model || fallbackModel;
+  const configuredModel = resolveModelIdForServer(record.serverName, serverEnv, serverArgs);
+  const model = cost.model || configuredModel;
 
-  let costUsd = cost.priced ? cost.costUsd : 0;
+  let costUsd: number | null = cost.priced ? cost.costUsd : null;
   let pricingSource = cost.source;
 
-  if (costUsd <= 0 && model && (record.requestTokens + record.responseTokens) > 0) {
+  if ((costUsd === null || costUsd <= 0) && model && (record.requestTokens + record.responseTokens) > 0) {
     const resolved = await pricing.resolveModelId(model);
     if (resolved) {
       const recomputed = pricing.computeCost(record.requestTokens, record.responseTokens, resolved);
       if (recomputed.priced) {
-        costUsd = recomputed.costUsd;
+          costUsd = recomputed.costUsd;
         pricingSource = recomputed.source;
       }
     }
   }
 
+  const priced = costUsd !== null && costUsd > 0;
   return {
     ...record,
     model,
     costUsd,
     pricingSource,
+    priced,
+    pricingUnavailable: priced ? undefined : `Pricing unavailable for model ${model || 'unknown'}`,
   };
 }
 

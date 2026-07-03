@@ -5,6 +5,14 @@ import { CLOUD_NAME } from '@/lib/product-links';
 
 export const dynamic = 'force-dynamic';
 
+function metricValue(value: number | null): string {
+  return value === null ? 'Unavailable' : String(value);
+}
+
+function pct(value: number | null): string {
+  return value === null ? 'Unavailable' : `${(value * 100).toFixed(0)}%`;
+}
+
 export default async function ObservatoryPage() {
   const snap = observatorySnapshot();
   let certs: Awaited<ReturnType<typeof listPublicCertifications>> = [];
@@ -27,10 +35,10 @@ export default async function ObservatoryPage() {
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-        <MetricCard label="Adoption score" value={String(snap.adoptionScore)} />
-        <MetricCard label="Threat heat index" value={String(snap.threatHeatIndex)} />
-        <MetricCard label="Avg block rate" value={`${(snap.avgBlockRate * 100).toFixed(0)}%`} />
-        <MetricCard label="Servers tracked" value={String(snap.serverCount)} />
+        <MetricCard label="Adoption score" value={metricValue(snap.adoptionScore)} />
+        <MetricCard label="Threat heat index" value={metricValue(snap.threatHeatIndex)} />
+        <MetricCard label="Avg block rate" value={pct(snap.avgBlockRate)} />
+        <MetricCard label="Servers tracked" value={metricValue(snap.serverCount)} />
       </div>
 
       <section style={{ marginBottom: '2rem' }}>

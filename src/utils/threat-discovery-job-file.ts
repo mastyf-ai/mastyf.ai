@@ -23,9 +23,12 @@ function resolveTenantId(tenantId?: string): string {
 }
 
 function swarmDir(tenantId?: string): string {
+  const tid = resolveTenantId(tenantId);
   const envOverride = process.env.MASTYF_AI_SWARM_DIR?.trim();
-  if (envOverride) return envOverride;
-  return getEffectiveSwarmDir(resolveTenantId(tenantId));
+  const envTenant = process.env.MASTYF_AI_TENANT_ID?.trim() || DEFAULT_TENANT_ID;
+  // Dashboard sets MASTYF_AI_SWARM_DIR for the active tenant only — do not leak to other tenants in tests.
+  if (envOverride && tid === envTenant) return envOverride;
+  return getEffectiveSwarmDir(tid);
 }
 
 export function threatDiscoveryJobPath(kind: ThreatDiscoveryJobKind, tenantId?: string): string {

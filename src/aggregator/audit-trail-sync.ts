@@ -296,12 +296,18 @@ export class AuditTrailSync {
         for (const serverName of servers) {
           const successRate = await this.localDb.getRecentSuccessRate(serverName, tenantId);
           if (successRate === null) continue;
+          const health = await this.localDb.getLatestHealthCheck(serverName, tenantId);
+          const latencyMs = health?.latency_ms;
+          const toolCount = health?.tool_count;
+          if (!Number.isFinite(latencyMs) || !Number.isFinite(toolCount)) {
+            Logger.debug(
+              `[AuditTrailSync] Skipping unified health for ${serverName}: measured latency/tool count unavailable`,
+            );
+            continue;
+          }
 
           const client = await this.pgPool.connect();
           try {
-            // latency_ms and tool_count are placeholders (0) — HistoryDatabase
-            // doesn't currently persist latency/tool-count per server; these
-            // fields are populated when real metrics become available.
             await client.query(
               `INSERT INTO unified_health_checks
              (instance_id, server_name, latency_ms, success, success_rate, tool_count, tenant_id)
@@ -310,10 +316,10 @@ export class AuditTrailSync {
               [
                 this.config.instanceId,
                 serverName,
-                0, // latency_ms: placeholder (no per-server latency data available)
+                latencyMs,
                 successRate > 0.5,
                 successRate,
-                0, // tool_count: placeholder (no per-server tool count available)
+                toolCount,
                 tenantId,
               ],
             );

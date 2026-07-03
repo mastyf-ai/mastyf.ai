@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Live multi-server traffic into ~/.mastyf-ai/history.db for TUI verification.
- * No mock AI state — real proxy calls only.
+ * No generated AI state — real proxy calls only.
  *
  * Usage:
  *   node scripts/run-live-tui-demo.cjs           # one-shot (all corpus calls)
@@ -13,7 +13,7 @@ const { homedir } = require('os');
 
 const ROOT = resolve(__dirname, '..');
 const CORPUS = JSON.parse(readFileSync(join(ROOT, 'scenarios/dogfood/agent-corpus.json'), 'utf8'));
-const STUB = join(ROOT, 'scenarios/dogfood/enterprise-mcp-stub.cjs');
+const LOCAL_SERVICE = join(ROOT, 'scenarios/dogfood/enterprise-mcp-local-service.cjs');
 const POLICY = join(ROOT, 'default-policy.yaml');
 const SERVER_NAMES = ['github', 'filesystem', 'puppeteer', 'postgres'];
 
@@ -69,8 +69,8 @@ async function printDbSummary(db) {
     name,
     proxy: new McpProxyServer(
       'node',
-      [STUB],
-      { PATH: process.env.PATH, HOME: process.env.HOME, STUB_ROLE: name },
+      [LOCAL_SERVICE],
+      { PATH: process.env.PATH, HOME: process.env.HOME, SERVICE_ROLE: name },
       db,
       name,
       engine,

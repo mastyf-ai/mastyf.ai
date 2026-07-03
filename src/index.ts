@@ -12,7 +12,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { ConfigParser } from './config-parser.js';
 import { ReportGenerator } from './reporter/report-generator.js';
-import { FullReport, McpServerConfig } from './types.js';
+import type { FullReport, McpServerConfig, ProxyCallRecord } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
 import { Logger } from './utils/logger.js';
 import { createContainer } from './container.js';
@@ -20,6 +20,11 @@ import { sanitizeConfigPath } from './utils/sanitize-config-path.js';
 import { resolveMcpServerDbPath } from './utils/mastyf-ai-db-path.js';
 import { readPackageVersion } from './utils/package-version.js';
 import { resolveTenantFromEnv } from './tenant/resolve-tenant.js';
+import {
+  buildObservedTools,
+  computeMeasuredPerformance,
+  filterRecordsByWindow,
+} from './utils/real-metrics.js';
 
 // ── DB path: separate from proxy history.db (Cline cannot set env in MCP JSON)
 if (!process.env['MASTYF_AI_DB_PATH']) {
@@ -30,6 +35,22 @@ import type { Container } from './container.js';
 
 let container: Container;
 const reporter = new ReportGenerator();
+
+const DEFAULT_METRIC_WINDOW_DAYS = 7;
+const MAX_METRIC_RECORDS = 10_000;
+
+async function getRecentServerRecords(
+  serverName: string,
+  tenantId: string,
+  windowDays = DEFAULT_METRIC_WINDOW_DAYS,
+): Promise<ProxyCallRecord[]> {
+  const records = await container.db.getCallRecordsForServer(serverName, MAX_METRIC_RECORDS, tenantId);
+  return filterRecordsByWindow(records, windowDays);
+}
+
+function noTrafficMessage(serverName: string, windowDays = DEFAULT_METRIC_WINDOW_DAYS): string {
+  return `No measured proxy traffic found for "${serverName}" in the last ${windowDays} day${windowDays === 1 ? '' : 's'}. Route MCP traffic through the Mastyf AI proxy to collect real metrics.`;
+}
 
 const server = new Server(
   { name: 'mastyf-ai', version: readPackageVersion() },
@@ -479,12 +500,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     // ── Agentic AI: Honeypot (Feature #4) ──────────────────────
     {
       name: 'deploy_honeypot',
-      description: 'Deploy an ephemeral fake MCP server to detect adversarial probing',
+      description: 'Deploy an ephemeral decoy MCP server to detect adversarial probing',
       inputSchema: {
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Honeypot display name' },
-          template: { type: 'string', enum: ['fake-production-database', 'fake-filesystem', 'fake-github', 'fake-slack', 'fake-api-server', 'fake-credentials-vault', 'fake-admin-panel'], description: 'Honeypot template' },
+          template: { type: 'string', enum: ['decoy-production-database', 'decoy-filesystem', 'decoy-github', 'decoy-slack', 'decoy-api-server', 'decoy-credentials-vault', 'decoy-admin-panel'], description: 'Decoy template' },
           ttlMinutes: { type: 'number', description: 'Auto-destroy after N minutes (default: 30)' },
           alertOnInteraction: { type: 'boolean', description: 'Alert on every probe (default: true)' },
         },
@@ -703,7 +724,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     // ── RL Features ──
     {
-      name: 'sample_agent_trust',
+      name: 'evaluate_agent_trust',
       description: 'Thompson Sampling — run Bayesian bandit trust sampling for an agent (Beta posterior, exploration/exploitation)',
       inputSchema: { type: 'object', properties: { agentId: { type: 'string' } }, required: ['agentId'] },
     },
@@ -942,7 +963,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (!sn) return { content: [{ type: 'text', text: 'No servers available for drift detection.' }] };
       const baseline = container.driftDetector.getLatestBaseline(sn);
       if (!baseline) return { content: [{ type: 'text', text: `No baseline captured for "${sn}". Use capture_baseline first.` }] };
-      const result = container.driftDetector.detectDrift(baseline, [], { latencyP50: baseline.performance.latencyP50, latencyP95: baseline.performance.latencyP95, successRate: baseline.performance.successRate, avgResponseSize: baseline.performance.avgResponseSize });
+      const records = await getRecentServerRecords(sn, tenantId);
+      const currentPerformance = computeMeasuredPerformance(records);
+      if (!currentPerformance) {
+        return { content: [{ type: 'text', text: noTrafficMessage(sn) }] };
+      }
+      const result = container.driftDetector.detectDrift(baseline, buildObservedTools(records), currentPerformance);
       return { content: [{ type: 'text', text: `**Drift Detection: ${sn}**\nDrift score: ${result.data!.driftScore}/100\nDrifted: ${result.data!.drifted}\nRecommend rollback: ${result.data!.recommendRollback}\n\nFindings:\n${result.data!.findings.map(f => `- [${f.severity}] ${f.description} (${f.metric}: ${f.baseline} → ${f.current})`).join('\n')}\n\nSummary: ${result.data!.summary}` }] };
     }
 
@@ -950,8 +976,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const sn = (args?.serverName as string);
       const srv = servers.find(s => s.name === sn);
       if (!srv) return { content: [{ type: 'text', text: `Server "${sn}" not found.` }] };
-      const baseline = container.driftDetector.captureBaseline(sn, [], { latencyP50: 100, latencyP95: 500, successRate: 1.0, avgResponseSize: 1024 });
-      return { content: [{ type: 'text', text: `Baseline captured for "${sn}"\nID: ${baseline.id}\nTimestamp: ${baseline.capturedAt}` }] };
+      const records = await getRecentServerRecords(sn, tenantId);
+      const performance = computeMeasuredPerformance(records);
+      if (!performance) {
+        return { content: [{ type: 'text', text: noTrafficMessage(sn) }] };
+      }
+      const tools = buildObservedTools(records);
+      const baseline = container.driftDetector.captureBaseline(sn, tools, performance);
+      return { content: [{ type: 'text', text: `Baseline captured for "${sn}" from ${records.length} measured call${records.length === 1 ? '' : 's'}\nID: ${baseline.id}\nTimestamp: ${baseline.capturedAt}\nLatency P50/P95: ${performance.latencyP50}ms/${performance.latencyP95}ms\nSuccess Rate: ${(performance.successRate * 100).toFixed(1)}%\nObserved Tools: ${tools.length}` }] };
     }
 
     case 'rollback_server_config': {
@@ -1031,7 +1063,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [{
           type: 'text',
-          text: `**Policy A/B Simulation**\n${report.combinedSummary}\n\nCounterfactual: ${report.counterfactual.summary}\nHarness: ${report.harnessSample.summary}`,
+          text: `**Policy A/B Simulation**\n${report.combinedSummary}\n\nCounterfactual: ${report.counterfactual.summary}\nHarness: ${report.harnessReplay.summary}`,
         }],
       };
     }
@@ -1053,7 +1085,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Honeypot (Feature #4)
     case 'deploy_honeypot': {
       const hpName = args?.name as string;
-      const template = args?.template as string;
+      const template = (args?.template as string | undefined) || 'decoy-api-server';
       const ttlMin = (args?.ttlMinutes as number) || 30;
       const alert = args?.alertOnInteraction !== false;
       const instance = container.honeypotManager.deploy({
@@ -1247,11 +1279,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     case 'check_sla': {
       const sn = (args?.serverName as string) || servers[0]?.name || 'unknown';
       const tn = (args?.toolName as string) || 'read_file';
-      container.slaEnforcer.record(sn, 'read_file', 100, true);
-      container.slaEnforcer.record(sn, 'read_file', 200, true);
-      container.slaEnforcer.record(sn, 'read_file', 500, false);
+      const records = (await getRecentServerRecords(sn, tenantId))
+        .filter((record) => record.toolName === tn);
+      if (records.length === 0) {
+        return { content: [{ type: 'text', text: `**SLA Status: ${sn}/${tn}**\n\n${noTrafficMessage(sn)}\nNo measured calls for tool "${tn}" in the SLA window.` }] };
+      }
+      for (const record of records) {
+        container.slaEnforcer.record(sn, tn, record.durationMs, !record.blocked);
+      }
       const status = container.slaEnforcer.check(sn, tn);
-      return { content: [{ type: 'text', text: `**SLA Status: ${sn}/${tn}**\n\nLatency P50: ${status.latencyP50}ms\nLatency P95: ${status.latencyP95}ms\nError Rate: ${status.errorRate}%\nCircuit State: ${status.circuitState}\nBreaches: ${status.breaches.length > 0 ? status.breaches.map(b => `\n  - ${b.metric}: ${b.value} (threshold: ${b.threshold})`).join('') : 'None'}\n\nOverall: ${status.circuitState === 'open' ? '⚠️ Circuit OPEN — tool degraded' : status.circuitState === 'half-open' ? 'Recovering — half-open' : '✅ Healthy'}` }] };
+      return { content: [{ type: 'text', text: `**SLA Status: ${sn}/${tn}**\n\nMeasured Calls: ${records.length}\nLatency P50: ${status.latencyP50}ms\nLatency P95: ${status.latencyP95}ms\nError Rate: ${status.errorRate}%\nCircuit State: ${status.circuitState}\nBreaches: ${status.breaches.length > 0 ? status.breaches.map(b => `\n  - ${b.metric}: ${b.value} (threshold: ${b.threshold})`).join('') : 'None'}\n\nOverall: ${status.circuitState === 'open' ? 'Circuit OPEN - tool degraded' : status.circuitState === 'half-open' ? 'Recovering - half-open' : 'Healthy'}` }] };
     }
 
     case 'run_incident_playbook': {
@@ -1264,10 +1301,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     case 'get_agent_reputation': {
       const agentId = (args?.agentId as string) || 'unknown';
-      container.reputationEngine.record(agentId, 'test', false, 100);
       const rep = container.reputationEngine.getScore(agentId);
       const policy = container.reputationEngine.getPolicyForAgent(agentId);
-      return { content: [{ type: 'text', text: `**Agent Reputation: ${rep.agentId}**\n\nScore: ${rep.score}/1.0\nTier: **${rep.tier.toUpperCase()}**\nTotal Calls: ${rep.totalCalls}\nBlocked: ${rep.blockedCalls}\nBypass Rate: ${rep.bypassRate}\nTool Diversity: ${rep.toolDiversity} tools\nAvg Arg Length: ${rep.avgArgumentEntropy}\n\nPolicy Applied: **${policy.mode.toUpperCase()}** — ${policy.message}` }] };
+      const observationNote = rep.totalCalls === 0
+        ? '\n\nNo runtime call records are loaded for this agent; showing persisted/default reputation without adding generated records.'
+        : '';
+      return { content: [{ type: 'text', text: `**Agent Reputation: ${rep.agentId}**\n\nScore: ${rep.score}/1.0\nTier: **${rep.tier.toUpperCase()}**\nTotal Calls: ${rep.totalCalls}\nBlocked: ${rep.blockedCalls}\nBypass Rate: ${rep.bypassRate}\nTool Diversity: ${rep.toolDiversity} tools\nAvg Arg Length: ${rep.avgArgumentEntropy}\n\nPolicy Applied: **${policy.mode.toUpperCase()}** - ${policy.message}${observationNote}` }] };
     }
 
     case 'harden_config': {
@@ -1279,10 +1318,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     case 'detect_collusion': {
-      container.collusionDetector.record('agent-a', servers[0]?.name || 'filesystem', 'list_directory');
-      container.collusionDetector.record('agent-b', servers[0]?.name || 'filesystem', 'read_file');
-      const alerts = container.collusionDetector.getAlerts();
-      return { content: [{ type: 'text', text: `**Collusion Detection**\n\n${alerts.length > 0 ? alerts.map(a => `⚠️ **${a.pattern}** (${(a.confidence * 100).toFixed(0)}% confidence)\nAgents: ${a.agents.join(', ')}\nTools: ${a.tools.join(' → ')}\n${a.description}`).join('\n\n') : 'No collusion patterns detected. Agents operating independently.'}` }] };
+      const localAlerts = container.collusionDetector.getAlerts().map((alert) => ({
+        pattern: alert.pattern,
+        confidence: alert.confidence,
+        agents: alert.agents,
+        tools: alert.tools,
+        description: alert.description,
+        timestamp: alert.timestamp,
+      }));
+      const fleetAlerts = container.industryStore.listFleetChainAlerts(undefined, 50, tenantId).map((alert) => ({
+        pattern: alert.pattern,
+        confidence: alert.confidence,
+        agents: alert.agents,
+        tools: alert.tools,
+        description: alert.description,
+        timestamp: alert.createdAt,
+      }));
+      const chainEvents = container.industryStore.listChainEvents(tenantId, 200);
+      const persistedPatternEvents = chainEvents
+        .filter((event) => ['recon_then_exploit', 'coordinated_exfil', 'token_share'].includes(event.eventType))
+        .map((event) => ({
+          pattern: event.eventType,
+          confidence: event.blocked ? 0.8 : 0.6,
+          agents: event.agentId ? event.agentId.split(',').filter(Boolean) : [],
+          tools: event.toolName.split('->').filter(Boolean),
+          description: `Persisted chain event ${event.eventType} in session ${event.sessionId} on ${event.serverName}`,
+          timestamp: 'stored',
+        }));
+      const alerts = [...fleetAlerts, ...localAlerts, ...persistedPatternEvents];
+      const body = alerts.length > 0
+        ? alerts.map(a => `**${a.pattern}** (${(a.confidence * 100).toFixed(0)}% confidence)\nAgents: ${a.agents.join(', ') || 'unknown'}\nTools: ${a.tools.join(' -> ') || 'unknown'}\n${a.description}`).join('\n\n')
+        : `No collusion patterns detected in ${chainEvents.length} stored chain event${chainEvents.length === 1 ? '' : 's'}.`;
+      return { content: [{ type: 'text', text: `**Collusion Detection**\n\n${body}` }] };
     }
 
     case 'policy_to_natural_language': {
@@ -1328,7 +1395,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     // ── RL Handlers ───────────────────────────────────────────────
-    case 'sample_agent_trust': {
+    case 'evaluate_agent_trust': {
       const agentId = (args?.agentId as string) || 'unknown';
       container.thompsonSampling.record(agentId, 'safe');
       container.thompsonSampling.record(agentId, 'safe');

@@ -3,10 +3,10 @@
     "postgres": {
       "command": "node",
       "args": [
-        "scenarios/dogfood/enterprise-mcp-stub.cjs"
+        "scenarios/dogfood/enterprise-mcp-local-service.cjs"
       ],
       "env": {
-        "STUB_ROLE": "postgres"
+        "SERVICE_ROLE": "postgres"
       },
       "transport": "stdio"
     }

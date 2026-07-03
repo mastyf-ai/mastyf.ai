@@ -67,13 +67,15 @@ export class RiskScorer {
       details: this.getExposureDetails(server),
     });
 
-    // Factor 4: Release velocity (if available)
+    // Factor 4: Release velocity (only when real package metadata is available)
     const velocityScore = this.scoreVelocity(server);
     factors.push({
       name: 'Release Velocity',
-      score: velocityScore,
-      weight: 0.10,
-      details: velocityScore > 50 ? 'Frequent releases increase surface area' : 'Stable release cadence',
+      score: velocityScore ?? 0,
+      weight: velocityScore === null ? 0 : 0.10,
+      details: velocityScore === null
+        ? 'Unavailable - package registry release cadence was not measured'
+        : velocityScore > 50 ? 'Frequent releases increase surface area' : 'Stable release cadence',
     });
 
     // Factor 5: Authentication posture
@@ -175,13 +177,10 @@ export class RiskScorer {
     }
   }
 
-  /**
-   * Score based on release velocity (placeholder — real implementation
-   * would query npm/PyPI for release frequency data).
-   */
-  private scoreVelocity(_server: McpServerConfig): number {
-    // Default to moderate — real data would come from package registries
-    return 35;
+  /** Score based on release velocity when package registry metadata has been measured. */
+  private scoreVelocity(server: McpServerConfig): number | null {
+    const releaseVelocity = (server as McpServerConfig & { releaseVelocityScore?: number }).releaseVelocityScore;
+    return Number.isFinite(releaseVelocity) ? Math.max(0, Math.min(100, Number(releaseVelocity))) : null;
   }
 
   /**

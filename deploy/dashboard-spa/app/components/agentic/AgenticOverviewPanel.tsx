@@ -29,6 +29,7 @@ export function AgenticOverviewPanel({ refreshKey = 0 }: Props) {
   const { setWindow } = useDashboardWindow();
   const { data, loading, error, reload } = useAgenticDashboard(refreshKey, 10_000);
   const kpis = data?.kpis;
+  const unavailable = data?.available === false || !kpis;
 
   const trafficData = useMemo(
     () =>
@@ -94,7 +95,7 @@ export function AgenticOverviewPanel({ refreshKey = 0 }: Props) {
             <span className="text-5xl font-bold" style={{ color: gradeColor(kpis?.trustGrade ?? '—') }}>
               {kpis?.trustGrade ?? '—'}
             </span>
-            <div className="text-sm text-gray-500">{kpis?.trustScore ?? 0}/100</div>
+            <div className="text-sm text-gray-500">{kpis ? `${kpis.trustScore}/100` : 'Unavailable'}</div>
           </div>
           <div className="flex-1 text-sm text-gray-600 dark:text-gray-300">
             <p>
@@ -103,26 +104,27 @@ export function AgenticOverviewPanel({ refreshKey = 0 }: Props) {
                 : 'No proxy traffic in selected time window.'}
             </p>
             <p className="mt-1">
-              Agentic uptime {formatUptime(kpis?.uptimeMs ?? 0)} · {kpis?.totalDecisions ?? 0} autonomous decisions ·
-              injection detection rate {(100 * (kpis?.injectionDetectionRate ?? 0)).toFixed(1)}%
+              {kpis
+                ? `Agentic uptime ${formatUptime(kpis.uptimeMs)} · ${kpis.totalDecisions} autonomous decisions · injection detection rate ${(100 * kpis.injectionDetectionRate).toFixed(1)}%`
+                : 'Agentic metrics unavailable from backend.'}
             </p>
           </div>
         </div>
       </Card>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Blocked requests" value={kpis?.blockedRequests ?? 0} variant="danger" />
-        <KpiCard label="Trust score" value={kpis?.trustScore ?? 0} unit="/100" sub={`Grade ${kpis?.trustGrade ?? '—'}`} />
-        <KpiCard label="Compliance" value={kpis?.complianceOverall ?? 0} unit="%" />
+        <KpiCard label="Blocked requests" value={unavailable ? 'Unavailable' : kpis?.blockedRequests ?? 'Unavailable'} variant="danger" />
+        <KpiCard label="Trust score" value={unavailable ? 'Unavailable' : kpis?.trustScore ?? 'Unavailable'} unit={unavailable ? undefined : '/100'} sub={unavailable ? 'No backend data' : `Grade ${kpis?.trustGrade ?? '—'}`} />
+        <KpiCard label="Compliance" value={unavailable ? 'Unavailable' : kpis?.complianceOverall ?? 'Unavailable'} unit={unavailable ? undefined : '%'} />
         <KpiCard
           label="Task queue"
-          value={(kpis?.taskQueued ?? 0) + (kpis?.taskRunning ?? 0)}
-          sub={`${kpis?.taskRunning ?? 0} running`}
+          value={unavailable ? 'Unavailable' : (kpis?.taskQueued ?? 0) + (kpis?.taskRunning ?? 0)}
+          sub={unavailable ? 'No backend data' : `${kpis?.taskRunning ?? '—'} running`}
         />
-        <KpiCard label="LLM tokens" value={kpis?.llmTokensUsed ?? 0} sub={`$${(kpis?.llmCostEstimate ?? 0).toFixed(4)} est.`} />
-        <KpiCard label="Mesh signatures" value={kpis?.meshSignatures ?? 0} sub={kpis?.meshEnabled ? 'Connected' : 'Disabled'} />
-        <KpiCard label="Honeypots" value={kpis?.honeypotActive ?? 0} sub={`${kpis?.honeypotCaptures ?? 0} captures`} />
-        <KpiCard label="Active trust sessions" value={kpis?.activeSessions ?? 0} />
+        <KpiCard label="LLM tokens" value={unavailable ? 'Unavailable' : kpis?.llmTokensUsed ?? 'Unavailable'} sub={unavailable ? 'No backend data' : `$${(kpis?.llmCostEstimate ?? 0).toFixed(4)} measured`} />
+        <KpiCard label="Mesh signatures" value={unavailable ? 'Unavailable' : kpis?.meshSignatures ?? 'Unavailable'} sub={unavailable ? 'No backend data' : kpis?.meshEnabled ? 'Connected' : 'Disabled'} />
+        <KpiCard label="Decoys" value={unavailable ? 'Unavailable' : kpis?.decoyActive ?? 'Unavailable'} sub={unavailable ? 'No backend data' : `${kpis?.decoyCaptures ?? '—'} captures`} />
+        <KpiCard label="Active trust sessions" value={unavailable ? 'Unavailable' : kpis?.activeSessions ?? 'Unavailable'} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

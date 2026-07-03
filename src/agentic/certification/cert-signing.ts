@@ -1,11 +1,11 @@
 /**
  * JWS-like HMAC attestation for MCP server certifications.
- * Uses MASTYF_AI_CERT_SIGNING_KEY, persisted ~/.mastyf-ai/.cert-signing-key, or local dev fallback.
+ * Uses MASTYF_AI_CERT_SIGNING_KEY or a persisted ~/.mastyf-ai/.cert-signing-key.
  */
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHmac, timingSafeEqual } from 'crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 export interface CertAttestationPayload {
   serverName: string;
@@ -25,8 +25,6 @@ function fromB64url(input: string): string {
   return Buffer.from(input, 'base64url').toString('utf-8');
 }
 
-const LOCAL_DEV_FALLBACK_KEY = 'mastyf-ai-local-dev-cert-signing-do-not-use-in-prod';
-
 function certSigningKeyPath(): string {
   const home = process.env['MASTYF_AI_HOME'] || join(homedir(), '.mastyf-ai');
   return join(home, '.cert-signing-key');
@@ -39,13 +37,7 @@ function loadOrCreatePersistedKey(): string | null {
       const key = readFileSync(path, 'utf8').trim();
       return key || null;
     }
-    if (process.env['MASTYF_AI_STRICT_MODE'] === 'true' || process.env['MASTYF_AI_ENTERPRISE_MODE'] === 'true') {
-      return null;
-    }
-    const key = randomBytes(32).toString('hex');
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${key}\n`, { mode: 0o600 });
-    return key;
+    return null;
   } catch {
     return null;
   }
@@ -61,14 +53,10 @@ export function getCertSigningKey(): string {
     return persisted;
   }
 
-  if (process.env['MASTYF_AI_STRICT_MODE'] === 'true' || process.env['MASTYF_AI_ENTERPRISE_MODE'] === 'true') {
-    throw new Error(
-      'MASTYF_AI_CERT_SIGNING_KEY environment variable is required for certification signing. ' +
-      'Set a cryptographically random secret (e.g., openssl rand -hex 32).',
-    );
-  }
-
-  return LOCAL_DEV_FALLBACK_KEY;
+  throw new Error(
+    'MASTYF_AI_CERT_SIGNING_KEY or persisted cert signing key is required for certification signing. ' +
+    'Set a cryptographically random secret (e.g., openssl rand -hex 32).',
+  );
 }
 
 export function signCertAttestation(payload: CertAttestationPayload): string {

@@ -25,13 +25,13 @@ export interface HoneypotConfig {
 }
 
 export type HoneypotTemplate =
-  | 'fake-production-database'
-  | 'fake-filesystem'
-  | 'fake-github'
-  | 'fake-slack'
-  | 'fake-api-server'
-  | 'fake-credentials-vault'
-  | 'fake-admin-panel';
+  | 'decoy-production-database'
+  | 'decoy-filesystem'
+  | 'decoy-github'
+  | 'decoy-slack'
+  | 'decoy-api-server'
+  | 'decoy-credentials-vault'
+  | 'decoy-admin-panel';
 
 export interface HoneypotInstance {
   /** 唯一的蜜罐 ID */
@@ -173,40 +173,40 @@ export class HoneypotManager {
    */
   getTemplateTools(template: HoneypotTemplate): { name: string; description: string }[] {
     const templates: Record<HoneypotTemplate, { name: string; description: string }[]> = {
-      'fake-production-database': [
+      'decoy-production-database': [
         { name: 'query', description: 'Execute a database query (honeypot)' },
         { name: 'migrate', description: 'Run database migrations (honeypot)' },
         { name: 'backup', description: 'Create database backup (honeypot)' },
         { name: 'list_tables', description: 'List all database tables (honeypot)' },
       ],
-      'fake-filesystem': [
+      'decoy-filesystem': [
         { name: 'read_file', description: 'Read a file from the filesystem (honeypot)' },
         { name: 'write_file', description: 'Write content to a file (honeypot)' },
         { name: 'delete_file', description: 'Delete a file (honeypot)' },
         { name: 'list_directory', description: 'List directory contents (honeypot)' },
       ],
-      'fake-github': [
+      'decoy-github': [
         { name: 'create_pr', description: 'Create a pull request (honeypot)' },
         { name: 'merge_pr', description: 'Merge a pull request (honeypot)' },
         { name: 'list_secrets', description: 'List repository secrets (honeypot)' },
         { name: 'trigger_workflow', description: 'Trigger a GitHub Actions workflow (honeypot)' },
       ],
-      'fake-slack': [
+      'decoy-slack': [
         { name: 'send_message', description: 'Send a Slack message (honeypot)' },
         { name: 'list_channels', description: 'List Slack channels (honeypot)' },
         { name: 'read_messages', description: 'Read channel messages (honeypot)' },
       ],
-      'fake-api-server': [
+      'decoy-api-server': [
         { name: 'get_data', description: 'Fetch data from the API (honeypot)' },
         { name: 'update_data', description: 'Update API data (honeypot)' },
         { name: 'delete_data', description: 'Delete API data (honeypot)' },
       ],
-      'fake-credentials-vault': [
+      'decoy-credentials-vault': [
         { name: 'get_secret', description: 'Retrieve a secret (honeypot)' },
         { name: 'list_secrets', description: 'List all secrets (honeypot)' },
         { name: 'rotate_key', description: 'Rotate an encryption key (honeypot)' },
       ],
-      'fake-admin-panel': [
+      'decoy-admin-panel': [
         { name: 'list_users', description: 'List system users (honeypot)' },
         { name: 'grant_access', description: 'Grant access to user (honeypot)' },
         { name: 'system_config', description: 'View system configuration (honeypot)' },

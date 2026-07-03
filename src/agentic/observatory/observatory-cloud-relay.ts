@@ -15,17 +15,6 @@ export interface CloudObservatoryPayload {
 }
 
 export async function pullCloudObservatorySnapshot(): Promise<CloudObservatoryPayload | null> {
-  if (process.env.MASTYF_AI_OBSERVATORY_STUB === 'true') {
-    return {
-      avgBlockRate: 0.92,
-      serverCount: 42,
-      threatHeatIndex: 35,
-      adoptionScore: 78,
-      topThreatClasses: [{ cls: 'prompt_injection', count: 120 }],
-      generatedAt: new Date().toISOString(),
-    };
-  }
-
   const relayUrl = process.env.MASTYF_AI_OBSERVATORY_RELAY_URL?.trim()
     ?? process.env.MASTYF_AI_CLOUD_URL?.trim();
   if (!relayUrl) return null;

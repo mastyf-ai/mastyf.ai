@@ -112,16 +112,24 @@ export async function runPlanComplianceAudit(): Promise<PlanComplianceReport> {
     const { mergeRatingsWithQuorum } = await import('./reputation/reputation-quorum.js');
     const { verifyReputationAttestation } = await import('./reputation/reputation-attestation.js');
     const net = new ReputationNetwork();
-    const entry = net.rateServer({ serverName: 'audit-srv', dimensions: { security_posture: 75 }, raterId: 'r1' });
+    let entryScore = 0;
+    let attValid = false;
+    let attestationDetail = 'Signed reputation attestation';
+    try {
+      const entry = net.rateServer({ serverName: 'audit-srv', dimensions: { security_posture: 75 }, raterId: 'r1' });
+      entryScore = entry.consensusScore;
+      attValid = entry.attestationJws ? verifyReputationAttestation(entry.attestationJws).valid : false;
+    } catch (err: unknown) {
+      attestationDetail = err instanceof Error ? err.message : 'Reputation attestation failed';
+    }
     const q = mergeRatingsWithQuorum([
       { raterId: 'a', dimensions: { security_posture: 80 }, raterWeight: 2 },
       { raterId: 'b', dimensions: { security_posture: 70 }, raterWeight: 2 },
     ]);
-    const att = entry.attestationJws ? verifyReputationAttestation(entry.attestationJws) : { valid: false };
     const checks: ComplianceCheck[] = [
-      { id: 'rate', passed: entry.consensusScore > 0, detail: 'Local reputation rating', weight: 25 },
+      { id: 'rate', passed: entryScore > 0, detail: 'Local reputation rating', weight: 25 },
       { id: 'quorum', passed: q.quorumMet, detail: 'Byzantine quorum merge', weight: 25 },
-      { id: 'attestation', passed: att.valid, detail: 'Signed reputation attestation', weight: 25 },
+      { id: 'attestation', passed: attValid, detail: attestationDetail, weight: 25 },
       { id: 'mesh', passed: existsSync(join(__dirname, 'reputation/reputation-mesh-pull.ts')), detail: 'Mesh pull/publish path', weight: 25 },
     ];
     modules.push({ id: 'B1', name: 'Decentralized Reputation Network', score: scoreModule(checks), checks });
@@ -155,13 +163,20 @@ export async function runPlanComplianceAudit(): Promise<PlanComplianceReport> {
     const fl = new FederatedLearningCoordinator();
     fl.recordBlockedSignature('audit:sig', [0.5, 0.8, 0.2]);
     const infer = await fl.runOnnxInference([0.5, 0.8, 0.2]);
-    const m1 = maskGradientForUpload([0.1, 0.2], 'p1', ['p1', 'p2'], 'r1');
-    const m2 = maskGradientForUpload([0.3, 0.1], 'p2', ['p1', 'p2'], 'r1');
+    let mpcPassed = false;
+    let mpcDetail = 'MPC-lite masked aggregation';
+    try {
+      const m1 = maskGradientForUpload([0.1, 0.2], 'p1', ['p1', 'p2'], 'r1');
+      const m2 = maskGradientForUpload([0.3, 0.1], 'p2', ['p1', 'p2'], 'r1');
+      mpcPassed = sumMaskedGradients([m1, m2]).length === 2;
+    } catch (err: unknown) {
+      mpcDetail = err instanceof Error ? err.message : 'MPC masking unavailable';
+    }
     delete process.env.MASTYF_AI_FEDERATED_LEARNING;
     delete process.env.MASTYF_AI_FEDERATED_LEARNING_MIN_REPORTS;
     const checks: ComplianceCheck[] = [
       { id: 'coordinator', passed: fl.isEnabled() || infer != null, detail: 'Federated coordinator + inference', weight: 30 },
-      { id: 'mpc', passed: sumMaskedGradients([m1, m2]).length === 2, detail: 'MPC-lite masked aggregation', weight: 25 },
+      { id: 'mpc', passed: mpcPassed, detail: mpcDetail, weight: 25 },
       { id: 'export', passed: typeof fl.exportModelBundle === 'function', detail: 'Model export/import bundle', weight: 25 },
       { id: 'mesh', passed: existsSync(join(__dirname, 'federated/federated-mesh-bridge.ts')), detail: 'Mesh delta sync', weight: 20 },
     ];

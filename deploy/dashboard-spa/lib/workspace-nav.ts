@@ -127,7 +127,6 @@ export const NAV_SECTIONS: Array<{
   { label: 'Security', items: ['activity', 'security'] },
   { label: 'Governance', items: ['policy', 'cost', 'servers'] },
   { label: 'Assurance', items: ['compliance'] },
-  { label: 'Intelligence', items: ['agentic'] },
   { label: 'System', items: ['settings', 'help'] },
 ];
 
@@ -153,10 +152,12 @@ export interface NavState {
 
 export function parseNavFromUrl(search: string): NavState {
   const params = new URLSearchParams(search);
-  const ws = (params.get('workspace') || DEFAULT_WORKSPACE) as WorkspaceId;
+  const rawWs = params.get('workspace') || DEFAULT_WORKSPACE;
+  const ws = (LEGACY_WORKSPACE_MAP[rawWs]
+    ?? (rawWs in WORKSPACE_CONFIG ? rawWs : DEFAULT_WORKSPACE)) as WorkspaceId;
   const view = params.get('view') || DEFAULT_VIEW[ws];
   const topic = params.get('topic') || undefined;
-  return { workspace: ws in WORKSPACE_CONFIG ? ws : DEFAULT_WORKSPACE, view, topic };
+  return { workspace: ws, view, topic };
 }
 
 export function syncNavToUrl(state: NavState): void {
@@ -186,6 +187,7 @@ export const LEGACY_WORKSPACE_MAP: Record<string, WorkspaceId> = {
   home: 'dashboard',
   operations: 'activity',
   threats: 'security',
+  agentic: 'dashboard',
 };
 
 export const LEGACY_VIEW_MAP: Record<string, string> = {

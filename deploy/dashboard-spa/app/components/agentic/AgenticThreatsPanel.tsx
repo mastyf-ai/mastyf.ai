@@ -11,7 +11,8 @@ export function AgenticThreatsPanel({ refreshKey = 0 }: Props) {
   const { data, loading } = useAgenticDashboard(refreshKey);
   const inj = data?.promptInjectionStats;
   const mesh = data?.mesh;
-  const hp = data?.honeypots;
+  const decoys = data?.decoys;
+  const unavailable = data?.available === false;
 
   if (loading && !data) return <p className="hint p-6">Loading threat defense metrics…</p>;
 
@@ -21,22 +22,23 @@ export function AgenticThreatsPanel({ refreshKey = 0 }: Props) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard
           label="Injection scans"
-          value={inj?.totalScans ?? 0}
-          sub={`${inj?.totalDetections ?? 0} detections`}
+          value={unavailable || !inj ? 'Unavailable' : inj.totalScans}
+          sub={unavailable || !inj ? 'No backend data' : `${inj.totalDetections} detections`}
         />
         <KpiCard
           label="Detection rate"
-          value={((inj?.detectionRate ?? 0) * 100).toFixed(1)}
-          unit="%"
+          value={unavailable || !inj ? 'Unavailable' : (inj.detectionRate * 100).toFixed(1)}
+          unit={unavailable || !inj ? undefined : '%'}
         />
-        <KpiCard label="Mesh signatures" value={mesh?.localSignatures ?? 0} sub={mesh?.enabled ? 'Relay on' : 'Disabled'} />
-        <KpiCard label="Honeypot captures" value={hp?.totalCaptures ?? 0} sub={`${hp?.active ?? 0} active`} />
+        <KpiCard label="Mesh signatures" value={unavailable || !mesh ? 'Unavailable' : mesh.localSignatures} sub={unavailable || !mesh ? 'No backend data' : mesh.enabled ? 'Relay on' : 'Disabled'} />
+        <KpiCard label="Decoy captures" value={unavailable || !decoys ? 'Unavailable' : decoys.totalCaptures} sub={unavailable || !decoys ? 'No backend data' : `${decoys.active} active`} />
       </div>
       <Card className="p-4">
         <h3 className="font-semibold mb-2">Threat mesh</h3>
         <p className="text-sm text-gray-500">
-          Local signatures: {mesh?.localSignatures ?? 0} · Pending: {mesh?.pendingSignatures ?? 0} ·
-          Status: {mesh?.enabled ? 'enabled' : 'disabled'}
+          {mesh && !unavailable
+            ? `Local signatures: ${mesh.localSignatures} · Pending: ${mesh.pendingSignatures} · Status: ${mesh.enabled ? 'enabled' : 'disabled'}`
+            : 'Threat mesh data unavailable from backend.'}
         </p>
       </Card>
       <Card className="p-4">

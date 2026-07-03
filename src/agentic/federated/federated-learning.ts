@@ -48,16 +48,7 @@ export interface OnnxInferenceResult {
   score: number;
   label: 'benign' | 'injection' | 'exfil';
   modelVersion: string;
-  backend: 'onnxruntime' | 'mock';
-}
-
-/** Lightweight ONNX-style scorer when onnxruntime-node is unavailable */
-function mockOnnxScore(features: number[]): OnnxInferenceResult {
-  const sum = features.reduce((a, b) => a + b, 0);
-  const norm = features.length ? sum / features.length : 0;
-  if (norm > 0.75) return { score: norm, label: 'injection', modelVersion: 'fl-onnx-v1', backend: 'mock' };
-  if (norm > 0.45) return { score: norm, label: 'exfil', modelVersion: 'fl-onnx-v1', backend: 'mock' };
-  return { score: 1 - norm, label: 'benign', modelVersion: 'fl-onnx-v1', backend: 'mock' };
+  backend: 'onnxruntime' | 'aggregated-weights';
 }
 
 async function tryOnnxRuntimeScore(features: number[], modelVersion: string): Promise<OnnxInferenceResult | null> {
@@ -380,9 +371,9 @@ export class FederatedLearningCoordinator {
       while (padded.length < FEDERATED_WEIGHT_DIM) padded.push(0);
       const score = scoreWithAggregatedWeights(padded.slice(0, FEDERATED_WEIGHT_DIM), weights);
       const label: OnnxInferenceResult['label'] = score > 0.75 ? 'injection' : score > 0.45 ? 'exfil' : 'benign';
-      return { score, label, modelVersion: this.activeVersion, backend: 'mock' };
+      return { score, label, modelVersion: this.activeVersion, backend: 'aggregated-weights' };
     }
-    return mockOnnxScore(salted);
+    return null;
   }
 
   /** Export deployable model bundle for cross-replica rollout (B3). */

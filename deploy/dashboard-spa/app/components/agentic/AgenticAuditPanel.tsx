@@ -32,6 +32,7 @@ export function AgenticAuditPanel({ refreshKey = 0 }: Props) {
   }, [load]);
 
   if (loading && !audit) return <p className="hint p-6">Loading audit trail…</p>;
+  const auditUnavailable = audit?.available === false || !audit?.stats;
 
   return (
     <div className="agentic-panel space-y-4">
@@ -48,25 +49,27 @@ export function AgenticAuditPanel({ refreshKey = 0 }: Props) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
         <Card className="p-3">
           <div className="text-gray-500">Total records</div>
-          <div className="text-2xl font-bold">{audit?.stats.totalRecords ?? 0}</div>
+          <div className="text-2xl font-bold">{auditUnavailable ? 'Unavailable' : audit.stats?.totalRecords}</div>
         </Card>
         <Card className="p-3">
           <div className="text-gray-500">Blocked</div>
-          <div className="text-2xl font-bold text-red-600">{audit?.stats.totalBlocked ?? 0}</div>
+          <div className="text-2xl font-bold text-red-600">{auditUnavailable ? 'Unavailable' : audit.stats?.totalBlocked}</div>
         </Card>
         <Card className="p-3">
           <div className="text-gray-500">Allowed</div>
-          <div className="text-2xl font-bold">{audit?.stats.totalAllowed ?? 0}</div>
+          <div className="text-2xl font-bold">{auditUnavailable ? 'Unavailable' : audit.stats?.totalAllowed}</div>
         </Card>
         <Card className="p-3">
           <div className="text-gray-500">Avg latency</div>
-          <div className="text-2xl font-bold">{audit?.stats.averageLatencyMs ?? 0}ms</div>
+          <div className="text-2xl font-bold">{auditUnavailable ? 'Unavailable' : `${audit.stats?.averageLatencyMs}ms`}</div>
         </Card>
       </div>
 
       <Card className="overflow-hidden">
         <div className="p-3 border-b border-gray-200 dark:border-gray-700 font-semibold">MCP request audit</div>
-        {(audit?.records ?? []).length === 0 ? (
+        {auditUnavailable ? (
+          <p className="p-6 text-center text-gray-400 text-sm">{audit?.error ?? 'Audit data unavailable from backend.'}</p>
+        ) : (audit?.records ?? []).length === 0 ? (
           <p className="p-6 text-center text-gray-400 text-sm">
             No MCP traffic recorded yet. Audit records appear as requests pass through the Mastyf AI proxy.
           </p>

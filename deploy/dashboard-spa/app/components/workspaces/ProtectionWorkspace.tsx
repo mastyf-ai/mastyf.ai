@@ -117,10 +117,7 @@ export function ProtectionWorkspace({
         </p>
       </section>
 
-      <RoadmapComplianceStrip
-        refreshKey={refreshKey}
-        onOpenAgentic={() => onNavigateAdvanced?.('agentic', 'overview')}
-      />
+      <RoadmapComplianceStrip refreshKey={refreshKey} />
 
       <Card title="Protection status" subtitle="Live Autopilot services">
         {status ? (

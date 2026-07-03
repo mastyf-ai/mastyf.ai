@@ -13,6 +13,7 @@ export function AgenticPolicyPanel({ refreshKey = 0 }: Props) {
   const { data, loading } = useAgenticDashboard(refreshKey);
   const pg = data?.policyGen;
   const frameworks = data?.compliance?.frameworks ?? [];
+  const unavailable = data?.available === false;
 
   if (loading && !data) return <p className="hint p-6">Loading policy &amp; compliance…</p>;
 
@@ -22,12 +23,12 @@ export function AgenticPolicyPanel({ refreshKey = 0 }: Props) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard
           label="Policy observation"
-          value={pg?.active ? 'Active' : 'Idle'}
-          sub={`${pg?.totalCalls ?? 0} calls · ${pg?.uniqueTools ?? 0} tools`}
+          value={unavailable || !pg ? 'Unavailable' : pg.active ? 'Active' : 'Idle'}
+          sub={unavailable || !pg ? 'No backend data' : `${pg.totalCalls} calls · ${pg.uniqueTools} tools`}
         />
-        <KpiCard label="Compliance overall" value={data?.compliance?.overall ?? 0} unit="%" />
-        <KpiCard label="Observation uptime" value={pg?.uptimeMin ?? 0} unit="min" />
-        <KpiCard label="Frameworks" value={frameworks.length} />
+        <KpiCard label="Compliance overall" value={unavailable || !data?.compliance ? 'Unavailable' : data.compliance.overall} unit={unavailable || !data?.compliance ? undefined : '%'} />
+        <KpiCard label="Observation uptime" value={unavailable || !pg ? 'Unavailable' : pg.uptimeMin} unit={unavailable || !pg ? undefined : 'min'} />
+        <KpiCard label="Frameworks" value={unavailable ? 'Unavailable' : frameworks.length} />
       </div>
       <Card className="p-4 overflow-x-auto">
         <table className="data-table w-full text-sm">

@@ -15,7 +15,14 @@ export function upsertReputation(serverName: string, dimensions: Record<string, 
   const values = Object.values(dimensions);
   const consensusScore = values.length
     ? Math.round(values.reduce((a, b) => a + b, 0) / values.length)
-    : 50;
+    : null;
+  if (consensusScore === null) {
+    return {
+      available: false,
+      reason: 'reputation_dimensions_required',
+      dataSources: [],
+    };
+  }
   const existing = reputationEntries.get(serverName);
   const raterCount = (existing?.raterCount ?? 0) + 1;
   const entry = {
@@ -46,27 +53,24 @@ export function observatorySnapshot() {
     const cls = String(m.dimension?.class ?? 'unknown');
     classMap.set(cls, (classMap.get(cls) ?? 0) + m.value);
   }
-  const avgBlockRate = blockRates.length ? blockRates.reduce((a, b) => a + b, 0) / blockRates.length : 0.94;
-  const serverCount = serverCounts.length ? Math.max(...serverCounts) : 128;
+  const avgBlockRate = blockRates.length ? blockRates.reduce((a, b) => a + b, 0) / blockRates.length : null;
+  const serverCount = serverCounts.length ? Math.max(...serverCounts) : null;
   const topThreatClasses = [...classMap.entries()]
     .map(([cls, count]) => ({ cls, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
-  if (!topThreatClasses.length) {
-    topThreatClasses.push(
-      { cls: 'prompt-injection', count: 42 },
-      { cls: 'credential-exfil', count: 31 },
-      { cls: 'shell-obfuscation', count: 22 },
-    );
-  }
+  const hasObservatoryData = avgBlockRate !== null && serverCount !== null && topThreatClasses.length > 0;
   return {
-    adoptionScore: Math.min(100, Math.round(serverCount * 0.4 + avgBlockRate * 60)),
-    threatHeatIndex: Math.min(100, topThreatClasses.reduce((a, t) => a + t.count, 0)),
+    available: hasObservatoryData,
+    reason: hasObservatoryData ? undefined : 'cloud_observatory_data_unavailable',
+    adoptionScore: hasObservatoryData ? Math.min(100, Math.round(serverCount * 0.4 + avgBlockRate * 60)) : null,
+    threatHeatIndex: hasObservatoryData ? Math.min(100, topThreatClasses.reduce((a, t) => a + t.count, 0)) : null,
     avgBlockRate,
-    serverCount: Math.max(serverCount, reputationEntries.size * 4),
+    serverCount,
     topThreatClasses,
     generatedAt: new Date().toISOString(),
     source: 'cloud-observatory',
     contributorCount: reputationEntries.size,
+    dataSources: hasObservatoryData ? ['cloud-observatory-store'] : [],
   };
 }

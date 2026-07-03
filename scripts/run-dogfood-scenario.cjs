@@ -14,7 +14,7 @@ const OUTPUT = join(SCENARIO, 'output');
 const CORPUS = JSON.parse(readFileSync(join(SCENARIO, 'agent-corpus.json'), 'utf8'));
 const POLICY = join(ROOT, 'default-policy.yaml');
 const CLI = join(ROOT, 'dist', 'cli.js');
-const STUB = join(SCENARIO, 'enterprise-mcp-stub.cjs');
+const LOCAL_SERVICE = join(SCENARIO, 'enterprise-mcp-local-service.cjs');
 const SERVER_NAMES = ['github', 'filesystem', 'puppeteer', 'postgres'];
 const EXPECTED_BLOCKS = CORPUS.calls.filter((c) => c.expect === 'block').length;
 
@@ -176,7 +176,7 @@ async function runCliProxyCorpus(serverName, calls, sandboxEnv) {
 
   const proxies = SERVER_NAMES.map((name) => ({
     name,
-    proxy: new McpProxyServer('node', [STUB], { PATH: process.env.PATH, HOME: process.env.HOME, STUB_ROLE: name }, db, name, engine),
+    proxy: new McpProxyServer('node', [LOCAL_SERVICE], { PATH: process.env.PATH, HOME: process.env.HOME, SERVICE_ROLE: name }, db, name, engine),
   }));
   await sleep(1200);
 

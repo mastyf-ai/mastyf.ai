@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "fixture_echo": {
+    "echo_local": {
       "command": "node",
       "args": [
         "benchmarks/fixtures/echo-server.cjs"

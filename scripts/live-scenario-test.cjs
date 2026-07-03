@@ -204,7 +204,7 @@ var ECHO_CODE = 'var rl=require("readline").createInterface({input:process.stdin
   log('  ✓ Response inspection verified — prompt injections detected');
   log('  ✓ Live data: 2,115 pricing entries from litellm, 43 CVEs from OSV.dev');
   log('');
-  log('  All results are from live execution — zero mock data.');
+  log('  All results are from live execution — no generated data.');
   log(BANNER);
 
   db.close();

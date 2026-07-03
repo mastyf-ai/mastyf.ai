@@ -2599,6 +2599,121 @@ export async function generateDigestNow(): Promise<{ ok: boolean; error?: string
   return { ok: true };
 }
 
+export type ComplianceFrameworkPosture = {
+  framework: string;
+  frameworkName: string;
+  totalControls: number;
+  satisfiedControls: number;
+  partialControls: number;
+  unsatisfiedControls: number;
+  postureScore: number;
+  summary: string;
+  generatedAt?: string;
+  controls: Array<{
+    controlId: string;
+    controlName: string;
+    description: string;
+    satisfied: boolean;
+    satisfiedBy: string[];
+    gap?: string;
+    recommendedPolicy?: string;
+  }>;
+  auditCounts?: {
+    totalCalls: number;
+    blockedCalls: number;
+    servers: string[];
+  };
+  policySignalCount?: number;
+  incidentSignalCount?: number;
+};
+
+export async function fetchComplianceFrameworkPosture(): Promise<{
+  frameworks: ComplianceFrameworkPosture[];
+  overall: number | null;
+  available?: boolean;
+  error?: string;
+}> {
+  const res = await mastyfAiFetch('/api/compliance/posture');
+  const body = (await res.json().catch(() => ({}))) as {
+    frameworks?: ComplianceFrameworkPosture[];
+    overall?: number | null;
+    available?: boolean;
+    error?: string;
+  };
+  if (!res.ok) {
+    return { frameworks: [], overall: null, available: false, error: body.error ?? `HTTP ${res.status}` };
+  }
+  return {
+    frameworks: Array.isArray(body.frameworks) ? body.frameworks : [],
+    overall: typeof body.overall === 'number' ? body.overall : null,
+    available: body.available,
+    error: body.error,
+  };
+}
+
+export type ComplianceEvidenceArtifact = {
+  id: string;
+  kind: string;
+  framework: string | null;
+  filename: string;
+  path: string;
+  sizeBytes: number;
+  generatedAt: string;
+  downloadUrl?: string;
+  detailLevel?: 'detailed' | 'legacy-summary' | 'digest';
+};
+
+export async function fetchComplianceEvidence(): Promise<{
+  artifacts: ComplianceEvidenceArtifact[];
+  count: number;
+  evidenceDir?: string;
+  hiddenLegacyCount?: number;
+  available?: boolean;
+  error?: string;
+}> {
+  const res = await mastyfAiFetch('/api/compliance/evidence');
+  const body = (await res.json().catch(() => ({}))) as {
+    artifacts?: ComplianceEvidenceArtifact[];
+    count?: number;
+    evidenceDir?: string;
+    hiddenLegacyCount?: number;
+    available?: boolean;
+    error?: string;
+  };
+  if (!res.ok) {
+    return { artifacts: [], count: 0, available: false, error: body.error ?? `HTTP ${res.status}` };
+  }
+  return {
+    artifacts: Array.isArray(body.artifacts) ? body.artifacts : [],
+    count: typeof body.count === 'number' ? body.count : body.artifacts?.length ?? 0,
+    evidenceDir: body.evidenceDir,
+    hiddenLegacyCount: body.hiddenLegacyCount,
+    available: body.available,
+    error: body.error,
+  };
+}
+
+export async function generateComplianceEvidence(framework = 'soc2'): Promise<{
+  ok: boolean;
+  artifact?: ComplianceEvidenceArtifact;
+  error?: string;
+}> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/compliance/evidence/generate', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ framework }),
+  });
+  const body = (await res.json().catch(() => ({}))) as {
+    artifact?: ComplianceEvidenceArtifact;
+    error?: string;
+  };
+  if (!res.ok) {
+    return { ok: false, error: body.error ?? `HTTP ${res.status}` };
+  }
+  return { ok: true, artifact: body.artifact };
+}
+
 export async function fetchPendingSuggestions(): Promise<{
   count: number;
   suggestions: unknown[];
@@ -2614,6 +2729,7 @@ export type UnifiedFleetServer = {
   transport: string;
   source: string;
   wrapped: boolean;
+  config?: UiMcpServerConfig & { packageName?: string; version?: string };
   localUrl?: string;
   status?: string;
   metrics?: {
@@ -2760,15 +2876,15 @@ export type AgenticDashboardResponse = {
     injectionScans: number;
     meshSignatures: number;
     meshEnabled: boolean;
-    honeypotActive: number;
-    honeypotCaptures: number;
+    decoyActive: number;
+    decoyCaptures: number;
     taskQueued: number;
     taskRunning: number;
     complianceOverall: number;
     trustGrade: string;
     trustScore: number;
     activeSessions: number;
-  };
+  } | null;
   trafficSeries?: AgenticTrafficPoint[];
   decisionsByFeature?: Record<string, number>;
   recentDecisions?: Array<{
@@ -2792,7 +2908,7 @@ export type AgenticDashboardResponse = {
     }>;
   };
   policyGen?: { active: boolean; totalCalls: number; uniqueTools: number; uptimeMin: number };
-  honeypots?: { active: number; totalCaptures: number; recentAlerts: number };
+  decoys?: { active: number; totalCaptures: number; recentAlerts: number } | null;
   mesh?: { enabled: boolean; localSignatures: number; pendingSignatures: number };
   promptInjectionStats?: { totalScans: number; totalDetections: number; detectionRate: number };
   trustSessions?: { activeSessions: number; registeredAgents: number; totalNegotiations: number };
@@ -2819,46 +2935,67 @@ export type AgenticAuditRecord = {
 
 export async function fetchAgenticDashboard(window = '7d'): Promise<AgenticDashboardResponse | null> {
   const res = await mastyfAiFetch(`/api/agentic/dashboard?window=${encodeURIComponent(window)}`);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    return {
+      available: false,
+      error: await parseApiError(res),
+      meta: { dataSources: [] },
+    };
+  }
   const body = (await res.json()) as AgenticDashboardResponse;
-  if (body.error && body.available === false && !body.kpis) return null;
   return body;
 }
 
 export async function fetchAgenticAudit(limit = 50): Promise<{
+  available?: boolean;
+  error?: string;
   records: AgenticAuditRecord[];
-  stats: { totalRecords: number; totalBlocked: number; totalAllowed: number; averageLatencyMs: number };
+  stats: { totalRecords: number; totalBlocked: number; totalAllowed: number; averageLatencyMs: number } | null;
 } | null> {
   const res = await mastyfAiFetch(`/api/agentic/audit?limit=${limit}`);
-  if (!res.ok) return null;
+  if (!res.ok) return { available: false, error: await parseApiError(res), records: [], stats: null };
   const body = (await res.json()) as {
     available?: boolean;
+    error?: string;
+    reason?: string;
     records?: AgenticAuditRecord[];
-    stats?: { totalRecords: number; totalBlocked: number; totalAllowed: number; averageLatencyMs: number };
+    stats?: { totalRecords: number; totalBlocked: number; totalAllowed: number; averageLatencyMs: number } | null;
   };
-  if (body.available === false) return null;
-  return { records: body.records ?? [], stats: body.stats ?? { totalRecords: 0, totalBlocked: 0, totalAllowed: 0, averageLatencyMs: 0 } };
+  return {
+    available: body.available,
+    error: body.error ?? body.reason,
+    records: body.records ?? [],
+    stats: body.stats ?? null,
+  };
 }
 
 export async function fetchAgenticDecisions(limit = 50): Promise<AgenticDashboardResponse['recentDecisions']> {
   const res = await mastyfAiFetch(`/api/agentic/decisions?limit=${limit}`);
-  if (!res.ok) return [];
-  const body = (await res.json()) as { decisions?: AgenticDashboardResponse['recentDecisions'] };
+  if (!res.ok) return undefined;
+  const body = (await res.json()) as { available?: boolean; decisions?: AgenticDashboardResponse['recentDecisions'] };
+  if (body.available === false) return undefined;
   return body.decisions ?? [];
 }
 
 export async function fetchAgenticTasksDetail(): Promise<{
-  stats: { queued: number; running: number; completed: number; failed: number; total: number };
+  available?: boolean;
+  error?: string;
+  stats: { queued: number; running: number; completed: number; failed: number; total: number } | null;
   pendingApprovals: Array<{ requestId: string; toolName: string; description: string; createdAt: string }>;
 } | null> {
   const res = await mastyfAiFetch('/api/agentic/tasks/detail');
-  if (!res.ok) return null;
+  if (!res.ok) return { available: false, error: await parseApiError(res), stats: null, pendingApprovals: [] };
   const body = (await res.json()) as {
-    stats?: { queued: number; running: number; completed: number; failed: number; total: number };
+    available?: boolean;
+    error?: string;
+    reason?: string;
+    stats?: { queued: number; running: number; completed: number; failed: number; total: number } | null;
     pendingApprovals?: Array<{ requestId: string; toolName: string; description: string; createdAt: string }>;
   };
   return {
-    stats: body.stats ?? { queued: 0, running: 0, completed: 0, failed: 0, total: 0 },
+    available: body.available,
+    error: body.error ?? body.reason,
+    stats: body.stats ?? null,
     pendingApprovals: body.pendingApprovals ?? [],
   };
 }
@@ -2889,6 +3026,7 @@ export async function fetchCertificationRegistry(): Promise<{
     packageName: string;
     level: string;
     score: number;
+    certified?: boolean;
     expiresAt: string;
   }>;
   count: number;
@@ -2901,11 +3039,40 @@ export async function fetchCertificationRegistry(): Promise<{
       packageName: string;
       level: string;
       score: number;
+      certified?: boolean;
       expiresAt: string;
     }>;
     count?: number;
   };
-  return { certifications: body.certifications ?? [], count: body.count ?? 0 };
+  return {
+    certifications: Array.isArray(body.certifications) ? body.certifications : [],
+    count: typeof body.count === 'number' ? body.count : body.certifications?.length ?? 0,
+  };
+}
+
+export async function resolveNpmPackageVersion(packageName: string): Promise<{
+  name: string;
+  version: string;
+  description?: string;
+  repository?: string;
+} | null> {
+  const res = await mastyfAiFetch(`/api/packages/npm/resolve?name=${encodeURIComponent(packageName)}`);
+  if (!res.ok) {
+    throw new Error(await parseApiError(res));
+  }
+  const body = (await res.json()) as {
+    name?: string;
+    version?: string;
+    description?: string;
+    repository?: string;
+  };
+  if (!body.name || !body.version) return null;
+  return {
+    name: body.name,
+    version: body.version,
+    description: body.description,
+    repository: body.repository,
+  };
 }
 
 const DEFAULT_CLOUD_PUBLIC_URL = 'https://mastyf-ai-cloud.vercel.app';
@@ -3028,13 +3195,14 @@ export type PlanComplianceReport = {
   modules: Array<{ id: string; name: string; score: number; checks: Array<{ id: string; passed: boolean; detail: string }> }>;
   generatedAt: string;
   summary: string;
+  error?: string;
 };
 
 export async function fetchPlanComplianceAudit(): Promise<PlanComplianceReport | null> {
   const res = await mastyfAiFetch('/api/agentic/plan-compliance/audit');
-  if (!res.ok) return null;
-  const body = (await res.json()) as PlanComplianceReport & { error?: string };
-  if (body.error && !body.modules?.length) return null;
+  const body = (await res.json().catch(() => null)) as (PlanComplianceReport & { error?: string }) | null;
+  if (!body) return null;
+  if (!res.ok && !body.error) return null;
   return body;
 }
 
