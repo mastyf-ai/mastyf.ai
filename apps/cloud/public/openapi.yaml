@@ -7,10 +7,13 @@ info:
   version: 1.0.0
   contact:
     name: mastyf.ai
-    url: https://mastyf-ai-cloud-jet.vercel.app
+    email: mastyf.support@gmail.com
+    url: https://www.mastyf.ai
 servers:
-  - url: https://mastyf-ai-cloud-jet.vercel.app
+  - url: https://www.mastyf.ai
     description: Production
+  - url: https://mastyf-ai-cloud-jet.vercel.app
+    description: Vercel preview
   - url: http://localhost:3001
     description: Local dev
 paths:

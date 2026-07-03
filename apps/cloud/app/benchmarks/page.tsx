@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { listBenchmarkLeaderboard } from '@/lib/industry-standard';
 import { observatorySnapshot } from '@/lib/cloud-observatory-store';
-import { CLOUD_NAME, NPM_PRODUCT_NAME } from '@/lib/product-links';
+import { CLOUD_NAME } from '@/lib/product-links';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +29,7 @@ export default async function BenchmarksPage() {
       </p>
       <h1 style={{ margin: '0 0 0.5rem' }}>Public benchmark leaderboard</h1>
       <p style={{ color: '#555', marginBottom: '1.5rem' }}>
-        Community-submitted {NPM_PRODUCT_NAME} profiles ranked by block rate (higher is better) and false-positive rate
+        Community-submitted proxy profiles ranked by block rate (higher is better) and false-positive rate
         (lower is better). Aggregated fleet telemetry feeds the{' '}
         <Link href="/observatory">ecosystem health observatory</Link>.
       </p>

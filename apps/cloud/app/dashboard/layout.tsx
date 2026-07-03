@@ -48,9 +48,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <>
+    <div className="dashboard-theme">
       <DashboardNav />
       {children}
-    </>
+    </div>
   );
 }

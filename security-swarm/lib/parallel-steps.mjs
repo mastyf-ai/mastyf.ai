@@ -1,7 +1,7 @@
 /**
  * H15 — Run independent swarm steps in parallel (FAST mode scale).
  */
-import { runStep, formatStepOutput, STEP_TIMEOUT_MS } from './run-step.mjs';
+import { runStep, formatStepOutput } from './run-step.mjs';
 
 export function runParallelSwarmSteps(steps, { cwd, live, env = {} }) {
   return Promise.all(
@@ -12,7 +12,7 @@ export function runParallelSwarmSteps(steps, { cwd, live, env = {} }) {
         cwd: cwd ?? spec.cwd,
         label,
         stepKey: label,
-        timeoutMs: spec.timeoutMs ?? STEP_TIMEOUT_MS[label],
+        timeoutMs: spec.timeoutMs,
         live,
         env: { ...process.env, ...env, ...spec.env },
       });

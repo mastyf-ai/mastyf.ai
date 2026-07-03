@@ -29,6 +29,19 @@ services:
       MASTYF_AI_STRICT_MODE: "true"
       POLICY_AUDIT_ENABLED: "true"
       MASTYF_AI_DB_PATH: /data/history.db
+      # Host Ollama (container localhost ≠ host). Docker Desktop resolves host.docker.internal.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      MASTYF_AI_LLM_ENABLED: "true"
+      MASTYF_AI_LLM_MODEL: qwen3:8b
+      MASTYF_AI_SEMANTIC_ASYNC: "true"
+      SWARM_THREAT_LAB: "true"
+      SWARM_THREAT_LAB_MODE: reactive
+      # Full swarm gates (vitest + corpus + harness parity) — see deploy/Dockerfile swarm assets
+      MASTYF_AI_SWARM_GATES_TIMEOUT_MS: "2100000"
+      # Docker/Colima runs slower than bare metal — scale per-step timeouts (vitest, corpus, parity)
+      MASTYF_AI_SWARM_TIMEOUT_MULTIPLIER: "3"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./mcp.json:/etc/mastyf-ai/mcp.json:ro
       - ../default-policy.yaml:/etc/mastyf-ai/policy.yaml:ro

@@ -11,7 +11,7 @@
 }
 
 .certified-back a {
-  color: #4f46e5;
+  color: var(--accent-gold, #c5a059);
   text-decoration: none;
 }
 
@@ -39,8 +39,13 @@
 }
 
 .certified-table a {
-  color: #4f46e5;
+  color: var(--text, #0a1128);
   text-decoration: none;
+  font-weight: 500;
+}
+
+.certified-table a:hover {
+  color: var(--accent-gold, #c5a059);
 }
 
 .certified-foot {
@@ -153,36 +158,47 @@
 }
 
 .badge-embed-block {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   overflow: hidden;
+  background: var(--surface);
 }
 
 .badge-embed-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0.75rem;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 0.65rem 0.85rem;
+  background: rgba(10, 17, 40, 0.03);
+  border-bottom: 1px solid var(--border);
 }
 
 .badge-copy-btn {
-  border: 1px solid #cbd5e1;
-  background: #fff;
-  border-radius: 4px;
-  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
   cursor: pointer;
   font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  transition: background 0.2s;
+}
+
+.badge-copy-btn:hover {
+  background: rgba(197, 160, 89, 0.1);
+  border-color: var(--accent-gold);
 }
 
 .badge-embed-code {
   margin: 0;
-  padding: 0.75rem;
+  padding: 0.85rem;
   font-size: 0.8rem;
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-all;
+  background: rgba(10, 17, 40, 0.02);
+  color: var(--text);
 }
 
 .badge-embed-gallery {
@@ -205,9 +221,9 @@
 
 .badge-embed-preview-box {
   padding: 1rem;
-  border: 1px solid var(--border, #243041);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(10, 17, 40, 0.03);
   min-width: 200px;
 }
 
@@ -223,13 +239,14 @@
   align-items: flex-start;
   gap: 0.15rem;
   padding: 0.5rem 0.65rem;
-  border: 1px solid var(--border, #243041);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.15);
-  color: var(--text, #e8eef7);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
   text-align: left;
   font-size: 0.75rem;
+  transition: border-color 0.2s, background 0.2s;
 }
 
 .badge-style-chip strong {
@@ -237,19 +254,23 @@
 }
 
 .badge-style-chip span {
-  color: var(--muted, #8b9bb4);
+  color: var(--muted);
   font-size: 0.68rem;
 }
 
+.badge-style-chip:hover {
+  border-color: var(--accent-gold);
+}
+
 .badge-style-chip.active {
-  border-color: #6366f1;
-  background: rgba(99, 102, 241, 0.15);
+  border-color: var(--accent-gold);
+  background: rgba(197, 160, 89, 0.08);
 }
 
 .badge-embed-desc {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--muted, #8b9bb4);
+  color: var(--muted);
 }
 
 .badge-embed-platform-tabs {
@@ -260,17 +281,24 @@
 
 .badge-platform-tab {
   padding: 0.35rem 0.65rem;
-  border: 1px solid var(--border, #243041);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: transparent;
-  color: var(--muted, #8b9bb4);
+  background: var(--surface);
+  color: var(--muted);
   font-size: 0.75rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.badge-platform-tab:hover {
+  border-color: var(--text);
+  color: var(--text);
 }
 
 .badge-platform-tab.active {
-  background: #4f46e5;
-  border-color: #4f46e5;
+  background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
 }
 
@@ -348,17 +376,19 @@
   display: inline-block;
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.15rem 0.5rem;
+  padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  background: #e2e8f0;
-  color: #334155;
-  text-transform: none;
+  background: rgba(197, 160, 89, 0.12);
+  color: var(--accent-gold);
+  text-transform: capitalize;
+  border: 1px solid rgba(197, 160, 89, 0.25);
 }
 
 .score-ring-skeleton {
-  width: 160px;
-  height: 160px;
+  width: 168px;
+  height: 168px;
   border-radius: 50%;
+  flex-shrink: 0;
   background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.2s ease-in-out infinite;

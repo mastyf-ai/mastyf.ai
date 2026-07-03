@@ -68,6 +68,16 @@ Vercel serverless cannot spawn subprocesses for live MCP scans. Production flow:
 
 Apply migration `012_deep_scan_jobs.sql` via `pnpm cloud:migrate:prod`.
 
+### Public website deep scan (sync mode)
+
+For the **public score UI** (`Run deep scan` on `/certified/...`), enable synchronous live probes on Vercel:
+
+| Variable | Value |
+|----------|-------|
+| `MASTYF_AI_ENABLE_DEEP_SCAN` | `true` |
+
+This runs the live MCP probe in the serverless function (no worker). Rate limiting applies (**10 req/min** per IP). For high-volume or API-only deep scan, use the async worker flow above instead and omit this flag.
+
 On Vercel, client IP comes from `x-vercel-forwarded-for` / `x-forwarded-for` (edge-injected, not client-spoofable). Self-hosted options:
 
 | Variable | Purpose |

@@ -2,22 +2,15 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: var(--bg);
+}
+
+.login-page-main {
+  flex: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1.25rem;
-}
-
-.login-back {
-  position: absolute;
-  top: 1.25rem;
-  left: 1.25rem;
-  color: var(--muted);
-  font-size: 0.9rem;
-  text-decoration: none;
-}
-
-.login-back:hover {
-  color: var(--text);
+  padding: 3rem 1.25rem;
 }
 
 .login-card {
@@ -25,9 +18,10 @@
   max-width: 420px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 2rem;
+  border-radius: var(--radius-lg);
+  padding: 2.25rem;
   text-align: center;
+  box-shadow: var(--shadow-md);
 }
 
 .login-brand {
@@ -42,13 +36,13 @@
 }
 
 .login-brand strong {
-  color: var(--accent);
+  color: var(--text);
 }
 
 .login-card h1 {
   margin: 0 0 0.5rem;
   font-size: 1.5rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.02em;
 }
 
@@ -63,8 +57,8 @@
   text-align: left;
   padding: 1rem;
   border-radius: 10px;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.3);
   margin-bottom: 1.25rem;
 }
 
@@ -93,6 +87,7 @@
 
 .login-alt a {
   font-weight: 600;
+  color: var(--accent-gold);
 }
 
 .login-footer-links {
@@ -113,4 +108,9 @@
 .signin-buttons .btn {
   width: 100%;
   margin: 0;
+}
+
+.signin-buttons .btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
 }

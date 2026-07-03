@@ -21,6 +21,17 @@ export const STEP_TIMEOUT_MS = {
   default: 600_000,
 };
 
+function resolveStepTimeoutMs(label, stepKey, explicitMs) {
+  if (explicitMs != null && Number.isFinite(explicitMs) && explicitMs > 0) return explicitMs;
+  const base =
+    STEP_TIMEOUT_MS[label] ??
+    STEP_TIMEOUT_MS[stepKey] ??
+    STEP_TIMEOUT_MS.default;
+  const mult = parseFloat(process.env.MASTYF_AI_SWARM_TIMEOUT_MULTIPLIER || '1');
+  if (!Number.isFinite(mult) || mult <= 0) return base;
+  return Math.round(base * mult);
+}
+
 const SECRET_PATTERNS = [
   /Bearer\s+[A-Za-z0-9._-]+/gi,
   /api[_-]?key[=:]\s*['"]?[^\s'"]+/gi,
@@ -49,11 +60,7 @@ export function sanitizeSpawnOutput(text) {
  */
 export function runStep(cmd, args, opts = {}) {
   const label = opts.label ?? [cmd, ...args].join(' ');
-  const timeoutMs =
-    opts.timeoutMs ??
-    STEP_TIMEOUT_MS[label] ??
-    STEP_TIMEOUT_MS[opts.stepKey] ??
-    STEP_TIMEOUT_MS.default;
+  const timeoutMs = resolveStepTimeoutMs(label, opts.stepKey, opts.timeoutMs);
   const maxBuffer = opts.maxBuffer ?? DEFAULT_MAX_BUFFER;
   const live = opts.live === true;
 

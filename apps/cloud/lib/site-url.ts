@@ -20,7 +20,7 @@ export function resolveSiteUrl(request?: Request): string {
   return PRODUCTION_SITE_URL;
 }
 
-/** Default control plane URL for self-hosted MCP Guardian proxies. */
+/** Default control plane URL for self-hosted mastyf.ai proxies. */
 export function defaultControlPlaneUrl(): string {
   return (
     process.env.MASTYF_AI_CONTROL_PLANE_URL?.trim()

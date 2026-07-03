@@ -2,7 +2,7 @@
 
 import { GITHUB_DEFAULT_BRANCH, GITHUB_REPO_URL } from '@/lib/github-links';
 import { DEV_AUTH_PROVIDER_ID } from '@/lib/oauth-providers';
-import { NPM_PACKAGE_URL, NPM_PRODUCT_NAME, SITE_NAME } from '@/lib/product-links';
+import { SITE_NAME } from '@/lib/product-links';
 import { signIn } from 'next-auth/react';
 
 const OAUTH_SETUP_DOC = `${GITHUB_REPO_URL}/blob/${GITHUB_DEFAULT_BRANCH}/apps/cloud/docs/OAUTH_CLOUD_SETUP.md`;
@@ -52,10 +52,6 @@ export function SignInButtons({
           <a href={GITHUB_REPO_URL} rel="noopener noreferrer">
             {SITE_NAME} on GitHub
           </a>{' '}
-          or install{' '}
-          <a href={NPM_PACKAGE_URL} rel="noopener noreferrer">
-            {NPM_PRODUCT_NAME} on npm
-          </a>
           .
         </p>
       </>

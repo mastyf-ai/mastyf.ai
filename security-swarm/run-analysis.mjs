@@ -5,6 +5,9 @@ import './lib/gate-pro.mjs';
  *
  * Usage:
  *   node security-swarm/run-analysis.mjs [--full] [--nightly] [--skip-live] [--skip-swarm] [--quiet] [--continuous] [--skip-continuous]
+ *
+ * CI regression gates (pnpm build, vitest, corpus) are skipped when --skip-swarm is passed or
+ * MASTYF_AI_SWARM_SKIP_GATES=true (recommended for production Docker — no dev toolchain in image).
  */
 import { runStep } from './lib/run-step.mjs';
 import { randomUUID } from 'node:crypto';
@@ -29,7 +32,8 @@ import {
 const FULL = process.argv.includes('--full');
 const NIGHTLY = process.argv.includes('--nightly');
 const SKIP_LIVE = process.argv.includes('--skip-live');
-const SKIP_SWARM = process.argv.includes('--skip-swarm');
+const SKIP_SWARM =
+  process.argv.includes('--skip-swarm') || process.env.MASTYF_AI_SWARM_SKIP_GATES === 'true';
 const QUIET = process.argv.includes('--quiet');
 const RUN_CONTINUOUS = process.argv.includes('--continuous');
 const SKIP_CONTINUOUS = process.argv.includes('--skip-continuous') || process.env.MASTYF_AI_SWARM_SKIP_CONTINUOUS === 'true';
@@ -253,19 +257,24 @@ async function main() {
         ? JSON.parse(readFileSync(join(SWARM_DIR, 'latest.json'), 'utf-8'))
         : null;
       swarmOk = latest?.overall ?? false;
-      if (existsSync(LIVE_JSON)) {
-        mergeRealLifeSummary(JSON.parse(readFileSync(LIVE_JSON, 'utf-8')));
-      }
-      if (process.env.SWARM_THREAT_LAB === 'true') {
-        run('node', ['security-swarm/agents/threat-lab.mjs'], { allowFail: true });
-        emitArtifact(['threat-lab-candidates.json']);
-      }
-      if (process.env.SWARM_THREAT_RESEARCH_AUTO === 'true') {
-        run('node', ['security-swarm/agents/auto-threat-research.mjs'], { allowFail: true });
-        emitArtifact(['auto-corpus-manifest.json']);
-      }
     } else {
-      log('Skipping swarm (--skip-swarm)');
+      log(
+        'Skipping CI regression gates (--skip-swarm or MASTYF_AI_SWARM_SKIP_GATES) — '
+        + 'operational analysis only (live MCP, traffic, Threat Lab)',
+      );
+      swarmOk = liveOk;
+    }
+
+    if (existsSync(LIVE_JSON)) {
+      mergeRealLifeSummary(JSON.parse(readFileSync(LIVE_JSON, 'utf-8')));
+    }
+    if (process.env.SWARM_THREAT_LAB === 'true') {
+      run('node', ['security-swarm/agents/threat-lab.mjs'], { allowFail: true });
+      emitArtifact(['threat-lab-candidates.json']);
+    }
+    if (process.env.SWARM_THREAT_RESEARCH_AUTO === 'true') {
+      run('node', ['security-swarm/agents/auto-threat-research.mjs'], { allowFail: true });
+      emitArtifact(['auto-corpus-manifest.json']);
     }
 
     setPhase('visuals');

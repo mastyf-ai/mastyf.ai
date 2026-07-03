@@ -1,7 +1,7 @@
 import { CloudConsoleBanner } from '@/components/CloudConsoleBanner';
 import { auth } from '@/lib/auth';
 import { getUserOrg } from '@/lib/org-context';
-import { CLOUD_NAME, NPM_PRODUCT_NAME, SITE_NAME } from '@/lib/product-links';
+import { CLOUD_NAME, SITE_NAME } from '@/lib/product-links';
 import Link from 'next/link';
 
 function appUrl(): string {
@@ -71,14 +71,14 @@ MASTYF_AI_CLOUD_API_KEY=<your-api-key>
       </div>
 
       <div className="card" style={{ marginTop: '1.25rem', borderColor: 'rgba(34, 197, 94, 0.25)' }}>
-        <h2>Optional: link {NPM_PRODUCT_NAME}</h2>
+        <h2>Optional: connect self-hosted proxy</h2>
         <p className="muted">
-          Running the open-source {NPM_PRODUCT_NAME} proxy on your own servers? Connect it to this{' '}
-          {SITE_NAME} tenant to sync policy and use SSO into the local ops dashboard. You do not need
-          this for scores, badges, or cloud policy editing.
+          Running a self-hosted MCP security proxy? Connect it to this {SITE_NAME} tenant to sync
+          policy via API and enable fleet visibility. You do not need this for scores, badges, or
+          cloud policy editing.
         </p>
         <Link href="/dashboard/connect" className="btn">
-          Link self-hosted {NPM_PRODUCT_NAME} →
+          Connect self-hosted proxy →
         </Link>
       </div>
     </main>

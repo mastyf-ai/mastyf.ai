@@ -8,13 +8,12 @@ dist
 coverage
 *.md
 !README.md
-tests
 scenarios
-corpus
+!scenarios/real-life
+!scenarios/real-life/**
 .turbo
 *.log
 .env
 .env.*
 .cursor
-**/*.test.ts
 packages/*/tests

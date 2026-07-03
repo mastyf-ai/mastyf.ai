@@ -6,24 +6,26 @@ type Props = {
 
 export function PackageNotFound({ packageName }: Props) {
   return (
-    <main className="socket-main socket-not-certified" style={{ paddingTop: '2rem' }}>
-      <p className="socket-breadcrumb">
-        <Link href="/certified">Security scores</Link> / {packageName}
-      </p>
+    <main className="score-page">
+      <nav className="score-breadcrumb" aria-label="Breadcrumb">
+        <Link href="/">Home</Link>
+        <span aria-hidden>/</span>
+        <Link href="/certified">Security scores</Link>
+        <span aria-hidden>/</span>
+        <span className="score-breadcrumb-current">{packageName}</span>
+      </nav>
 
-      <div className="socket-not-certified-hero">
-        <div className="socket-not-certified-badge">
-          <span className="socket-not-certified-label">Package not found</span>
-        </div>
-        <h1 className="socket-pkg-title">{packageName}</h1>
-        <p className="socket-hero-lead" style={{ textAlign: 'left', maxWidth: '36rem' }}>
+      <section className="score-not-found card-elevated">
+        <span className="score-not-found-badge">Package not found</span>
+        <h1 className="score-hero-title">{packageName}</h1>
+        <p className="score-section-lead">
           This package name is not published on npm, or the name is invalid. Check the spelling
           (scoped packages use <code>@scope/name</code>) and try again.
         </p>
-        <p style={{ marginTop: '1rem' }}>
-          <Link href="/certified">← Back to lookup</Link>
-        </p>
-      </div>
+        <Link href="/certified" className="socket-search-btn" style={{ display: 'inline-flex', marginTop: '1rem' }}>
+          ← Back to lookup
+        </Link>
+      </section>
     </main>
   );
 }

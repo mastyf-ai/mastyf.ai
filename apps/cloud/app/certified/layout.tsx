@@ -1,7 +1,8 @@
 import { CertifiedShell } from '@/components/CertifiedShell';
-import './certified.css';
-import './socket-certified.css';
+import '../landing.css';
 
-export default function CertifiedLayout({ children }: { children: React.ReactNode }) {
+type Props = { children: React.ReactNode };
+
+export default function CertifiedLayout({ children }: Props) {
   return <CertifiedShell>{children}</CertifiedShell>;
 }

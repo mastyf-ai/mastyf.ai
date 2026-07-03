@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { NPM_PRODUCT_NAME, SITE_NAME } from '@/lib/product-links';
+import { SITE_NAME } from '@/lib/product-links';
 
 type ActiveRule = {
   name: string;
@@ -186,8 +186,7 @@ export function PolicyEditor({ initialYaml }: { initialYaml: string }) {
       <h2>Policy YAML</h2>
       <p className="muted">
         Edit your tenant policy on {SITE_NAME}. Download the YAML or pull it via{' '}
-        <code>/api/v1/policy</code>. To enforce on a self-hosted {NPM_PRODUCT_NAME} host, deploy to{' '}
-        <code>policy-templates/tenants/&lt;tenant-id&gt;/policy.yaml</code> or sync via the API.
+        <code>/api/v1/policy</code>. Download the YAML or sync to a self-hosted proxy via the API.
       </p>
       <textarea
         className="policy-editor"

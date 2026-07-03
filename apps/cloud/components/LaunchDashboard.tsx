@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { NPM_PRODUCT_NAME } from '@/lib/product-links';
 
 function isValidGuardianUrl(url: string): boolean {
   const trimmed = url.trim();
@@ -27,7 +26,7 @@ export function LaunchDashboard() {
   const onLaunch = async () => {
     setError('');
     if (!isValidGuardianUrl(mastyfAiUrl)) {
-      setError(`Enter a valid http:// or https:// ${NPM_PRODUCT_NAME} URL.`);
+      setError('Enter a valid http:// or https:// proxy URL.');
       return;
     }
     setLoading(true);
@@ -55,11 +54,11 @@ export function LaunchDashboard() {
     <div className="card">
       <h2>Open live dashboard (SSO)</h2>
       <p className="muted">
-        One-time redirect to your {NPM_PRODUCT_NAME} ops UI. Requires the env block above on that host (
+        One-time redirect to your proxy ops UI. Requires the env block above on that host (
         <code>MASTYF_AI_CLOUD_JWT_SECRET</code> must match cloud <code>AUTH_SECRET</code>).
       </p>
       <label style={{ display: 'block', marginTop: '1rem' }}>
-        {NPM_PRODUCT_NAME} base URL
+        Proxy base URL
         <input
           type="url"
           value={mastyfAiUrl}

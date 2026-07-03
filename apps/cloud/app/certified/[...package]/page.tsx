@@ -73,55 +73,81 @@ export default async function CertifiedPackagePage({ params }: Props) {
   });
 
   return (
-    <main className="socket-main" style={{ paddingTop: '2rem' }}>
-      <p className="socket-breadcrumb">
-        <Link href="/certified">Security scores</Link> / {packageName}
-      </p>
+    <main className="score-page">
+      <nav className="score-breadcrumb" aria-label="Breadcrumb">
+        <Link href="/">Home</Link>
+        <span aria-hidden>/</span>
+        <Link href="/certified">Security scores</Link>
+        <span aria-hidden>/</span>
+        <span className="score-breadcrumb-current">{packageName}</span>
+      </nav>
 
-      <div className="socket-pkg-header">
-        <ScoreRing score={score.score} grade={grade} size={160} />
-        <div>
-          <h1 className="socket-pkg-title">{packageName}</h1>
-          <p className="socket-pkg-meta">
-            {score.serverName} · v{score.version} ·{' '}
-            <span style={{ textTransform: 'capitalize' }}>{score.level}</span>
-            {' · '}
-            <ScanTierBadge tier={score.scanTier} source={score.source} />
-          </p>
-          <div
-            className="certified-hero-badge"
-            style={{ marginBottom: '1rem' }}
-            dangerouslySetInnerHTML={{ __html: badgeSvg }}
-          />
-          <p className="score-report-summary" style={{ margin: '0.75rem 0' }}>
-            {scoreReport.summaryPlainEnglish}
-          </p>
-          <p className="certified-meta">
-            Scored {new Date(score.computedAt).toLocaleString()} · Cache expires{' '}
-            {new Date(score.expiresAt).toLocaleString()}
-          </p>
-          {verification ? (
-            <p className={`socket-status ${verification.valid ? 'valid' : 'invalid'}`}>
-              Attestation {verification.valid ? 'valid' : verification.expired ? 'expired' : 'invalid'}
-            </p>
-          ) : null}
-          <DeepScanButton
-            packageName={packageName}
-            enabled={isDeepScanEnabled()}
-            currentTier={score.scanTier}
-            source={score.source}
-          />
+      <section className="score-hero card-elevated">
+        <div className="score-hero-grid">
+          <div className="score-hero-ring">
+            <ScoreRing score={score.score} grade={grade} size={168} />
+          </div>
+
+          <div className="score-hero-body">
+            <p className="score-hero-eyebrow">Package trust score</p>
+            <h1 className="score-hero-title">{packageName}</h1>
+
+            <div className="score-meta-chips">
+              <span className="score-chip">{score.serverName}</span>
+              <span className="score-chip">v{score.version}</span>
+              <span className="score-chip score-chip-cap">{score.level}</span>
+              <ScanTierBadge tier={score.scanTier} source={score.source} />
+            </div>
+
+            <div
+              className="score-hero-badge"
+              dangerouslySetInnerHTML={{ __html: badgeSvg }}
+            />
+
+            <p className="score-hero-summary">{scoreReport.summaryPlainEnglish}</p>
+
+            {verification ? (
+              <p className={`score-attestation score-attestation-${verification.valid ? 'valid' : 'invalid'}`}>
+                Attestation {verification.valid ? 'valid' : verification.expired ? 'expired' : 'invalid'}
+              </p>
+            ) : null}
+
+            <DeepScanButton
+              packageName={packageName}
+              enabled={isDeepScanEnabled()}
+              currentTier={score.scanTier}
+              source={score.source}
+            />
+          </div>
         </div>
-      </div>
+
+        <div className="score-stat-row">
+          <div className="score-stat-card">
+            <span className="score-stat-label">Scored</span>
+            <strong>{new Date(score.computedAt).toLocaleString()}</strong>
+          </div>
+          <div className="score-stat-card">
+            <span className="score-stat-label">Cache expires</span>
+            <strong>{new Date(score.expiresAt).toLocaleString()}</strong>
+          </div>
+          <div className="score-stat-card">
+            <span className="score-stat-label">Scan tier</span>
+            <strong className="score-stat-cap">{score.scanTier}</strong>
+          </div>
+          <div className="score-stat-card">
+            <span className="score-stat-label">Trust level</span>
+            <strong className="score-stat-cap">{score.level}</strong>
+          </div>
+        </div>
+      </section>
 
       <ScoreReportPanel report={scoreReport} />
 
-      <div className="socket-two-col" style={{ marginTop: '2rem' }}>
-        <section>
-          <h2 className="socket-section-title">Embed badge</h2>
-          <p className="certified-lead">
-            Pick a layout (GitHub README, flat-square, plastic, …) and copy markdown, HTML, RST,
-            BBCode, or AsciiDoc.
+      <div className="score-page-grid">
+        <section className="score-side-card card-elevated">
+          <h2 className="score-section-title">Embed badge</h2>
+          <p className="score-section-lead">
+            Pick a layout and copy markdown, HTML, RST, BBCode, or AsciiDoc for your README.
           </p>
           <BadgeEmbedGallery
             cloudBaseUrl={cloudBase}
@@ -129,36 +155,41 @@ export default async function CertifiedPackagePage({ params }: Props) {
             badgeCacheKey={score.computedAt}
           />
         </section>
+
         {score.source === 'attested' ? (
-          <section>
-            <h2 className="socket-section-title">Maintainer attestation</h2>
-            <p className="certified-lead">
+          <section className="score-side-card card-elevated">
+            <h2 className="score-section-title">Maintainer attestation</h2>
+            <p className="score-section-lead">
               This score was published with a signed attestation from a maintainer proxy scan.
             </p>
-            <pre className="badge-embed-code" style={{ border: '1px solid var(--border)', borderRadius: 8 }}>
-              {`mastyf-ai certify publish \\
+            <pre className="score-code-block">{`mastyf-ai certify publish \\
   --server ${score.serverName} \\
   --package ${packageName} \\
   --pkg-version ${score.version} \\
-  --cloud-url ${cloudBase}`}
-            </pre>
+  --cloud-url ${cloudBase}`}</pre>
           </section>
         ) : (
-          <section>
-            <h2 className="socket-section-title">Improve this score</h2>
-            <p className="certified-lead">
+          <section className="score-side-card card-elevated">
+            <h2 className="score-section-title">Improve this score</h2>
+            <p className="score-section-lead">
               Fix the issues above, then run a deep scan or publish from your mastyf.ai proxy for a
               maintainer-verified badge.
             </p>
             {certificationChecksOnly(score.checks).length > 0 ? (
-              <ul className="certified-check-list">
+              <ul className="score-check-list">
                 {certificationChecksOnly(score.checks).map((c) => (
-                  <li key={String(c.id ?? c.name)}>
-                    [{c.passed ? '✓' : '✗'}] {c.name}: {c.details}
+                  <li key={String(c.id ?? c.name)} className={c.passed ? 'pass' : 'fail'}>
+                    <span className="score-check-icon" aria-hidden>{c.passed ? '✓' : '✗'}</span>
+                    <div>
+                      <strong>{c.name}</strong>
+                      <p>{c.details}</p>
+                    </div>
                   </li>
                 ))}
               </ul>
-            ) : null}
+            ) : (
+              <p className="score-section-lead">No additional certification checks to display.</p>
+            )}
           </section>
         )}
       </div>

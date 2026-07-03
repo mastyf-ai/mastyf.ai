@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CLOUD_NAME, NPM_PRODUCT_NAME, SITE_NAME } from '@/lib/product-links';
+import { CLOUD_NAME, SITE_NAME } from '@/lib/product-links';
 
 /** Clarifies that /dashboard is the mastyf.ai cloud console. */
 export function CloudConsoleBanner() {
@@ -11,8 +11,8 @@ export function CloudConsoleBanner() {
         manage API keys here — all in the browser, no install required.
       </p>
       <p className="muted" style={{ marginBottom: 0, fontSize: '0.9rem' }}>
-        Optional: link a self-hosted <strong>{NPM_PRODUCT_NAME}</strong> proxy to sync policy and SSO.{' '}
-        <Link href="/dashboard/connect">Link proxy →</Link>
+        Optional: link a self-hosted proxy to sync policy via API.{' '}
+        <Link href="/dashboard/connect">Connect proxy →</Link>
       </p>
     </div>
   );
