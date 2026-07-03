@@ -134,14 +134,36 @@ export class SecurityThreatQuarantine {
   }
 
   restore(threatKey: string): { ok: boolean; error?: string; record?: SecurityQuarantineRecord } {
+    const group = this.restoreGroup(threatKey);
+    if (!group.ok) return { ok: false, error: group.error };
+    return { ok: true, record: group.records?.[0] };
+  }
+
+  /**
+   * Restore every quarantined row that shares type+source with the anchor threat.
+   * Matches bulk quarantine, which archives all underlying rows for a fingerprint.
+   */
+  restoreGroup(
+    threatKey: string,
+  ): { ok: boolean; error?: string; records?: SecurityQuarantineRecord[]; restored?: number } {
     const state = this.read();
-    const idx = state.entries.findIndex(
+    const anchor = state.entries.find(
       (e) => e.threatKey === threatKey || e.id === threatKey,
     );
-    if (idx < 0) return { ok: false, error: 'Not in quarantine' };
-    const [record] = state.entries.splice(idx, 1);
-    saveState(this.tenantId, state);
-    return { ok: true, record };
+    if (!anchor) return { ok: false, error: 'Not in quarantine' };
+    const fingerprint = `${anchor.type}:${anchor.source}`;
+    const removed: SecurityQuarantineRecord[] = [];
+    const kept: SecurityQuarantineRecord[] = [];
+    for (const entry of state.entries) {
+      if (`${entry.type}:${entry.source}` === fingerprint) {
+        removed.push(entry);
+      } else {
+        kept.push(entry);
+      }
+    }
+    if (removed.length === 0) return { ok: false, error: 'Not in quarantine' };
+    saveState(this.tenantId, { entries: kept });
+    return { ok: true, records: removed, restored: removed.length };
   }
 
   list(days = 30): SecurityQuarantineRecord[] {

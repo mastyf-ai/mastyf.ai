@@ -75,6 +75,31 @@ describe('SecurityThreatQuarantine', () => {
     expect(q.findEntry(30, { id: 'THR-3450' })?.threatKey).toBe(threatKey);
   });
 
+  it('restoreGroup removes all rows that share type and source', () => {
+    const q = new SecurityThreatQuarantine('default');
+    const shared = {
+      type: 'Semantic Prompt Injection',
+      source: '10.13.195.218',
+      severity: 'critical' as const,
+      status: 'blocked' as const,
+    };
+    q.quarantine({
+      id: 'THR-1',
+      threatKey: 'block:fs:read:2026-07-03 10:55:17',
+      ...shared,
+    });
+    q.quarantine({
+      id: 'THR-2',
+      threatKey: 'block:fs:read:2026-07-03 10:55:19',
+      ...shared,
+    });
+    expect(q.list(30)).toHaveLength(2);
+    const restored = q.restoreGroup('block:fs:read:2026-07-03 10:55:17');
+    expect(restored.ok).toBe(true);
+    expect(restored.restored).toBe(2);
+    expect(q.list(30)).toHaveLength(0);
+  });
+
   it('stores enforcement metadata', () => {
     const q = new SecurityThreatQuarantine('default');
     const row = {

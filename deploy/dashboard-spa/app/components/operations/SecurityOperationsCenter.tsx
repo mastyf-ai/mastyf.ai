@@ -266,7 +266,16 @@ function OverviewView({ roles, refreshKey, onAction }: { roles: string[]; refres
             {loading ? (
               <p className="text-sm text-muted">Loading threats…</p>
             ) : !dash?.threats || dash.threats.length === 0 ? (
-              <EmptyState title="No threats" message="All clear — no active threats detected" />
+              <EmptyState
+                title="No active threats"
+                message={
+                  (dash?.quarantinedCount ?? 0) > 0
+                    ? `${dash.quarantinedCount} threat(s) are quarantined and hidden from this list. Open Security → Quarantine and click Restore to show them here again.`
+                    : (dash?.executiveSummary?.[0]?.includes('policy blocks')
+                      ? 'Blocks are recorded in the window above, but no high-severity threat rows are in the monitor queue.'
+                      : 'All clear — no active threats detected in the selected time window.')
+                }
+              />
             ) : (
               <div className="table-wrap">
                 <table className="table">

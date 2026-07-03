@@ -2493,17 +2493,18 @@ export async function startDashboardServer(
         }
         try {
           const { getSecurityThreatQuarantine } = await import('./security-threat-quarantine.js');
-          const result = getSecurityThreatQuarantine(requestTenantId).restore(threatKey);
+          const result = getSecurityThreatQuarantine(requestTenantId).restoreGroup(threatKey);
           if (!result.ok) {
             writeJson(res, 400, { ok: false, error: result.error || 'Restore failed' });
             return;
           }
+          const primary = result.records?.[0];
           let removedRule = false;
-          if (removeRule && result.record?.appliedRuleName) {
+          if (removeRule && primary?.appliedRuleName) {
             const { removeSuggestionRuleFromPolicy } = await import('../ai/policy-applier.js');
             const removed = removeSuggestionRuleFromPolicy(
-              result.record.appliedRuleName,
-              result.record.policyPath || defaultPolicyPath(),
+              primary.appliedRuleName,
+              primary.policyPath || defaultPolicyPath(),
               policyWatcher ?? null,
             );
             removedRule = removed.removed;
@@ -2511,14 +2512,19 @@ export async function startDashboardServer(
           appendThreatIntelActionAudit({
             action: 'monitor_restore',
             id: threatKey,
-            appliedRuleName: result.record?.appliedRuleName,
+            appliedRuleName: primary?.appliedRuleName,
             removeRule,
             removedRule,
             operator: authResult.identity || null,
             tenantId: requestTenantId,
             timestamp: new Date().toISOString(),
           });
-          writeJson(res, 200, { ok: true, threatKey, removedRule });
+          writeJson(res, 200, {
+            ok: true,
+            threatKey,
+            removedRule,
+            restored: result.restored ?? 1,
+          });
         } catch (e) {
           writeJson(res, 500, { ok: false, error: e instanceof Error ? e.message : 'Restore failed' });
         }
@@ -2539,7 +2545,6 @@ export async function startDashboardServer(
 
           if (b.all === true || b.all === 'true') {
             const fed = await resolveChartContext(requestTenantId, 1);
-            const { buildSecurityDashboard } = await import('./security-dashboard.js');
             let policyMode: string | undefined;
             try {
               const { readFileSync } = await import('fs');
@@ -2550,12 +2555,24 @@ export async function startDashboardServer(
             } catch {
               policyMode = process.env.MASTYF_AI_POLICY_MODE;
             }
+            const { buildSecurityDashboard, listMonitorThreatCandidates, threatDisplayFingerprint } =
+              await import('./security-dashboard.js');
             const dash = await buildSecurityDashboard(fed.db, requestTenantId, 1, { policyMode });
-            const targets = (dash.threats ?? []).filter(
+            const visibleHigh = (dash.threats ?? []).filter(
               (t) => t.severity === 'critical' || t.severity === 'high',
             );
+            const targetFingerprints = new Set(
+              visibleHigh.map((t) => threatDisplayFingerprint(t)),
+            );
+            const allCandidates = await listMonitorThreatCandidates(fed.db, requestTenantId, 1);
+            const targetsByKey = new Map<string, (typeof allCandidates)[number]>();
+            for (const row of allCandidates) {
+              if (row.severity !== 'critical' && row.severity !== 'high') continue;
+              if (!targetFingerprints.has(threatDisplayFingerprint(row))) continue;
+              targetsByKey.set(row.threatKey, row);
+            }
             let quarantined = 0;
-            for (const row of targets) {
+            for (const row of targetsByKey.values()) {
               const enforcement = await applyMonitorQuarantineEnforcement({
                 row,
                 tenantId: requestTenantId,
@@ -2602,31 +2619,45 @@ export async function startDashboardServer(
               : 'blocked') as 'blocked' | 'monitored' | 'resolved',
           };
           const fed = await resolveChartContext(requestTenantId, 1);
-          const enforcement = await applyMonitorQuarantineEnforcement({
-            row,
-            tenantId: requestTenantId,
-            db: fed.db,
-            policyPath,
-            policyWatcher: policyWatcher ?? null,
-            operator,
-          });
-          const result = store.quarantine(row, operator, b.note ? String(b.note) : undefined, {
-            appliedRuleName: enforcement.appliedRuleName,
-            policyPath: enforcement.policyPath,
-            enforcementStatus: enforcement.status,
-            enforcementDetail: enforcement.detail,
-            sourceKind: enforcement.sourceKind,
-          });
-          if (!result.ok) {
-            writeJson(res, 400, { ok: false, error: result.error || 'Quarantine failed' });
-            return;
+          const { listMonitorThreatCandidates, threatDisplayFingerprint } =
+            await import('./security-dashboard.js');
+          const fingerprint = threatDisplayFingerprint(row);
+          const related = (await listMonitorThreatCandidates(fed.db, requestTenantId, 1)).filter(
+            (candidate) => threatDisplayFingerprint(candidate) === fingerprint,
+          );
+          const targets = related.length > 0 ? related : [row];
+          let lastEnforcement: Awaited<ReturnType<typeof applyMonitorQuarantineEnforcement>> | null =
+            null;
+          let lastResult: ReturnType<typeof store.quarantine> | null = null;
+          for (const target of targets) {
+            const enforcement = await applyMonitorQuarantineEnforcement({
+              row: target,
+              tenantId: requestTenantId,
+              db: fed.db,
+              policyPath,
+              policyWatcher: policyWatcher ?? null,
+              operator,
+            });
+            const result = store.quarantine(target, operator, b.note ? String(b.note) : undefined, {
+              appliedRuleName: enforcement.appliedRuleName,
+              policyPath: enforcement.policyPath,
+              enforcementStatus: enforcement.status,
+              enforcementDetail: enforcement.detail,
+              sourceKind: enforcement.sourceKind,
+            });
+            if (!result.ok) {
+              writeJson(res, 400, { ok: false, error: result.error || 'Quarantine failed' });
+              return;
+            }
+            lastEnforcement = enforcement;
+            lastResult = result;
           }
           appendThreatIntelActionAudit({
             action: 'monitor_quarantine',
             id: row.id,
             threatKey,
-            appliedRuleName: enforcement.appliedRuleName,
-            enforcementStatus: enforcement.status,
+            appliedRuleName: lastEnforcement?.appliedRuleName,
+            enforcementStatus: lastEnforcement?.status,
             operator: authResult.identity || null,
             tenantId: requestTenantId,
             timestamp: new Date().toISOString(),
@@ -2634,9 +2665,10 @@ export async function startDashboardServer(
           writeJson(res, 200, {
             ok: true,
             threatKey,
-            record: result.record,
-            appliedRuleName: enforcement.appliedRuleName,
-            enforcementStatus: enforcement.status,
+            record: lastResult?.record,
+            appliedRuleName: lastEnforcement?.appliedRuleName,
+            enforcementStatus: lastEnforcement?.status,
+            quarantined: targets.length,
           });
         } catch (e) {
           writeJson(res, 500, { ok: false, error: e instanceof Error ? e.message : 'Quarantine failed' });

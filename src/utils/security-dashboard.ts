@@ -41,6 +41,7 @@ export type SecurityDashboardPayload = {
   executiveSummary: string[];
   threats: SecurityThreatRow[];
   activeThreatCount: number;
+  quarantinedCount: number;
   semanticEngineActive: boolean;
   autoBlockOn: boolean;
   auditLatencyMs: number | null;
@@ -95,6 +96,13 @@ function blockThreatKey(r: ProxyCallRecord): string {
   return `block:${r.serverName}:${r.toolName}:${r.timestamp || ''}`;
 }
 
+/** Stable UI grouping key — multiple block/semantic rows can share type+source. */
+export function threatDisplayFingerprint(
+  row: Pick<SecurityThreatRow, 'type' | 'source'>,
+): string {
+  return `${row.type}:${row.source}`;
+}
+
 function buildThreatsFromRecords(blocked: ProxyCallRecord[]): SecurityThreatRow[] {
   return blocked.slice(0, 20).map((r, i) => ({
     id: threatIdFromRecord(r, i),
@@ -120,6 +128,59 @@ async function buildThreatsFromSemantic(
       severity: (r.semanticAudit?.confidence ?? 0) >= 0.85 ? 'critical' : 'high',
       status: r.syncDecision?.action === 'block' ? 'blocked' : 'monitored',
     }));
+}
+
+async function gatherThreatCandidates(
+  db: IDatabase,
+  tenantId: string | undefined,
+  windowDays: number,
+): Promise<SecurityThreatRow[]> {
+  const records = await loadAllRecordsInWindow(db, tenantId, windowDays);
+  const blocked = records.filter((r) => r.blocked);
+  const semanticThreats = await buildThreatsFromSemantic(tenantId);
+  const recordThreats = buildThreatsFromRecords(blocked);
+  return [...semanticThreats, ...recordThreats];
+}
+
+/** All monitor threat rows before quarantine / dedupe (for bulk quarantine expansion). */
+export async function listMonitorThreatCandidates(
+  db: IDatabase | null,
+  tenantId: string | undefined,
+  windowDaysInput: number | string,
+): Promise<SecurityThreatRow[]> {
+  if (!db) return [];
+  const windowDays = parseWindowDays(windowDaysInput);
+  return gatherThreatCandidates(db, tenantId, windowDays);
+}
+
+/** @internal Exported for unit tests — dedupe + quarantine suppression. */
+export function filterVisibleMonitorThreats(
+  candidates: SecurityThreatRow[],
+  quarantine: ReturnType<typeof getSecurityThreatQuarantine>,
+): SecurityThreatRow[] {
+  return applyThreatVisibilityFilter(candidates, quarantine);
+}
+
+function applyThreatVisibilityFilter(
+  candidates: SecurityThreatRow[],
+  quarantine: ReturnType<typeof getSecurityThreatQuarantine>,
+): SecurityThreatRow[] {
+  const suppressedKeys = quarantine.quarantinedKeys();
+  const suppressedFingerprints = new Set(
+    quarantine.list(365).map((e) => threatDisplayFingerprint(e)),
+  );
+  const seen = new Set<string>();
+  const threats: SecurityThreatRow[] = [];
+  for (const t of candidates) {
+    if (suppressedKeys.has(t.threatKey)) continue;
+    const fingerprint = threatDisplayFingerprint(t);
+    if (suppressedFingerprints.has(fingerprint)) continue;
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    threats.push(t);
+    if (threats.length >= 12) break;
+  }
+  return threats;
 }
 
 function p50Latency(records: ProxyCallRecord[]): number | null {
@@ -151,6 +212,7 @@ export async function buildSecurityDashboard(
     executiveSummary: ['Start the Mastyf AI proxy and route MCP traffic to populate live threat data.'],
     threats: [],
     activeThreatCount: 0,
+    quarantinedCount: 0,
     semanticEngineActive: semStats.enabled,
     autoBlockOn: opts?.policyMode === 'block',
     auditLatencyMs: null,
@@ -169,21 +231,10 @@ export async function buildSecurityDashboard(
 
   const records = await loadAllRecordsInWindow(db, tenantId, windowDays);
   const sum = summarizeRecords(records);
-  const blocked = records.filter((r) => r.blocked);
   const quarantine = getSecurityThreatQuarantine(tenantId);
-  const suppressed = quarantine.quarantinedKeys();
-  const semanticThreats = await buildThreatsFromSemantic(tenantId);
-  const recordThreats = buildThreatsFromRecords(blocked);
-  const seen = new Set<string>();
-  const threats: SecurityThreatRow[] = [];
-  for (const t of [...semanticThreats, ...recordThreats]) {
-    if (suppressed.has(t.threatKey)) continue;
-    const key = `${t.type}:${t.source}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    threats.push(t);
-    if (threats.length >= 12) break;
-  }
+  const candidates = await gatherThreatCandidates(db, tenantId, windowDays);
+  const threats = applyThreatVisibilityFilter(candidates, quarantine);
+  const semanticThreats = candidates.filter((t) => t.threatKey.startsWith('semantic:'));
 
   let manifestScore: number | null = null;
   let scanned = 0;
@@ -222,6 +273,22 @@ export async function buildSecurityDashboard(
   const authIntegrity =
     sum.total > 0 ? Math.round((sum.passed / sum.total) * 1000) / 10 : 100;
 
+  const quarantinedEntries = quarantine.list(365);
+  const quarantinedCount = quarantinedEntries.length;
+  const quarantinedGroups = new Set(
+    quarantinedEntries.map((e) => threatDisplayFingerprint(e)),
+  ).size;
+
+  const summaryLines = [
+    sum.blocked > 0
+      ? `${sum.blocked} policy blocks in last ${windowDays >= 1 ? Math.round(windowDays * 24) + 'h' : 'window'}`
+      : 'No blocks recorded in the selected window',
+    quarantinedGroups > 0
+      ? `${quarantinedGroups} threat group(s) quarantined (${quarantinedCount} archived) — restore from Quarantine tab to return to Active Threats`
+      : null,
+    `Auth layer integrity: ${authIntegrity}%`,
+  ].filter((line): line is string => !!line);
+
   return {
     available: true,
     windowDays,
@@ -229,14 +296,10 @@ export async function buildSecurityDashboard(
     securityScore,
     scoreLabel: scoreLabel(securityScore),
     layers,
-    executiveSummary: [
-      sum.blocked > 0
-        ? `${sum.blocked} threats blocked in last ${windowDays >= 1 ? Math.round(windowDays * 24) + 'h' : 'window'}`
-        : 'No blocks recorded in the selected window',
-      `Auth layer integrity: ${authIntegrity}%`,
-    ],
+    executiveSummary: summaryLines,
     threats,
     activeThreatCount: threats.filter((t) => t.status !== 'resolved').length,
+    quarantinedCount,
     semanticEngineActive: semStats.enabled,
     autoBlockOn: opts?.policyMode === 'block',
     auditLatencyMs: p50Latency(records),

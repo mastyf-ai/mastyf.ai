@@ -2293,6 +2293,7 @@ export type SecurityDashboardResponse = {
   executiveSummary?: string[];
   threats?: SecurityDashboardThreat[];
   activeThreatCount?: number;
+  quarantinedCount?: number;
   semanticEngineActive?: boolean;
   autoBlockOn?: boolean;
   auditLatencyMs?: number | null;
