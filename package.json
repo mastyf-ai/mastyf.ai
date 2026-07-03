@@ -198,7 +198,7 @@
     "commander": "^12.0.0",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
-    "ioredis": "^5.10.1",
+    "ioredis": "^5.11.1",
     "jose": "^6.2.3",
     "js-yaml": "^4.1.1",
     "lru-cache": "^11.3.6",
