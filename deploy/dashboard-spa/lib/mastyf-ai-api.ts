@@ -1320,7 +1320,9 @@ export async function investigateIncident(triggerId: string): Promise<Investigat
   return { investigation: (await res.json()) as Record<string, unknown> };
 }
 
-export async function acceptSuggestion(suggestion: AiSuggestion): Promise<boolean> {
+export type SuggestionActionResult = { ok: boolean; error?: string };
+
+export async function acceptSuggestion(suggestion: AiSuggestion): Promise<SuggestionActionResult> {
   const headers = await buildMutatingHeaders();
   const res = await mastyfAiFetch('/api/policy/suggestions/accept', {
     method: 'POST',
@@ -1333,10 +1335,25 @@ export async function acceptSuggestion(suggestion: AiSuggestion): Promise<boolea
       rule: suggestion.rule,
     }),
   });
-  return res.ok;
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      reason?: string;
+      blockers?: string[];
+    };
+    if (data.error === 'autopilot_safety_blocked') {
+      const blockers = Array.isArray(data.blockers) ? data.blockers.join('; ') : '';
+      return {
+        ok: false,
+        error: blockers ? `Safety blocked: ${blockers}` : 'Autopilot safety blocked this suggestion',
+      };
+    }
+    return { ok: false, error: data.reason || data.error || `Accept failed (HTTP ${res.status})` };
+  }
+  return { ok: true };
 }
 
-export async function rejectSuggestion(suggestion: AiSuggestion): Promise<boolean> {
+export async function rejectSuggestion(suggestion: AiSuggestion): Promise<SuggestionActionResult> {
   const headers = await buildMutatingHeaders();
   const res = await mastyfAiFetch('/api/policy/suggestions/reject', {
     method: 'POST',
@@ -1348,7 +1365,11 @@ export async function rejectSuggestion(suggestion: AiSuggestion): Promise<boolea
       confidence: suggestion.confidence ?? 0.5,
     }),
   });
-  return res.ok;
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string; reason?: string };
+    return { ok: false, error: data.reason || data.error || `Reject failed (HTTP ${res.status})` };
+  }
+  return { ok: true };
 }
 
 export async function reloadPolicy(): Promise<boolean> {

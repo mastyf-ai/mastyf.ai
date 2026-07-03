@@ -581,6 +581,44 @@ export async function ensureAiEngineInitialized(
   return initializeAiEngine(db, resolved);
 }
 
+/** Remove a suggestion from the pending queue after accept/reject. */
+export function removePendingSuggestion(
+  suggestionId: string,
+  opts?: { ruleName?: string; tenantId?: string },
+): boolean {
+  try {
+    const path = resolveAiPendingSuggestionsPath(opts?.tenantId);
+    if (!existsSync(path)) return false;
+    const body = JSON.parse(readFileSync(path, 'utf-8')) as {
+      updatedAt?: string;
+      suggestions?: Array<{ id: string; ruleName?: string }>;
+    };
+    const before = body.suggestions?.length ?? 0;
+    const id = suggestionId.trim();
+    const ruleName = opts?.ruleName?.trim();
+    body.suggestions = (body.suggestions ?? []).filter(
+      (s) => s.id !== id && (!ruleName || s.ruleName !== ruleName),
+    );
+    if (body.suggestions.length === before) return false;
+    body.updatedAt = new Date().toISOString();
+    writeFileSync(path, JSON.stringify(body, null, 2));
+    void import('../utils/metrics.js').then(({ setSuggestionQueueDepth }) => {
+      setSuggestionQueueDepth(body.suggestions!.length);
+    });
+    broadcastDashboardEvent({
+      type: 'ai:suggestions',
+      payload: { suggestions: body.suggestions, removed: id },
+      timestamp: Date.now(),
+    });
+    return true;
+  } catch (err: unknown) {
+    Logger.debug(
+      `[SuggestionEngine] Failed to remove pending suggestion: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return false;
+  }
+}
+
 /** Read persisted pending suggestions (fast — no learning cycle). */
 export function loadPendingSuggestions(tenantId?: string): Array<{
   id: string;
@@ -751,6 +789,7 @@ export async function recordSuggestionOutcome(
     policyWatcher?: PolicyWatcher | null;
     userId?: string;
     pattern?: string;
+    tenantId?: string;
   },
 ): Promise<void> {
   const patterns = meta.pattern || meta.rule?.argPatterns?.join(' ');
@@ -758,6 +797,8 @@ export async function recordSuggestionOutcome(
     const { applySuggestionToPolicy } = await import('./policy-applier.js');
     await applySuggestionToPolicy(meta.rule, meta.policyPath, meta.policyWatcher ?? null);
   }
+
+  removePendingSuggestion(suggestionId, { ruleName: meta.ruleName, tenantId: meta.tenantId });
 
   if (globalEngine) {
     globalEngine.recordUserOutcome(suggestionId, action, {

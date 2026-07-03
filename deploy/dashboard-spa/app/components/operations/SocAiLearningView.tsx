@@ -119,18 +119,18 @@ export function SocAiLearningView({ roles = [], refreshKey, aiRefreshTick = 0, o
   const onAccept = async (s: AiSuggestion) => {
     if (!canMutate) { onAction?.('Requires operator role'); return; }
     setBusy(`accept:${s.id}`);
-    const ok = await acceptSuggestion(s);
-    onAction?.(ok ? `Accepted ${s.ruleName || s.id}` : 'Accept failed');
-    if (ok) await load();
+    const res = await acceptSuggestion(s);
+    onAction?.(res.ok ? `Accepted ${s.ruleName || s.id}` : res.error || 'Accept failed');
+    if (res.ok) await load();
     setBusy('');
   };
 
   const onReject = async (s: AiSuggestion) => {
     if (!canMutate) { onAction?.('Requires operator role'); return; }
     setBusy(`reject:${s.id}`);
-    const ok = await rejectSuggestion(s);
-    onAction?.(ok ? `Rejected ${s.ruleName || s.id}` : 'Reject failed');
-    if (ok) await load();
+    const res = await rejectSuggestion(s);
+    onAction?.(res.ok ? `Rejected ${s.ruleName || s.id}` : res.error || 'Reject failed');
+    if (res.ok) await load();
     setBusy('');
   };
 

@@ -3173,7 +3173,17 @@ export async function startDashboardServer(
       if (url === '/api/policy/suggestions/accept' && method === 'POST') {
         setCors();
         const b = await readBody(req);
-        const rule = b.rule as import('../policy/policy-types.js').PolicyRule | undefined;
+        let rule = b.rule as import('../policy/policy-types.js').PolicyRule | undefined;
+        if (!rule?.name || !rule?.action) {
+          const { loadPendingSuggestions } = await import('../ai/suggestion-engine.js');
+          const found = loadPendingSuggestions(requestTenantId).find(
+            (s) => s.id === String(b.suggestionId || '')
+              || (!!b.ruleName && s.ruleName === String(b.ruleName)),
+          );
+          if (found?.rule?.name && found.rule.action) {
+            rule = found.rule;
+          }
+        }
         if (!rule?.name || !rule?.action) {
           writeJson(res, 400, { error: 'invalid_rule', reason: 'rule.name and rule.action are required' });
           return;
@@ -3215,6 +3225,7 @@ export async function startDashboardServer(
           policyPath,
           policyWatcher: policyWatcher ?? null,
           userId: authResult.identity || String(b.userId || ''),
+          tenantId: requestTenantId,
         });
         const { appendLearningEvent } = await import('./learning-events.js');
         appendLearningEvent({
@@ -3306,6 +3317,7 @@ export async function startDashboardServer(
           confidence: typeof b2.confidence === 'number' ? b2.confidence : 0.5,
           userId: authResult.identity || String(b2.userId || ''),
           pattern: b2.pattern ? String(b2.pattern) : undefined,
+          tenantId: requestTenantId,
         });
         if (b2.fpReject && b2.rule && b2.pattern) {
           const { recordFpRejection } = await import('../ai/fp-whitelist.js');

@@ -97,9 +97,9 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
       onAction?.('Requires operator role');
       return;
     }
-    const ok = await acceptSuggestion(s);
-    onAction?.(ok ? `Accepted ${s.ruleName || s.id}` : 'Accept failed');
-    if (ok) await refresh();
+    const res = await acceptSuggestion(s);
+    onAction?.(res.ok ? `Accepted ${s.ruleName || s.id}` : res.error || 'Accept failed');
+    if (res.ok) await refresh();
   };
 
   const onReject = async (s: AiSuggestion) => {
@@ -107,9 +107,9 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
       onAction?.('Requires operator role');
       return;
     }
-    const ok = await rejectSuggestion(s);
-    onAction?.(ok ? `Rejected ${s.ruleName || s.id}` : 'Reject failed');
-    if (ok) await refresh();
+    const res = await rejectSuggestion(s);
+    onAction?.(res.ok ? `Rejected ${s.ruleName || s.id}` : res.error || 'Reject failed');
+    if (res.ok) await refresh();
   };
 
   const onLabel = async (id: string, label: 'true_positive' | 'false_positive' | 'ignored') => {
