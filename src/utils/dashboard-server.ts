@@ -2545,7 +2545,10 @@ export async function startDashboardServer(
         try {
           const u = new URL(req.url || url, 'http://localhost');
           const { DEFAULT_SECURITY_MONITOR_WINDOW } = await import('./security-dashboard.js');
-          const monitorWindow = b.window ?? u.searchParams.get('window') ?? DEFAULT_SECURITY_MONITOR_WINDOW;
+          const monitorWindow: string | number =
+            typeof b.window === 'string' || typeof b.window === 'number'
+              ? b.window
+              : (u.searchParams.get('window') ?? DEFAULT_SECURITY_MONITOR_WINDOW);
           const windowDays = parseWindowDays(monitorWindow);
           const { getSecurityThreatQuarantine } = await import('./security-threat-quarantine.js');
           const { applyMonitorQuarantineEnforcement } = await import('./monitor-quarantine-enforcement.js');

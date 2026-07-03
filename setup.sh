@@ -12,8 +12,90 @@ step()    { echo -e "\n${CYAN}${BOLD}── $* ${RESET}"; }
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
+OS="$(uname -s)"
+
+# Never run under sudo — nix must use the installing user's HOME and tokens.
+if [ "$(id -u)" -eq 0 ]; then
+  die "Do not run setup.sh as root. Re-run as your normal user (setup will prompt for sudo only when needed)."
+fi
+
+# Portable in-place sed (GNU vs BSD/macOS).
+sed_inplace() {
+  if sed --version 2>/dev/null | grep -q GNU; then
+    sed -i "$@"
+  else
+    local expr=$1
+    shift
+    sed -i '' "$expr" "$@"
+  fi
+}
+
 # Single canonical nix develop command — no variable expansion, no quoting issues
-NIX_DEVELOP="nix --extra-experimental-features nix-command --extra-experimental-features flakes develop ${ROOT}/config"
+NIX_FLAGS=(--extra-experimental-features nix-command --extra-experimental-features flakes)
+NIX_DEVELOP=(nix "${NIX_FLAGS[@]}" develop "${ROOT}/config")
+
+nix_store_ping() {
+  nix "${NIX_FLAGS[@]}" store ping &>/dev/null
+}
+
+nix_daemon_running() {
+  if [ "$OS" = "Darwin" ]; then
+    if launchctl print system/systems.determinate.nix-daemon &>/dev/null; then
+      launchctl print system/systems.determinate.nix-daemon 2>/dev/null | grep -q 'state = running'
+      return
+    fi
+    if launchctl print system/org.nixos.nix-daemon &>/dev/null; then
+      launchctl print system/org.nixos.nix-daemon 2>/dev/null | grep -q 'state = running'
+      return
+    fi
+    return 1
+  fi
+  systemctl is-active --quiet nix-daemon 2>/dev/null
+}
+
+start_nix_daemon() {
+  if [ "$OS" = "Darwin" ]; then
+    # Determinate Nix manages 3.x (launchd). Never `sudo nix-daemon &` — it breaks HOME and sockets.
+    if launchctl print system/systems.determinate.nix-daemon &>/dev/null; then
+      sudo launchctl kickstart -k system/systems.determinate.nix-daemon
+      return
+    fi
+    if launchctl print system/org.nixos.nix-daemon &>/dev/null; then
+      sudo launchctl kickstart -k system/org.nixos.nix-daemon
+      return
+    fi
+    die "Nix launchd service not found. Reinstall via: curl -sSf -L https://install.determinate.systems/nix | sh -s -- install"
+  fi
+  sudo systemctl start nix-daemon
+}
+
+ensure_nix_daemon() {
+  if nix_store_ping; then
+    success "nix-daemon reachable"
+    return
+  fi
+
+  # Orphan `sudo nix-daemon &` from older setup.sh leaves a dead socket on macOS.
+  if [ "$OS" = "Darwin" ] && pgrep -x nix-daemon >/dev/null 2>&1; then
+    warn "Stopping orphan nix-daemon process(es) (macOS uses Determinate launchd)..."
+    sudo pkill -x nix-daemon 2>/dev/null || true
+    sleep 1
+  fi
+
+  if nix_daemon_running; then
+    warn "Daemon launchd job is running but store ping failed — restarting via launchctl..."
+  else
+    warn "nix-daemon not running. Starting it..."
+  fi
+
+  start_nix_daemon
+  sleep 2
+
+  if ! nix_store_ping; then
+    die "Cannot connect to nix-daemon after restart. Run manually:\n  sudo pkill -x nix-daemon\n  sudo launchctl kickstart -k system/systems.determinate.nix-daemon\n  nix store ping --extra-experimental-features 'nix-command flakes'"
+  fi
+  success "nix-daemon started"
+}
 
 # ── Detect shell rc file ──────────────────────────────────────────────────────
 detect_shell_rc() {
@@ -49,14 +131,7 @@ fi
 # ── 2. Ensure nix daemon is running ──────────────────────────────────────────
 step "Checking Nix daemon"
 
-if ! systemctl is-active --quiet nix-daemon 2>/dev/null; then
-  warn "nix-daemon not running. Starting it..."
-  sudo systemctl start nix-daemon 2>/dev/null || sudo nix-daemon &
-  sleep 2
-  success "nix-daemon started"
-else
-  success "nix-daemon is running"
-fi
+ensure_nix_daemon
 
 # ── 3. Grant daemon socket access ────────────────────────────────────────────
 step "Checking nix daemon socket access"
@@ -86,7 +161,7 @@ step "Checking Nix flakes support"
 
 NIX_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/nix/nix.conf"
 
-if ! nix --extra-experimental-features "nix-command flakes" store ping &>/dev/null; then
+if ! nix_store_ping; then
   warn "Enabling flakes in $NIX_CONF..."
   mkdir -p "$(dirname "$NIX_CONF")"
   if ! grep -q "experimental-features" "$NIX_CONF" 2>/dev/null; then
@@ -94,6 +169,9 @@ if ! nix --extra-experimental-features "nix-command flakes" store ping &>/dev/nu
     success "Flakes enabled"
   else
     warn "experimental-features already present in $NIX_CONF — check for conflicts with /etc/nix/nix.conf"
+  fi
+  if ! nix_store_ping; then
+    ensure_nix_daemon
   fi
 else
   success "Flakes available"
@@ -104,7 +182,7 @@ step "Entering nix dev shell and building"
 
 info "This may take a few minutes on first run (downloading nixpkgs)..."
 
-$NIX_DEVELOP --command bash -euo pipefail << NIXSHELL
+"${NIX_DEVELOP[@]}" --command bash -euo pipefail << NIXSHELL
 BOLD='\033[1m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RESET='\033[0m'
 info()    { echo -e "\${BOLD}[setup]\${RESET} \$*"; }
 success() { echo -e "\${GREEN}[setup] ✓\${RESET} \$*"; }
@@ -153,8 +231,8 @@ ALIAS_MARKER="# mastyf.ai alias"
 
 # Remove any old/broken mastyf alias first
 if grep -q "mastyf" "$SHELL_RC" 2>/dev/null; then
-  sed -i '/# mastyf.ai alias/,+1d' "$SHELL_RC"
-  sed -i '/alias mastyf=/d' "$SHELL_RC"
+  sed_inplace '/# mastyf.ai alias/,+1d' "$SHELL_RC"
+  sed_inplace '/alias mastyf=/d' "$SHELL_RC"
 fi
 
 {

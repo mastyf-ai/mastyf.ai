@@ -20,7 +20,6 @@ import {
   fetchSwarmLatest,
   fetchThreatLabCandidates,
   pollAiThreats,
-  quarantineAllThreats,
   quarantineSecurityThreat,
   quarantineThreatIntel,
   rejectThreatLabCandidate,
@@ -155,22 +154,6 @@ function OverviewView({ roles, refreshKey, onAction }: { roles: string[]; refres
   const activeThreats = dash?.activeThreatCount ?? sec?.activeThreats ?? 0;
   const serverCount = sec?.serverReports?.length ?? health?.serverReports?.length ?? 0;
 
-  const onQuarantineAll = async () => {
-    if (!canMutate) { onAction?.('Requires operator role'); return; }
-    const count = (dash?.threats ?? []).filter(t => t.severity === 'critical' || t.severity === 'high').length;
-    if (!count) { onAction?.('No high-severity threats to quarantine'); return; }
-    if (!window.confirm(`Quarantine ${count} high/critical threat(s)?`)) return;
-    setBusy('quarantine-all');
-    const res = await quarantineAllThreats(windowParam);
-    if (res.ok) {
-      onAction?.(`Quarantined ${res.quarantined ?? 0} threat(s). See Security → Quarantine for enforcement status and applied YAML rules.`);
-      await load();
-    } else {
-      onAction?.(res.error || 'Quarantine failed');
-    }
-    setBusy('');
-  };
-
   const onQuarantineOne = async (row: SecurityDashboardThreat) => {
     if (!canMutate) { onAction?.('Requires operator role'); return; }
     if (!window.confirm(`Quarantine ${row.id}?`)) return;
@@ -255,13 +238,6 @@ function OverviewView({ roles, refreshKey, onAction }: { roles: string[]; refres
           <Card
             title="Active Threats"
             subtitle={dash?.threats ? `${dash.threats.length} detected` : undefined}
-            actions={
-              <div className="flex gap-2">
-                <Button variant="danger" size="sm" onClick={() => void onQuarantineAll()} disabled={!!busy || !canMutate}>
-                  {busy === 'quarantine-all' ? '…' : 'Quarantine All'}
-                </Button>
-              </div>
-            }
           >
             {loading ? (
               <p className="text-sm text-muted">Loading threats…</p>
@@ -270,7 +246,7 @@ function OverviewView({ roles, refreshKey, onAction }: { roles: string[]; refres
                 title="No active threats"
                 message={
                   (dash?.quarantinedCount ?? 0) > 0
-                    ? `${dash.quarantinedCount} threat(s) are quarantined and hidden from this list. Open Security → Quarantine and click Restore to show them here again.`
+                    ? `${dash?.quarantinedCount ?? 0} threat(s) are quarantined and hidden from this list. Open Security → Quarantine and click Restore to show them here again.`
                     : (dash?.executiveSummary?.[0]?.includes('policy blocks')
                       ? 'Blocks are recorded in the window above, but no high-severity threat rows are in the monitor queue.'
                       : 'All clear — no active threats detected in the selected time window.')

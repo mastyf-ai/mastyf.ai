@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   fetchSecurityDashboard,
-  quarantineAllThreats,
   quarantineSecurityThreat,
   type SecurityDashboardResponse,
   type SecurityDashboardThreat,
@@ -51,36 +50,6 @@ export function SecurityDashboardPanel({ refreshKey = 0, roles = [], onNavigate,
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
-
-  const onQuarantineAll = async () => {
-    if (!canMutate) {
-      onAction?.('Requires operator role to quarantine threats');
-      return;
-    }
-    const count = (data?.threats ?? []).filter(
-      (t) => t.severity === 'critical' || t.severity === 'high',
-    ).length;
-    if (!count) {
-      onAction?.('No high-severity threats to quarantine');
-      return;
-    }
-    if (
-      !window.confirm(
-        `Quarantine ${count} high/critical threat(s)? This will hide them from Threat Monitor and apply or confirm hardening policy rules. Quarantined records are listed under Security → Quarantined.`,
-      )
-    ) {
-      return;
-    }
-    setBusy('quarantine-all');
-    const res = await quarantineAllThreats('24h');
-    if (res.ok) {
-      onAction?.(`Quarantined ${res.quarantined ?? 0} threat(s) with enforcement checks — see Security → Quarantined`);
-      await load();
-    } else {
-      onAction?.(res.error || 'Quarantine failed');
-    }
-    setBusy('');
-  };
 
   const onQuarantineOne = async (row: SecurityDashboardThreat) => {
     if (!canMutate) {
@@ -237,14 +206,6 @@ export function SecurityDashboardPanel({ refreshKey = 0, roles = [], onNavigate,
                 <span className="threat-active-badge">{data?.activeThreatCount ?? 0} active</span>
               </h3>
               <div className="btn-row">
-                <Button
-                  variant="primary"
-                  onClick={() => void onQuarantineAll()}
-                  disabled={!!busy || !canMutate}
-                  title={!canMutate ? 'Requires operator role' : undefined}
-                >
-                  {busy === 'quarantine-all' ? 'Quarantining…' : 'Quarantine All'}
-                </Button>
                 <Button variant="secondary" onClick={onExport}>
                   Export
                 </Button>
