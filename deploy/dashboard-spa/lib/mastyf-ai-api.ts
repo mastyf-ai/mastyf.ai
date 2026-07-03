@@ -2311,7 +2311,9 @@ export async function fetchSecurityDashboard(
   return (await res.json()) as SecurityDashboardResponse;
 }
 
-export async function quarantineAllThreats(): Promise<{
+export async function quarantineAllThreats(
+  window: string = '7d',
+): Promise<{
   ok: boolean;
   quarantined?: number;
   error?: string;
@@ -2320,7 +2322,7 @@ export async function quarantineAllThreats(): Promise<{
   const res = await mastyfAiFetch('/api/security/threats/quarantine', {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ all: true }),
+    body: JSON.stringify({ all: true, window }),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -2332,6 +2334,7 @@ export async function quarantineAllThreats(): Promise<{
 export async function quarantineSecurityThreat(
   row: SecurityDashboardThreat,
   note?: string,
+  window: string = '7d',
 ): Promise<{
   ok: boolean;
   error?: string;
@@ -2342,7 +2345,7 @@ export async function quarantineSecurityThreat(
   const res = await mastyfAiFetch('/api/security/threats/quarantine', {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...row, note }),
+    body: JSON.stringify({ ...row, note, window }),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };

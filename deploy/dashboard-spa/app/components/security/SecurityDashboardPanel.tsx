@@ -72,7 +72,7 @@ export function SecurityDashboardPanel({ refreshKey = 0, roles = [], onNavigate,
       return;
     }
     setBusy('quarantine-all');
-    const res = await quarantineAllThreats();
+    const res = await quarantineAllThreats('24h');
     if (res.ok) {
       onAction?.(`Quarantined ${res.quarantined ?? 0} threat(s) with enforcement checks — see Security → Quarantined`);
       await load();
@@ -96,7 +96,7 @@ export function SecurityDashboardPanel({ refreshKey = 0, roles = [], onNavigate,
     }
     const payload = { ...row, threatKey: row.threatKey || row.id };
     setBusy(payload.threatKey);
-    const res = await quarantineSecurityThreat(payload);
+    const res = await quarantineSecurityThreat(payload, undefined, '24h');
     if (res.ok) {
       if (res.enforcementStatus === 'applied') {
         onAction?.(`Quarantined ${row.id}. Applied policy rule ${res.appliedRuleName || 'for threat hardening'}.`);

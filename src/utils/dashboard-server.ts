@@ -2535,6 +2535,10 @@ export async function startDashboardServer(
         setCors();
         const b = await readBody(req);
         try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const { DEFAULT_SECURITY_MONITOR_WINDOW } = await import('./security-dashboard.js');
+          const monitorWindow = b.window ?? u.searchParams.get('window') ?? DEFAULT_SECURITY_MONITOR_WINDOW;
+          const windowDays = parseWindowDays(monitorWindow);
           const { getSecurityThreatQuarantine } = await import('./security-threat-quarantine.js');
           const { applyMonitorQuarantineEnforcement } = await import('./monitor-quarantine-enforcement.js');
           const store = getSecurityThreatQuarantine(requestTenantId);
@@ -2544,7 +2548,7 @@ export async function startDashboardServer(
             || defaultPolicyPath();
 
           if (b.all === true || b.all === 'true') {
-            const fed = await resolveChartContext(requestTenantId, 1);
+            const fed = await resolveChartContext(requestTenantId, windowDays);
             let policyMode: string | undefined;
             try {
               const { readFileSync } = await import('fs');
@@ -2555,24 +2559,15 @@ export async function startDashboardServer(
             } catch {
               policyMode = process.env.MASTYF_AI_POLICY_MODE;
             }
-            const { buildSecurityDashboard, listMonitorThreatCandidates, threatDisplayFingerprint } =
-              await import('./security-dashboard.js');
-            const dash = await buildSecurityDashboard(fed.db, requestTenantId, 1, { policyMode });
-            const visibleHigh = (dash.threats ?? []).filter(
-              (t) => t.severity === 'critical' || t.severity === 'high',
+            const { listBulkQuarantineTargets } = await import('./security-dashboard.js');
+            const targets = await listBulkQuarantineTargets(
+              fed.db,
+              requestTenantId,
+              monitorWindow,
+              policyMode,
             );
-            const targetFingerprints = new Set(
-              visibleHigh.map((t) => threatDisplayFingerprint(t)),
-            );
-            const allCandidates = await listMonitorThreatCandidates(fed.db, requestTenantId, 1);
-            const targetsByKey = new Map<string, (typeof allCandidates)[number]>();
-            for (const row of allCandidates) {
-              if (row.severity !== 'critical' && row.severity !== 'high') continue;
-              if (!targetFingerprints.has(threatDisplayFingerprint(row))) continue;
-              targetsByKey.set(row.threatKey, row);
-            }
             let quarantined = 0;
-            for (const row of targetsByKey.values()) {
+            for (const row of targets) {
               const enforcement = await applyMonitorQuarantineEnforcement({
                 row,
                 tenantId: requestTenantId,
@@ -2618,14 +2613,14 @@ export async function startDashboardServer(
               ? b.status
               : 'blocked') as 'blocked' | 'monitored' | 'resolved',
           };
-          const fed = await resolveChartContext(requestTenantId, 1);
-          const { listMonitorThreatCandidates, threatDisplayFingerprint } =
-            await import('./security-dashboard.js');
-          const fingerprint = threatDisplayFingerprint(row);
-          const related = (await listMonitorThreatCandidates(fed.db, requestTenantId, 1)).filter(
-            (candidate) => threatDisplayFingerprint(candidate) === fingerprint,
+          const fed = await resolveChartContext(requestTenantId, windowDays);
+          const { listRelatedMonitorThreatsForQuarantine } = await import('./security-dashboard.js');
+          const targets = await listRelatedMonitorThreatsForQuarantine(
+            fed.db,
+            requestTenantId,
+            row,
+            monitorWindow,
           );
-          const targets = related.length > 0 ? related : [row];
           let lastEnforcement: Awaited<ReturnType<typeof applyMonitorQuarantineEnforcement>> | null =
             null;
           let lastResult: ReturnType<typeof store.quarantine> | null = null;

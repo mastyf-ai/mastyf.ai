@@ -142,6 +142,9 @@ async function gatherThreatCandidates(
   return [...semanticThreats, ...recordThreats];
 }
 
+/** Matches dashboard time-window selector default (see DashboardWindowContext). */
+export const DEFAULT_SECURITY_MONITOR_WINDOW = '7d';
+
 /** All monitor threat rows before quarantine / dedupe (for bulk quarantine expansion). */
 export async function listMonitorThreatCandidates(
   db: IDatabase | null,
@@ -151,6 +154,56 @@ export async function listMonitorThreatCandidates(
   if (!db) return [];
   const windowDays = parseWindowDays(windowDaysInput);
   return gatherThreatCandidates(db, tenantId, windowDays);
+}
+
+/** Related rows for single quarantine — must use the same window as the active dashboard. */
+export function filterRelatedMonitorThreats(
+  candidates: SecurityThreatRow[],
+  anchor: SecurityThreatRow,
+): SecurityThreatRow[] {
+  const fingerprint = threatDisplayFingerprint(anchor);
+  const related = candidates.filter((candidate) => threatDisplayFingerprint(candidate) === fingerprint);
+  return related.length > 0 ? related : [anchor];
+}
+
+export async function listRelatedMonitorThreatsForQuarantine(
+  db: IDatabase | null,
+  tenantId: string | undefined,
+  anchor: SecurityThreatRow,
+  windowDaysInput: number | string = DEFAULT_SECURITY_MONITOR_WINDOW,
+): Promise<SecurityThreatRow[]> {
+  const candidates = await listMonitorThreatCandidates(db, tenantId, windowDaysInput);
+  return filterRelatedMonitorThreats(candidates, anchor);
+}
+
+/** High/critical rows to archive for quarantine-all — keyed by threatKey within the dashboard window. */
+export function collectBulkQuarantineTargets(
+  candidates: SecurityThreatRow[],
+  visibleThreats: SecurityThreatRow[],
+): SecurityThreatRow[] {
+  const visibleHigh = visibleThreats.filter(
+    (t) => t.severity === 'critical' || t.severity === 'high',
+  );
+  const targetFingerprints = new Set(visibleHigh.map((t) => threatDisplayFingerprint(t)));
+  const targetsByKey = new Map<string, SecurityThreatRow>();
+  for (const row of candidates) {
+    if (row.severity !== 'critical' && row.severity !== 'high') continue;
+    if (!targetFingerprints.has(threatDisplayFingerprint(row))) continue;
+    targetsByKey.set(row.threatKey, row);
+  }
+  return [...targetsByKey.values()];
+}
+
+export async function listBulkQuarantineTargets(
+  db: IDatabase | null,
+  tenantId: string | undefined,
+  windowDaysInput: number | string = DEFAULT_SECURITY_MONITOR_WINDOW,
+  policyMode?: string,
+): Promise<SecurityThreatRow[]> {
+  const windowDays = parseWindowDays(windowDaysInput);
+  const dash = await buildSecurityDashboard(db, tenantId, windowDays, { policyMode });
+  const candidates = await listMonitorThreatCandidates(db, tenantId, windowDaysInput);
+  return collectBulkQuarantineTargets(candidates, dash.threats ?? []);
 }
 
 /** @internal Exported for unit tests — dedupe + quarantine suppression. */

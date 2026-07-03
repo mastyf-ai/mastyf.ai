@@ -161,7 +161,7 @@ function OverviewView({ roles, refreshKey, onAction }: { roles: string[]; refres
     if (!count) { onAction?.('No high-severity threats to quarantine'); return; }
     if (!window.confirm(`Quarantine ${count} high/critical threat(s)?`)) return;
     setBusy('quarantine-all');
-    const res = await quarantineAllThreats();
+    const res = await quarantineAllThreats(windowParam);
     if (res.ok) {
       onAction?.(`Quarantined ${res.quarantined ?? 0} threat(s). See Security → Quarantine for enforcement status and applied YAML rules.`);
       await load();
@@ -175,7 +175,7 @@ function OverviewView({ roles, refreshKey, onAction }: { roles: string[]; refres
     if (!canMutate) { onAction?.('Requires operator role'); return; }
     if (!window.confirm(`Quarantine ${row.id}?`)) return;
     setBusy(row.id);
-    const res = await quarantineSecurityThreat(row);
+    const res = await quarantineSecurityThreat(row, undefined, windowParam);
     if (res.ok) {
       onAction?.(formatQuarantineResultMessage(row.id, {
         enforcementStatus: res.enforcementStatus,
