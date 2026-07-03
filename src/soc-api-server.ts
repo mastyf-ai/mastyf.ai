@@ -27,6 +27,7 @@ import type { IDatabase } from './database/database-interface.js';
 import type { McpServerConfig, SecurityReport, CostReport, HealthReport, ProxyCallRecord } from './types.js';
 import { parseWindowDays } from './utils/time-buckets.js';
 import { buildAuditHeatmapBundle } from './utils/audit-heatmap.js';
+import { DEFAULT_TENANT_ID, validateTenantId } from './tenant/resolve-tenant.js';
 
 // ── Types for API responses (matching mastyf-ai-api.ts in dashboard-spa) ─────
 
@@ -235,6 +236,75 @@ async function getAllCallRecords(
   return filterByWindow(allRecords, windowDays);
 }
 
+function resolveSecuritySwarmUpstream(currentPort: number): string | null {
+  const raw =
+    process.env['SOC_SECURITY_SWARM_UPSTREAM']?.trim()
+    ?? process.env['MASTYF_AI_DASHBOARD_API_ORIGIN']?.trim()
+    ?? process.env['NEXT_PUBLIC_MASTYF_AI_API']?.trim()
+    ?? 'http://127.0.0.1:4000';
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    const port = url.port || (url.protocol === 'https:' ? '443' : '80');
+    if ((url.hostname === 'localhost' || url.hostname === '127.0.0.1') && port === String(currentPort)) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+async function proxySecuritySwarmToDashboard(req: Request, res: Response, currentPort: number): Promise<void> {
+  const upstream = resolveSecuritySwarmUpstream(currentPort);
+  if (!upstream) {
+    res.status(503).json({
+      available: false,
+      reason: 'security_swarm_upstream_unavailable',
+      dataSources: [],
+    });
+    return;
+  }
+
+  const target = new URL(req.originalUrl || req.url, upstream);
+  const headers: Record<string, string> = {
+    accept: String(req.headers['accept'] ?? 'application/json'),
+  };
+  for (const header of ['authorization', 'cookie', 'x-api-key', 'x-csrf-token', 'user-agent']) {
+    const value = req.headers[header];
+    if (value) headers[header] = Array.isArray(value) ? value[0] ?? '' : String(value);
+  }
+  const tenantHeader = req.headers['x-mastyf-ai-tenant'] ?? req.headers['x-tenant-id'];
+  if (tenantHeader) headers['x-mastyf-ai-tenant'] = Array.isArray(tenantHeader) ? tenantHeader[0] ?? '' : String(tenantHeader);
+  let body: string | undefined;
+  if (!['GET', 'HEAD'].includes(req.method.toUpperCase())) {
+    headers['content-type'] = String(req.headers['content-type'] ?? 'application/json');
+    body = req.body === undefined ? undefined : JSON.stringify(req.body);
+  }
+
+  try {
+    const upstreamRes = await fetch(target, {
+      method: req.method,
+      headers,
+      body,
+      signal: AbortSignal.timeout(Number(process.env['SOC_SECURITY_SWARM_UPSTREAM_TIMEOUT_MS'] ?? 10_000)),
+    });
+    for (const header of ['content-type', 'content-disposition', 'cache-control']) {
+      const value = upstreamRes.headers.get(header);
+      if (value) res.setHeader(header, value);
+    }
+    res.status(upstreamRes.status).send(Buffer.from(await upstreamRes.arrayBuffer()));
+  } catch (err) {
+    res.status(502).json({
+      available: false,
+      reason: 'security_swarm_upstream_failed',
+      error: err instanceof Error ? err.message : String(err),
+      upstream,
+      dataSources: [],
+    });
+  }
+}
+
 function parseDailyBudget(): number {
   const env = process.env['MASTYF_AI_DAILY_BUDGET_USD'] ?? process.env['MASTYF_AI_COST_BUDGET'];
   if (!env) return 0;
@@ -244,7 +314,12 @@ function parseDailyBudget(): number {
 
 // ── Main API server factory ──────────────────────────────────────────────────
 
-export async function startSocApiServer(port = 4040): Promise<void> {
+export interface SocApiServerHandle {
+  port: number;
+  close: () => Promise<void>;
+}
+
+export async function startSocApiServer(port = 4040): Promise<SocApiServerHandle> {
   const dbPath = process.env['MASTYF_AI_DB_PATH'] || resolveMcpServerDbPath();
   const container = await createContainer(dbPath);
   const db = container.db;
@@ -284,6 +359,11 @@ export async function startSocApiServer(port = 4040): Promise<void> {
       Logger.warn(`[soc-api] Config parse failed: ${err instanceof Error ? err.message : String(err)}`);
       return [];
     }
+  }
+
+  function getRequestTenantId(req: Request): string {
+    const raw = req.header('x-mastyf-ai-tenant') || req.header('x-tenant-id') || process.env['MASTYF_AI_TENANT_ID'] || DEFAULT_TENANT_ID;
+    return validateTenantId(raw);
   }
 
   // ── GET /api/auth/status ──────────────────────────────────────────────────
@@ -1132,64 +1212,145 @@ export async function startSocApiServer(port = 4040): Promise<void> {
   });
 
   // ── GET /api/security-swarm/tool-integrity ────────────────────────────────
-  app.get('/api/security-swarm/tool-integrity', (_req: Request, res: Response) => {
-    res.json({ available: false, reason: 'Run security-swarm to generate tool integrity report' });
+  app.get('/api/security-swarm/tool-integrity', async (req: Request, res: Response) => {
+    try {
+      const { readSwarmJsonFile } = await import('./utils/swarm-artifacts.js');
+      const report = readSwarmJsonFile<Record<string, unknown>>('tool-watch.json', getRequestTenantId(req));
+      if (!report) {
+        res.json({ hasData: false, hint: 'Run SWARM_TOOL_WATCH=true pnpm security-swarm' });
+        return;
+      }
+      res.json({ hasData: true, ...report });
+    } catch (err) {
+      res.status(500).json({ hasData: false, error: String(err) });
+    }
   });
 
   // ── GET /api/security-swarm/shadow-red-team ───────────────────────────────
-  app.get('/api/security-swarm/shadow-red-team', (_req: Request, res: Response) => {
-    res.json({ available: false, reason: 'Run security-swarm --shadow-red-team to generate report' });
+  app.get('/api/security-swarm/shadow-red-team', async (req: Request, res: Response) => {
+    try {
+      const { readSwarmJsonFile } = await import('./utils/swarm-artifacts.js');
+      const report = readSwarmJsonFile<Record<string, unknown>>('shadow-red-team.json', getRequestTenantId(req));
+      if (!report) {
+        res.json({
+          hasData: false,
+          hint: 'Run pnpm security-swarm:shadow-red-team or SWARM_SHADOW_RED_TEAM=true',
+        });
+        return;
+      }
+      res.json({ hasData: true, ...report });
+    } catch (err) {
+      res.status(500).json({ hasData: false, error: String(err) });
+    }
   });
 
   // ── GET /api/security-swarm/supply-chain ─────────────────────────────────
-  app.get('/api/security-swarm/supply-chain', (_req: Request, res: Response) => {
-    res.json({ available: false, reason: 'Run security-swarm to generate supply chain graph' });
+  app.get('/api/security-swarm/supply-chain', async (req: Request, res: Response) => {
+    try {
+      const { loadToolBaseline } = await import('./ai/shadow-red-team.js');
+      const { buildSupplyChainGraph } = await import('./ai/supply-chain-graph.js');
+      const { loadToolCallCounts } = await import('./ai/supply-chain-loader.js');
+      const windowDays = parseWindowDays(String(req.query['window'] ?? '7'));
+      const tenantId = getRequestTenantId(req);
+      const baselines = loadToolBaseline();
+      const callCounts = await loadToolCallCounts(tenantId, windowDays);
+      const graph = buildSupplyChainGraph(baselines, callCounts);
+      res.json({
+        hasData: baselines.length > 0,
+        graph,
+        callCounts,
+        hint: baselines.length > 0 ? undefined : 'Run SWARM_TOOL_WATCH=true pnpm security-swarm to capture MCP server baselines',
+      });
+    } catch (err) {
+      res.status(500).json({ hasData: false, error: String(err) });
+    }
   });
 
   // ── GET /api/security-swarm/status ────────────────────────────────────────
-  app.get('/api/security-swarm/status', (_req: Request, res: Response) => {
-    res.json({
-      jobId: 'none',
-      state: 'idle',
-      phase: 'idle',
-      phaseLabel: 'No active job',
-      progressPct: 0,
-      startedAt: null,
-      finishedAt: null,
-      exitCode: null,
-      error: null,
-      analysisPath: '',
-      logTail: '',
-      hasRun: false,
-    });
+  app.get('/api/security-swarm/status', async (req: Request, res: Response) => {
+    try {
+      const { getSwarmJobStatus } = await import('./utils/security-swarm-runner.js');
+      res.json(getSwarmJobStatus(getRequestTenantId(req)));
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── GET /api/security-swarm/job-log ───────────────────────────────────────
+  app.get('/api/security-swarm/job-log', async (req: Request, res: Response) => {
+    try {
+      const { readSwarmTextArtifact, readSwarmJsonFile } = await import('./utils/swarm-artifacts.js');
+      const tenantId = getRequestTenantId(req);
+      const log = readSwarmTextArtifact('job.log', tenantId);
+      const steps = readSwarmJsonFile<{ steps?: unknown[] }>('steps.json', tenantId);
+      res.json({
+        available: true,
+        log: log || '',
+        steps: steps?.steps ?? [],
+        hasLog: !!log,
+      });
+    } catch (err) {
+      res.status(500).json({ available: false, error: String(err) });
+    }
   });
 
   // ── GET /api/learning/semantic/active-learning ────────────────────────────
-  app.get('/api/learning/semantic/active-learning', (_req: Request, res: Response) => {
-    res.json({ available: false, queued: 0, processed: 0, flagged: 0, enabled: false });
+  app.get('/api/learning/semantic/active-learning', async (req: Request, res: Response) => {
+    try {
+      const { loadSemanticAuditRecordsAsync } = await import('./ai/semantic-audit-store.js');
+      const { buildActiveLearningReport } = await import('./ai/semantic-active-learning.js');
+      const records = await loadSemanticAuditRecordsAsync({
+        tenantId: getRequestTenantId(req),
+        sinceMs: 30 * 24 * 60 * 60 * 1000,
+        limit: 500,
+      });
+      res.json({ available: true, ...buildActiveLearningReport(records) });
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── GET /api/ai/compliance/report ────────────────────────────────────────
-  app.get('/api/ai/compliance/report', (_req: Request, res: Response) => {
-    res.json({ available: false, reason: 'Compliance report requires ANTHROPIC_API_KEY' });
+  app.get('/api/ai/compliance/report', async (req: Request, res: Response) => {
+    try {
+      const windowDays = parseWindowDays(String(req.query['window'] ?? '7'));
+      const { generateComplianceReport } = await import('./ai/compliance-copilot.js');
+      const report = await generateComplianceReport({
+        tenantId: getRequestTenantId(req),
+        windowDays,
+        useLlm: req.query['useLlm'] !== 'false',
+      });
+      res.json({
+        available: true,
+        report,
+        markdown: report.exportFormats.markdown,
+        json: report.exportFormats.json,
+      });
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── GET /api/ai/tenant-model/readiness ────────────────────────────────────
-  app.get('/api/ai/tenant-model/readiness', (_req: Request, res: Response) => {
-    res.json({
-      tenantId: 'default',
-      ready: false,
-      labeledCount: 0,
-      minRequired: 50,
-      modelName: 'mastyf-ai-tenant-default',
-      exportPath: '',
-      message: 'Not enough labeled data yet',
-    });
+  app.get('/api/ai/tenant-model/readiness', async (req: Request, res: Response) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const { checkTenantModelReadiness, routeSemanticModelForTenant } = await import('./ai/tenant-semantic-model.js');
+      const readiness = await checkTenantModelReadiness(tenantId);
+      res.json({ available: true, ...readiness, routing: routeSemanticModelForTenant(tenantId) });
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── GET /api/fleet/signature-hints ────────────────────────────────────────
-  app.get('/api/fleet/signature-hints', (_req: Request, res: Response) => {
-    res.json({ available: false, hints: [] });
+  app.get('/api/fleet/signature-hints', async (_req: Request, res: Response) => {
+    try {
+      const { buildLocalSignatureExchange } = await import('./utils/federated-signature-exchange.js');
+      res.json(await buildLocalSignatureExchange());
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── GET /api/dashboard/agent-abuse ────────────────────────────────────────
@@ -1216,43 +1377,207 @@ export async function startSocApiServer(port = 4040): Promise<void> {
   });
 
   // ── GET /api/learning/semantic/tribunal ───────────────────────────────────
-  app.get('/api/learning/semantic/tribunal', (_req: Request, res: Response) => {
-    res.json({ available: false, items: [], reason: 'Semantic tribunal requires ANTHROPIC_API_KEY' });
+  app.get('/api/learning/semantic/tribunal', async (req: Request, res: Response) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const limitRaw = parseInt(String(req.query['limit'] ?? '10'), 10);
+      const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 25) : 10;
+      const { peekTribunalQueue } = await import('./ai/swarm-debate-tribunal.js');
+      const { getTribunalJobStatus, loadTribunalReport } = await import('./utils/tribunal-runner.js');
+      const [queue, job, report] = await Promise.all([
+        peekTribunalQueue({ tenantId, limit }),
+        Promise.resolve(getTribunalJobStatus(tenantId)),
+        Promise.resolve(loadTribunalReport(tenantId)),
+      ]);
+      res.json({ available: true, job, report, queue });
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── POST /api/incidents/investigate ──────────────────────────────────────
-  app.post('/api/incidents/investigate', (_req: Request, res: Response) => {
-    res.json({ investigation: null, error: 'LLM investigation requires ANTHROPIC_API_KEY' });
+  app.post('/api/incidents/investigate', async (req: Request, res: Response) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const triggerId = String(body['triggerId'] || body['semanticAuditId'] || '').trim();
+      if (!triggerId) {
+        res.status(400).json({ error: 'triggerId required' });
+        return;
+      }
+      const triggerTypeRaw = body['triggerType'];
+      const triggerType =
+        triggerTypeRaw === 'semantic_flag' || triggerTypeRaw === 'repeat_block' || triggerTypeRaw === 'swarm_bypass'
+          ? triggerTypeRaw
+          : undefined;
+      const { investigateIncident } = await import('./ai/incident-investigator.js');
+      const investigation = await investigateIncident({
+        triggerId,
+        triggerType,
+        tenantId: getRequestTenantId(req),
+        useLlm: body['useLlm'] !== false,
+      });
+      if (!investigation) {
+        res.status(404).json({ found: false, triggerId });
+        return;
+      }
+      res.json(investigation);
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── POST /api/policy/suggestions/accept ──────────────────────────────────
-  app.post('/api/policy/suggestions/accept', (_req: Request, res: Response) => {
-    res.json({ ok: true });
+  app.post('/api/policy/suggestions/accept', async (req: Request, res: Response) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const suggestionId = String(body['suggestionId'] || body['id'] || '').trim();
+      if (!suggestionId) {
+        res.status(400).json({ error: 'suggestionId required' });
+        return;
+      }
+      const { loadPendingSuggestions, recordSuggestionOutcome } = await import('./ai/suggestion-engine.js');
+      const found = loadPendingSuggestions(getRequestTenantId(req)).find((s) => s.id === suggestionId || s.ruleName === suggestionId);
+      if (!found) {
+        res.status(404).json({ found: false, suggestionId });
+        return;
+      }
+      await recordSuggestionOutcome(suggestionId, 'applied', {
+        ruleName: found.ruleName || suggestionId,
+        tenantId: getRequestTenantId(req),
+        source: 'assist',
+        confidence: found.confidence ?? 0,
+      });
+      res.json({ status: 'accepted', id: suggestionId });
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── POST /api/policy/suggestions/reject ──────────────────────────────────
-  app.post('/api/policy/suggestions/reject', (_req: Request, res: Response) => {
-    res.json({ ok: true });
+  app.post('/api/policy/suggestions/reject', async (req: Request, res: Response) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const suggestionId = String(body['suggestionId'] || body['id'] || '').trim();
+      if (!suggestionId) {
+        res.status(400).json({ error: 'suggestionId required' });
+        return;
+      }
+      const { recordSuggestionOutcome } = await import('./ai/suggestion-engine.js');
+      await recordSuggestionOutcome(suggestionId, 'rejected', {
+        ruleName: suggestionId,
+        tenantId: getRequestTenantId(req),
+        source: 'assist',
+        confidence: 0,
+      });
+      res.json({ status: 'rejected', id: suggestionId });
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── POST /api/policy/copilot ──────────────────────────────────────────────
-  app.post('/api/policy/copilot', (_req: Request, res: Response) => {
-    res.json({ available: false, reason: 'Policy copilot requires ANTHROPIC_API_KEY' });
+  app.post('/api/policy/copilot', async (req: Request, res: Response) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const goal = String(body['goal'] || '').trim();
+      if (!goal) {
+        res.status(400).json({ error: 'goal required' });
+        return;
+      }
+      const { generatePolicyCopilotSuggestion } = await import('./ai/policy-copilot.js');
+      const suggestion = await generatePolicyCopilotSuggestion(goal, {
+        availableTools: Array.isArray(body['availableTools']) ? body['availableTools'].map(String) : undefined,
+        tenantId: getRequestTenantId(req),
+      });
+      if (!suggestion) {
+        res.status(503).json({ available: false, reason: 'policy_copilot_unavailable', dataSources: [] });
+        return;
+      }
+      res.json(suggestion);
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── POST /api/security-swarm/run ──────────────────────────────────────────
-  app.post('/api/security-swarm/run', (_req: Request, res: Response) => {
-    res.json({ ok: false, error: 'Use pnpm security-swarm from the CLI' });
+  app.post('/api/security-swarm/run', async (req: Request, res: Response) => {
+    try {
+      const { startSwarmAnalysis } = await import('./utils/security-swarm-runner.js');
+      const result = startSwarmAnalysis({
+        full: !!(req.body as { full?: boolean } | undefined)?.full,
+        tenantId: getRequestTenantId(req),
+      });
+      if (!result.ok) {
+        res.status(result.status ?? 409).json({
+          error: result.error,
+          jobId: result.jobId,
+        });
+        return;
+      }
+      res.status(202).json({ jobId: result.jobId, startedAt: result.startedAt });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── /api/security-swarm/* pass-through ───────────────────────────────────
+  // The dashboard server owns the full security-swarm surface. SOC keeps a
+  // small local subset above and forwards the rest to avoid divergent stubs.
+  app.use('/api/security-swarm', async (req: Request, res: Response) => {
+    await proxySecuritySwarmToDashboard(req, res, port);
   });
 
   // ── POST /api/ai/tenant-model/train ──────────────────────────────────────
-  app.post('/api/ai/tenant-model/train', (_req: Request, res: Response) => {
-    res.json({ available: false, error: 'Tenant model training requires CLI' });
+  app.post('/api/ai/tenant-model/train', async (req: Request, res: Response) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const body = req.body as Record<string, unknown>;
+      const action = body['action'] === 'train' ? 'train' : 'export';
+      const { exportTenantTrainingDataset } = await import('./ai/tenant-model-export.js');
+      const { checkTenantModelReadiness } = await import('./ai/tenant-semantic-model.js');
+      if (action === 'train') {
+        const readiness = await checkTenantModelReadiness(tenantId);
+        if (!readiness.ready) {
+          res.status(400).json({ error: readiness.message, readiness });
+          return;
+        }
+        if (process.env['MASTYF_AI_DASHBOARD_ALLOW_LORA_TRAIN'] !== 'true') {
+          res.status(403).json({ error: 'Dashboard LoRA train disabled', readiness });
+          return;
+        }
+        const { startTenantTrainJob } = await import('./ai/tenant-model-train-runner.js');
+        const started = startTenantTrainJob(tenantId);
+        if (!started.ok) {
+          res.status(started.status ?? 500).json({ error: started.error, jobId: started.jobId });
+          return;
+        }
+        res.status(202).json({ jobId: started.jobId, status: 'queued', readiness });
+        return;
+      }
+      const exported = await exportTenantTrainingDataset(tenantId);
+      res.json({
+        action: 'export',
+        readiness: exported.readiness,
+        manifest: exported.manifest,
+        exportPath: exported.exportPath,
+        modelfilePath: exported.modelfilePath,
+        manifestPath: exported.manifestPath,
+        rowsExported: exported.rowsExported,
+        fewShotExamples: exported.fewShotExamples,
+      });
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── GET /api/ai/tenant-model/train/status ────────────────────────────────
-  app.get('/api/ai/tenant-model/train/status', (_req: Request, res: Response) => {
-    res.json({ jobId: 'none', tenantId: 'default', state: 'idle', startedAt: null, finishedAt: null, exitCode: null, error: null, logTail: '' });
+  app.get('/api/ai/tenant-model/train/status', async (req: Request, res: Response) => {
+    try {
+      const { getTenantTrainJobStatus } = await import('./ai/tenant-model-train-runner.js');
+      res.json({ available: true, ...getTenantTrainJobStatus(getRequestTenantId(req)) });
+    } catch (err) {
+      res.status(500).json({ available: false, reason: String(err), dataSources: [] });
+    }
   });
 
   // ── GET /api/dashboard/insights/export ────────────────────────────────────
@@ -1297,14 +1622,22 @@ export async function startSocApiServer(port = 4040): Promise<void> {
 
   // ── Start HTTP server ─────────────────────────────────────────────────────
   const httpServer = createServer(app);
-  httpServer.listen(port, () => {
-    Logger.info(`[soc-api] MCP Mastyf AI SOC API server listening on http://localhost:${port}`);
-    Logger.info(`[soc-api] DB path: ${dbPath}`);
+  await new Promise<void>((resolve) => {
+    httpServer.listen(port, () => {
+      resolve();
+    });
   });
+  const address = httpServer.address();
+  const actualPort = typeof address === 'object' && address ? address.port : port;
+  Logger.info(`[soc-api] MCP Mastyf AI SOC API server listening on http://localhost:${actualPort}`);
+  Logger.info(`[soc-api] DB path: ${dbPath}`);
+  if (actualPort !== port) {
+    Logger.info(`[soc-api] Requested port ${port}; assigned ephemeral port ${actualPort}`);
+  }
 
   // ── Background auto-refresh (push SSE updates every 30s) ─────────────────
   const AUTO_REFRESH_INTERVAL = parseInt(process.env['SOC_API_REFRESH_INTERVAL_MS'] ?? '30000', 10);
-  setInterval(async () => {
+  const autoRefreshTimer = setInterval(async () => {
     if (sseClients.size === 0) return;
     try {
       const serverNames = await db.getDistinctActiveServers();
@@ -1332,16 +1665,31 @@ export async function startSocApiServer(port = 4040): Promise<void> {
   }, AUTO_REFRESH_INTERVAL);
 
   // ── Graceful shutdown ─────────────────────────────────────────────────────
-  const shutdown = async () => {
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
     Logger.info('[soc-api] Shutting down...');
+    clearInterval(autoRefreshTimer);
     for (const c of sseClients) { try { c.end(); } catch { /* noop */ } }
     sseClients.clear();
-    httpServer.close();
+    await new Promise<void>((resolve) => {
+      httpServer.close(() => resolve());
+    });
     await db.close();
+    process.removeListener('SIGINT', handleSigint);
+    process.removeListener('SIGTERM', handleSigterm);
+  };
+  const shutdown = async () => {
+    await close();
     process.exit(0);
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  const handleSigint = () => { void shutdown(); };
+  const handleSigterm = () => { void shutdown(); };
+  process.on('SIGINT', handleSigint);
+  process.on('SIGTERM', handleSigterm);
+
+  return { port: actualPort, close };
 }
 
 // Auto-start if run directly

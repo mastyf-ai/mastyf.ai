@@ -1,22 +1,22 @@
 [
   {
     "name": "filesystem.json",
-    "description": "Filesystem MCP server — real dogfood stub config (STUB_ROLE=filesystem)",
-    "content": "{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"scenarios/dogfood/enterprise-mcp-stub.cjs\"\n      ],\n      \"env\": {\n        \"STUB_ROLE\": \"filesystem\"\n      },\n      \"transport\": \"stdio\"\n    }\n  }\n}\n"
+    "description": "Filesystem MCP server — real dogfood local-service config (SERVICE_ROLE=filesystem)",
+    "content": "{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"scenarios/dogfood/enterprise-mcp-local-service.cjs\"\n      ],\n      \"env\": {\n        \"SERVICE_ROLE\": \"filesystem\"\n      },\n      \"transport\": \"stdio\"\n    }\n  }\n}\n"
   },
   {
     "name": "github.json",
-    "description": "GitHub MCP integration — real dogfood stub config (STUB_ROLE=github)",
-    "content": "{\n  \"mcpServers\": {\n    \"github\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"scenarios/dogfood/enterprise-mcp-stub.cjs\"\n      ],\n      \"env\": {\n        \"STUB_ROLE\": \"github\"\n      },\n      \"transport\": \"stdio\"\n    }\n  }\n}\n"
+    "description": "GitHub MCP integration — real dogfood local-service config (SERVICE_ROLE=github)",
+    "content": "{\n  \"mcpServers\": {\n    \"github\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"scenarios/dogfood/enterprise-mcp-local-service.cjs\"\n      ],\n      \"env\": {\n        \"SERVICE_ROLE\": \"github\"\n      },\n      \"transport\": \"stdio\"\n    }\n  }\n}\n"
   },
   {
     "name": "puppeteer.json",
-    "description": "Puppeteer browser automation — real dogfood stub config (STUB_ROLE=puppeteer)",
-    "content": "{\n  \"mcpServers\": {\n    \"puppeteer\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"scenarios/dogfood/enterprise-mcp-stub.cjs\"\n      ],\n      \"env\": {\n        \"STUB_ROLE\": \"puppeteer\"\n      },\n      \"transport\": \"stdio\"\n    }\n  }\n}\n"
+    "description": "Puppeteer browser automation — real dogfood local-service config (SERVICE_ROLE=puppeteer)",
+    "content": "{\n  \"mcpServers\": {\n    \"puppeteer\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"scenarios/dogfood/enterprise-mcp-local-service.cjs\"\n      ],\n      \"env\": {\n        \"SERVICE_ROLE\": \"puppeteer\"\n      },\n      \"transport\": \"stdio\"\n    }\n  }\n}\n"
   },
   {
     "name": "postgres.json",
-    "description": "PostgreSQL MCP server — dogfood stub config",
-    "content": "{\n  \"mcpServers\": {\n    \"postgres\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"scenarios/dogfood/enterprise-mcp-stub.cjs\"\n      ],\n      \"env\": {\n        \"STUB_ROLE\": \"postgres\"\n      },\n      \"transport\": \"stdio\"\n    }\n  }\n}\n"
+    "description": "PostgreSQL MCP server — dogfood local-service config",
+    "content": "{\n  \"mcpServers\": {\n    \"postgres\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"scenarios/dogfood/enterprise-mcp-local-service.cjs\"\n      ],\n      \"env\": {\n        \"SERVICE_ROLE\": \"postgres\"\n      },\n      \"transport\": \"stdio\"\n    }\n  }\n}\n"
   }
 ]

@@ -5,7 +5,8 @@ import { CLOUD_NAME } from '@/lib/product-links';
 
 export const dynamic = 'force-dynamic';
 
-function pct(n: number): string {
+function pct(n: number | null): string {
+  if (n === null) return 'Unavailable';
   return `${(n * 100).toFixed(1)}%`;
 }
 
@@ -43,7 +44,9 @@ export default async function BenchmarksPage() {
           </div>
           <div>
             <p style={{ margin: 0, color: '#666', fontSize: '0.85rem' }}>Server count</p>
-            <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>{observatory.serverCount}</p>
+            <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>
+              {observatory.serverCount ?? 'Unavailable'}
+            </p>
           </div>
           <div>
             <p style={{ margin: 0, color: '#666', fontSize: '0.85rem' }}>Top threat class</p>

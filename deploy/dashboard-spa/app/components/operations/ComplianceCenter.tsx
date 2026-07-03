@@ -6,6 +6,11 @@ import {
   fetchPlanComplianceAudit,
   fetchContinuousAssuranceReport,
   fetchCertificationRegistry,
+  fetchComplianceFrameworkPosture,
+  fetchComplianceEvidence,
+  generateComplianceEvidence,
+  type ComplianceEvidenceArtifact,
+  type ComplianceFrameworkPosture,
   type PlanComplianceReport,
   type ContinuousAssuranceReport,
 } from '@/lib/mastyf-ai-api';
@@ -79,6 +84,8 @@ function OverviewView({ refreshKey }: { refreshKey: number }) {
           <Card title="Plan Compliance Audit" subtitle="Modular compliance assessment">
             {loading ? (
               <p className="text-sm text-muted">Loading compliance data…</p>
+            ) : plan?.error && (!plan.modules || plan.modules.length === 0) ? (
+              <EmptyState title="Compliance audit failed" message={plan.error} />
             ) : plan ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div className="flex items-center gap-3">
@@ -177,13 +184,22 @@ function OverviewView({ refreshKey }: { refreshKey: number }) {
 /* ── Frameworks ──────────────────────────────── */
 
 function FrameworksView({ refreshKey }: { refreshKey: number }) {
-  const [assurance, setAssurance] = useState<ContinuousAssuranceReport | null>(null);
+  const [frameworks, setFrameworks] = useState<ComplianceFrameworkPosture[]>([]);
+  const [overall, setOverall] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const a = await fetchContinuousAssuranceReport().catch(() => null);
-    if (a) setAssurance(a);
+    const result = await fetchComplianceFrameworkPosture().catch((err: unknown) => ({
+      frameworks: [],
+      overall: null,
+      available: false,
+      error: err instanceof Error ? err.message : 'Compliance framework posture unavailable',
+    }));
+    setFrameworks(result.frameworks);
+    setOverall(result.overall);
+    setError(result.error ?? null);
     setLoading(false);
   }, []);
 
@@ -191,35 +207,59 @@ function FrameworksView({ refreshKey }: { refreshKey: number }) {
 
   if (loading) return <p className="text-sm text-muted">Loading frameworks…</p>;
 
-  if (!assurance?.controls || Object.keys(assurance.controls).length === 0) {
-    return <EmptyState title="No frameworks" message="No compliance frameworks are configured" />;
+  if (error && frameworks.length === 0) {
+    return <EmptyState title="Framework posture unavailable" message={error} />;
+  }
+
+  if (frameworks.length === 0) {
+    return <EmptyState title="No frameworks" message="No compliance framework posture data is available" />;
   }
 
   return (
-    <Card title="Compliance Frameworks" subtitle="Active control frameworks and their status">
+    <Card
+      title="Compliance Frameworks"
+      subtitle="Framework posture from live policy, proxy audit, and security scan evidence"
+      actions={overall != null ? <Badge variant={overall >= 80 ? 'success' : overall >= 50 ? 'warning' : 'danger'}>Overall {overall}%</Badge> : undefined}
+    >
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
-              <th>Control</th>
-              <th>Status</th>
-              <th>Category</th>
-              <th>Evidence</th>
+              <th>Framework</th>
+              <th>Score</th>
+              <th>Controls</th>
+              <th>Audit Evidence</th>
+              <th>Open Gaps</th>
             </tr>
           </thead>
           <tbody>
-            {Object.entries(assurance.controls).map(([key, control]: [string, any]) => (
-              <tr key={key}>
-                <td className="font-medium">{control.name || key}</td>
+            {frameworks.map((framework) => {
+              const openGaps = framework.controls.filter((control) => !control.satisfied);
+              return (
+              <tr key={framework.framework}>
+                <td className="font-medium">
+                  {framework.frameworkName}
+                  <div className="text-xs text-muted">{framework.framework}</div>
+                </td>
                 <td>
-                  <Badge variant={control.status === 'pass' ? 'success' : control.status === 'fail' ? 'danger' : 'warning'}>
-                    {control.status || 'unknown'}
+                  <Badge variant={framework.postureScore >= 80 ? 'success' : framework.postureScore >= 50 ? 'warning' : 'danger'}>
+                    {framework.postureScore}%
                   </Badge>
                 </td>
-                <td className="text-sm">{control.category || '—'}</td>
-                <td className="text-sm">{control.evidenceCount ?? 0} items</td>
+                <td className="text-sm">
+                  {framework.satisfiedControls}/{framework.totalControls} satisfied
+                </td>
+                <td className="text-sm">
+                  {(framework.auditCounts?.totalCalls ?? 0).toLocaleString()} calls, {(framework.auditCounts?.blockedCalls ?? 0).toLocaleString()} blocked
+                </td>
+                <td className="text-sm">
+                  {openGaps.length === 0
+                    ? 'No open gaps'
+                    : openGaps.slice(0, 2).map((control) => `${control.controlId}: ${control.gap ?? 'unsatisfied'}`).join('; ')}
+                </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -229,13 +269,157 @@ function FrameworksView({ refreshKey }: { refreshKey: number }) {
 
 /* ── Evidence ────────────────────────────────── */
 
-function EvidenceView() {
+const EVIDENCE_FRAMEWORKS = [
+  { id: 'soc2', label: 'SOC 2' },
+  { id: 'iso27001', label: 'ISO 27001' },
+  { id: 'hipaa', label: 'HIPAA' },
+  { id: 'pci-dss', label: 'PCI DSS' },
+  { id: 'fedramp', label: 'FedRAMP' },
+];
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function EvidenceView({ refreshKey }: { refreshKey: number }) {
+  const [artifacts, setArtifacts] = useState<ComplianceEvidenceArtifact[]>([]);
+  const [evidenceDir, setEvidenceDir] = useState<string | undefined>();
+  const [hiddenLegacyCount, setHiddenLegacyCount] = useState(0);
+  const [framework, setFramework] = useState('soc2');
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await fetchComplianceEvidence().catch((err: unknown) => ({
+      artifacts: [],
+      count: 0,
+      evidenceDir: undefined,
+      hiddenLegacyCount: 0,
+      available: false,
+      error: err instanceof Error ? err.message : 'Evidence library unavailable',
+    }));
+    setArtifacts(result.artifacts);
+    setEvidenceDir(result.evidenceDir);
+    setHiddenLegacyCount(result.hiddenLegacyCount ?? 0);
+    setError(result.error ?? null);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { void load(); }, [load, refreshKey]);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setMessage(null);
+    setError(null);
+    const result = await generateComplianceEvidence(framework);
+    setGenerating(false);
+    if (!result.ok) {
+      setError(result.error ?? 'Evidence generation failed');
+      return;
+    }
+    setMessage(`Generated ${result.artifact?.filename ?? 'compliance evidence'}.`);
+    await load();
+  };
+
   return (
-    <Card title="Evidence Library">
-      <EmptyState
-        title="Evidence management"
-        message="Upload and manage compliance evidence artifacts. Automated evidence collection will be available in a future release."
-      />
+    <Card
+      title="Evidence Library"
+      subtitle="Generated compliance evidence from live policy and proxy audit data"
+      actions={(
+        <div className="flex items-center gap-2">
+          <select
+            className="input"
+            value={framework}
+            onChange={(event) => setFramework(event.target.value)}
+            disabled={generating}
+          >
+            {EVIDENCE_FRAMEWORKS.map((item) => (
+              <option key={item.id} value={item.id}>{item.label}</option>
+            ))}
+          </select>
+          <Button variant="primary" size="sm" loading={generating} onClick={() => void handleGenerate()}>
+            Generate Evidence
+          </Button>
+        </div>
+      )}
+    >
+      {message && <p className="text-sm text-muted">{message}</p>}
+      {error && <p className="text-sm" style={{ color: 'var(--danger)' }}>{error}</p>}
+      {evidenceDir && (
+        <p className="text-xs text-muted">
+          Evidence directory: <code>{evidenceDir}</code>
+        </p>
+      )}
+      {hiddenLegacyCount > 0 && (
+        <p className="text-xs text-muted">
+          Hidden legacy summary artifacts: {hiddenLegacyCount}. Generate new evidence to create full reports.
+        </p>
+      )}
+      {loading ? (
+        <p className="text-sm text-muted">Loading evidence artifacts…</p>
+      ) : artifacts.length === 0 ? (
+        <EmptyState
+          title="No evidence artifacts"
+          message="Generate evidence to create a compliance PDF from the current policy and audit trail."
+        />
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Artifact</th>
+                <th>Type</th>
+                <th>Detail</th>
+                <th>Framework</th>
+                <th>Generated</th>
+                <th>Size</th>
+                <th>Download</th>
+                <th>Path</th>
+              </tr>
+            </thead>
+            <tbody>
+              {artifacts.map((artifact) => (
+                <tr key={artifact.id}>
+                  <td className="font-medium">{artifact.filename}</td>
+                  <td><Badge variant="info">{artifact.kind}</Badge></td>
+                  <td>
+                    {artifact.detailLevel === 'detailed' ? (
+                      <Badge variant="success">Full evidence</Badge>
+                    ) : artifact.detailLevel === 'legacy-summary' ? (
+                      <Badge variant="warning">Legacy summary</Badge>
+                    ) : artifact.detailLevel === 'digest' ? (
+                      <Badge variant="neutral">Digest</Badge>
+                    ) : (
+                      <span className="text-xs text-muted">Unknown</span>
+                    )}
+                  </td>
+                  <td>{artifact.framework ?? '—'}</td>
+                  <td className="text-xs text-muted">
+                    {artifact.generatedAt ? new Date(artifact.generatedAt).toLocaleString() : '—'}
+                  </td>
+                  <td className="mono">{formatBytes(artifact.sizeBytes)}</td>
+                  <td>
+                    {artifact.downloadUrl ? (
+                      <a className="btn btn-sm" href={artifact.downloadUrl} download>
+                        Download
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted">Unavailable</span>
+                    )}
+                  </td>
+                  <td className="text-xs text-muted"><code>{artifact.path}</code></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Card>
   );
 }
@@ -256,7 +440,7 @@ export function ComplianceCenter({ view, onViewChange, refreshKey }: Props) {
 
       {view === 'overview' && <OverviewView refreshKey={refreshKey} />}
       {view === 'frameworks' && <FrameworksView refreshKey={refreshKey} />}
-      {view === 'evidence' && <EvidenceView />}
+      {view === 'evidence' && <EvidenceView refreshKey={refreshKey} />}
     </section>
   );
 }

@@ -90,10 +90,15 @@ export class ControlMapper {
     const missing: string[] = [];
 
     for (const req of control.requirements) {
-      const matched = activePolicies.some(p =>
+      const matchedPolicy = activePolicies.some(p =>
         p.toLowerCase().includes(req.toLowerCase()) ||
         req.toLowerCase().includes(p.toLowerCase()),
       );
+      const matchedIncident = blockedIncidents.some(inc =>
+        inc.toLowerCase().includes(req.toLowerCase()) ||
+        req.toLowerCase().includes(inc.toLowerCase()),
+      );
+      const matched = matchedPolicy || matchedIncident;
       if (matched) {
         satisfiedBy.push(req);
       } else {
@@ -116,7 +121,7 @@ export class ControlMapper {
       framework: 'soc2', // Will be overridden
       controlName: control.controlName,
       description: control.description,
-      satisfiedBy: [...satisfiedBy, ...incidentEvidence],
+      satisfiedBy: Array.from(new Set([...satisfiedBy, ...incidentEvidence])),
       satisfied,
       gap: !satisfied ? `Missing: ${missing.join(', ')}` : undefined,
       recommendedPolicy: !satisfied ? this.generateRecommendedPolicy(control, missing) : undefined,

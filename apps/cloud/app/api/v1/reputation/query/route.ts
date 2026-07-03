@@ -13,22 +13,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...stored, source: 'cloud-reputation-network' });
   }
   return NextResponse.json({
+    found: false,
+    available: false,
     serverName,
-    level: 'silver',
-    consensusScore: 62,
-    raterCount: 0,
-    dimensions: {
-      security_posture: 60,
-      auth_strength: 55,
-      cve_hygiene: 65,
-      publisher_trust: 50,
-      policy_compliance: 70,
-      uptime: 60,
-      community_rating: 55,
-      mastyf_ai_protected: 80,
-    },
+    reason: 'reputation_not_found',
+    dataSources: [],
     source: 'cloud-reputation-network',
-  });
+  }, { status: 404 });
 }
 
 export async function POST(request: Request) {
@@ -40,6 +31,12 @@ export async function POST(request: Request) {
   }
   const serverName = String(body.serverName ?? '');
   const dimensions = (body.dimensions ?? {}) as Record<string, number>;
+  if (!serverName) {
+    return NextResponse.json({ error: 'serverName required' }, { status: 400 });
+  }
+  if (!Object.values(dimensions).some((value) => Number.isFinite(value))) {
+    return NextResponse.json({ error: 'dimensions with finite values required' }, { status: 400 });
+  }
   const entry = upsertReputation(serverName, dimensions);
   return NextResponse.json({ ...entry, accepted: true });
 }

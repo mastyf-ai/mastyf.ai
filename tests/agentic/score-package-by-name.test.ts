@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
-  buildSyntheticMcpConfig,
+  buildPackageMcpConfig,
   isValidNpmPackageName,
 } from '../../src/agentic/trust-score/score-package-by-name.js';
 import { isValidNpmPackageName as isValidFromClient } from '../../src/clients/npm-registry-client.js';
@@ -22,9 +22,9 @@ describe('isValidNpmPackageName', () => {
   });
 });
 
-describe('buildSyntheticMcpConfig', () => {
+describe('buildPackageMcpConfig', () => {
   it('builds npx stdio config for scoped package', () => {
-    const cfg = buildSyntheticMcpConfig('@playwright/mcp', '0.0.76');
+    const cfg = buildPackageMcpConfig('@playwright/mcp', '0.0.76');
     expect(cfg.command).toBe('npx');
     expect(cfg.args).toEqual(['-y', '@playwright/mcp@0.0.76']);
     expect(cfg.name).toBe('mcp');

@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Export labeled training dataset for future local model fine-tuning (Phase 3 stub).
+ * Export labeled training dataset for future local model fine-tuning.
  *
  * Usage: pnpm ai:export-training-data [--out exports/training-dataset.jsonl]
  */

@@ -2,12 +2,10 @@
  * B3 — Pairwise-masked gradient aggregation (MPC-lite secure FedAvg analog).
  * Masks cancel when all participant gradients are summed; server never sees raw local gradients.
  */
-import { createHmac, randomBytes } from 'crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHmac } from 'crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
-
-const LOCAL_DEV_MPC_SECRET = 'mastyf-ai-local-dev-mpc-secret-do-not-use-in-prod';
+import { join } from 'node:path';
 
 function mpcSecretPath(): string {
   const home = process.env['MASTYF_AI_HOME'] || join(homedir(), '.mastyf-ai');
@@ -27,25 +25,14 @@ function getMpcSecret(): string {
         return secret;
       }
     }
-    if (process.env['MASTYF_AI_STRICT_MODE'] !== 'true' && process.env['MASTYF_AI_ENTERPRISE_MODE'] !== 'true') {
-      const secret = randomBytes(32).toString('hex');
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, `${secret}\n`, { mode: 0o600 });
-      process.env['MASTYF_AI_FEDERATED_MPC_SECRET'] = secret;
-      return secret;
-    }
   } catch {
     /* fall through */
   }
 
-  if (process.env['MASTYF_AI_STRICT_MODE'] === 'true' || process.env['MASTYF_AI_ENTERPRISE_MODE'] === 'true') {
-    throw new Error(
-      'MASTYF_AI_FEDERATED_MPC_SECRET environment variable is required for federated MPC masking. ' +
-      'Set a cryptographically random secret (e.g., openssl rand -hex 32).',
-    );
-  }
-
-  return LOCAL_DEV_MPC_SECRET;
+  throw new Error(
+    'MASTYF_AI_FEDERATED_MPC_SECRET or persisted federated MPC secret is required for federated MPC masking. ' +
+    'Set a cryptographically random secret (e.g., openssl rand -hex 32).',
+  );
 }
 
 function maskVector(participantId: string, peerId: string, roundId: string, dim: number, sign: 1 | -1): number[] {

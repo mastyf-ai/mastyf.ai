@@ -1,5 +1,5 @@
 /**
- * Policy simulator — combines counterfactual replay, policy diff, and harness sample.
+ * Policy simulator — combines counterfactual replay, policy diff, and harness replay.
  */
 import { readFileSync, existsSync } from 'fs';
 import { PolicyDiff } from '../agentic/policy-gen/policy-diff.js';
@@ -8,17 +8,17 @@ import { simulatePolicyCounterfactual, type CounterfactualReport } from '../ai/p
 import { runMastyfAiBenchScorecard, type BenchmarkScorecard } from './mastyf-ai-bench.js';
 import type { PolicyRule } from '../policy/policy-types.js';
 
-function stubPolicy(yaml: string): SynthesizedPolicy {
+function draftPolicyForDiff(yaml: string): SynthesizedPolicy {
   return {
     yaml,
-    confidence: 0.7,
-    summary: 'Simulated policy',
+    confidence: 0,
+    summary: 'Draft policy for diff only',
     suggestions: [],
     rationale: {},
     metadata: {
       generatedAt: new Date().toISOString(),
       generatorVersion: 'policy-simulator',
-      observationWindowId: 'sim',
+      observationWindowId: 'unavailable',
       totalToolsObserved: 0,
       toolsInPolicy: 0,
       toolsWithRateLimits: 0,
@@ -31,7 +31,7 @@ function stubPolicy(yaml: string): SynthesizedPolicy {
 export interface PolicySimulationReport {
   generatedAt: string;
   counterfactual: CounterfactualReport;
-  harnessSample: BenchmarkScorecard;
+  harnessReplay: BenchmarkScorecard;
   policyDiffSummary?: string;
   combinedSummary: string;
 }
@@ -52,29 +52,29 @@ export async function simulatePolicyChange(opts: {
     windowDays: opts.windowDays,
   });
 
-  const harnessSample = runMastyfAiBenchScorecard(undefined, opts.benchProfile ?? 'policy-sim');
+  const harnessReplay = runMastyfAiBenchScorecard(undefined, opts.benchProfile ?? 'policy-sim');
 
   let policyDiffSummary: string | undefined;
   if (opts.generatedPolicyYaml && opts.existingPolicyYaml) {
     const differ = new PolicyDiff();
-    const diff = differ.diff(stubPolicy(opts.generatedPolicyYaml), opts.existingPolicyYaml);
+    const diff = differ.diff(draftPolicyForDiff(opts.generatedPolicyYaml), opts.existingPolicyYaml);
     policyDiffSummary = diff.summary;
   } else if (opts.policyPath && existsSync(opts.policyPath) && opts.generatedPolicyYaml) {
     const existing = readFileSync(opts.policyPath, 'utf-8');
     const differ = new PolicyDiff();
-    policyDiffSummary = differ.diff(stubPolicy(opts.generatedPolicyYaml), existing).summary;
+    policyDiffSummary = differ.diff(draftPolicyForDiff(opts.generatedPolicyYaml), existing).summary;
   }
 
   const combinedSummary = [
     counterfactual.summary,
-    harnessSample.summary,
+    harnessReplay.summary,
     policyDiffSummary ? `Policy diff: ${policyDiffSummary}` : undefined,
   ].filter(Boolean).join(' | ');
 
   return {
     generatedAt: new Date().toISOString(),
     counterfactual,
-    harnessSample,
+    harnessReplay,
     policyDiffSummary,
     combinedSummary,
   };

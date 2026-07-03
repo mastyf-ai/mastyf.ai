@@ -1,10 +1,10 @@
 {
   "mcpServers": {
     "official-filesystem": {
-      "command": "/nix/store/9vrhqlr0hmzsksxmm3534dwg5ma9w552-nodejs-slim-22.23.1/bin/node",
+      "command": "/nix/store/nlqqkmmqgv83vgzlahi2sbxk89s7lrmr-nodejs-slim-22.23.1/bin/node",
       "args": [
-        "/home/pwn/Downloads/mastyf.ai/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
-        "/tmp/nix-shell.1tnpBc/nix-shell.yEHrvE/nix-shell.3SXm22/mastyf-ai-real-life-8qmf6R"
+        "/Users/rudraneeldas/mastyf.ai/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+        "/tmp/nix-shell.o6szx0/mastyf-ai-real-life-GHWrVz"
       ],
       "env": {},
       "transport": "stdio"

@@ -31,7 +31,7 @@ const SCENARIO = join(ROOT, 'scenarios', 'dogfood');
 const CLI = join(ROOT, 'dist', 'cli.js');
 const CORPUS = JSON.parse(readFileSync(join(SCENARIO, 'agent-corpus.json'), 'utf8'));
 const POLICY = join(ROOT, 'default-policy.yaml');
-const STUB = join(SCENARIO, 'enterprise-mcp-stub.cjs');
+const LOCAL_SERVICE = join(SCENARIO, 'enterprise-mcp-local-service.cjs');
 const SERVER_NAMES = ['github', 'filesystem', 'puppeteer', 'postgres'];
 const MASTYF_AI_DIR = join(homedir(), '.mastyf-ai');
 const DB_PATH = join(MASTYF_AI_DIR, 'history.db');
@@ -123,8 +123,8 @@ function runCli(args, extraEnv = {}, timeoutMs = 120000) {
     name,
     proxy: new McpProxyServer(
       'node',
-      [STUB],
-      { PATH: process.env.PATH, HOME: process.env.HOME, STUB_ROLE: name },
+      [LOCAL_SERVICE],
+      { PATH: process.env.PATH, HOME: process.env.HOME, SERVICE_ROLE: name },
       db,
       name,
       engine,

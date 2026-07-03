@@ -11,14 +11,14 @@ const TOOL_GROUPS = [
       { id: 'policy-gen', label: 'Generate policy', path: '/api/agentic/policy-gen/generate' },
       { id: 'policy-start', label: 'Start observation', path: '/api/agentic/policy-gen/start-observation' },
       { id: 'policy-stop', label: 'Stop observation', path: '/api/agentic/policy-gen/stop-observation' },
-      { id: 'injection-scan', label: 'Test injection scan', path: '/api/agentic/prompt-injection/scan', body: { toolName: 'read_file', arguments: { content: 'test input' } } },
-      { id: 'dlp-scan', label: 'Test response DLP', path: '/api/agentic/dlp/scan', body: { responseText: 'sample response' } },
+      { id: 'injection-scan', label: 'Run injection scan', path: '/api/agentic/prompt-injection/scan' },
+      { id: 'dlp-scan', label: 'Run response DLP', path: '/api/agentic/dlp/scan' },
     ],
   },
   {
     title: 'Defense & ops',
     tools: [
-      { id: 'honeypot', label: 'Deploy honeypot', path: '/api/agentic/honeypot/deploy', body: { name: `hp-${Date.now()}`, template: 'fake-api-endpoint', ttlMinutes: 30 } },
+      { id: 'decoy', label: 'Deploy decoy', path: '/api/agentic/honeypot/deploy' },
       { id: 'fuzzer', label: 'Run protocol fuzzer', path: '/api/agentic/fuzzer/run' },
       { id: 'playbook', label: 'Run incident playbook', path: '/api/agentic/playbook/run', body: { trigger: 'dashboard', playbook: 'prompt_injection', severity: 'high' } },
       { id: 'harden', label: 'Config hardening', path: '/api/agentic/harden/analyze', body: { serverName: 'filesystem' } },
@@ -29,7 +29,7 @@ const TOOL_GROUPS = [
     tools: [
       { id: 'red-team', label: 'Run red team', path: '/api/agentic/red-team/run' },
       { id: 'collusion', label: 'Collusion scan', path: '/api/agentic/collusion/detect' },
-      { id: 'thompson', label: 'Thompson sample', path: '/api/agentic/rl/thompson', body: { agentId: 'dashboard-agent' } },
+      { id: 'thompson', label: 'Evaluate agent trust', path: '/api/agentic/rl/thompson' },
       { id: 'certify', label: 'Certify server', path: '/api/agentic/certification/certify', body: { serverName: 'filesystem', packageName: '@modelcontextprotocol/server-filesystem', version: 'latest', trustScore: 70, complianceScore: 50, cveFree: true, authMethod: 'none', transport: 'stdio', trustedPublisher: true } },
     ],
   },
@@ -44,7 +44,7 @@ export function AgenticToolsPanel() {
         <h2 className="text-xl font-bold">Admin tools</h2>
         <p className="text-sm text-gray-500">
           Run agentic actions on demand. Results appear inline below each button (not in a sidebar).
-          Lab tools may require MASTYF_AI_AGENTIC_DEMO_MODE for sample data.
+          Actions use backend-provided defaults and return unavailable states when required context is missing.
         </p>
       </div>
       {TOOL_GROUPS.map((group) => (

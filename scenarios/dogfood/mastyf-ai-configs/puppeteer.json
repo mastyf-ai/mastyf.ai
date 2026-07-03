@@ -3,10 +3,10 @@
     "puppeteer": {
       "command": "node",
       "args": [
-        "scenarios/dogfood/enterprise-mcp-stub.cjs"
+        "scenarios/dogfood/enterprise-mcp-local-service.cjs"
       ],
       "env": {
-        "STUB_ROLE": "puppeteer"
+        "SERVICE_ROLE": "puppeteer"
       },
       "transport": "stdio"
     }

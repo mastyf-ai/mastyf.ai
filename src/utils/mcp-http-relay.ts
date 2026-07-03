@@ -49,7 +49,7 @@ export async function relayMcpHttpRequest(
       resolvePromise = resolve;
     });
 
-    const mockWrite = (chunk: unknown) => {
+    const interceptedWrite = (chunk: unknown) => {
       const str = Buffer.isBuffer(chunk) ? chunk.toString('utf-8') : String(chunk);
       const lines = str.split('\n').filter((l) => l.trim());
       for (const line of lines) {
@@ -69,7 +69,7 @@ export async function relayMcpHttpRequest(
 
     const timeoutMs = 15000;
     try {
-      process.stdout.write = mockWrite as typeof process.stdout.write;
+      process.stdout.write = interceptedWrite as typeof process.stdout.write;
       void proxy.handleClientInput(body);
 
       const result = await Promise.race([

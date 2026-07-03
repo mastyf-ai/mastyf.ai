@@ -30,20 +30,23 @@ export function AgenticOperationsPanel({ refreshKey = 0 }: Props) {
   }, [refreshKey, data?.generatedAt]);
 
   const stats = tasks?.stats ?? data?.kpis;
+  const unavailable = tasks?.available === false || data?.available === false || !stats;
 
   return (
     <div className="agentic-panel space-y-4">
       <h2 className="text-xl font-bold">Operations</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Queued" value={stats && 'queued' in stats ? stats.queued : data?.kpis?.taskQueued ?? 0} />
-        <KpiCard label="Running" value={stats && 'running' in stats ? stats.running : data?.kpis?.taskRunning ?? 0} />
-        <KpiCard label="Completed" value={stats && 'completed' in stats ? stats.completed : 0} />
-        <KpiCard label="Failed" value={stats && 'failed' in stats ? stats.failed : 0} />
+        <KpiCard label="Queued" value={unavailable ? 'Unavailable' : stats && 'queued' in stats ? stats.queued : data?.kpis?.taskQueued ?? 'Unavailable'} />
+        <KpiCard label="Running" value={unavailable ? 'Unavailable' : stats && 'running' in stats ? stats.running : data?.kpis?.taskRunning ?? 'Unavailable'} />
+        <KpiCard label="Completed" value={unavailable ? 'Unavailable' : stats && 'completed' in stats ? stats.completed : 'Unavailable'} />
+        <KpiCard label="Failed" value={unavailable ? 'Unavailable' : stats && 'failed' in stats ? stats.failed : 'Unavailable'} />
       </div>
 
       <Card className="p-4">
         <h3 className="font-semibold mb-2">Pending approvals</h3>
-        {(tasks?.pendingApprovals ?? []).length === 0 ? (
+        {tasks?.available === false ? (
+          <p className="hint">{tasks.error ?? 'Task queue unavailable from backend.'}</p>
+        ) : (tasks?.pendingApprovals ?? []).length === 0 ? (
           <p className="hint">No pending human-in-the-loop approvals.</p>
         ) : (
           <ul className="space-y-2 text-sm">

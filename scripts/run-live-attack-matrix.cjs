@@ -12,7 +12,7 @@ const { load } = require('js-yaml');
 const ROOT = resolve(__dirname, '..');
 const POLICY_PATH = join(ROOT, 'default-policy.yaml');
 const CLI = join(ROOT, 'dist', 'cli.js');
-const STUB = join(ROOT, 'scenarios', 'dogfood', 'enterprise-mcp-stub.cjs');
+const LOCAL_SERVICE = join(ROOT, 'scenarios', 'dogfood', 'enterprise-mcp-local-service.cjs');
 
 const BASE64_BLOB = Buffer.from(
   'exfil-payload-' + 'A'.repeat(400) + '-end',
@@ -193,8 +193,8 @@ async function runProxyMatrix(cases, baseEnv) {
     mcpServers: {
       filesystem: {
         command: 'node',
-        args: [STUB],
-        env: { STUB_ROLE: 'filesystem' },
+        args: [LOCAL_SERVICE],
+        env: { SERVICE_ROLE: 'filesystem' },
         transport: 'stdio',
       },
     },

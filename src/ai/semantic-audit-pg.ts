@@ -1,6 +1,6 @@
 /**
  * PostgreSQL persistence for semantic audit outcomes (enterprise / DATABASE_URL).
- * JSONL in semantic-audit-store.ts remains the local-dev fallback.
+ * JSONL in semantic-audit-store.ts is used when PostgreSQL is not configured.
  */
 import type { StoredSemanticAudit } from './semantic-audit-store.js';
 import { resolveTenantId } from '../tenant/resolve-tenant.js';

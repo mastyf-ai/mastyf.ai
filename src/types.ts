@@ -134,9 +134,11 @@ export interface ProxyCallRecord {
   timestamp: string;
   /** LLM model billed for this call (detected at proxy time) */
   model?: string;
-  /** USD cost from client or live provider rates — not a static estimate */
-  costUsd?: number;
+  /** USD cost from client or live provider rates. Null means pricing was unavailable. */
+  costUsd?: number | null;
   pricingSource?: PricingSource;
+  priced?: boolean;
+  pricingUnavailable?: string;
   /** True when the proxy denied the call (policy, DLP, auth) before upstream responded */
   blocked?: boolean;
   blockRule?: string;

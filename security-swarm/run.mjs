@@ -26,6 +26,8 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..');
 const OUT_DIR = resolveSwarmDir();
 const VENV_PY = join(REPO, 'adversarial-harness', '.venv', 'bin', 'python3');
+const NODE_BIN = dirname(process.execPath);
+process.env.PATH = `${NODE_BIN}:${process.env.PATH || ''}`;
 
 const FAST = process.argv.includes('--fast');
 const FORCE_QUIET = process.argv.includes('--quiet');
@@ -81,15 +83,59 @@ function banner(title, sub = '') {
   swarmLog(`[swarm] ${title}${sub ? ` — ${sub}` : ''}`);
 }
 
-function resolveVenvPython() {
-  if (existsSync(VENV_PY)) return VENV_PY;
-  const r = runStep('node', ['adversarial-harness/scripts/setup-python-venv.mjs'], {
+function venvPythonReady(pythonPath) {
+  if (!pythonPath || !existsSync(pythonPath)) return false;
+  const r = runStep(pythonPath, ['-c', 'import yaml'], {
     cwd: REPO,
     stepKey: 'setup-python-venv',
     live: false,
   });
-  const out = (r.stdout || '').trim();
-  return out || 'python3';
+  return r.status === 0;
+}
+
+function venvPythonFromSetupStep(setupStep) {
+  const python = (setupStep?.stdout || '').trim() || (existsSync(VENV_PY) ? VENV_PY : 'python3');
+  return venvPythonReady(python) ? python : null;
+}
+
+function nodeModuleRoot() {
+  return process.execPath.replace(/[/\\]bin[/\\]node$/, '');
+}
+
+function ensureBetterSqlite3() {
+  const probeScript = "const Database=require('better-sqlite3');new Database(':memory:');";
+  const probe = runStep(process.execPath, ['-e', probeScript], {
+    cwd: REPO,
+    stepKey: 'sqlite-probe',
+    live: false,
+  });
+  if (probe.status === 0) return;
+  swarmLog('[swarm] better-sqlite3 ABI mismatch — rebuilding for current Node…');
+  const rebuild = runStep('pnpm', ['rebuild', 'better-sqlite3'], {
+    cwd: REPO,
+    stepKey: 'rebuild-better-sqlite3',
+    live: LIVE,
+    timeoutMs: 300_000,
+    env: {
+      ...process.env,
+      npm_config_build_from_source: 'true',
+      npm_config_nodedir: nodeModuleRoot(),
+      npm_config_runtime: 'node',
+      npm_config_target: process.versions.node,
+      PATH: `${NODE_BIN}:${process.env.PATH || ''}`,
+    },
+  });
+  if (rebuild.status !== 0) {
+    throw new Error('[swarm] pnpm rebuild better-sqlite3 failed — run setup.sh or pnpm rebuild better-sqlite3');
+  }
+  const recheck = runStep(process.execPath, ['-e', probeScript], {
+    cwd: REPO,
+    stepKey: 'sqlite-probe',
+    live: false,
+  });
+  if (recheck.status !== 0) {
+    throw new Error('[swarm] better-sqlite3 still unavailable after rebuild');
+  }
 }
 
 function updateSwarmSubProgress(stepIndex, totalSteps, label) {
@@ -262,6 +308,8 @@ run('node', ['security-swarm/agents/scout.mjs'], {
 
 run('pnpm', ['build:mastyf-ai'], { label: 'pnpm-build', totalSteps });
 
+ensureBetterSqlite3();
+
 const vitestArgs = LIVE
   ? ['vitest', 'run', 'tests/policy/', 'tests/proxy/', 'tests/utils/', '--reporter=verbose']
   : ['test:policy-proxy-utils'];
@@ -269,7 +317,12 @@ const vitestArgs = LIVE
 if (FAST && process.env.SWARM_PARALLEL_STEPS !== 'false') {
   const parallel = await runParallelSwarmSteps(
     [
-      { cmd: 'pnpm', args: vitestArgs, label: 'vitest-policy-proxy-utils' },
+      {
+        cmd: 'pnpm',
+        args: vitestArgs,
+        label: 'vitest-policy-proxy-utils',
+        env: { MASTYF_AI_DISABLE_SEMANTIC: 'true' },
+      },
       {
         cmd: 'node',
         args: ['--import', 'tsx', 'corpus/run-eval.ts'],
@@ -311,27 +364,56 @@ if (!FAST) {
     totalSteps,
   });
 } else {
-  if (LIVE) {
-    run('node', ['adversarial-harness/scripts/setup-python-venv.mjs'], {
-      label: 'setup-python-venv',
+  run('node', ['adversarial-harness/scripts/setup-python-venv.mjs'], {
+    label: 'setup-python-venv',
+    totalSteps,
+  });
+  const setupStep = steps.at(-1);
+  if (!setupStep?.ok) {
+    run('node', ['adversarial-harness/scripts/run-node-tests.mjs'], {
+      label: 'harness-node-tests',
       totalSteps,
     });
+    run('node', ['--import', 'tsx', 'adversarial-harness/scripts/compare-node-python.ts'], {
+      label: 'harness-parity',
+      totalSteps,
+      timeoutMs: 900_000,
+      env: {
+        MASTYF_AI_DISABLE_SEMANTIC: 'true',
+        PYTHONPATH: join(REPO, 'adversarial-harness', 'python'),
+        HARNESS_PYTHON: 'python3',
+      },
+    });
+  } else {
+    const venvPython = venvPythonFromSetupStep(setupStep);
+    run('node', ['adversarial-harness/scripts/run-node-tests.mjs'], {
+      label: 'harness-node-tests',
+      totalSteps,
+    });
+    if (!venvPython) {
+      steps.push({
+        label: 'harness-parity',
+        ok: false,
+        status: 1,
+        timedOut: false,
+        elapsedSec: 0,
+        stdout: '',
+        stderr: '[swarm] Python harness venv is not ready (missing pyyaml?). Run: node adversarial-harness/scripts/setup-python-venv.mjs',
+      });
+      consecutiveFailures++;
+    } else {
+      run('node', ['--import', 'tsx', 'adversarial-harness/scripts/compare-node-python.ts'], {
+        label: 'harness-parity',
+        totalSteps,
+        timeoutMs: 900_000,
+        env: {
+          MASTYF_AI_DISABLE_SEMANTIC: 'true',
+          PYTHONPATH: join(REPO, 'adversarial-harness', 'python'),
+          HARNESS_PYTHON: venvPython,
+        },
+      });
+    }
   }
-  const venvPython = LIVE ? resolveVenvPython() : resolveVenvPython();
-  run('node', ['adversarial-harness/scripts/run-node-tests.mjs'], {
-    label: 'harness-node-tests',
-    totalSteps,
-  });
-  run('node', ['--import', 'tsx', 'adversarial-harness/scripts/compare-node-python.ts'], {
-    label: 'harness-parity',
-    totalSteps,
-    timeoutMs: 900_000,
-    env: {
-      MASTYF_AI_DISABLE_SEMANTIC: 'true',
-      PYTHONPATH: join(REPO, 'adversarial-harness', 'python'),
-      HARNESS_PYTHON: venvPython,
-    },
-  });
 }
 
 writeFileSync(join(OUT_DIR, 'steps.json'), JSON.stringify({ steps, mode: FAST ? 'fast' : 'full', live: LIVE }, null, 2));

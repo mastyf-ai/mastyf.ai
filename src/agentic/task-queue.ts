@@ -68,7 +68,7 @@ export class AgenticTaskQueue {
     if (options.dedupKey) {
       if (this.dedupKeys.has(options.dedupKey)) {
         Logger.debug(`[AgenticTaskQueue] Deduplicating task: ${options.dedupKey}`);
-        // Return a synthetic id — task is considered already queued
+        // Return a deterministic dedup id; the task is considered already queued.
         return `dedup:${options.dedupKey}`;
       }
       this.dedupKeys.add(options.dedupKey);

@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 const readline = require('readline');
-const role = process.env.STUB_ROLE || 'generic';
+
+const role = process.env.SERVICE_ROLE || 'generic';
 const TOOLS = [
   'search', 'search_repositories', 'get_file_contents', 'read_file', 'read_text_file',
   'list_directory', 'list_files', 'write_to_file', 'query', 'list_tables',
   'puppeteer_navigate', 'puppeteer_screenshot', 'execute_command', 'bash', 'execute', 'echo',
 ];
+
 const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', (line) => {
   let msg;

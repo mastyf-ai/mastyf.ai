@@ -1,8 +1,7 @@
 /**
- * Seeds ~/.mastyf-ai for TUI: real-life config scan + 20-call block scenario.
+ * Prepares ~/.mastyf-ai for TUI from real-life config scan + live proxy calls.
  */
 const { spawn } = require('child_process');
-const { writeFileSync, mkdirSync, existsSync } = require('fs');
 const { join } = require('path');
 const { homedir } = require('os');
 const { McpProxyServer } = require('../dist/proxy/proxy-server.js');
@@ -19,25 +18,6 @@ function run(cmd, args) {
     const p = spawn(cmd, args, { stdio: 'inherit', cwd: join(__dirname, '..') });
     p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`))));
   });
-}
-
-function seedAiState() {
-  mkdirSync(MASTYF_AI_DIR, { recursive: true });
-  writeFileSync(join(MASTYF_AI_DIR, '.ai-learning.json'), JSON.stringify({
-    outcomes: [
-      { suggestionId: 'baseline-0', ruleName: 'auto-token-cap-read_file', source: 'baseline', action: 'applied', confidence: 0.9, timestamp: new Date().toISOString() },
-      { suggestionId: 'cost-1', ruleName: 'cost-burst-execute_command', source: 'cost', action: 'applied', confidence: 0.87, timestamp: new Date().toISOString() },
-    ],
-    truePositiveRate: 0.72,
-    falsePositiveRate: 0.28,
-    adaptiveThreshold: 0.85,
-    moduleWeights: { baseline: 0.95, cost: 0.87, threat: 1.0, assist: 1.0 },
-    lastUpdated: new Date().toISOString(),
-  }, null, 2));
-  writeFileSync(join(MASTYF_AI_DIR, '.threat-state.json'), JSON.stringify({
-    ids: ['osv-GHSA-345p-7cg4-v4c7', 'gh-GHSA-r8j5-8747-88cm', 'gh-GHSA-wf8q-wvv8-p8jf'],
-    updated: new Date().toISOString(),
-  }, null, 2));
 }
 
 (async function main() {
@@ -100,11 +80,9 @@ function seedAiState() {
     const recs = await db.getCallRecordsForServer(s.name);
     total += recs.length;
     blocked += recs.filter((r) => r.responseTokens === 0 && r.requestTokens > 0).length;
-    await db.addHealthCheck(s.name, 35 + Math.floor(Math.random() * 80), true, 8);
-    await db.addCostRecord(s.name, recs.reduce((a, r) => a + r.totalTokens, 0), 0.002 + Math.random() * 0.01);
   }
 
-  // No seed/mock AI files — learning state comes from real proxy cycles only
+  // Learning state comes from real proxy cycles only.
   db.close();
 
   console.log(`\n   Recorded ${total} calls (${blocked} blocked by policy)`);

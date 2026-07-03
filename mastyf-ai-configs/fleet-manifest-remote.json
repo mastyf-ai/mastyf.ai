@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "filesystem-proxy": {
+      "url": "http://127.0.0.1:9108/sse",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9107",
+        "MASTYF_AI_SSE_PROXY_PORT": "9107"
+      }
+    },
+    "github-proxy": {
+      "url": "http://127.0.0.1:9109/sse",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9108",
+        "MASTYF_AI_SSE_PROXY_PORT": "9108"
+      }
+    },
+    "mcp-guardian": {
+      "url": "http://127.0.0.1:9103/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9109",
+        "MASTYF_AI_SSE_PROXY_PORT": "9109"
+      }
+    },
+    "remote-api": {
+      "url": "http://localhost:3001/mcp",
+      "transport": "sse",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9110",
+        "MASTYF_AI_SSE_PROXY_PORT": "9110"
+      }
+    }
+  }
+}

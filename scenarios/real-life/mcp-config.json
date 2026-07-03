@@ -32,7 +32,7 @@
       "command": "node",
       "args": [
         "-e",
-        "console.log('analytics stub')"
+        "console.log('analytics local service unavailable')"
       ],
       "env": {
         "OPENAI_API_KEY": "sk-proj-EXAMPLE_REDACTED_NOT_A_REAL_KEY",

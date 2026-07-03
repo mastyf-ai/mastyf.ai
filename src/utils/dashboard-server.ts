@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync, appendFileSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync, appendFileSync, readdirSync, statSync } from 'fs';
 import { load } from 'js-yaml';
 import { parsePolicyConfig } from '../policy/policy-schema.js';
 import {
@@ -7,7 +7,7 @@ import {
   signPolicyYaml,
   validateSignedPolicyYaml,
 } from '../policy/policy-signature.js';
-import { resolve, dirname, join, extname } from 'path';
+import { resolve, dirname, join, extname, basename } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
@@ -63,6 +63,10 @@ import {
   resolveFederatedChartDb,
   type FederatedQueryContext,
 } from './federated-data-source.js';
+import {
+  buildObservedTools,
+  computeMeasuredPerformance,
+} from './real-metrics.js';
 import { initUnifiedDataReaderPool } from './unified-data-reader.js';
 import { getAuditAttestationStatus } from './audit-attestation.js';
 import { getFieldEncryptionStatus } from './field-encryption.js';
@@ -292,7 +296,7 @@ export {
   ensureAgenticContainer,
   isAgenticDemoMode,
 } from './agentic-container.js';
-import { getAgenticContainer, ensureAgenticContainer, isAgenticDemoMode } from './agentic-container.js';
+import { getAgenticContainer, ensureAgenticContainer } from './agentic-container.js';
 
 type DashboardHandle = {
   auth: DashboardAuth;
@@ -3567,87 +3571,20 @@ export async function startDashboardServer(
       }
 
       if (url.startsWith('/api/security-swarm/')) {
-        if (!assertFeature(url, 'swarm', res, setCors)) return;
-      }
-
-      if (url === '/api/security-swarm/run' && method === 'POST') {
-        setCors();
-        const body = await readBody(req).catch(() => ({}));
-        const { startSwarmAnalysis } = await import('./security-swarm-runner.js');
-        const result = startSwarmAnalysis({
-          full: !!(body as { full?: boolean }).full,
-          tenantId: requestTenantId,
+        const { handleDashboardSecuritySwarmRoutes } = await import('./dashboard-security-swarm-routes.js');
+        const handled = await handleDashboardSecuritySwarmRoutes({
+          url,
+          method,
+          req,
+          res,
+          requestTenantId,
+          policyWatcher,
+          writeJson,
+          readBody,
+          setCors,
+          assertFeature,
         });
-        if (!result.ok) {
-          writeJson(res, result.status ?? 409, {
-            error: result.error,
-            jobId: result.jobId,
-          });
-          return;
-        }
-        writeJson(res, 202, { jobId: result.jobId, startedAt: result.startedAt });
-        return;
-      }
-      if (url === '/api/security-swarm/status' && method === 'GET') {
-        setCors();
-        const { getSwarmJobStatus } = await import('./security-swarm-runner.js');
-        writeJson(res, 200, getSwarmJobStatus(requestTenantId));
-        return;
-      }
-      if (url === '/api/security-swarm/job-log' && method === 'GET') {
-        setCors();
-        const { readSwarmTextArtifact, readSwarmJsonFile } = await import('./swarm-artifacts.js');
-        const log = readSwarmTextArtifact('job.log', requestTenantId);
-        const steps = readSwarmJsonFile<{ steps?: unknown[] }>('steps.json', requestTenantId);
-        writeJson(res, 200, available({
-          log: log || '',
-          steps: steps?.steps ?? [],
-          hasLog: !!log,
-        }));
-        return;
-      }
-      if (
-        url === '/api/security-swarm/report' ||
-        url === '/api/security-swarm/report/download'
-      ) {
-        setCors();
-        const { readAnalysisReport } = await import('./security-swarm-runner.js');
-        const report = readAnalysisReport(requestTenantId);
-        if (!report.ok || !report.text) {
-          writeJson(res, 404, { error: report.error || 'Report not ready' });
-          return;
-        }
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        if (url.endsWith('/download')) {
-          res.setHeader(
-            'Content-Disposition',
-            'attachment; filename="mastyf-ai-swarm-analysis.txt"',
-          );
-        }
-        res.end(report.text);
-        return;
-      }
-      if (url === '/api/security-swarm/latest' && method === 'GET') {
-        setCors();
-        const { readSwarmLatest } = await import('./security-swarm-runner.js');
-        const latest = readSwarmLatest(requestTenantId);
-        if (!latest) {
-          writeJson(res, 404, { error: 'latest.json not found — run analysis first' });
-          return;
-        }
-        writeJson(res, 200, latest);
-        return;
-      }
-      if (url === '/api/security-swarm/figures' && method === 'GET') {
-        setCors();
-        const { readFiguresManifest } = await import('./swarm-artifacts.js');
-        const manifest = readFiguresManifest(requestTenantId);
-        writeJson(res, 200, {
-          generatedAt: manifest.generatedAt ?? null,
-          figures: manifest.figures,
-        });
-        return;
+        if (handled) return;
       }
       if (url === '/api/visuals/live' && method === 'GET') {
         setCors();
@@ -3674,255 +3611,20 @@ export async function startDashboardServer(
         }
         return;
       }
-      if (url === '/api/security-swarm/summary' && method === 'GET') {
-        setCors();
-        const { readSwarmSummaryMd } = await import('./security-swarm-runner.js');
-        const md = readSwarmSummaryMd(requestTenantId);
-        if (!md) {
-          writeJson(res, 404, { error: 'summary.md not found' });
-          return;
-        }
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-        res.end(md);
-        return;
-      }
-      if (url === '/api/security-swarm/live-session' && method === 'GET') {
-        setCors();
-        const { readLiveFilesystemSession } = await import('./swarm-artifacts.js');
-        const live = readLiveFilesystemSession(requestTenantId);
-        if (!live) {
-          writeJson(res, 404, { error: 'No live session from current analysis — run security analysis first' });
-          return;
-        }
-        writeJson(res, 200, live);
-        return;
-      }
-      if (url === '/api/security-swarm/report-json' && method === 'GET') {
-        setCors();
-        const { ensurePlainEnglishReport } = await import('./swarm-artifacts.js');
-        const report = ensurePlainEnglishReport(requestTenantId);
-        if (!report) {
-          writeJson(res, 404, { error: 'report.json not found — run analysis first' });
-          return;
-        }
-        writeJson(res, 200, report);
-        return;
-      }
-      if (url === '/api/security-swarm/traffic-summary' && method === 'GET') {
-        setCors();
-        const { readTrafficSummary } = await import('./swarm-artifacts.js');
-        const traffic = readTrafficSummary(requestTenantId);
-        if (!traffic) {
-          writeJson(res, 404, { error: 'traffic-summary.json not found' });
-          return;
-        }
-        writeJson(res, 200, traffic);
-        return;
-      }
-      if (url === '/api/security-swarm/user-servers' && method === 'GET') {
-        setCors();
-        const { readUserServersSession } = await import('./swarm-artifacts.js');
-        const session = readUserServersSession(requestTenantId);
-        if (!session) {
-          writeJson(res, 404, { error: 'user-servers-session.json not found' });
-          return;
-        }
-        writeJson(res, 200, session);
-        return;
-      }
-      if (url === '/api/security-swarm/threat-lab-candidates' && method === 'GET') {
-        setCors();
-        const { readThreatLabCandidates } = await import('./swarm-artifacts.js');
-        const data = readThreatLabCandidates(requestTenantId);
-        if (!data) {
-          writeJson(res, 404, { error: 'threat-lab-candidates.json not found' });
-          return;
-        }
-        writeJson(res, 200, data);
-        return;
-      }
-      if (url === '/api/security-swarm/threat-lab-candidates/accept' && method === 'POST') {
-        setCors();
-        const body = await readBody(req);
-        const id = String(body.id || '').trim();
-        if (!id) {
-          writeJson(res, 400, { ok: false, error: 'id required' });
-          return;
-        }
-        const { readThreatLabCandidates, markThreatLabCandidate } = await import('./swarm-artifacts.js');
-        const data = readThreatLabCandidates(requestTenantId);
-        const candidate = data?.candidates?.find((c: { id: string }) => c.id === id);
-        if (!candidate) {
-          writeJson(res, 404, { ok: false, error: 'Threat Lab candidate not found' });
-          return;
-        }
-        const policyRule = candidate.policyRule as import('../policy/policy-types.js').PolicyRule | undefined;
-        if (!policyRule?.name) {
-          writeJson(res, 400, {
-            ok: false,
-            error: 'Candidate has no policyRule — re-run Threat Lab or pick a candidate with a generated rule',
-          });
-          return;
-        }
-        const { applySuggestionToPolicy } = await import('../ai/policy-applier.js');
-        const policyPath = process.env['MASTYF_AI_POLICY_PATH'] || join(REPO_ROOT, 'default-policy.yaml');
-        const result = await applySuggestionToPolicy(
-          policyRule,
-          policyPath,
-          policyWatcher ?? null,
-          { tenantId: requestTenantId },
-        );
-        if (!result.applied && result.reason !== 'duplicate') {
-          writeJson(res, 400, {
-            ok: false,
-            error: result.reason ?? 'apply_failed',
-            simulationSummary: result.simulationSummary,
-          });
-          return;
-        }
-        markThreatLabCandidate(requestTenantId, id, 'accepted');
-        writeJson(res, 200, {
-          ok: true,
-          status: result.reason === 'duplicate' ? 'already_present' : 'accepted',
-          id,
-          ruleName: policyRule.name,
-        });
-        return;
-      }
-      if (url === '/api/security-swarm/threat-lab-candidates/reject' && method === 'POST') {
-        setCors();
-        const body = await readBody(req);
-        const id = String(body.id || '');
-        const { markThreatLabCandidate } = await import('./swarm-artifacts.js');
-        markThreatLabCandidate(requestTenantId, id, 'rejected');
-        writeJson(res, 200, { status: 'rejected', id });
-        return;
-      }
-      if (url === '/api/security-swarm/auto-corpus' && method === 'GET') {
-        setCors();
-        const { readAutoCorpusManifest } = await import('./swarm-artifacts.js');
-        const data = readAutoCorpusManifest(requestTenantId);
-        if (!data) {
-          writeJson(res, 404, { error: 'auto-corpus-manifest.json not found' });
-          return;
-        }
-        writeJson(res, 200, data);
-        return;
-      }
       if (url.startsWith('/api/threat-discovery/')) {
-        if (!assertFeature(url, 'swarm', res, setCors)) return;
-      }
-      if (url === '/api/threat-discovery/status' && method === 'GET') {
-        setCors();
-        const { buildThreatDiscoveryStatus } = await import('./threat-discovery-status.js');
-        writeJson(res, 200, await buildThreatDiscoveryStatus(requestTenantId));
-        return;
-      }
-      if (url === '/api/threat-discovery/automation/summary' && method === 'GET') {
-        setCors();
-        const { buildThreatAutomationSummary } = await import('./threat-automation-summary.js');
-        writeJson(res, 200, await buildThreatAutomationSummary(requestTenantId));
-        return;
-      }
-      if (url === '/api/threat-discovery/threat-lab/run' && method === 'POST') {
-        setCors();
-        const body = await readBody(req).catch(() => ({}));
-        const mode = (body as { mode?: string }).mode === 'proactive' ? 'proactive' : 'reactive';
-        const { startThreatLabJob } = await import('./threat-discovery-runner.js');
-        const result = startThreatLabJob(requestTenantId, { mode });
-        if (!result.ok) {
-          writeJson(res, result.status ?? 409, { error: result.error, jobId: result.jobId });
-          return;
-        }
-        writeJson(res, 202, { jobId: result.jobId, startedAt: result.startedAt, kind: 'threat-lab' });
-        return;
-      }
-      if (url === '/api/threat-discovery/auto-research/run' && method === 'POST') {
-        setCors();
-        const { startAutoThreatResearchJob } = await import('./threat-discovery-runner.js');
-        const result = startAutoThreatResearchJob(requestTenantId);
-        if (!result.ok) {
-          writeJson(res, result.status ?? 409, { error: result.error, jobId: result.jobId });
-          return;
-        }
-        writeJson(res, 202, { jobId: result.jobId, startedAt: result.startedAt, kind: 'auto-research' });
-        return;
-      }
-      const candidateMatch = url.match(/^\/api\/threat-discovery\/candidates\/([^/]+)$/);
-      if (candidateMatch && method === 'GET') {
-        setCors();
-        const id = decodeURIComponent(candidateMatch[1]);
-        const { readThreatLabCandidateById } = await import('./swarm-artifacts.js');
-        const candidate = readThreatLabCandidateById(requestTenantId, id);
-        if (!candidate) {
-          writeJson(res, 404, { error: 'Candidate not found' });
-          return;
-        }
-        writeJson(res, 200, candidate);
-        return;
-      }
-      // ── Threat Discovery Scheduler (in-process, persists to ~/.mastyf-ai) ──
-      if (url === '/api/threat-discovery/scheduler/start' && method === 'POST') {
-        setCors();
-        try {
-          const { startScheduler } = await import('./threat-discovery-scheduler.js');
-          const state = startScheduler(requestTenantId);
-          writeJson(res, 200, { status: 'ok', ...state });
-        } catch (err) {
-          writeJson(res, 500, {
-            status: 'error',
-            error: err instanceof Error ? err.message : 'Failed to start scheduler',
-          });
-        }
-        return;
-      }
-      if (url === '/api/threat-discovery/scheduler/stop' && method === 'POST') {
-        setCors();
-        try {
-          const { stopScheduler } = await import('./threat-discovery-scheduler.js');
-          const state = stopScheduler();
-          writeJson(res, 200, { status: 'ok', ...state });
-        } catch (err) {
-          writeJson(res, 500, {
-            status: 'error',
-            error: err instanceof Error ? err.message : 'Failed to stop scheduler',
-          });
-        }
-        return;
-      }
-      if (url === '/api/threat-discovery/scheduler/status' && method === 'GET') {
-        setCors();
-        try {
-          const { getSchedulerStatus } = await import('./threat-discovery-scheduler.js');
-          writeJson(res, 200, getSchedulerStatus(requestTenantId));
-        } catch (err) {
-          writeJson(res, 500, {
-            running: false,
-            error: err instanceof Error ? err.message : 'Failed to read scheduler status',
-          });
-        }
-        return;
-      }
-      if (url === '/api/threat-discovery/promote/stats' && method === 'GET') {
-        setCors();
-        try {
-          const { getPromotionStats } = await import('../ai/auto-corpus-promoter.js');
-          writeJson(res, 200, await getPromotionStats());
-        } catch {
-          writeJson(res, 200, { error: 'Auto-corpus promoter not available', enabled: process.env['MASTYF_AI_AUTO_CORPUS_PROMOTE'] !== 'true' });
-        }
-        return;
-      }
-      if (url === '/api/threat-discovery/promote/batch' && method === 'POST') {
-        setCors();
-        try {
-          const { getPromotionStats } = await import('../ai/auto-corpus-promoter.js');
-          writeJson(res, 200, await getPromotionStats());
-        } catch {
-          writeJson(res, 200, { error: 'Auto-corpus promoter not available', enabled: process.env['MASTYF_AI_AUTO_CORPUS_PROMOTE'] !== 'true' });
-        }
-        return;
+        const { handleDashboardThreatDiscoveryRoutes } = await import('./dashboard-threat-discovery-routes.js');
+        const handled = await handleDashboardThreatDiscoveryRoutes({
+          url,
+          method,
+          req,
+          res,
+          requestTenantId,
+          writeJson,
+          readBody,
+          setCors,
+          assertFeature,
+        });
+        if (handled) return;
       }
       if (url === '/api/onboarding/status' && method === 'GET') {
         setCors();
@@ -4067,6 +3769,186 @@ export async function startDashboardServer(
         } catch (err: unknown) {
           writeJson(res, 500, {
             error: err instanceof Error ? err.message : 'Digest generation failed',
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/compliance/evidence/download' && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const file = u.searchParams.get('file')?.trim() ?? '';
+          const kind = u.searchParams.get('kind')?.trim() ?? '';
+          let filePath = '';
+          if (file) {
+            if (basename(file) !== file || !file.endsWith('.pdf')) {
+              writeJson(res, 400, { available: false, error: 'Valid evidence PDF filename required' });
+              return;
+            }
+            const { complianceEvidenceDir } = await import('../agentic/compliance/compliance-pdf-export.js');
+            filePath = join(complianceEvidenceDir(), file);
+          } else if (kind) {
+            const { getLatestDigestPaths } = await import('./report-scheduler.js');
+            const digest = getLatestDigestPaths(requestTenantId);
+            filePath = kind === 'healthDigest' ? digest.healthPath ?? '' : kind === 'securityDigest' ? digest.securityPath ?? '' : '';
+          }
+          if (!filePath) {
+            writeJson(res, 400, { available: false, error: 'Valid evidence artifact required' });
+            return;
+          }
+          if (!existsSync(filePath)) {
+            writeJson(res, 404, { available: false, error: 'Evidence artifact not found' });
+            return;
+          }
+          const filename = basename(filePath);
+          const contentType = filename.endsWith('.pdf')
+            ? 'application/pdf'
+            : filename.endsWith('.json')
+              ? 'application/json'
+              : 'text/markdown; charset=utf-8';
+          res.statusCode = 200;
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
+          res.end(readFileSync(filePath));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            available: false,
+            error: err instanceof Error ? err.message : 'Failed to download compliance evidence',
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/compliance/evidence' && method === 'GET') {
+        setCors();
+        try {
+          const { complianceEvidenceDir } = await import('../agentic/compliance/compliance-pdf-export.js');
+          const { getLatestDigestPaths } = await import('./report-scheduler.js');
+          const dir = complianceEvidenceDir();
+          const u = new URL(req.url || url, 'http://localhost');
+          const includeLegacy = u.searchParams.get('includeLegacy') === 'true';
+          let hiddenLegacyCount = 0;
+          const artifacts: Array<{
+            id: string;
+            kind: string;
+            framework: string | null;
+            filename: string;
+            path: string;
+            sizeBytes: number;
+            generatedAt: string;
+            downloadUrl?: string;
+            detailLevel?: 'detailed' | 'legacy-summary' | 'digest';
+          }> = [];
+          if (existsSync(dir)) {
+            const frameworks = ['pci-dss', 'iso27001', 'fedramp', 'hipaa', 'soc2'];
+            for (const filename of readdirSync(dir).filter((name) => name.endsWith('.pdf'))) {
+              const path = join(dir, filename);
+              const stat = statSync(path);
+              const framework = frameworks.find((fw) => filename.startsWith(`compliance-${fw}-`)) ?? null;
+              const detailLevel = stat.size >= 3_000 ? 'detailed' : 'legacy-summary';
+              if (detailLevel === 'legacy-summary' && !includeLegacy) {
+                hiddenLegacyCount++;
+                continue;
+              }
+              artifacts.push({
+                id: filename,
+                kind: 'compliance-pdf',
+                framework,
+                filename,
+                path,
+                sizeBytes: stat.size,
+                generatedAt: stat.mtime.toISOString(),
+                downloadUrl: `/api/compliance/evidence/download?file=${encodeURIComponent(filename)}`,
+                detailLevel,
+              });
+            }
+          }
+          const digest = getLatestDigestPaths(requestTenantId);
+          for (const [kind, path] of Object.entries({
+            healthDigest: digest.healthPath,
+            securityDigest: digest.securityPath,
+          })) {
+            if (!path || !existsSync(path)) continue;
+            const stat = statSync(path);
+            artifacts.push({
+              id: `${kind}:${path}`,
+              kind,
+              framework: null,
+              filename: path.split('/').pop() ?? path,
+              path,
+              sizeBytes: stat.size,
+              generatedAt: stat.mtime.toISOString(),
+              downloadUrl: `/api/compliance/evidence/download?kind=${encodeURIComponent(kind)}`,
+              detailLevel: 'digest',
+            });
+          }
+          artifacts.sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt));
+          writeJson(res, 200, available({
+            artifacts,
+            count: artifacts.length,
+            evidenceDir: dir,
+            hiddenLegacyCount,
+            dataSources: ['compliance-evidence-dir', 'digest-artifacts'],
+          }));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            available: false,
+            error: err instanceof Error ? err.message : 'Failed to list compliance evidence',
+            dataSources: [],
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/compliance/evidence/generate' && method === 'POST') {
+        setCors();
+        try {
+          const c = getAgenticContainer();
+          if (!c) {
+            writeJson(res, 503, unavailable({ artifact: null }, 'Agentic services not initialized'));
+            return;
+          }
+          const body = await readBody(req).catch(() => ({})) as Record<string, unknown>;
+          const frameworkRaw = String(body.framework || 'soc2').trim();
+          const frameworks = ['soc2', 'hipaa', 'pci-dss', 'fedramp', 'iso27001'] as const;
+          if (!frameworks.includes(frameworkRaw as typeof frameworks[number])) {
+            writeJson(res, 400, { available: false, error: 'Unsupported framework', dataSources: [] });
+            return;
+          }
+          const framework = frameworkRaw as typeof frameworks[number];
+          const bundle = await c.complianceEvidence.run(framework);
+          c.industryStore.saveComplianceControlStatus({
+            framework: bundle.framework,
+            controlId: '_bundle',
+            status: bundle.posture.postureScore >= 80 ? 'satisfied' : bundle.posture.postureScore >= 50 ? 'partial' : 'gap',
+            evidenceJson: JSON.stringify(bundle),
+            evaluatedAt: bundle.generatedAt,
+            tenantId: requestTenantId,
+          });
+          const { writeComplianceEvidencePdf } = await import('../agentic/compliance/compliance-pdf-export.js');
+          const pdfPath = await writeComplianceEvidencePdf(bundle);
+          const stat = statSync(pdfPath);
+          writeJson(res, 200, available({
+            artifact: {
+              id: pdfPath.split('/').pop() ?? pdfPath,
+              kind: 'compliance-pdf',
+              framework,
+              filename: pdfPath.split('/').pop() ?? pdfPath,
+              path: pdfPath,
+              sizeBytes: stat.size,
+              generatedAt: stat.mtime.toISOString(),
+              downloadUrl: `/api/compliance/evidence/download?file=${encodeURIComponent(pdfPath.split('/').pop() ?? pdfPath)}`,
+              detailLevel: 'detailed',
+            },
+            bundle,
+            dataSources: ['history.db', 'policy-yaml', 'compliance-evidence-runner'],
+          }));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            available: false,
+            error: err instanceof Error ? err.message : 'Failed to generate compliance evidence',
+            dataSources: [],
           });
         }
         return;
@@ -4356,6 +4238,32 @@ export async function startDashboardServer(
         writeJson(res, 200, { servers, uiServers, unified: enriched, fleet });
         return;
       }
+      if (url === '/api/packages/npm/resolve' && method === 'GET') {
+        setCors();
+        const u = new URL(req.url || url, 'http://localhost');
+        const packageName = u.searchParams.get('name')?.trim() ?? '';
+        const version = u.searchParams.get('version')?.trim() || undefined;
+        if (!packageName) {
+          writeJson(res, 400, { available: false, error: 'name required', dataSources: [] });
+          return;
+        }
+        try {
+          const { fetchNpmPackage } = await import('../clients/npm-registry-client.js');
+          const meta = await fetchNpmPackage(packageName, version);
+          writeJson(res, 200, available({
+            ...meta,
+            requestedVersion: version ?? 'latest',
+            dataSources: ['npm-registry'],
+          }));
+        } catch (err: unknown) {
+          writeJson(res, 502, {
+            available: false,
+            error: err instanceof Error ? err.message : 'npm registry lookup failed',
+            dataSources: ['npm-registry'],
+          });
+        }
+        return;
+      }
       if (url === '/api/fleet/status' && method === 'GET') {
         setCors();
         const { discoverAllServers } = await import('../fleet/unified-server-registry.js');
@@ -4468,7 +4376,7 @@ export async function startDashboardServer(
       if (url === '/api/agentic/policy-gen/start-observation' && method === 'POST') {
         setCors();
         const c = getAgenticContainer();
-        if (!c) { writeJson(res, 500, { error: 'Agentic services not initialized' }); return; }
+        if (!c) { writeJson(res, 503, unavailable({ instance: null }, 'Agentic services not initialized')); return; }
         const window = c.behaviorCollector.startWindow();
         writeJson(res, 200, { ok: true, windowId: window.windowId, message: `Observation started. Tools being recorded. Use 'generate policy' once enough calls observed.` });
         return;
@@ -4501,11 +4409,14 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         const body = await readBody(req);
-        const toolName = String(body.toolName || 'test');
+        const toolName = String(body.toolName || '').trim();
         const args = (body.arguments || body.args || {}) as Record<string, unknown>;
-        const serverName = String(body.serverName || 'dashboard');
+        const serverName = String(body.serverName || '').trim();
+        if (!toolName || !serverName) {
+          writeJson(res, 400, { available: false, error: 'serverName and toolName required', dataSources: [] });
+          return;
+        }
         if (!c) {
-          // Fallback: run detector standalone
           const modelProvider = new (await import('../agentic/model-provider.js')).AgenticModelProvider();
           const detector = new (await import('../agentic/prompt-injection/detector.js')).PromptInjectionDetector(modelProvider);
           const result = await detector.scan(toolName, serverName, args);
@@ -4524,7 +4435,7 @@ export async function startDashboardServer(
         const body = await readBody(req);
         const instance = c.honeypotManager.deploy({
           name: String(body.name || `dashboard-${Date.now()}`),
-          template: (body.template || 'fake-production-database') as any,
+          template: (body.template || 'decoy-api-server') as any,
           ttlMs: (Number(body.ttlMinutes) || 30) * 60 * 1000,
           alertOnInteraction: body.alertOnInteraction !== false,
         });
@@ -4540,7 +4451,7 @@ export async function startDashboardServer(
         const count = Number(body.attackCount) || 50;
         const attacks = c.attackGenerator.generateAllAttacks().slice(0, count);
         const categories = [...new Set(attacks.map((a: any) => a.category))];
-        writeJson(res, 200, { ok: true, attackCount: attacks.length, categories, samplePayloads: attacks.slice(0, 5).map((a: any) => ({ id: a.id, category: a.category, snippet: a.payload.slice(0, 80) })) });
+        writeJson(res, 200, { ok: true, attackCount: attacks.length, categories, payloadPreviews: attacks.slice(0, 5).map((a: any) => ({ id: a.id, category: a.category, snippet: a.payload.slice(0, 80) })) });
         return;
       }
 
@@ -4582,8 +4493,27 @@ export async function startDashboardServer(
         if (!c) { writeJson(res, 500, { error: 'Agentic services not initialized' }); return; }
         const body = await readBody(req);
         const sn = String(body.serverName || 'filesystem');
-        const baseline = c.driftDetector.captureBaseline(sn, [], { latencyP50: 100, latencyP95: 500, successRate: 1.0, avgResponseSize: 1024 });
-        writeJson(res, 200, { ok: true, id: baseline.id, serverName: sn, capturedAt: baseline.capturedAt });
+        const metricDb = runtimeHistoryDb ?? c.db;
+        const records = (await loadAllRecordsInWindow(metricDb, requestTenantId, 7))
+          .filter((record) => record.serverName === sn);
+        const performance = computeMeasuredPerformance(records);
+        if (!performance) {
+          writeJson(res, 200, {
+            ok: false,
+            serverName: sn,
+            error: 'No measured proxy traffic available for baseline capture',
+          });
+          return;
+        }
+        const baseline = c.driftDetector.captureBaseline(sn, buildObservedTools(records), performance);
+        writeJson(res, 200, {
+          ok: true,
+          id: baseline.id,
+          serverName: sn,
+          capturedAt: baseline.capturedAt,
+          measuredCalls: records.length,
+          performance,
+        });
         return;
       }
 
@@ -4613,22 +4543,15 @@ export async function startDashboardServer(
             ],
           });
         } else {
-          writeJson(res, 200, {
-            uptimeMs: 0, totalDecisions: 0, avgConfidence: 0, llmTokensUsed: 0, llmCostEstimate: 0,
+          writeJson(res, 503, unavailable({
+            uptimeMs: null,
+            totalDecisions: null,
+            avgConfidence: null,
+            llmTokensUsed: null,
+            llmCostEstimate: null,
             llmAvailable: false,
-            features: [
-              { name: 'Policy Generation', status: 'idle' },
-              { name: 'Prompt Injection Detection', status: 'active' },
-              { name: 'Threat Prediction', status: 'active' },
-              { name: 'Supply Chain Verification', status: 'active' },
-              { name: 'Drift Detection', status: 'active' },
-              { name: 'Compliance Mapping', status: 'active' },
-              { name: 'Red Team Engine', status: 'active' },
-              { name: 'Threat Intel Mesh', status: 'disabled' },
-              { name: 'Honeypot Manager', status: '0 active' },
-              { name: 'Trust Negotiation', status: 'active' },
-            ],
-          });
+            features: [],
+          }, 'Agentic services not initialized'));
         }
         return;
       }
@@ -4636,7 +4559,8 @@ export async function startDashboardServer(
       if (url === '/api/agentic/tasks' && method === 'GET') {
         setCors();
         const c = getAgenticContainer();
-        writeJson(res, 200, c ? c.taskQueue.getStats() : { queued: 0, running: 0, completed: 0, failed: 0 });
+        if (!c) { writeJson(res, 503, unavailable({ stats: null }, 'Agentic services not initialized')); return; }
+        writeJson(res, 200, available(c.taskQueue.getStats()));
         return;
       }
 
@@ -4658,7 +4582,7 @@ export async function startDashboardServer(
           const summary = c.behaviorCollector.getSummary();
           writeJson(res, 200, { active: c.behaviorCollector.isActive(), currentObservation: summary, historicalWindows: c.behaviorCollector.getHistory().length });
         } else {
-          writeJson(res, 200, { active: false, currentObservation: null, historicalWindows: 0 });
+          writeJson(res, 503, unavailable({ currentObservation: null }, 'Agentic services not initialized'));
         }
         return;
       }
@@ -4677,7 +4601,7 @@ export async function startDashboardServer(
             writeJson(res, 200, { policies: [], note: 'Use start_behavior_observation MCP tool first' });
           }
         } else {
-          writeJson(res, 200, { policies: [], note: 'Agentic services not initialized' });
+          writeJson(res, 503, unavailable({ policies: [] }, 'Agentic services not initialized'));
         }
         return;
       }
@@ -4685,7 +4609,8 @@ export async function startDashboardServer(
       if (url === '/api/agentic/prompt-injection/stats' && method === 'GET') {
         setCors();
         const c = getAgenticContainer();
-        writeJson(res, 200, c ? c.promptInjectionDetector.getStats() : { totalScans: 0, totalDetections: 0, detectionRate: 0 });
+        if (!c) { writeJson(res, 503, unavailable({ stats: null }, 'Agentic services not initialized')); return; }
+        writeJson(res, 200, available(c.promptInjectionDetector.getStats()));
         return;
       }
 
@@ -4741,7 +4666,7 @@ export async function startDashboardServer(
         const u = new URL(req.url || url, 'http://localhost');
         const limit = Math.min(200, Math.max(1, parseInt(u.searchParams.get('limit') || '50', 10)));
         if (!c) {
-          writeJson(res, 200, available({ records: [], stats: { totalRecords: 0, totalBlocked: 0, totalAllowed: 0, averageLatencyMs: 0 } }));
+          writeJson(res, 503, unavailable({ records: [], stats: null }, 'Agentic services not initialized'));
           return;
         }
         writeJson(res, 200, available({
@@ -4757,7 +4682,7 @@ export async function startDashboardServer(
         const u = new URL(req.url || url, 'http://localhost');
         const limit = Math.min(200, Math.max(1, parseInt(u.searchParams.get('limit') || '50', 10)));
         if (!c) {
-          writeJson(res, 200, available({ decisions: [] }));
+          writeJson(res, 503, unavailable({ decisions: [] }, 'Agentic services not initialized'));
           return;
         }
         writeJson(res, 200, available({ decisions: c.telemetry.getRecentDecisions(limit) }));
@@ -4768,7 +4693,7 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         if (!c) {
-          writeJson(res, 200, available({ stats: { queued: 0, running: 0, completed: 0, failed: 0, total: 0 }, pendingApprovals: [], tasks: [] }));
+          writeJson(res, 503, unavailable({ stats: null, pendingApprovals: [], tasks: [] }, 'Agentic services not initialized'));
           return;
         }
         const stats = c.taskQueue.getStats();
@@ -4781,7 +4706,8 @@ export async function startDashboardServer(
       if (url === '/api/agentic/scheduler/status' && method === 'GET') {
         setCors();
         const c = getAgenticContainer();
-        writeJson(res, 200, available({ tasks: c ? c.agenticScheduler.getStatus() : [] }));
+        if (!c) { writeJson(res, 503, unavailable({ tasks: [] }, 'Agentic services not initialized')); return; }
+        writeJson(res, 200, available({ tasks: c.agenticScheduler.getStatus() }));
         return;
       }
 
@@ -4790,15 +4716,22 @@ export async function startDashboardServer(
         const c = getAgenticContainer();
         if (c) {
           const frameworks = ['soc2', 'hipaa', 'pci-dss', 'fedramp', 'iso27001'] as const;
-          const postures = frameworks.map(f => c.controlMapper.evaluate(f, [], []));
+          const bundles = await Promise.all(frameworks.map(f => c.complianceEvidence.run(f)));
+          const postures = bundles.map((bundle) => ({
+            ...bundle.posture,
+            generatedAt: bundle.generatedAt,
+            auditCounts: bundle.auditCounts,
+            policySignalCount: bundle.policySignals.length,
+            incidentSignalCount: bundle.incidentSignals.length,
+          }));
           const overall = Math.round(postures.reduce((s, p) => s + p.postureScore, 0) / postures.length);
-          writeJson(res, 200, { frameworks: postures, overall });
+          writeJson(res, 200, available({
+            frameworks: postures,
+            overall,
+            dataSources: ['history.db', 'policy-yaml', 'security-scans', 'compliance-evidence-runner'],
+          }));
         } else {
-          const fws = ['soc2', 'hipaa', 'pci-dss', 'fedramp', 'iso27001'] as const;
-          const names: Record<string, string> = {
-            soc2: 'SOC 2 (Service Organization Control)', hipaa: 'HIPAA Security Rule', 'pci-dss': 'PCI-DSS v4.0', fedramp: 'FedRAMP (Moderate)', iso27001: 'ISO/IEC 27001:2022',
-          };
-          writeJson(res, 200, { frameworks: fws.map(f => ({ framework: f, frameworkName: names[f], postureScore: 0, satisfiedControls: 0, totalControls: 5 })), overall: 0 });
+          writeJson(res, 503, unavailable({ frameworks: [], overall: null }, 'Agentic services not initialized'));
         }
         return;
       }
@@ -4811,7 +4744,7 @@ export async function startDashboardServer(
           const posture = c.controlMapper.evaluate(framework as any, [], []);
           writeJson(res, 200, posture);
         } else {
-          writeJson(res, 200, { framework, postureScore: 0, satisfiedControls: 0, totalControls: 5, criticalGaps: [], summary: 'Connect to active Mastyf AI server.' });
+          writeJson(res, 503, unavailable({ framework, posture: null }, 'Agentic services not initialized'));
         }
         return;
       }
@@ -4824,14 +4757,17 @@ export async function startDashboardServer(
           const baselines = c.driftDetector.getBaselines(serverName);
           writeJson(res, 200, { serverName, baselineCount: baselines.length, latestBaseline: baselines[baselines.length - 1] || null });
         } else {
-          writeJson(res, 200, { baselineCount: 0, latestBaseline: null });
+          writeJson(res, 503, unavailable({ serverName, baselineCount: null, latestBaseline: null }, 'Agentic services not initialized'));
         }
         return;
       }
 
       if (url === '/api/agentic/red-team/results' && method === 'GET') {
         setCors();
-        writeJson(res, 200, { status: 'ready', baseAttacks: 16, mutationStrategies: 6, combinationEngine: 'active' });
+        const c = getAgenticContainer();
+        if (!c) { writeJson(res, 503, unavailable({ status: null }, 'Agentic services not initialized')); return; }
+        const attacks = c.attackGenerator.generateAllAttacks();
+        writeJson(res, 200, available({ status: 'available', attackCount: attacks.length, categories: [...new Set(attacks.map((a: any) => a.category))] }));
         return;
       }
 
@@ -4841,7 +4777,7 @@ export async function startDashboardServer(
         if (c) {
           writeJson(res, 200, c.threatMeshNode.getStats());
         } else {
-          writeJson(res, 200, { enabled: false, localSignatures: 0, pendingSignatures: 0 });
+          writeJson(res, 503, unavailable({ stats: null }, 'Agentic services not initialized'));
         }
         return;
       }
@@ -4852,7 +4788,7 @@ export async function startDashboardServer(
         if (c) {
           writeJson(res, 200, { summary: c.honeypotManager.getSummary(), honeypots: c.honeypotManager.getAll() });
         } else {
-          writeJson(res, 200, { summary: { active: 0, totalDeployments: 0, totalCaptures: 0, recentAlerts: 0 }, honeypots: [] });
+          writeJson(res, 503, unavailable({ summary: null, honeypots: [] }, 'Agentic services not initialized'));
         }
         return;
       }
@@ -4863,14 +4799,16 @@ export async function startDashboardServer(
         if (c) {
           writeJson(res, 200, { sessions: c.trustProtocol.getActiveSessions(), registry: c.trustProtocol.getTrustRegistry(), stats: c.trustProtocol.getStats() });
         } else {
-          writeJson(res, 200, { sessions: [], registry: [], stats: { totalNegotiations: 0, failedNegotiations: 0, activeSessions: 0, registeredAgents: 0 } });
+          writeJson(res, 503, unavailable({ sessions: [], registry: [], stats: null }, 'Agentic services not initialized'));
         }
         return;
       }
 
       if (url === '/api/agentic/supply-chain/status' && method === 'GET') {
         setCors();
-        writeJson(res, 200, { status: 'active', modules: ['signature-verifier', 'typo-squat-detector', 'dependency-confusion-detector'] });
+        const c = getAgenticContainer();
+        if (!c) { writeJson(res, 503, unavailable({ status: null, modules: [] }, 'Agentic services not initialized')); return; }
+        writeJson(res, 200, available({ status: 'available', modules: ['signature-verifier', 'typo-squat-detector', 'dependency-confusion-detector'] }));
         return;
       }
 
@@ -4880,7 +4818,7 @@ export async function startDashboardServer(
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
         const sn = String(b.serverName || 'unknown');
-        if (!c) { writeJson(res, 200, { grade: 'B', overallScore: 60, categories: [], improvementActions: [] }); return; }
+        if (!c) { writeJson(res, 503, unavailable({ score: null }, 'Agentic services not initialized')); return; }
         const score = c.mastyfAiScore.compute({ serverName: sn, cveCount: 0, maxCvss: 0, newestCveAgeDays: 0, authMethod: 'none', transport: 'stdio', highRiskToolCount: 0, mediumRiskToolCount: 0, totalToolCount: 0, trustedPublisher: false, typoSquatDetected: false, depConfusionDetected: false, blockedCalls: 0, bypassedAttacks: 0, responseDlpActive: false, mastyfAiProtected: true });
         writeJson(res, 200, score);
         return;
@@ -4891,7 +4829,8 @@ export async function startDashboardServer(
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
         const respText = String(b.responseText || '');
-        if (!c) { writeJson(res, 200, { violated: false, violations: [], block: false }); return; }
+        if (!respText) { writeJson(res, 400, { available: false, error: 'responseText required', dataSources: [] }); return; }
+        if (!c) { writeJson(res, 503, unavailable({ result: null }, 'Agentic services not initialized')); return; }
         const result = c.responseDlp.scan('dashboard', 'dashboard', respText);
         writeJson(res, 200, result);
         return;
@@ -4902,8 +4841,37 @@ export async function startDashboardServer(
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
         if (!c) { writeJson(res, 500, { error: 'Agentic services not initialized' }); return; }
-        const result = c.certifier.certify(String(b.serverName||'unknown'), String(b.packageName||''), String(b.version||'latest'), { trustScore: Number(b.trustScore)||50, complianceScore: Number(b.complianceScore)||0, cveFree: b.cveFree!==false, authMethod: String(b.authMethod||'none'), transport: String(b.transport||'stdio'), trustedPublisher: b.trustedPublisher===true });
-        writeJson(res, 200, result);
+        const serverName = String(b.serverName || '').trim();
+        const packageName = String(b.packageName || '').trim();
+        const version = String(b.version || '').trim();
+        if (!serverName || !packageName || !version) { writeJson(res, 400, { error: 'serverName, packageName, and version required' }); return; }
+        const trustScore = Number(b.trustScore);
+        const complianceScore = Number(b.complianceScore);
+        if (Number.isFinite(trustScore) && Number.isFinite(complianceScore)) {
+          const result = c.certifier.certify(serverName, packageName, version, {
+            trustScore,
+            complianceScore,
+            cveFree: b.cveFree === true,
+            authMethod: String(b.authMethod || ''),
+            transport: String(b.transport || ''),
+            trustedPublisher: b.trustedPublisher === true,
+          });
+          writeJson(res, 200, result);
+          return;
+        }
+        const { scanServerForCertification, buildScoreInputFromScan } = await import('../agentic/certification/certify-publish.js');
+        const server = {
+          name: serverName,
+          transport: b.transport === 'sse' || b.transport === 'websocket' ? b.transport : 'stdio',
+          packageName,
+          version,
+          url: typeof b.url === 'string' ? b.url : undefined,
+        } satisfies import('../types.js').McpServerConfig;
+        const dbPath = process.env['MASTYF_AI_DB_PATH'];
+        const { report, toolNames, blockedCalls } = await scanServerForCertification(server, dbPath);
+        const scoreInput = buildScoreInputFromScan({ server, report, toolNames, blockedCalls });
+        const result = c.certifier.certifyFromScan(serverName, packageName, version, scoreInput);
+        writeJson(res, 200, available({ ...result, dataSources: ['security-scan', 'history.db'] }));
         return;
       }
 
@@ -4911,7 +4879,7 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         if (!c) { writeJson(res, 500, { error: 'Agentic services not initialized' }); return; }
-        const blockFn = (_m: string, _p: Record<string, unknown>) => ({ blocked: false });
+        const blockFn = (_m: string, _p: Record<string, unknown>) => ({ blocked: true, reason: 'No live policy decision function provided to dashboard fuzzer' });
         c.protocolFuzzer.runFuzzer(blockFn);
         writeJson(res, 200, c.protocolFuzzer.getStats());
         return;
@@ -4921,15 +4889,21 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
-        const sn = String(b.serverName || 'filesystem');
-        const tn = String(b.toolName || 'read_file');
+        const sn = String(b.serverName || '').trim();
+        const tn = String(b.toolName || '').trim();
+        if (!sn || !tn) { writeJson(res, 400, { error: 'serverName and toolName required' }); return; }
         if (!c) { writeJson(res, 500, { error: 'Agentic services not initialized' }); return; }
-        if (isAgenticDemoMode()) {
-          c.slaEnforcer.record(sn, tn, 100, true);
-          c.slaEnforcer.record(sn, tn, 200, true);
-          c.slaEnforcer.record(sn, tn, 500, false);
+        const metricDb = runtimeHistoryDb ?? c.db;
+        const records = (await loadAllRecordsInWindow(metricDb, requestTenantId, 7))
+          .filter((record) => record.serverName === sn && record.toolName === tn);
+        for (const record of records) {
+          c.slaEnforcer.record(sn, tn, record.durationMs, !record.blocked);
         }
-        writeJson(res, 200, { ...c.slaEnforcer.check(sn, tn), demo: isAgenticDemoMode() });
+        writeJson(res, 200, {
+          ...c.slaEnforcer.check(sn, tn),
+          measuredCalls: records.length,
+          hasTraffic: records.length > 0,
+        });
         return;
       }
 
@@ -4938,7 +4912,11 @@ export async function startDashboardServer(
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
         if (!c) { writeJson(res, 500, { error: 'Agentic services not initialized' }); return; }
-        const report = c.incidentPlaybook.run(String(b.trigger||'test'), 'dashboard', (b.severity||'high') as any, String(b.playbook||'prompt_injection'));
+        const trigger = String(b.trigger || '').trim();
+        const playbook = String(b.playbook || '').trim();
+        const severity = String(b.severity || '').trim();
+        if (!trigger || !playbook || !severity) { writeJson(res, 400, { error: 'trigger, playbook, and severity required' }); return; }
+        const report = c.incidentPlaybook.run(trigger, 'dashboard', severity as any, playbook);
         writeJson(res, 200, report);
         return;
       }
@@ -4947,12 +4925,14 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
-        const agentId = String(b.agentId || 'unknown');
-        if (!c) { writeJson(res, 200, { agentId, score: 0.5, tier: 'standard' }); return; }
-        if (isAgenticDemoMode()) {
-          c.reputationEngine.record(agentId, 'test', false, 100);
-        }
-        writeJson(res, 200, { ...c.reputationEngine.getScore(agentId), demo: isAgenticDemoMode() });
+        const agentId = String(b.agentId || '').trim();
+        if (!agentId) { writeJson(res, 400, { error: 'agentId required' }); return; }
+        if (!c) { writeJson(res, 503, unavailable({ agentId, reputation: null }, 'Agentic services not initialized')); return; }
+        const reputation = c.reputationEngine.getScore(agentId);
+        writeJson(res, 200, {
+          ...reputation,
+          hasObservations: reputation.totalCalls > 0,
+        });
         return;
       }
 
@@ -4960,8 +4940,9 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
-        const sn = String(b.serverName || 'filesystem');
-        if (!c) { writeJson(res, 200, { serverName: sn, score: 85, grade: 'B', recommendations: [] }); return; }
+        const sn = String(b.serverName || '').trim();
+        if (!sn) { writeJson(res, 400, { error: 'serverName required' }); return; }
+        if (!c) { writeJson(res, 503, unavailable({ serverName: sn, analysis: null }, 'Agentic services not initialized')); return; }
         writeJson(res, 200, c.configHardener.analyze({ name: sn, transport: 'stdio' } as any));
         return;
       }
@@ -4969,12 +4950,24 @@ export async function startDashboardServer(
       if (url === '/api/agentic/collusion/detect' && method === 'POST') {
         setCors();
         const c = getAgenticContainer();
-        if (!c) { writeJson(res, 200, { alerts: [] }); return; }
-        if (isAgenticDemoMode()) {
-          c.collusionDetector.record('agent-a', 'filesystem', 'list_directory');
-          c.collusionDetector.record('agent-b', 'filesystem', 'read_file');
-        }
-        writeJson(res, 200, { alerts: c.collusionDetector.getAlerts(), demo: isAgenticDemoMode() });
+        if (!c) { writeJson(res, 503, unavailable({ alerts: [] }, 'Agentic services not initialized')); return; }
+        const fleetAlerts = c.industryStore.listFleetChainAlerts(undefined, 50, requestTenantId);
+        const chainEvents = c.industryStore.listChainEvents(requestTenantId, 200);
+        const persistedPatternEvents = chainEvents
+          .filter((event) => ['recon_then_exploit', 'coordinated_exfil', 'token_share'].includes(event.eventType))
+          .map((event) => ({
+            alertId: `stored:${event.sessionId}:${event.eventType}`,
+            pattern: event.eventType,
+            agents: event.agentId ? event.agentId.split(',').filter(Boolean) : [],
+            tools: event.toolName.split('->').filter(Boolean),
+            confidence: event.blocked ? 0.8 : 0.6,
+            timestamp: 'stored',
+            description: `Persisted chain event ${event.eventType} in session ${event.sessionId} on ${event.serverName}`,
+          }));
+        writeJson(res, 200, {
+          alerts: [...fleetAlerts, ...c.collusionDetector.getAlerts(), ...persistedPatternEvents],
+          observedChainEvents: chainEvents.length,
+        });
         return;
       }
 
@@ -4982,14 +4975,10 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
-        const agentId = String(b.agentId || 'unknown');
-        if (!c) { writeJson(res, 200, { agentId, sampledScore: 0.5, meanScore: 0.5, tier: 'standard' }); return; }
-        if (isAgenticDemoMode()) {
-          c.thompsonSampling.record(agentId, 'safe');
-          c.thompsonSampling.record(agentId, 'safe');
-          c.thompsonSampling.record(agentId, 'blocked');
-        }
-        writeJson(res, 200, { ...c.thompsonSampling.sample(agentId), demo: isAgenticDemoMode() });
+        const agentId = String(b.agentId || '').trim();
+        if (!agentId) { writeJson(res, 400, { error: 'agentId required' }); return; }
+        if (!c) { writeJson(res, 503, unavailable({ agentId, sample: null }, 'Agentic services not initialized')); return; }
+        writeJson(res, 200, c.thompsonSampling.sample(agentId));
         return;
       }
 
@@ -4997,8 +4986,12 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
-        if (!c) { writeJson(res, 200, { action: 'skip', expectedReward: 0, exploration: true }); return; }
-        const decision = c.contextualBandit.selectAction({ serverType: String(b.serverType||'filesystem'), hourOfDay: new Date().getHours(), agentTier: String(b.agentTier||'standard'), ruleCategory: String(b.ruleCategory||'shell_injection') });
+        if (!c) { writeJson(res, 503, unavailable({ decision: null }, 'Agentic services not initialized')); return; }
+        const serverType = String(b.serverType || '').trim();
+        const agentTier = String(b.agentTier || '').trim();
+        const ruleCategory = String(b.ruleCategory || '').trim();
+        if (!serverType || !agentTier || !ruleCategory) { writeJson(res, 400, { error: 'serverType, agentTier, and ruleCategory required' }); return; }
+        const decision = c.contextualBandit.selectAction({ serverType, hourOfDay: new Date().getHours(), agentTier, ruleCategory });
         writeJson(res, 200, decision);
         return;
       }
@@ -5007,9 +5000,17 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
-        if (!c) { writeJson(res, 200, { action: 'maintain', newValue: 500, qValues: [] }); return; }
-        const state = { blockRate: Number(b.blockRate)||0.3, fpRate: Number(b.fpRate)||0.05, callVolume: Number(b.callVolume)||0.5 };
-        const decision = c.sarsaThresholds.decide(String(b.parameter||'rateLimit') as any, state);
+        if (!c) { writeJson(res, 503, unavailable({ decision: null }, 'Agentic services not initialized')); return; }
+        const parameter = String(b.parameter || '').trim();
+        const blockRate = Number(b.blockRate);
+        const fpRate = Number(b.fpRate);
+        const callVolume = Number(b.callVolume);
+        if (!parameter || !Number.isFinite(blockRate) || !Number.isFinite(fpRate) || !Number.isFinite(callVolume)) {
+          writeJson(res, 400, { error: 'parameter, blockRate, fpRate, and callVolume required' });
+          return;
+        }
+        const state = { blockRate, fpRate, callVolume };
+        const decision = c.sarsaThresholds.decide(parameter as any, state);
         writeJson(res, 200, decision);
         return;
       }
@@ -5019,18 +5020,26 @@ export async function startDashboardServer(
         setCors();
         const c = getAgenticContainer();
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
-        const kpiData = b.kpiData || {};
-        
-        // Build prompt from KPI data
-        const trustGrade = (b.trustGrade as string) || 'B';
-        const trustScore = (b.trustScore as number) || 65;
-        const blocked = (b.blockedCount as number) || 0;
-        const compliance = (b.compliancePct as number) || 0;
-        const sessions = (b.activeSessions as number) || 0;
-        const honeypotActive = (b.honeypotActive as number) || 0;
-        const mesSignatures = (b.meshSignatures as number) || 0;
-        const observing = (b.isObserving as boolean) || false;
-        const policyCalls = (b.policyCalls as number) || 0;
+        const requiredFields = ['trustGrade', 'trustScore', 'blockedCount', 'compliancePct', 'activeSessions', 'decoyActive', 'meshSignatures', 'isObserving', 'policyCalls'];
+        const missing = requiredFields.filter((field) => !(field in b));
+        if (missing.length > 0) {
+          writeJson(res, 400, {
+            available: false,
+            reason: 'missing_backend_metrics',
+            missing,
+            dataSources: [],
+          });
+          return;
+        }
+        const trustGrade = String(b.trustGrade);
+        const trustScore = Number(b.trustScore);
+        const blocked = Number(b.blockedCount);
+        const compliance = Number(b.compliancePct);
+        const sessions = Number(b.activeSessions);
+        const decoyActive = Number(b.decoyActive);
+        const mesSignatures = Number(b.meshSignatures);
+        const observing = Boolean(b.isObserving);
+        const policyCalls = Number(b.policyCalls);
 
         if (c && c.modelProvider && c.modelProvider.isAvailable()) {
           try {
@@ -5040,11 +5049,11 @@ export async function startDashboardServer(
 - Blocked attacks: ${blocked}
 - Compliance score: ${compliance}% across SOC2/HIPAA/PCI-DSS/FedRAMP/ISO27001
 - Active sessions: ${sessions}
-- Honeypots active: ${honeypotActive}
+- Decoys active: ${decoyActive}
 - Threat signatures shared: ${mesSignatures}
 - Policy observation: ${observing ? 'Active' : 'Idle'} (${policyCalls} calls observed)
 
-Please write a 2-3 sentence summary of what these metrics mean. Also write a short explanation for each metric in simple English. Format your response as JSON: {"summary":"overall summary","metricExplanations":{"trustScore":"...","blockedAttacks":"...","compliance":"...","sessions":"...","honeypots":"...","threatMesh":"...","policyGen":"..."}}`;
+Please write a 2-3 sentence summary of what these metrics mean. Also write a short explanation for each metric in simple English. Format your response as JSON: {"summary":"overall summary","metricExplanations":{"trustScore":"...","blockedAttacks":"...","compliance":"...","sessions":"...","decoys":"...","threatMesh":"...","policyGen":"..."}}`;
             
             const response = await c.modelProvider.complete({
               systemPrompt,
@@ -5058,33 +5067,20 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
               writeJson(res, 200, { ok: true, analysis: response.parsedJson, llmUsed: true, model: response.model });
               return;
             }
-          } catch (e) { /* fall through to heuristic */ }
+          } catch (e) {
+            writeJson(res, 503, unavailable({ analysis: null }, e instanceof Error ? e.message : 'LLM analysis unavailable'));
+            return;
+          }
         }
 
-        // Heuristic fallback
-        writeJson(res, 200, {
-          ok: true,
-          analysis: {
-            summary: `Your MCP server has a ${trustGrade} trust score (${trustScore}/100). ${blocked > 0 ? `${blocked} attack(s) were blocked.` : 'No attacks detected.'} ${compliance > 0 ? `Compliance is at ${compliance}%.` : 'Compliance framework checks are pending.'}`,
-            metricExplanations: {
-              trustScore: `This measures how secure your MCP server is across 8 categories. Your grade is ${trustGrade} (${trustScore}/100). ${trustGrade === 'B' ? 'This is production-ready but could be improved with authentication.' : 'Review the improvement actions below.'}`,
-              blockedAttacks: `${blocked} malicious requests were blocked by Mastyf AI's policy engine. Each blocked request represents a potential security threat that was stopped before reaching your server.`,
-              compliance: `Compliance posture across 5 industry frameworks (SOC2, HIPAA, PCI-DSS, FedRAMP, ISO27001). Current score: ${compliance}%. These frameworks map to legal and regulatory requirements.`,
-              sessions: `${sessions} active MCP sessions. Each session represents an AI client connected to your MCP server through Mastyf AI.`,
-              honeypots: `${honeypotActive} fake decoy servers are deployed to detect and study attacker probing patterns.`,
-              threatMesh: `${mesSignatures} anonymized threat signatures have been shared across the Mastyf AI network to protect all deployments.`,
-              policyGen: policyCalls > 0 ? `Observing ${policyCalls} tool calls to automatically generate a minimal-privilege policy.` : 'Policy generation is idle. Start observation to automatically create security rules.',
-            },
-          },
-          llmUsed: false,
-        });
+        writeJson(res, 503, unavailable({ analysis: null }, 'LLM provider unavailable'));
         return;
       }
 
       if (url === '/api/agentic/rl/reinforce' && method === 'POST') {
         setCors();
         const c = getAgenticContainer();
-        if (!c) { writeJson(res, 200, { selectedStrategy: 'case_obfuscation', probability: 0.16, strategyProbabilities: [], totalEpisodes: 0 }); return; }
+        if (!c) { writeJson(res, 503, unavailable({ strategy: null }, 'Agentic services not initialized')); return; }
         writeJson(res, 200, c.reinforceFuzzer.select());
         return;
       }

@@ -54,15 +54,15 @@ export type AgenticDashboardSummary = {
     injectionScans: number;
     meshSignatures: number;
     meshEnabled: boolean;
-    honeypotActive: number;
-    honeypotCaptures: number;
+    decoyActive: number;
+    decoyCaptures: number;
     taskQueued: number;
     taskRunning: number;
     complianceOverall: number;
     trustGrade: string;
     trustScore: number;
     activeSessions: number;
-  };
+  } | null;
   trafficSeries: AgenticTrafficPoint[];
   decisionsByFeature: Record<string, number>;
   recentDecisions: AgenticDecisionRecord[];
@@ -84,7 +84,7 @@ export type AgenticDashboardSummary = {
     uniqueTools: number;
     uptimeMin: number;
   };
-  honeypots: { active: number; totalCaptures: number; recentAlerts: number };
+  decoys: { active: number; totalCaptures: number; recentAlerts: number } | null;
   mesh: { enabled: boolean; localSignatures: number; pendingSignatures: number };
   promptInjectionStats: { totalScans: number; totalDetections: number; detectionRate: number };
   trustSessions: {
@@ -211,7 +211,7 @@ export async function buildAgenticDashboardSummary(
     localSignatures: 0,
     pendingSignatures: 0,
   };
-  const honeypotSummary = container?.honeypotManager.getSummary() ?? {
+  const decoySummary = container?.honeypotManager.getSummary() ?? {
     active: 0,
     totalDeployments: 0,
     totalCaptures: 0,
@@ -257,7 +257,7 @@ export async function buildAgenticDashboardSummary(
         { name: 'Prompt Injection Detection', status: 'active' },
         { name: 'Threat Prediction', status: 'active' },
         { name: 'Threat Intel Mesh', status: mesh.enabled ? 'active' : 'disabled' },
-        { name: 'Honeypot Manager', status: `${honeypotSummary.active} active` },
+        { name: 'Decoy Manager', status: `${decoySummary.active} active` },
         { name: 'Trust Negotiation', status: `${trustStats.activeSessions} sessions` },
         { name: 'Compliance Mapping', status: 'active' },
         { name: 'Red Team Engine', status: 'ready' },
@@ -293,7 +293,7 @@ export async function buildAgenticDashboardSummary(
   }
 
   return {
-    available: true,
+    available: agenticEnabled,
     agenticEnabled,
     hasProxyHistory,
     windowDays,
@@ -301,7 +301,7 @@ export async function buildAgenticDashboardSummary(
     historyOutsideWindow,
     suggestedWindow,
     generatedAt,
-    kpis: {
+    kpis: container ? {
       uptimeMs: telemetry?.uptimeMs ?? 0,
       totalDecisions: telemetry?.totalDecisions ?? 0,
       avgConfidence: telemetry?.avgConfidence ?? 0,
@@ -314,15 +314,15 @@ export async function buildAgenticDashboardSummary(
       injectionScans: injectionStats.totalScans,
       meshSignatures: mesh.localSignatures,
       meshEnabled: mesh.enabled,
-      honeypotActive: honeypotSummary.active,
-      honeypotCaptures: honeypotSummary.totalCaptures,
+      decoyActive: decoySummary.active,
+      decoyCaptures: decoySummary.totalCaptures,
       taskQueued: taskStats.queued,
       taskRunning: taskStats.running,
       complianceOverall,
       trustGrade,
       trustScore,
       activeSessions: trustStats.activeSessions,
-    },
+    } : null,
     trafficSeries,
     decisionsByFeature: telemetry?.decisionsByFeature ?? {},
     recentDecisions: container?.telemetry.getRecentDecisions(30) ?? [],
@@ -344,11 +344,11 @@ export async function buildAgenticDashboardSummary(
       uniqueTools: pgSummary?.uniqueTools ?? 0,
       uptimeMin: pgSummary?.uptimeMin ?? 0,
     },
-    honeypots: {
-      active: honeypotSummary.active,
-      totalCaptures: honeypotSummary.totalCaptures,
-      recentAlerts: honeypotSummary.recentAlerts,
-    },
+    decoys: container ? {
+      active: decoySummary.active,
+      totalCaptures: decoySummary.totalCaptures,
+      recentAlerts: decoySummary.recentAlerts,
+    } : null,
     mesh: {
       enabled: mesh.enabled,
       localSignatures: mesh.localSignatures,

@@ -1338,8 +1338,8 @@
   justify-content: center;
 }
 
-/* Mock score */
-.lp-mock-score {
+/* Preview score */
+.lp-preview-score {
   text-align: center;
 }
 
@@ -1387,13 +1387,13 @@
   font-family: ui-monospace, monospace;
 }
 
-/* Mock badge */
-.lp-mock-badge {
+/* Preview badge */
+.lp-preview-badge {
   text-align: center;
   width: 100%;
 }
 
-.lp-mock-badge img {
+.lp-preview-badge img {
   max-width: 100%;
   height: auto;
 }
@@ -1409,8 +1409,8 @@
   border-radius: 6px;
 }
 
-/* Mock console */
-.lp-mock-console {
+/* Preview console */
+.lp-preview-console {
   width: 100%;
   border-radius: 8px;
   overflow: hidden;

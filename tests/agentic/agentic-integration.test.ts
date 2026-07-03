@@ -147,7 +147,7 @@ describe('Feature #4: Agentic Honeypot Deployer', () => {
   it('deploys a honeypot and captures calls', () => {
     const instance = manager.deploy({
       name: 'test-db',
-      template: 'fake-production-database',
+      template: 'decoy-production-database',
       ttlMs: 5000,
       alertOnInteraction: false,
     });
@@ -164,7 +164,7 @@ describe('Feature #4: Agentic Honeypot Deployer', () => {
   });
 
   it('provides template tools', () => {
-    const tools = manager.getTemplateTools('fake-credentials-vault');
+    const tools = manager.getTemplateTools('decoy-credentials-vault');
     expect(tools.length).toBe(3);
     expect(tools[0]!.name).toBe('get_secret');
   });

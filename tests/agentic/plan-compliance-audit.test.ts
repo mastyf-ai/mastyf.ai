@@ -29,14 +29,11 @@ describe('plan compliance audit', () => {
     expect(result).toBeNull();
   });
 
-  it('B2 observatory stub returns cloud payload without relay URL', async () => {
-    process.env.MASTYF_AI_OBSERVATORY_STUB = 'true';
+  it('B2 observatory returns unavailable without relay URL', async () => {
     delete process.env.MASTYF_AI_OBSERVATORY_RELAY_URL;
     delete process.env.MASTYF_AI_CLOUD_URL;
     const payload = await pullCloudObservatorySnapshot();
-    delete process.env.MASTYF_AI_OBSERVATORY_STUB;
-    expect(payload?.avgBlockRate).toBeGreaterThan(0);
-    expect(payload?.serverCount).toBeGreaterThan(0);
+    expect(payload).toBeNull();
   });
 
   it('A2 scorecard downgrades when captured traffic missing', () => {

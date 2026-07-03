@@ -30,9 +30,9 @@ import {
   type ServersView,
   type PolicyView,
   type ActivityView,
-  type AgenticView,
   type ComplianceView,
   type SettingsView,
+  LEGACY_WORKSPACE_MAP,
 } from '@/lib/workspace-nav';
 import { DashboardShell } from './DashboardShell';
 import { LoginGate } from './LoginGate';
@@ -43,7 +43,6 @@ import type { AuthStatus } from '@/lib/mastyf-ai-api';
 import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
 
 import { ExecutiveDashboard } from './dashboard/ExecutiveDashboard';
-import { AgenticWorkspace } from './workspaces/AgenticWorkspace';
 import { ActivityCenter } from './operations/ActivityCenter';
 import { SecurityOperationsCenter } from './operations/SecurityOperationsCenter';
 import { PolicyControlCenter } from './operations/PolicyControlCenter';
@@ -76,7 +75,6 @@ export function DashboardClient() {
   const [costView, setCostView] = useState<CostView>('overview');
   const [serversView, setServersView] = useState<ServersView>('overview');
   const [complianceView, setComplianceView] = useState<ComplianceView>('overview');
-  const [agenticView, setAgenticView] = useState<AgenticView>('overview');
   const [settingsView, setSettingsView] = useState<SettingsView>('general');
 
   const [status, setStatus] = useState('Loading…');
@@ -126,18 +124,18 @@ export function DashboardClient() {
   }, []);
 
   const navigate = useCallback((wsId: WorkspaceId, view?: string, topic?: string) => {
-    setWorkspace(wsId);
+    const mapped = LEGACY_WORKSPACE_MAP[wsId] ?? wsId;
+    setWorkspace(mapped);
     setActiveView(view);
-    if (wsId === 'activity' && view) setActivityView(view as ActivityView);
-    if (wsId === 'security' && view) setSecurityView(view as SecurityView);
-    if (wsId === 'policy' && view) setPolicyView(view as PolicyView);
-    if (wsId === 'cost' && view) setCostView(view as CostView);
-    if (wsId === 'servers' && view) setServersView(view as ServersView);
-    if (wsId === 'compliance' && view) setComplianceView(view as ComplianceView);
-    if (wsId === 'agentic' && view) setAgenticView(view as AgenticView);
-    if (wsId === 'settings' && view) setSettingsView(view as SettingsView);
-    if (wsId === 'help' && topic) setHelpTopic(topic);
-    syncNavToUrl({ workspace: wsId, view, topic });
+    if (mapped === 'activity' && view) setActivityView(view as ActivityView);
+    if (mapped === 'security' && view) setSecurityView(view as SecurityView);
+    if (mapped === 'policy' && view) setPolicyView(view as PolicyView);
+    if (mapped === 'cost' && view) setCostView(view as CostView);
+    if (mapped === 'servers' && view) setServersView(view as ServersView);
+    if (mapped === 'compliance' && view) setComplianceView(view as ComplianceView);
+    if (mapped === 'settings' && view) setSettingsView(view as SettingsView);
+    if (mapped === 'help' && topic) setHelpTopic(topic);
+    syncNavToUrl({ workspace: mapped, view, topic });
   }, []);
 
   const refreshAll = useCallback(async () => {
@@ -183,8 +181,10 @@ export function DashboardClient() {
     if (parsed.view && parsed.workspace === 'cost') setCostView(parsed.view as CostView);
     if (parsed.view && parsed.workspace === 'servers') setServersView(parsed.view as ServersView);
     if (parsed.view && parsed.workspace === 'compliance') setComplianceView(parsed.view as ComplianceView);
-    if (parsed.view && parsed.workspace === 'agentic') setAgenticView(parsed.view as AgenticView);
     if (parsed.view && parsed.workspace === 'settings') setSettingsView(parsed.view as SettingsView);
+    if (new URLSearchParams(window.location.search).get('workspace') === 'agentic') {
+      syncNavToUrl({ workspace: parsed.workspace, view: parsed.view, topic: parsed.topic });
+    }
   }, []);
 
   useEffect(() => {
@@ -345,15 +345,6 @@ export function DashboardClient() {
                   view={complianceView}
                   onViewChange={(v) => { setComplianceView(v); syncNavToUrl({ workspace: 'compliance', view: v }); }}
                   refreshKey={refreshTick}
-                />
-              )}
-
-              {/* AI OPERATIONS */}
-              {workspace === 'agentic' && (
-                <AgenticWorkspace
-                  view={agenticView}
-                  refreshKey={refreshTick}
-                  onViewChange={(v) => { setAgenticView(v); syncNavToUrl({ workspace: 'agentic', view: v }); }}
                 />
               )}
 

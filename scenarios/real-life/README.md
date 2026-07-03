@@ -54,7 +54,7 @@ pnpm security-swarm:analyze:full --continuous
 | `LIVE_ATTACK_BENIGN_RATIO` | `0.08` | Fraction of benign corpus calls (FP tracking) |
 | `LIVE_ATTACK_ESCALATION` | `true` | Phase 2: unicode-mutated repeats of blocked patterns |
 
-Output: `output/continuous-live-attack-session.json` — **live MCP traffic** (not `sca/` synthetic sim).
+Output: `output/continuous-live-attack-session.json` — **live MCP traffic** (not `sca/` simulator output).
 
 Success targets: attack block rate ≥ **95%**, benign FP ≤ **2%**. Failures → `reports/security-swarm/continuous-bypasses.json`.
 

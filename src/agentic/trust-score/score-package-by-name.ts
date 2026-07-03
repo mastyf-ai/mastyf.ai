@@ -45,7 +45,7 @@ function scoreToLevel(score: number): string {
   return 'bronze';
 }
 
-export function buildSyntheticMcpConfig(
+export function buildPackageMcpConfig(
   packageName: string,
   version: string,
 ): McpServerConfig {
@@ -64,7 +64,7 @@ async function computePackageScore(
   version: string,
   tier: PackageScoreTier,
 ): Promise<PackageScoreResult> {
-  const server = buildSyntheticMcpConfig(packageName, version);
+  const server = buildPackageMcpConfig(packageName, version);
   const scanner = new SecurityScanner();
   const report = await scanner.scanServer(server);
   const supply = new SignatureVerifier().verify(packageName, version);
