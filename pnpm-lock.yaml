@@ -80,8 +80,8 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1
       lru-cache:
-        specifier: ^11.3.6
-        version: 11.3.6
+        specifier: ^11.5.1
+        version: 11.5.1
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -298,8 +298,8 @@ importers:
         specifier: ^5.10.1
         version: 5.10.1
       lru-cache:
-        specifier: ^11.3.6
-        version: 11.3.6
+        specifier: ^11.5.1
+        version: 11.5.1
       undici:
         specifier: ^7.28.0
         version: 7.28.0
@@ -2577,8 +2577,8 @@ packages:
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
 
-  lru-cache@11.3.6:
-    resolution: {integrity: sha512-Gf/KoL3C/MlI7Bt0PGI9I+TeTC/I6r/csU58N4BSNc4lppLBeKsOdFYkK+dX0ABDUMJNfCHTyPpzwwO21Awd3A==}
+  lru-cache@11.5.1:
+    resolution: {integrity: sha512-RPimw/7aMdv2oqRrxKwvZXcPfwBrn/JZ2xYcY9Hus/6LaS3VOAKVWKWgNLCFSiOm1ESXinjsDlidVU7JlnCN2A==}
     engines: {node: 20 || >=22}
 
   lucide-react@1.17.0:
@@ -5655,7 +5655,7 @@ snapshots:
 
   lru-cache@10.4.3: {}
 
-  lru-cache@11.3.6: {}
+  lru-cache@11.5.1: {}
 
   lucide-react@1.17.0(react@19.2.6):
     dependencies:
