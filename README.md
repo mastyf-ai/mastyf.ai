@@ -310,7 +310,7 @@ pnpm dashboard:proxy
 
 ## MCP package trust scores
 
-Before installing any MCP server from npm, check its trust score at [mastyf-ai-cloud-jet.vercel.app](https://mastyf-ai-cloud-jet.vercel.app). Scores cover CVE exposure, typo-squat risk, maintainer signals, and known attack patterns. Free, no account required.
+Before installing any MCP server from npm, check its trust score at [https://www.mastyf.ai/certified](https://www.mastyf.ai/certified). Scores cover CVE exposure, typo-squat risk, maintainer signals, and known attack patterns. Free, no account required.
 
 ---
 
