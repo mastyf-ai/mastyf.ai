@@ -1,0 +1,7 @@
+AI agents are now connecting to MCP servers, tools, APIs, and enterprise data. That
+creates a new security and compliance layer teams must manage in real time. Mastyf dot A I
+acts as a runtime trust layer for agentic systems. It enforces policies, detects threats,
+monitors tool calls, and records every decision in an audit trail. From the dashboard,
+teams can see protected traffic, framework posture, certifications, and downloadable
+compliance evidence for SOC 2, ISO 27001, HIPAA, PCI DSS, and FedRAMP. Secure AI agents.
+Prove compliance. Reduce risk with Mastyf dot A I.

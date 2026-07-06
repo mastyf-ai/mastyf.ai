@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "github": {
+      "url": "http://127.0.0.1:9102/mcp"
+    },
+    "filesystem": {
+      "url": "http://127.0.0.1:9100/mcp"
+    },
+    "puppeteer": {
+      "url": "http://127.0.0.1:9105/mcp"
+    },
+    "mcp-guardian": {
+      "url": "http://127.0.0.1:9109/mcp"
+    },
+    "fixture_echo": {
+      "url": "http://127.0.0.1:9101/mcp"
+    },
+    "memory": {
+      "url": "http://127.0.0.1:9103/mcp"
+    },
+    "playwright": {
+      "url": "http://127.0.0.1:9104/mcp"
+    },
+    "sequential-thinking": {
+      "url": "http://127.0.0.1:9106/mcp"
+    },
+    "filesystem-proxy": {
+      "url": "http://127.0.0.1:9107/sse"
+    },
+    "github-proxy": {
+      "url": "http://127.0.0.1:9108/sse"
+    },
+    "remote-api": {
+      "url": "http://127.0.0.1:9110/mcp"
+    },
+    "echo_local": {
+      "url": "http://127.0.0.1:9111/mcp"
+    }
+  }
+}

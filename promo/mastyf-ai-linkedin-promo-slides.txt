@@ -1,0 +1,13 @@
+file '/Users/rudraneeldas/mastyf.ai/promo/linkedin-promo-slide-01.png'
+duration 6.25
+file '/Users/rudraneeldas/mastyf.ai/promo/linkedin-promo-slide-02.png'
+duration 6.25
+file '/Users/rudraneeldas/mastyf.ai/promo/linkedin-promo-slide-03.png'
+duration 6.25
+file '/Users/rudraneeldas/mastyf.ai/promo/linkedin-promo-slide-04.png'
+duration 6.25
+file '/Users/rudraneeldas/mastyf.ai/promo/linkedin-promo-slide-05.png'
+duration 6.25
+file '/Users/rudraneeldas/mastyf.ai/promo/linkedin-promo-slide-06.png'
+duration 6.25
+file '/Users/rudraneeldas/mastyf.ai/promo/linkedin-promo-slide-06.png'

@@ -1,0 +1,23 @@
+Here is a full tour of the Mastyf dot A I dashboard.
+The executive dashboard starts with live operational posture: protected traffic, security score, active servers, cost signals, policy state, and compliance readiness.
+The Activity workspace begins with the live feed, where teams can watch proxy events and tool activity as agents interact with MCP servers and APIs.
+The audit trail sub-tab lets operators filter and inspect individual decisions, including blocked calls, rules, latency, tokens, and cost context.
+Analytics turns that activity into trends, while Infrastructure shows the health of the proxy, telemetry, and connected services.
+In Security, the posture overview summarizes risk, active threats, server posture, and threat layers.
+Threat Detection is where the workflow becomes active: operators can run analysis, launch Threat Lab, and start Auto Threat Research.
+The Threat Lab sub-tab reviews generated attack candidates, confidence, provenance, and accept or reject actions for building the corpus.
+Auto Research shows the research pipeline, scheduler, generated fixtures, promotion status, and the latest run results.
+Threat Intel merges swarm findings and candidate research into a live intelligence feed.
+Swarm Analysis runs the autonomous security-swarm job, tracks progress, displays regression gates, findings, plain-English reports, traffic summaries, and logs.
+AI Learning shows how the system learns from observed behavior and blocked activity.
+Quarantine shows risky rules and patterns that have been isolated for review.
+The Policy workspace shows active rules, the policy editor, policy testing, and version history.
+In Test and Simulate, teams can run a proposed tool call against the active policy and see the decision result before deploying changes.
+The Cost workspace shows spend overview, tool and server breakdowns, and budget controls for agentic workloads.
+The MCP Servers workspace shows inventory, health and performance, and certification workflows for observed servers.
+The Compliance workspace shows plan posture, continuous assurance, real framework mapping, and generated evidence.
+Frameworks maps live policy, audit records, and security scans to SOC 2, ISO 27001, HIPAA, PCI DSS, and FedRAMP.
+Evidence generates and downloads full compliance evidence packages from runtime telemetry rather than fabricated data.
+Settings covers platform configuration, tenants, integrations, and administration.
+Help gives teams the operational guidance they need to deploy and run the platform.
+Mastyf dot A I brings runtime protection, threat research, policy enforcement, server trust, cost awareness, and compliance evidence into one dashboard for AI agents and MCP infrastructure.
