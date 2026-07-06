@@ -14,6 +14,7 @@ import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { getTraceLogFields } from './tracing.js';
 import { resolveAiPendingSuggestionsPath } from '../ai/ai-paths.js';
 import { getAiEngine } from '../ai/suggestion-engine.js';
+import { getRecentLogEntries } from './dashboard-log-writer.js';
 
 let wiredDb: unknown = null;
 
@@ -93,13 +94,19 @@ export function wireDashboardWsProviders(ws: WsBroadcaster | null, historyDb: un
       }
     },
     logs: (tenantId: string) => {
-      const lines: string[] = [];
-      const jobLog = join(getEffectiveSwarmDir(tenantId || DEFAULT_TENANT_ID), 'job.log');
-      if (existsSync(jobLog)) {
-        const tail = readFileSync(jobLog, 'utf-8').split('\n').filter(Boolean).slice(-40);
-        lines.push(...tail.map((l) => `[swarm] ${l}`));
+      try {
+        return getRecentLogEntries(tenantId || DEFAULT_TENANT_ID, 40).map(e =>
+          `[${e.timestamp}] [${e.level.toUpperCase()}] [${e.category}]${e.source ? ` [${e.source}]` : ''} ${e.message}${e.details ? ` — ${e.details}` : ''}`,
+        );
+      } catch {
+        const lines: string[] = [];
+        const jobLog = join(getEffectiveSwarmDir(tenantId || DEFAULT_TENANT_ID), 'job.log');
+        if (existsSync(jobLog)) {
+          const tail = readFileSync(jobLog, 'utf-8').split('\n').filter(Boolean).slice(-40);
+          lines.push(...tail.map((l) => `[swarm] ${l}`));
+        }
+        return lines;
       }
-      return lines;
     },
   });
 }

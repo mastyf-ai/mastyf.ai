@@ -19,6 +19,7 @@ const icons: Record<string, string> = {
   ClipboardCheck: '✓',
   Brain: '◎',
   Settings: '⚙',
+  ScrollText: '📋',
   BookOpen: '📄',
 };
 

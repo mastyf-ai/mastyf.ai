@@ -1791,11 +1791,105 @@ export async function fetchAdminAuditTrail(): Promise<unknown[]> {
   return body.entries || [];
 }
 
+export type LogEntry = {
+  id: string;
+  timestamp: string;
+  level: 'debug' | 'info' | 'warn' | 'error' | 'critical';
+  category: 'user_activity' | 'security' | 'deployment' | 'system' | 'error' | 'warning' | 'debug' | 'swarm' | 'api_request' | 'policy_decision' | 'auth' | 'plugin';
+  message: string;
+  source?: string;
+  details?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type LogQueryParams = {
+  search?: string;
+  category?: string;
+  level?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type LogQueryResponse = {
+  entries: LogEntry[];
+  total: number;
+  categories: string[];
+  levels: string[];
+};
+
 export async function fetchLogs(): Promise<string[]> {
   const res = await mastyfAiFetch('/api/logs');
   if (!res.ok) return [];
   const body = (await res.json()) as { logs?: string[] };
   return body.logs || [];
+}
+
+export async function fetchLogEntries(query?: LogQueryParams): Promise<LogQueryResponse> {
+  const params = new URLSearchParams();
+  if (query?.search) params.set('search', query.search);
+  if (query?.category) params.set('category', query.category);
+  if (query?.level) params.set('level', query.level);
+  if (query?.startDate) params.set('startDate', query.startDate);
+  if (query?.endDate) params.set('endDate', query.endDate);
+  if (query?.limit) params.set('limit', String(query.limit));
+  if (query?.offset) params.set('offset', String(query.offset));
+  const q = params.toString();
+  const res = await mastyfAiFetch(`/api/logs/entries${q ? `?${q}` : ''}`);
+  if (!res.ok) return { entries: [], total: 0, categories: [], levels: [] };
+  return (await res.json()) as LogQueryResponse;
+}
+
+export async function clearLogs(category?: string): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/logs/clear', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ category }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error || res.statusText };
+  }
+  return { ok: true };
+}
+
+export async function exportLogs(params?: LogQueryParams): Promise<{ ok: boolean; blob?: Blob; error?: string }> {
+  const query = new URLSearchParams();
+  if (params?.category) query.set('category', params.category);
+  if (params?.level) query.set('level', params.level);
+  if (params?.startDate) query.set('startDate', params.startDate);
+  if (params?.endDate) query.set('endDate', params.endDate);
+  if (params?.search) query.set('search', params.search);
+  const q = query.toString();
+  const res = await mastyfAiFetch(`/api/logs/export${q ? `?${q}` : ''}`);
+  if (!res.ok) return { ok: false, error: `Export failed (HTTP ${res.status})` };
+  return { ok: true, blob: await res.blob() };
+}
+
+export async function fetchLogRetentionConfig(): Promise<{ retentionDays: number; maxSizeMb: number; enabledCategories: string[] }> {
+  const res = await mastyfAiFetch('/api/logs/retention');
+  if (!res.ok) return { retentionDays: 30, maxSizeMb: 100, enabledCategories: [] };
+  return (await res.json()) as { retentionDays: number; maxSizeMb: number; enabledCategories: string[] };
+}
+
+export async function updateLogRetentionConfig(config: {
+  retentionDays?: number;
+  maxSizeMb?: number;
+  enabledCategories?: string[];
+}): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/logs/retention', {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error || res.statusText };
+  }
+  return { ok: true };
 }
 
 export async function fetchSwarmLatest(): Promise<SwarmLatest | null> {

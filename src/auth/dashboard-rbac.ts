@@ -103,7 +103,11 @@ export function permissionForRoute(method: string, url: string): DashboardRouteP
   ) {
     return m === 'GET' ? 'read' : null;
   }
-  if (path === '/api/logs') return m === 'GET' ? 'export' : null;
+  if (path === '/api/logs' || path.startsWith('/api/logs/')) {
+    if (m === 'GET') return 'read';
+    if (m === 'POST' || m === 'PUT') return 'admin';
+    return null;
+  }
   if (path === '/api/policy/test') return m === 'POST' ? 'policy_test' : null;
   if (path === '/api/policy/copilot') return m === 'POST' ? 'policy_test' : null;
   if (path === '/api/policy/copilot/replay') return m === 'POST' ? 'policy_test' : null;

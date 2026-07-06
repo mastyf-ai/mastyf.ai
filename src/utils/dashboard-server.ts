@@ -897,7 +897,23 @@ export async function startDashboardServer(
             });
             res.end(JSON.stringify({ success: true, csrfToken: newCsrf }));
           }
-        } else { writeJson(res, 401, { success: false, error: result.error }); }
+          void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+            writeLogEntry(requestTenantId, 'info', 'auth', `Login successful for user ${body.username || 'unknown'}`, {
+              source: 'auth',
+              details: `Session created for ${body.username}`,
+              metadata: { user: body.username, ip: getClientIp(req), tenantId: requestTenantId },
+            });
+          });
+        } else {
+          writeJson(res, 401, { success: false, error: result.error });
+          void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+            writeLogEntry(requestTenantId, 'warn', 'auth', `Login failed for user ${body.username || 'unknown'}`, {
+              source: 'auth',
+              details: result.error || 'Invalid credentials',
+              metadata: { user: body.username, ip: getClientIp(req), tenantId: requestTenantId },
+            });
+          });
+        }
         return;
       }
 
@@ -962,7 +978,10 @@ export async function startDashboardServer(
 
       if (url.startsWith('/api/') && url !== '/api/login') {
         const clientIp = getClientIp(req);
+        const startMs = Date.now();
         res.on('finish', () => {
+          const durationMs = Date.now() - startMs;
+          const status = res.statusCode || 0;
           void import('../audit/dashboard-access-log.js').then(({ appendDashboardAccessLog }) => {
             appendDashboardAccessLog({
               userId: authResult.identity || 'unknown',
@@ -970,8 +989,18 @@ export async function startDashboardServer(
               method,
               path: url.split('?')[0] || url,
               endpoint: url.split('?')[0] || url,
-              status: res.statusCode || 0,
+              status,
               ip: clientIp,
+            });
+          });
+          if (url.startsWith('/api/logs/')) return;
+          const path = url.split('?')[0] || url;
+          const level = status >= 500 ? 'error' as const : status >= 400 ? 'warn' as const : 'info' as const;
+          void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+            writeLogEntry(requestTenantId, level, 'api_request', `${method} ${path} → ${status}`, {
+              source: 'api',
+              details: `Completed in ${durationMs}ms`,
+              metadata: { method, path, status, durationMs, ip: clientIp, user: authResult.identity },
             });
           });
         });
@@ -1095,6 +1124,13 @@ export async function startDashboardServer(
             sourceHash: auditor.computeHash(nextYaml),
           });
         }
+        void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+          writeLogEntry(requestTenantId, 'info', 'user_activity', `Policy rule ${name} ${body.enabled ? 'enabled' : 'disabled'}`, {
+            source: 'policy',
+            details: `User ${authResult.identity || 'unknown'} toggled rule ${name}`,
+            metadata: { user: authResult.identity, rule: name, enabled: body.enabled, action: 'toggle' },
+          });
+        });
         return;
       }
 
@@ -1149,6 +1185,13 @@ export async function startDashboardServer(
             sourceHash: auditor.computeHash(nextYaml),
           });
         }
+        void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+          writeLogEntry(requestTenantId, 'info', 'user_activity', `Policy rule ${name} deleted`, {
+            source: 'policy',
+            details: `User ${authResult.identity || 'unknown'} removed rule ${name}`,
+            metadata: { user: authResult.identity, rule: name, action: 'delete' },
+          });
+        });
         return;
       }
 
@@ -1252,6 +1295,13 @@ export async function startDashboardServer(
             sourceHash: auditor.computeHash(yaml),
           });
         }
+        void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+          writeLogEntry(requestTenantId, 'info', 'user_activity', `Policy configuration saved`, {
+            source: 'policy',
+            details: `User ${authResult.identity || 'unknown'} saved policy (${parsePolicyConfig(parsed).policy.mode} mode)`,
+            metadata: { user: authResult.identity, action: 'save', mode: parsePolicyConfig(parsed).policy.mode },
+          });
+        });
         return;
       }
 
@@ -3557,6 +3607,14 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url.startsWith('/api/logs/')) {
+        const { handleDashboardLogsRoutes } = await import('./dashboard-logs-routes.js');
+        const handled = await handleDashboardLogsRoutes({
+          url, method, req, res, requestTenantId, writeJson, readBody, setCors, runtimeHistoryDb,
+        });
+        if (handled) return;
+      }
+
       if (url === '/api/logs' && method === 'GET') {
         setCors();
         const lines: string[] = [];
@@ -4344,6 +4402,13 @@ export async function startDashboardServer(
           }
         }
         writeJson(res, 200, { ...result, localUrl, reloadRequired });
+        void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+          writeLogEntry(requestTenantId, 'info', 'user_activity', `Server "${String(body.name || '')}" added`, {
+            source: 'server',
+            details: `User ${authResult.identity || 'unknown'} added server ${String(body.name || '')}`,
+            metadata: { user: authResult.identity, server: String(body.name || ''), action: 'add' },
+          });
+        });
         return;
       }
       if (url?.startsWith('/api/servers/') && method === 'DELETE') {
@@ -4352,6 +4417,13 @@ export async function startDashboardServer(
         const { removeUiServer } = await import('./mcp-server-config.js');
         const result = removeUiServer(name);
         writeJson(res, result.ok ? 200 : 404, result);
+        void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+          writeLogEntry(requestTenantId, 'info', 'user_activity', `Server "${name}" removed`, {
+            source: 'server',
+            details: `User ${authResult.identity || 'unknown'} removed server ${name}`,
+            metadata: { user: authResult.identity, server: name, action: 'remove' },
+          });
+        });
         return;
       }
       if (url?.startsWith('/api/servers/') && method === 'PATCH') {
@@ -4368,6 +4440,13 @@ export async function startDashboardServer(
         if (body.disabled !== undefined) patch.disabled = body.disabled === true;
         const result = updateUiServer(name, patch);
         writeJson(res, result.ok ? 200 : 404, result);
+        void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+          writeLogEntry(requestTenantId, 'info', 'user_activity', `Server "${name}" updated`, {
+            source: 'server',
+            details: `User ${authResult.identity || 'unknown'} updated server ${name}`,
+            metadata: { user: authResult.identity, server: name, action: 'update' },
+          });
+        });
         return;
       }
 
@@ -5136,6 +5215,15 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
   }
   const mode = dashboardEnabled ? 'dashboard + WS' : 'WS only';
   Logger.info(`[dashboard] ${mode} at http://localhost:${listenPort}/ws`);
+
+  void import('./dashboard-log-writer.js').then(({ writeLogEntry, startRetentionScheduler }) => {
+    writeLogEntry('default', 'info', 'system', 'Dashboard server started', {
+      source: 'server',
+      details: `${mode} listening on port ${listenPort}`,
+      metadata: { port: listenPort, mode, pid: process.pid, nodeVersion: process.version },
+    });
+    startRetentionScheduler('default');
+  });
 
   const handle = { auth, server, ws };
   activeDashboard = handle;

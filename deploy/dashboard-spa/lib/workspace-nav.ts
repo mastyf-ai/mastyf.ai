@@ -8,7 +8,8 @@ export type WorkspaceId =
   | 'compliance'
   | 'agentic'
   | 'settings'
-  | 'help';
+  | 'help'
+  | 'logs';
 
 export type ActivityView = 'realtime' | 'audit' | 'analytics' | 'infrastructure';
 export type SecurityView = 'overview' | 'threats' | 'intel' | 'swarm' | 'learning' | 'quarantine';
@@ -20,6 +21,7 @@ export type ComplianceView = 'overview' | 'frameworks' | 'evidence';
 export type LegacyWorkspaceId = 'home' | 'operations' | 'threats';
 export type AgenticView = 'overview' | 'learning' | 'red-team' | 'prediction' | 'trust' | 'biometrics' | 'threats' | 'policy' | 'operations' | 'audit' | 'tools';
 export type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin';
+export type LogsView = 'events' | 'system' | 'retention';
 
 export const WORKSPACE_CONFIG: Record<WorkspaceId, {
   label: string;
@@ -113,6 +115,15 @@ export const WORKSPACE_CONFIG: Record<WorkspaceId, {
       { id: 'admin', label: 'Administration' },
     ],
   },
+  logs: {
+    label: 'Logs',
+    icon: 'ScrollText',
+    views: [
+      { id: 'events', label: 'Event Log' },
+      { id: 'system', label: 'System Log' },
+      { id: 'retention', label: 'Retention' },
+    ],
+  },
   help: {
     label: 'Help',
     icon: 'BookOpen',
@@ -127,7 +138,7 @@ export const NAV_SECTIONS: Array<{
   { label: 'Security', items: ['activity', 'security'] },
   { label: 'Governance', items: ['policy', 'cost', 'servers'] },
   { label: 'Assurance', items: ['compliance'] },
-  { label: 'System', items: ['settings', 'help'] },
+  { label: 'System', items: ['settings', 'logs', 'help'] },
 ];
 
 export const DEFAULT_WORKSPACE: WorkspaceId = 'dashboard';
@@ -141,6 +152,7 @@ export const DEFAULT_VIEW: Partial<Record<WorkspaceId, string>> = {
   compliance: 'overview',
   agentic: 'overview',
   settings: 'general',
+  logs: 'events',
   help: undefined,
 };
 
