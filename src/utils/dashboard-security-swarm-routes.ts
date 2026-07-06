@@ -59,6 +59,13 @@ export async function handleDashboardSecuritySwarmRoutes(params: {
       return true;
     }
     writeJson(res, 202, { jobId: result.jobId, startedAt: result.startedAt });
+    void import('./dashboard-log-writer.js').then(({ writeLogEntry }) => {
+      writeLogEntry(requestTenantId, 'info', 'swarm', `Swarm analysis ${(body as { full?: boolean }).full ? 'full' : 'incremental'} analysis started`, {
+        source: 'swarm',
+        details: `Job ${result.jobId} started`,
+        metadata: { jobId: result.jobId, full: !!(body as { full?: boolean }).full, startedAt: result.startedAt },
+      });
+    });
     return true;
   }
 

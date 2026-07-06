@@ -32,6 +32,7 @@ import {
   type ActivityView,
   type ComplianceView,
   type SettingsView,
+  type LogsView as LogsViewType,
   LEGACY_WORKSPACE_MAP,
 } from '@/lib/workspace-nav';
 import { DashboardShell } from './DashboardShell';
@@ -51,6 +52,7 @@ import { ServersFleetCenter } from './operations/ServersFleetCenter';
 import { ConfigurationHub } from './operations/ConfigurationHub';
 import { OperatorEnablementCenter } from './operations/OperatorEnablementCenter';
 import { ComplianceCenter } from './operations/ComplianceCenter';
+import { LogsViewer } from './operations/LogsViewer';
 
 import {
   DashboardWindowProvider,
@@ -76,6 +78,7 @@ export function DashboardClient() {
   const [serversView, setServersView] = useState<ServersView>('overview');
   const [complianceView, setComplianceView] = useState<ComplianceView>('overview');
   const [settingsView, setSettingsView] = useState<SettingsView>('general');
+  const [logsView, setLogsView] = useState<LogsViewType>('events');
 
   const [status, setStatus] = useState('Loading…');
   const [statusIsError, setStatusIsError] = useState(false);
@@ -134,6 +137,7 @@ export function DashboardClient() {
     if (mapped === 'servers' && view) setServersView(view as ServersView);
     if (mapped === 'compliance' && view) setComplianceView(view as ComplianceView);
     if (mapped === 'settings' && view) setSettingsView(view as SettingsView);
+    if (mapped === 'logs' && view) setLogsView(view as LogsViewType);
     if (mapped === 'help' && topic) setHelpTopic(topic);
     syncNavToUrl({ workspace: mapped, view, topic });
   }, []);
@@ -182,6 +186,7 @@ export function DashboardClient() {
     if (parsed.view && parsed.workspace === 'servers') setServersView(parsed.view as ServersView);
     if (parsed.view && parsed.workspace === 'compliance') setComplianceView(parsed.view as ComplianceView);
     if (parsed.view && parsed.workspace === 'settings') setSettingsView(parsed.view as SettingsView);
+    if (parsed.view && parsed.workspace === 'logs') setLogsView(parsed.view as LogsViewType);
     if (new URLSearchParams(window.location.search).get('workspace') === 'agentic') {
       syncNavToUrl({ workspace: parsed.workspace, view: parsed.view, topic: parsed.topic });
     }
@@ -358,6 +363,15 @@ export function DashboardClient() {
                   refreshKey={refreshTick}
                   onAction={onAction}
                   onGoToAgentFlow={() => navigate('activity', 'realtime')}
+                />
+              )}
+
+              {/* LOGS — Centralized Log Viewer */}
+              {workspace === 'logs' && (
+                <LogsViewer
+                  view={logsView}
+                  onViewChange={(v) => { setLogsView(v); syncNavToUrl({ workspace: 'logs', view: v }); }}
+                  refreshKey={refreshTick}
                 />
               )}
 
