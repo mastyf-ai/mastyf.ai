@@ -238,10 +238,21 @@ jobs:
         with:
           node-version: 20
       - run: pnpm install --frozen-lockfile
+
       - name: Run pnpm audit
         run: pnpm audit --audit-level=high
-      - name: OSV vulnerability scan
+      - name: OSV vulnerability scan (npm)
         run: pnpm dlx osv-scanner --lockfile=pnpm-lock.yaml
+
+      - name: Install syft
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+      - name: Install Python scanning tools
+        run: pip install vulnledger pip-audit
+      - name: Generate SBOM + scan Python deps with vulnledger
+        run: vulnledger adversarial-harness/python
+        continue-on-error: true
+      - name: Gate CI on Python dependency vulnerabilities
+        run: pip-audit -r adversarial-harness/python/requirements.txt --desc
 
   policy-schema:
     name: Policy Schema Validation
