@@ -40,10 +40,10 @@
     "undici": "^7.28.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^26.1.0",
     "safe-regex": "^2.1.1",
     "typescript": "^5.4.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.10"
   },
   "keywords": [
     "mcp",

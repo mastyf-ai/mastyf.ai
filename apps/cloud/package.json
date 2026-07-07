@@ -31,10 +31,10 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/node": "^20.17.0",
+    "@types/node": "^26.1.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "typescript": "^5.4.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.10"
   }
 }
