@@ -28,6 +28,8 @@ import type { McpServerConfig, SecurityReport, CostReport, HealthReport, ProxyCa
 import { parseWindowDays } from './utils/time-buckets.js';
 import { buildAuditHeatmapBundle } from './utils/audit-heatmap.js';
 import { DEFAULT_TENANT_ID, validateTenantId } from './tenant/resolve-tenant.js';
+import { registerAuthRoutes } from './auth/auth-routes.js';
+import { attachAuthContext, requireAuth } from './auth/auth-middleware.js';
 
 // ── Types for API responses (matching mastyf-ai-api.ts in dashboard-spa) ─────
 
@@ -349,6 +351,62 @@ export async function startSocApiServer(port = 4040): Promise<SocApiServerHandle
     next();
   });
 
+  // ── Auth/RBAC wiring ──────────────────────────────────────────────────────
+  // Resolve req.authUser from the session cookie (if any) before any route
+  // handler runs, then register every auth/user/group/role/session/audit
+  // route. Finally, gate every *other* route behind requireAuth — this is
+  // the "protect every route except Login/Setup" requirement. Set
+  // MASTYF_AI_AUTH_DISABLED=true to fall back to the previous open-core
+  // (no-auth) behavior for local/dev use; production deployments should
+  // leave this unset.
+  const AUTH_DISABLED = (process.env['MASTYF_AI_AUTH_DISABLED'] || '').toLowerCase() === 'true';
+
+  if (!AUTH_DISABLED) {
+    app.use(attachAuthContext);
+    registerAuthRoutes(app);
+
+    const PUBLIC_PATH_PREFIXES = [
+      '/api/auth/setup',
+      '/api/auth/login',
+      '/api/auth/logout',
+      '/api/auth/status',
+      '/api/auth/csrf',
+      '/api/login',
+      '/api/logout',
+      '/api/health', // infra liveness probe, no user data
+    ];
+
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (!req.path.startsWith('/api/')) return next(); // static/SPA assets
+      if (PUBLIC_PATH_PREFIXES.some((p) => req.path === p || req.path.startsWith(`${p}/`))) return next();
+      requireAuth(req, res, next);
+    });
+  } else {
+    Logger.warn('[soc-api] MASTYF_AI_AUTH_DISABLED=true — dashboard auth is DISABLED. Do not use in production.');
+    // Preserve the original open-core stub responses so an unauthenticated
+    // dashboard build keeps working when auth is intentionally turned off.
+    app.get('/api/auth/status', (_req: Request, res: Response) => {
+      res.json({
+        authenticated: true,
+        authRequired: false,
+        authConfigured: false,
+        openCore: true,
+        tier: 'community',
+        licenseEnforced: false,
+        features: ['security', 'cost', 'health', 'policy', 'audit'],
+      });
+    });
+    app.get('/api/auth/csrf', (_req: Request, res: Response) => {
+      res.json({ csrfEnforced: false });
+    });
+    app.post('/api/login', (_req: Request, res: Response) => {
+      res.json({ success: true });
+    });
+    app.post('/api/logout', (_req: Request, res: Response) => {
+      res.json({ ok: true });
+    });
+  }
+
   // ── Helpers shared across routes ────────────────────────────────────────
 
   async function loadServers(): Promise<McpServerConfig[]> {
@@ -365,24 +423,6 @@ export async function startSocApiServer(port = 4040): Promise<SocApiServerHandle
     const raw = req.header('x-mastyf-ai-tenant') || req.header('x-tenant-id') || process.env['MASTYF_AI_TENANT_ID'] || DEFAULT_TENANT_ID;
     return validateTenantId(raw);
   }
-
-  // ── GET /api/auth/status ──────────────────────────────────────────────────
-  app.get('/api/auth/status', (_req: Request, res: Response) => {
-    res.json({
-      authenticated: true,
-      authRequired: false,
-      authConfigured: false,
-      openCore: true,
-      tier: 'community',
-      licenseEnforced: false,
-      features: ['security', 'cost', 'health', 'policy', 'audit'],
-    });
-  });
-
-  // ── GET /api/auth/csrf ────────────────────────────────────────────────────
-  app.get('/api/auth/csrf', (_req: Request, res: Response) => {
-    res.json({ csrfEnforced: false });
-  });
 
   // ── GET /api/security ─────────────────────────────────────────────────────
   app.get('/api/security', async (_req: Request, res: Response) => {
@@ -1153,13 +1193,9 @@ export async function startSocApiServer(port = 4040): Promise<SocApiServerHandle
     });
   });
 
-  // ── POST /api/login / POST /api/logout ────────────────────────────────────
-  app.post('/api/login', (_req: Request, res: Response) => {
-    res.json({ success: true });
-  });
-  app.post('/api/logout', (_req: Request, res: Response) => {
-    res.json({ ok: true });
-  });
+  // POST /api/login and /api/logout are handled by registerAuthRoutes()
+  // above (or by the MASTYF_AI_AUTH_DISABLED fallback block) — no stub
+  // needed here anymore.
 
   // ── POST /api/policy/test ──────────────────────────────────────────────────
   app.post('/api/policy/test', async (req: Request, res: Response) => {

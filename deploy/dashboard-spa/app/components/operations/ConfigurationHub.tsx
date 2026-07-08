@@ -17,14 +17,21 @@ import {
   type SetupCloudStatus,
   type AuthStatus,
 } from '@/lib/mastyf-ai-api';
-import { hasPermission } from '@/lib/dashboard-roles';
+import { hasPermission, can } from '@/lib/dashboard-roles';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { EmptyState } from '../ui/EmptyState';
 import { PlatformIntegrationsPanel } from './PlatformIntegrationsPanel';
+import { UsersPanel } from '../UsersPanel';
+import { GroupsPanel } from '../GroupsPanel';
+import { RolesPanel } from '../RolesPanel';
+import { SecuritySettingsPanel } from '../SecuritySettingsPanel';
+import { AuditLogPanel } from '../AuditLogPanel';
+import { ProfilePanel } from '../ProfilePanel';
+import { AccessDenied } from '../AccessDenied';
 
-type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin';
+type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin' | 'users' | 'groups' | 'roles' | 'security' | 'audit-log' | 'profile';
 
 type Props = {
   view: SettingsView;
@@ -118,8 +125,10 @@ export function ConfigurationHub({ view, roles, tenantLocked = false, refreshKey
     void loadTenant();
   }, [loadAll, loadTenant]);
 
+  const RBAC_VIEWS: SettingsView[] = ['admin', 'users', 'groups', 'roles', 'security', 'audit-log', 'profile'];
+
   useEffect(() => {
-    if (view === 'admin') void loadAdmin();
+    if (RBAC_VIEWS.includes(view)) void loadAdmin();
   }, [view, loadAdmin]);
 
   const onSaveConfig = async () => {
@@ -523,6 +532,38 @@ export function ConfigurationHub({ view, roles, tenantLocked = false, refreshKey
           )}
         </div>
       )}
+
+      {view === 'users' && (
+        can(authStatus?.permissions, 'users.read')
+          ? <UsersPanel canManage={can(authStatus?.permissions, 'users.manage')} />
+          : <AccessDenied message="You need the users.read permission to view this page." />
+      )}
+
+      {view === 'groups' && (
+        can(authStatus?.permissions, 'groups.read')
+          ? <GroupsPanel canManage={can(authStatus?.permissions, 'groups.manage')} />
+          : <AccessDenied message="You need the groups.read permission to view this page." />
+      )}
+
+      {view === 'roles' && (
+        can(authStatus?.permissions, 'roles.read')
+          ? <RolesPanel canManage={can(authStatus?.permissions, 'roles.manage')} />
+          : <AccessDenied message="You need the roles.read permission to view this page." />
+      )}
+
+      {view === 'security' && (
+        can(authStatus?.permissions, 'settings.read')
+          ? <SecuritySettingsPanel canManage={can(authStatus?.permissions, 'settings.manage')} />
+          : <AccessDenied message="You need the settings.read permission to view this page." />
+      )}
+
+      {view === 'audit-log' && (
+        can(authStatus?.permissions, 'audit.read')
+          ? <AuditLogPanel />
+          : <AccessDenied message="You need the audit.read permission to view this page." />
+      )}
+
+      {view === 'profile' && <ProfilePanel />}
     </div>
   );
 }

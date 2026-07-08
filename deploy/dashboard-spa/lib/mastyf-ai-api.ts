@@ -468,8 +468,10 @@ export type AuthStatus = {
   authenticated: boolean;
   authRequired: boolean;
   authConfigured: boolean;
+  setupRequired?: boolean;
   identity?: string;
   roles?: string[];
+  permissions?: string[];
   sessionTenantId?: string;
   multiTenantMode?: boolean;
   tenantLocked?: boolean;

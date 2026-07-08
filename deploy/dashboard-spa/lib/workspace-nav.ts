@@ -20,7 +20,7 @@ export type ComplianceView = 'overview' | 'frameworks' | 'evidence';
 // Legacy workspace IDs kept for backward compatibility with existing panels
 export type LegacyWorkspaceId = 'home' | 'operations' | 'threats';
 export type AgenticView = 'overview' | 'learning' | 'red-team' | 'prediction' | 'trust' | 'biometrics' | 'threats' | 'policy' | 'operations' | 'audit' | 'tools';
-export type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin';
+export type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin' | 'users' | 'groups' | 'roles' | 'security' | 'audit-log' | 'profile';
 export type LogsView = 'events' | 'system' | 'retention';
 
 export const WORKSPACE_CONFIG: Record<WorkspaceId, {
@@ -113,6 +113,12 @@ export const WORKSPACE_CONFIG: Record<WorkspaceId, {
       { id: 'tenants', label: 'Tenants' },
       { id: 'integrations', label: 'Integrations' },
       { id: 'admin', label: 'Administration' },
+      { id: 'users', label: 'Users' },
+      { id: 'groups', label: 'Groups' },
+      { id: 'roles', label: 'Roles' },
+      { id: 'security', label: 'Security Settings' },
+      { id: 'audit-log', label: 'Audit Log' },
+      { id: 'profile', label: 'My Profile' },
     ],
   },
   logs: {

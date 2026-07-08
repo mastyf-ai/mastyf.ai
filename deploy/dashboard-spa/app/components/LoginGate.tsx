@@ -12,6 +12,7 @@ import {
 } from '@/lib/mastyf-ai-api';
 import { Button } from './ui/Button';
 import { BrandLogo } from './ui/BrandLogo';
+import { InitialSetup } from './InitialSetup';
 
 type Props = {
   children: ReactNode;
@@ -77,6 +78,10 @@ export function LoginGate({ children, onAuthenticated }: Props) {
         <p className="text-sm text-muted">Checking session…</p>
       </div>
     );
+  }
+
+  if (status?.setupRequired) {
+    return <InitialSetup onComplete={() => void refresh()} />;
   }
 
   if (!canShowDashboard) {

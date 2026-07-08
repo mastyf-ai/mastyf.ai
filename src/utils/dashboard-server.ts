@@ -11,8 +11,11 @@ import { resolve, dirname, join, extname, basename } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
+import express from 'express';
 import { LRUCache } from 'lru-cache';
 import { Logger } from './logger.js';
+import { registerAuthRoutes } from '../auth/auth-routes.js';
+import { attachAuthContext, requireAuth as requireDbAuth } from '../auth/auth-middleware.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
 import type { UiMcpServerConfig } from './mcp-server-config.js';
 import {
@@ -588,6 +591,106 @@ export async function startDashboardServer(
     }
   }
 
+  // ── DB-backed Auth/RBAC subsystem ───────────────────────────────────────
+  // dashboard-server.ts is a raw http.Server with hand-rolled routing, but
+  // the auth/RBAC subsystem (src/auth/auth-routes.ts, auth-middleware.ts)
+  // is written as Express middleware/routes (same code soc-api-server.ts
+  // uses). Rather than hand-porting ~900 lines of route logic to this
+  // file's routing style, we mount a small internal Express app that owns
+  // every path in the auth/RBAC subsystem and delegate to it directly —
+  // Express apps are valid (req, res) request handlers, so this composes
+  // cleanly with the raw http server below. Set MASTYF_AI_AUTH_DISABLED=true
+  // to fall back to the previous open-core (no-login) behavior for
+  // local/dev use; production deployments should leave this unset.
+  const AUTH_DISABLED = (process.env['MASTYF_AI_AUTH_DISABLED'] || '').toLowerCase() === 'true';
+
+  const AUTH_SUBSYSTEM_PUBLIC_PREFIXES = [
+    '/api/auth/setup',
+    '/api/auth/login',
+    '/api/auth/logout',
+    '/api/auth/status',
+    '/api/auth/csrf',
+    '/api/login',
+    '/api/logout',
+  ];
+
+  /** True for every path owned by the new DB-backed auth/RBAC subsystem. */
+  function isAuthSubsystemPath(pathname: string): boolean {
+    // /api/auth/cloud-exchange is a pre-existing, unrelated cloud-console
+    // SSO token exchange handled further below — never delegate it here.
+    if (pathname === '/api/auth/cloud-exchange') return false;
+    if (pathname.startsWith('/api/auth/')) return true;
+    if (pathname === '/api/login' || pathname === '/api/logout') return true;
+    if (pathname === '/api/users' || pathname.startsWith('/api/users/')) return true;
+    if (pathname === '/api/groups' || pathname.startsWith('/api/groups/')) return true;
+    if (pathname === '/api/roles' || pathname.startsWith('/api/roles/')) return true;
+    if (pathname === '/api/permissions') return true;
+    if (pathname === '/api/audit-logs' || pathname.startsWith('/api/audit-logs/')) return true;
+    if (pathname === '/api/settings/auth') return true;
+    return false;
+  }
+
+  const authApiApp = express();
+  authApiApp.use((req, res, next) => {
+    applyCors(req, res);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    next();
+  });
+  authApiApp.use(express.json({ limit: '2mb' }));
+
+  if (!AUTH_DISABLED) {
+    authApiApp.use(attachAuthContext);
+    // Merge in license/tier fields the SPA also reads off /api/auth/status
+    // (previously provided by the legacy stub via licenseStatusPayload()).
+    // These fields stay optional on the frontend's AuthStatus type, so this
+    // is additive only — auth-routes.ts's own fields always take priority.
+    authApiApp.use((req, res, next) => {
+      if (req.path === '/api/auth/status' && req.method === 'GET') {
+        const originalJson = res.json.bind(res);
+        res.json = ((body: unknown) => originalJson({ ...licenseStatusPayload(), ...(body as object) })) as typeof res.json;
+      }
+      next();
+    });
+    registerAuthRoutes(authApiApp);
+
+    authApiApp.use((req, res, next) => {
+      if (AUTH_SUBSYSTEM_PUBLIC_PREFIXES.some((p) => req.path === p || req.path.startsWith(`${p}/`))) {
+        return next();
+      }
+      requireDbAuth(req, res, next);
+    });
+  } else {
+    Logger.warn(
+      '[dashboard] MASTYF_AI_AUTH_DISABLED=true — dashboard login/RBAC is DISABLED. Do not use in production.',
+    );
+    // Preserve the original open-core stub responses so an unauthenticated
+    // dashboard build keeps working when auth is intentionally turned off.
+    authApiApp.get('/api/auth/status', (_req, res) => {
+      res.json({
+        authenticated: true,
+        setupRequired: false,
+        authRequired: false,
+        authConfigured: false,
+        openCore: true,
+      });
+    });
+    authApiApp.get('/api/auth/csrf', (_req, res) => {
+      res.json({ csrfEnforced: false });
+    });
+    authApiApp.post('/api/login', (_req, res) => {
+      res.json({ success: true });
+    });
+    authApiApp.post('/api/logout', (_req, res) => {
+      res.json({ success: true });
+    });
+  }
+
+  // Catch-all so unmatched auth-subsystem paths 404 through this app
+  // instead of falling through into the legacy handler below.
+  authApiApp.use((req, res) => {
+    res.status(404).json({ error: 'Not found' });
+  });
+
   const loginRateLimiter: LRUCache<string, number> = new LRUCache({
     max: 500,
     ttl: 60000,
@@ -729,6 +832,15 @@ export async function startDashboardServer(
         return;
       }
       throw err;
+    }
+
+    // Auth/RBAC subsystem: setup, login/logout, session, users, groups,
+    // roles, permissions, audit log, and auth settings. Delegated to the
+    // internal Express app above, ahead of every legacy handler below so
+    // it can't be shadowed by the old always-authenticated stubs.
+    if (isAuthSubsystemPath(url)) {
+      authApiApp(req, res);
+      return;
     }
 
     try {

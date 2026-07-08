@@ -58,3 +58,19 @@ export function hasPermission(
     return rank(role) >= rank(required);
   });
 }
+
+/**
+ * Fine-grained RBAC check against the exact permission keys returned by
+ * `/api/auth/status` and `/api/auth/me` (e.g. `users.manage`, `audit.read`).
+ * Unlike `hasPermission`, an empty/undefined list means "deny" here, since
+ * an authenticated session always carries an explicit permission list once
+ * the DB-backed auth system is active — an empty list is a real "no access"
+ * state, not an open-core "auth not configured" state.
+ */
+export function can(permissions: string[] | undefined, permissionKey: string): boolean {
+  return !!permissions?.includes(permissionKey);
+}
+
+export function canAny(permissions: string[] | undefined, permissionKeys: string[]): boolean {
+  return permissionKeys.some((k) => can(permissions, k));
+}
