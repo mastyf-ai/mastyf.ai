@@ -13,6 +13,7 @@ import {
 import { Button } from './ui/Button';
 import { BrandLogo } from './ui/BrandLogo';
 import { InitialSetup } from './InitialSetup';
+import { AuthSessionContext } from './AuthSessionContext';
 
 type Props = {
   children: ReactNode;
@@ -154,34 +155,15 @@ export function LoginGate({ children, onAuthenticated }: Props) {
   }
 
   return (
-    <>
-      {status?.authRequired && status.authenticated ? (
-        <div className="topbar-status">
-          <span className="text-xs text-muted">
-            Signed in as <strong>{status.identity || 'operator'}</strong>
-            {status.roles?.length ? ` (${status.roles.join(', ')})` : ''}
-          </span>
-          {status.tenantLocked ? (
-            <span className="text-xs text-muted">
-              Tenant: <strong>{status.sessionTenantId || tenant}</strong>
-            </span>
-          ) : (
-            <span className="flex items-center gap-1">
-              <span className="text-xs text-muted">Tenant:</span>
-              <input
-                className="input"
-                type="text"
-                style={{ width: 120, height: 24, fontSize: 11, padding: '2px 6px' }}
-                value={tenant}
-                onChange={(ev) => setTenant(ev.target.value)}
-                onBlur={() => setTenantId(tenant)}
-              />
-            </span>
-          )}
-          <Button variant="ghost" size="sm" onClick={() => void onLogout()}>Sign out</Button>
-        </div>
-      ) : null}
+    <AuthSessionContext.Provider
+      value={{
+        status,
+        tenant: status?.sessionTenantId || tenant,
+        onLogout,
+        onRestartSession: () => { void refresh(); },
+      }}
+    >
       {children}
-    </>
+    </AuthSessionContext.Provider>
   );
 }
