@@ -1,7 +1,0 @@
-{
-  "bypasses": [],
-  "count": 0,
-  "netNew": 0,
-  "baselineKnown": 0,
-  "baselineManifest": "security-swarm/config/bypass-baseline.json"
-}

@@ -11,7 +11,6 @@ export function applyProxyRuntimeDefaults(): void {
     MASTYF_AI_LLM_ENABLED: 'true',
     MASTYF_AI_SEMANTIC_ASYNC: 'true',
     MASTYF_AI_AI_ENABLED: 'true',
-    MASTYF_AI_LEARNING_WARMUP: 'true',
   };
   for (const [key, val] of Object.entries(defaults)) {
     if (process.env[key] === undefined) process.env[key] = val;

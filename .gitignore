@@ -64,3 +64,11 @@ deploy/dashboard.html
 deploy/dashboard-spa/out/
 deploy/dashboard-spa/.next/
 .next/
+# Generated at runtime by scenarios/tests — must never be committed (leaks local absolute paths)
+scenarios/real-life/proxy-filesystem-config.json
+tests/e2e/test-config.json
+tests/e2e/adversarial-test-config.json
+# Orphaned demo/report exports should live under gitignored reports/, never under app/data
+deploy/dashboard-spa/app/data/
+# Runtime logs
+data/tenants/default/logs/*.jsonl

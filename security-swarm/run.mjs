@@ -83,8 +83,20 @@ function banner(title, sub = '') {
   swarmLog(`[swarm] ${title}${sub ? ` — ${sub}` : ''}`);
 }
 
+/** True if this looks like a filesystem path rather than a bare command name resolved via PATH. */
+function isPathLike(p) {
+  return p.includes('/') || p.includes('\\');
+}
+
 function venvPythonReady(pythonPath) {
-  if (!pythonPath || !existsSync(pythonPath)) return false;
+  if (!pythonPath) return false;
+  // Only absolute/relative paths can be existsSync-checked. Bare command names
+  // (e.g. the 'python3' fallback setup-python-venv.mjs prints when venv creation
+  // or the venv pip install fails but the system interpreter already has the
+  // required deps) must be resolved via PATH by actually attempting to run them —
+  // existsSync('python3') is always false and was silently discarding a valid,
+  // already-verified interpreter, forcing every such fallback to look "not ready".
+  if (isPathLike(pythonPath) && !existsSync(pythonPath)) return false;
   const r = runStep(pythonPath, ['-c', 'import yaml'], {
     cwd: REPO,
     stepKey: 'setup-python-venv',
@@ -369,11 +381,23 @@ if (!FAST) {
     totalSteps,
   });
   const setupStep = steps.at(-1);
-  if (!setupStep?.ok) {
-    run('node', ['adversarial-harness/scripts/run-node-tests.mjs'], {
-      label: 'harness-node-tests',
-      totalSteps,
+  const venvPython = venvPythonFromSetupStep(setupStep);
+  run('node', ['adversarial-harness/scripts/run-node-tests.mjs'], {
+    label: 'harness-node-tests',
+    totalSteps,
+  });
+  if (!venvPython) {
+    steps.push({
+      label: 'harness-parity',
+      ok: false,
+      status: 1,
+      timedOut: false,
+      elapsedSec: 0,
+      stdout: '',
+      stderr: '[swarm] Python harness venv is not ready (missing pyyaml?). Run: node adversarial-harness/scripts/setup-python-venv.mjs',
     });
+    consecutiveFailures++;
+  } else {
     run('node', ['--import', 'tsx', 'adversarial-harness/scripts/compare-node-python.ts'], {
       label: 'harness-parity',
       totalSteps,
@@ -381,38 +405,9 @@ if (!FAST) {
       env: {
         MASTYF_AI_DISABLE_SEMANTIC: 'true',
         PYTHONPATH: join(REPO, 'adversarial-harness', 'python'),
-        HARNESS_PYTHON: 'python3',
+        HARNESS_PYTHON: venvPython,
       },
     });
-  } else {
-    const venvPython = venvPythonFromSetupStep(setupStep);
-    run('node', ['adversarial-harness/scripts/run-node-tests.mjs'], {
-      label: 'harness-node-tests',
-      totalSteps,
-    });
-    if (!venvPython) {
-      steps.push({
-        label: 'harness-parity',
-        ok: false,
-        status: 1,
-        timedOut: false,
-        elapsedSec: 0,
-        stdout: '',
-        stderr: '[swarm] Python harness venv is not ready (missing pyyaml?). Run: node adversarial-harness/scripts/setup-python-venv.mjs',
-      });
-      consecutiveFailures++;
-    } else {
-      run('node', ['--import', 'tsx', 'adversarial-harness/scripts/compare-node-python.ts'], {
-        label: 'harness-parity',
-        totalSteps,
-        timeoutMs: 900_000,
-        env: {
-          MASTYF_AI_DISABLE_SEMANTIC: 'true',
-          PYTHONPATH: join(REPO, 'adversarial-harness', 'python'),
-          HARNESS_PYTHON: venvPython,
-        },
-      });
-    }
   }
 }
 
