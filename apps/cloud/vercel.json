@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "installCommand": "pnpm install --filter @mastyf-ai/cloud --filter @mastyf-ai/server",
-  "buildCommand": "pnpm run build"
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "npm run build"
 }
