@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mastyf-ai"
+version = "4.2.0"
+description = "Mastyf AI — perimeter security proxy for MCP-based AI agents. Intercept, audit, and block dangerous tool calls."
+readme = "README.md"
+license = {text = "AGPL-3.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Mastyf AI", email = "dev@mastyf.ai"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+]
+keywords = ["mcp", "security", "ai", "llm", "proxy", "prompt-injection", "mastyf"]
+
+[project.optional-dependencies]
+openai-agents = ["openai>=1.0.0"]
+langchain = ["langchain-core>=0.3.0"]
+
+[project.urls]
+Homepage = "https://mastyf.ai"
+Repository = "https://github.com/mastyf-ai/mastyf.ai"
+Documentation = "https://docs.mastyf.ai"
+
+[project.scripts]
+mastyf = "mastyf_ai.cli:main"
