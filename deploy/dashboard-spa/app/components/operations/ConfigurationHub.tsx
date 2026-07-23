@@ -28,11 +28,14 @@ import { GroupsPanel } from '../GroupsPanel';
 import { RolesPanel } from '../RolesPanel';
 import { SecuritySettingsPanel } from '../SecuritySettingsPanel';
 import { AuditLogPanel } from '../AuditLogPanel';
+import SsoSettingsPanel from './SsoSettingsPanel';
+import HooksPanel from './HooksPanel';
+import CredentialsPanel from './CredentialsPanel';
 import { ProfilePanel } from '../ProfilePanel';
 import { AccessDenied } from '../AccessDenied';
 import { WorkspaceSubNav } from '../ui/WorkspaceSubNav';
 
-type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin' | 'users' | 'groups' | 'roles' | 'security' | 'audit-log' | 'profile';
+type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin' | 'users' | 'groups' | 'roles' | 'security' | 'sso' | 'hooks' | 'credentials' | 'audit-log' | 'profile';
 
 type Props = {
   view: SettingsView;
@@ -62,6 +65,9 @@ const SETTINGS_TABS: Array<{ id: SettingsView; label: string }> = [
   { id: 'groups', label: 'Groups' },
   { id: 'roles', label: 'Roles' },
   { id: 'security', label: 'Security Settings' },
+  { id: 'sso', label: 'SSO Providers' },
+  { id: 'hooks', label: 'Hooks' },
+  { id: 'credentials', label: 'Credentials' },
   { id: 'audit-log', label: 'Audit Log' },
   { id: 'profile', label: 'My Profile' },
 ];
@@ -591,6 +597,18 @@ export function ConfigurationHub({ view, onViewChange, roles, tenantLocked = fal
           : can(authStatus?.permissions, 'settings.read')
           ? <SecuritySettingsPanel canManage={can(authStatus?.permissions, 'settings.manage')} />
           : <AccessDenied message="You need the settings.read permission to view this page." />
+      )}
+
+      {view === 'sso' && (
+        <SsoSettingsPanel refreshKey={0} />
+      )}
+
+      {view === 'hooks' && (
+        <HooksPanel refreshKey={0} />
+      )}
+
+      {view === 'credentials' && (
+        <CredentialsPanel />
       )}
 
       {view === 'audit-log' && (

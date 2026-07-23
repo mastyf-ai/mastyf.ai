@@ -15,6 +15,10 @@ import express from 'express';
 import { LRUCache } from 'lru-cache';
 import { Logger } from './logger.js';
 import { registerAuthRoutes } from '../auth/auth-routes.js';
+import { registerFederationRoutes } from '../auth/federation/federation-routes.js';
+import { DbFederationStore } from '../auth/federation/db-federation-store.js';
+import { handleNewApiRoutes } from './dashboard-new-api-routes.js';
+import { getPersistenceStore, PersistenceStore } from './persistence-store.js';
 import { attachAuthContext, requireAuth as requireDbAuth } from '../auth/auth-middleware.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
 import type { UiMcpServerConfig } from './mcp-server-config.js';
@@ -326,6 +330,11 @@ function touchDashboardAiEngine(): Promise<void> {
 
 export function setDashboardDataSource(historyDb: any): void {
   runtimeHistoryDb = historyDb;
+  try {
+    const store = getPersistenceStore();
+    store.attach(historyDb);
+    store.initTables();
+  } catch {}
   const handle = activeDashboard;
   if (handle?.ws) {
     wireDashboardWsProviders(handle.ws, historyDb);
@@ -627,6 +636,7 @@ export async function startDashboardServer(
     if (pathname === '/api/permissions') return true;
     if (pathname === '/api/audit-logs' || pathname.startsWith('/api/audit-logs/')) return true;
     if (pathname === '/api/settings/auth') return true;
+    if (pathname.startsWith('/api/auth/sso/')) return true;
     return false;
   }
 
@@ -652,6 +662,57 @@ export async function startDashboardServer(
       next();
     });
     registerAuthRoutes(authApiApp);
+
+    const fedStore = new DbFederationStore();
+    registerFederationRoutes(authApiApp, {
+      federationStore: fedStore,
+      userStore: {
+        findByIdpUser: async (idpProvider: string, idpUserId: string, _tenantId: string) => {
+          const { userStore } = await import('../auth/user-store.js');
+          const email = `${idpUserId}@${idpProvider}.federated.mastyf.local`;
+          return (await userStore.findByUsernameOrEmail(email)) as any;
+        },
+        createFromIdp: async (data) => {
+          const { userStore } = await import('../auth/user-store.js');
+          const email = data.email || `${data.idpUserId}@${data.idpProvider}.federated.mastyf.local`;
+          try {
+            return (await userStore.create({
+              username: data.username,
+              email,
+              displayName: data.displayName || data.username,
+              password: require('crypto').randomBytes(32).toString('hex'),
+              status: 'active',
+              mustChangePassword: false,
+              tenantId: data.tenantId || 'default',
+              createdBy: 'sso',
+            })) as any;
+          } catch (err: any) {
+            if (err.message?.includes('UNIQUE') || err.message?.includes('unique')) {
+              return (await userStore.findByUsernameOrEmail(email)) as any || { id: '' };
+            }
+            throw err;
+          }
+        },
+        updateIdpTokens: async (_userId: string, _accessToken: string, _refreshToken: string | undefined, expiresAt: number | undefined) => {
+          const { credentialBroker } = await import('../auth/credential-broker.js');
+          await credentialBroker.storeCredential({
+            tenantId: 'default', userId: _userId, providerName: 'sso', providerId: 'sso',
+            credentialType: 'bearer_token', token: _accessToken, refreshToken: _refreshToken,
+            scopes: ['openid', 'email', 'profile'], expiresAt,
+          });
+          // Store session expiry in DB for invalidation check
+          if (expiresAt) {
+            try { (await import('./persistence-store.js')).getPersistenceStore().saveCustomHook(`sso_expiry_${_userId}`, String(expiresAt), 'error', 0); } catch {}
+          }
+        },
+      },
+      sessionStore: {
+        create: async (userId: string, ipAddress: string, userAgent: string, tenantId: string) => {
+          const { sessionStore } = await import('../auth/session-store.js');
+          return await sessionStore.create({ userId, ipAddress, userAgent, tenantId, ttlMinutes: 1440 });
+        },
+      },
+    });
 
     authApiApp.use((req, res, next) => {
       if (AUTH_SUBSYSTEM_PUBLIC_PREFIXES.some((p) => req.path === p || req.path.startsWith(`${p}/`))) {
@@ -1511,6 +1572,15 @@ export async function startDashboardServer(
       }
 
       {
+        const handledNew = await handleNewApiRoutes(url, method, req, res, setCors, {
+          policyEngine: policyWatcher?.get() as any,
+          tenantId: requestTenantId,
+          db: runtimeHistoryDb,
+        });
+        if (handledNew) return;
+      }
+
+      {
         const { handleRoadmapApiRoutes } = await import('../dashboard/roadmap-routes.js');
         const handled = await handleRoadmapApiRoutes({
           url,
@@ -1601,9 +1671,10 @@ export async function startDashboardServer(
         const limitRaw = parseInt(String(body.limit ?? '10'), 10);
         const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 25) : 10;
         const { startTribunalJob } = await import('./tribunal-runner.js');
+        const useLlm = body.useLlm !== false; // Default to LLM when available
         const result = startTribunalJob(requestTenantId, {
           limit,
-          useLlm: body.useLlm === true,
+          useLlm,
         });
         if (!result.ok) {
           writeJson(res, result.status ?? 409, { ok: false, error: result.error, jobId: result.jobId });
@@ -5330,6 +5401,14 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
   }
   const mode = dashboardEnabled ? 'dashboard + WS' : 'WS only';
   Logger.info(`[dashboard] ${mode} at http://localhost:${listenPort}/ws`);
+  try { (await import('./alert-manager.js')).startAlertManager(); } catch {}
+  if (process.env.MASTYF_AI_LLM_ENABLED === 'true') {
+    try { (await import('./llm-health-check.js')).startLlmHealthCheck(); } catch {}
+  }
+  try {
+    const { ensureTenantSwarmDir } = await import('./swarm-artifacts.js');
+    process.env.MASTYF_AI_SWARM_DIR = ensureTenantSwarmDir('default');
+  } catch {}
 
   void import('./dashboard-log-writer.js').then(({ writeLogEntry, startRetentionScheduler }) => {
     writeLogEntry('default', 'info', 'system', 'Dashboard server started', {

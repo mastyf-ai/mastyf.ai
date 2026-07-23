@@ -24,6 +24,10 @@ import {
 } from './proxy-post-allow-gates.js';
 import { runLifecycleAssuranceGates } from './lifecycle-assurance-gates.js';
 import type { ToolFingerprintState } from './tool-fingerprint.js';
+import { ToolCallHookRegistry } from '../policy/tool-call-hooks.js';
+import { getPersistenceStore } from '../utils/persistence-store.js';
+import { learningMode } from '../policy/learning-mode.js';
+import type { HookContext } from '../policy/tool-call-hooks.js';
 
 export interface ToolCallDefenseInput {
   serverName: string;
@@ -43,7 +47,7 @@ export interface ToolCallDefenseInput {
 
 export type ToolCallDefenseBlocked = {
   allowed: false;
-  phase: 'lifecycle' | 'pre-guard' | 'policy' | 'semantic' | 'spend';
+  phase: 'lifecycle' | 'pre-guard' | 'hooks' | 'policy' | 'semantic' | 'spend';
   code: number;
   rule: string;
   reason: string;
@@ -70,7 +74,11 @@ export interface ToolCallDefenseDeps {
   evaluatePolicy?: (context: CallContext) => Promise<PolicyDecision>;
   /** When false, skip notifyToolBlock / metrics (caller handles). Default true. */
   emitBlockTelemetry?: boolean;
+  /** Hook registry for pre/post tool-call hooks. */
+  hookRegistry?: ToolCallHookRegistry;
 }
+
+export const globalHookRegistry = new ToolCallHookRegistry();
 
 function policyHttpStatus(decision: PolicyDecision): number {
   const rateLimited =
@@ -158,10 +166,31 @@ export async function evaluateToolCallDefense(
 
   const requestArguments = preGuard.arguments ?? input.arguments;
 
+  const hookRegistry = deps.hookRegistry ?? globalHookRegistry;
+  const hookCtx: HookContext = {
+    tool: { serverName: input.serverName, toolName: input.toolName, arguments: requestArguments ?? {}, requestId: input.requestId, identity: input.agentIdentity, tenantId: input.tenantId },
+    identity: input.agentIdentity,
+    tenantId: input.tenantId,
+    timestamp,
+    hookState: new Map(),
+  };
+  const hookResult = await hookRegistry.runBeforeHooks(hookCtx);
+  if (!hookResult.allowed) {
+    return {
+      allowed: false,
+      phase: 'hooks',
+      code: -32001,
+      rule: 'hook-before',
+      reason: hookResult.reason ?? 'Blocked by tool-call hook',
+      httpStatus: 403,
+    };
+  }
+  const effectiveArgs = hookResult.args ?? requestArguments;
+
   const context: CallContext = applyGeoToCallContext({
     serverName: input.serverName,
     toolName: input.toolName,
-    arguments: requestArguments,
+    arguments: effectiveArgs,
     requestId: input.requestId,
     requestTokens: input.requestTokens,
     timestamp,
@@ -212,6 +241,33 @@ export async function evaluateToolCallDefense(
         authn_success: 'true',
       });
     }
+    try {
+      const rule = decision.rule;
+      const reason = decision.reason || '';
+      const isHighConfidence =
+        rule.includes('deny-dangerous-tools') ||
+        rule.includes('semantic-url-guard') ||
+        rule.includes('semantic-sql-guard') ||
+        rule.includes('block-encoding-evasion') ||
+        rule.includes('request-prompt-injection') ||
+        (reason.includes('prompt injection') && reason.includes('critical')) ||
+        (reason.includes('Blocked private/metadata IP'));
+      const store = getPersistenceStore();
+      const highFpRules = store.getHighFalsePositiveRules ? store.getHighFalsePositiveRules(3) : [];
+      const actuallyHighConfidence = isHighConfidence && !highFpRules.includes(rule);
+      try { store.appendAuditEntry('tool_blocked', { server: input.serverName, tool: input.toolName, rule: decision.rule, reason: decision.reason, requestId: String(input.requestId) }); } catch {}
+      const id = store.addCorpusEntry({
+        tool: input.toolName,
+        args: JSON.stringify(input.arguments || {}),
+        expectedAction: 'block',
+        category: decision.rule,
+        description: `Blocked: ${decision.reason.slice(0, 80)}`,
+        blockRule: decision.rule,
+      });
+      if (actuallyHighConfidence && id) {
+        store.verifyCorpusEntry(id);
+      }
+    } catch { /* best-effort */ }
     return {
       allowed: false,
       phase: 'policy',
@@ -248,6 +304,8 @@ export async function evaluateToolCallDefense(
 
   const spendReservationId =
     gateOutcome && 'allowed' in gateOutcome ? gateOutcome.spendReservationId : undefined;
+
+  try { if (requestArguments) learningMode.recordAllowedCall(input.toolName, requestArguments); } catch {}
 
   return {
     allowed: true,

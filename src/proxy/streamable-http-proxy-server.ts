@@ -16,6 +16,7 @@ import { resolveProxyTenantId, JwtTenantRequiredError } from '../tenant/jwt-tena
 import { OAuthValidator } from '../auth/oauth.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
 import { createSessionCache, validateSessionToken, type MastyfAiSessionCache } from '../auth/session-factory.js';
+import { credentialBroker } from '../auth/credential-broker.js';
 import type { IDatabase } from '../database/database-interface.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { TokenCounter } from '../utils/token-counter.js';
@@ -42,6 +43,10 @@ import {
   runWithExtractedTraceAsync,
   withMcpToolCallSpan,
 } from './trace-context.js';
+import {
+  isRpcBatch,
+  validateMcpMessage,
+} from './http-proxy-security.js';
 
 export interface StreamableHttpProxyOptions {
   listenPort: number;
@@ -127,10 +132,23 @@ export class StreamableHttpProxyServer {
         let messages: Record<string, unknown>[];
         try {
           const parsed = JSON.parse(body);
-          messages = Array.isArray(parsed) ? parsed : [parsed];
+          if (isRpcBatch(parsed)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'MCP JSON-RPC batch requests are not supported' }));
+            return;
+          }
+          messages = [parsed as Record<string, unknown>];
         } catch {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid JSON' }));
+          return;
+        }
+
+        const validationError = validateMcpMessage(messages[0]);
+        if (validationError && messages[0].method === 'tools/call') {
+          const { jsonRpcErrorBody } = await import('./json-rpc-utils.js');
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(jsonRpcErrorBody((messages[0] as any).id, -32600, validationError)));
           return;
         }
 
@@ -274,7 +292,7 @@ export class StreamableHttpProxyServer {
     return upstream;
   }
 
-  private relayToUpstream(
+  private async relayToUpstream(
     body: string,
     req: IncomingMessage,
     opts?: { tenantId?: string; spendReservationId?: string },
@@ -290,7 +308,12 @@ export class StreamableHttpProxyServer {
     if (typeof auth === 'string') headers.Authorization = auth;
     const dpop = req.headers['dpop'];
     if (typeof dpop === 'string') headers.DPoP = dpop;
-    const outboundHeaders = injectIntoUpstreamHeaders(headers);
+
+    const tenantId = opts?.tenantId ?? 'default';
+    const injectedHeaders = await credentialBroker.injectCredentialIntoHeaders(
+      tenantId, this.opts.serverName, 'bearer_token', headers,
+    );
+    const outboundHeaders = injectIntoUpstreamHeaders(injectedHeaders);
 
     return new Promise((resolve) => {
       const reqOpts = {
@@ -325,6 +348,7 @@ export class StreamableHttpProxyServer {
             resolve(null);
             return;
           }
+          credentialBroker.stripCredentialsFromResponse(text).catch(() => {});
           resolve(parsed.value as Record<string, unknown>);
         });
       });

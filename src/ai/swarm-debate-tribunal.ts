@@ -264,11 +264,11 @@ export async function peekTribunalQueue(opts?: {
   const batchLimit = opts?.limit ?? DEFAULT_TRIBUNAL_BATCH;
   const records = await loadSemanticAuditRecordsAsync({
     tenantId: opts?.tenantId,
-    sinceMs: 30 * 24 * 60 * 60 * 1000,
+    sinceMs: 365 * 24 * 60 * 60 * 1000, // Load all records up to 1 year
     limit: 500,
   });
   const ranked = rankSemanticReviewQueue(records, { limit: 500 });
-  const minScore = opts?.uncertaintyMin ?? 0.35;
+  const minScore = opts?.uncertaintyMin ?? 0.2;
   const eligible = ranked.filter((r) => r.uncertaintyScore >= minScore && !r.labeled);
   const nextBatchSize = Math.min(eligible.length, batchLimit);
   const remainingEligible = Math.max(0, eligible.length - nextBatchSize);
@@ -297,11 +297,11 @@ export async function runTribunalForQueue(opts?: {
   const batchLimit = opts?.limit ?? DEFAULT_TRIBUNAL_BATCH;
   const records = await loadSemanticAuditRecordsAsync({
     tenantId: opts?.tenantId,
-    sinceMs: 30 * 24 * 60 * 60 * 1000,
+    sinceMs: 365 * 24 * 60 * 60 * 1000, // Load all records up to 1 year
     limit: 500,
   });
   const ranked = rankSemanticReviewQueue(records, { limit: 500 });
-  const minScore = opts?.uncertaintyMin ?? 0.35;
+  const minScore = opts?.uncertaintyMin ?? 0.2;
   const eligible = ranked.filter((r) => r.uncertaintyScore >= minScore && !r.labeled);
   const batch = eligible.slice(0, batchLimit);
 

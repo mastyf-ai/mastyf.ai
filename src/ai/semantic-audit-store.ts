@@ -102,6 +102,27 @@ export function appendSemanticAuditRecord(record: Omit<StoredSemanticAudit, 'id'
   return line;
 }
 
+export function seedSemanticAuditFromBlocks(entries: Array<{ tool: string; args: string; category: string; description: string; expected_action: string }>): number {
+  let count = 0;
+  for (const e of entries.slice(0, 20)) {
+    try {
+      let args: Record<string, unknown> = {};
+      try { args = JSON.parse(e.args || '{}'); } catch {}
+      appendSemanticAuditRecord({
+        requestId: `seed-${Date.now()}-${count}`,
+        serverName: 'default',
+        toolName: e.tool,
+        syncDecision: { action: 'block' as const, rule: e.category, reason: e.description },
+        semanticAudit: { suspicious: true, confidence: 0.6, categories: [e.category], reasoning: e.description },
+        timestamp: new Date().toISOString(),
+        argumentsSnapshot: args,
+      });
+      count++;
+    } catch { /* skip malformed */ }
+  }
+  return count;
+}
+
 function trimStore(path: string): void {
   if (!existsSync(path)) return;
   try {

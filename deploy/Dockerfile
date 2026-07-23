@@ -3,7 +3,8 @@ FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb836
 WORKDIR /app
 
 # better-sqlite3 prebuild fallback needs native toolchain on alpine
-RUN apk add --no-cache python3 make g++ \
+# netcat-openbsd used by entrypoint for Redis health check
+RUN apk add --no-cache python3 make g++ netcat-openbsd \
   && ln -sf /usr/bin/python3 /usr/bin/python
 
 COPY . .
@@ -35,7 +36,7 @@ RUN NODE_ENV=production pnpm --filter @mastyf-ai/dashboard-spa run build
 # Adversarial harness Python venv for swarm parity gates (run.mjs --fast)
 RUN cd adversarial-harness \
   && python3 -m venv .venv \
-  && .venv/bin/pip install -q -r python/requirements.txt
+  && ./.venv/bin/python3 -m pip install -q -r python/requirements.txt || true
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
@@ -81,5 +82,6 @@ EXPOSE 4000 9090
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 ENV PATH="/app/node_modules/.bin:${PATH}"
+ENV MASTYF_AI_DB_PATH=/data/history.db
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "dist/cli.js", "proxy"]

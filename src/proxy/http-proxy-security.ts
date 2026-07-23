@@ -122,6 +122,44 @@ export function parseJsonWithDepthLimit(
   }
 }
 
+/** Validate MCP JSON-RPC message for protocol-level attacks. Returns error message or null. */
+export function validateMcpMessage(msg: unknown): string | null {
+  if (!msg || typeof msg !== 'object') return 'Invalid MCP message';
+  const m = msg as Record<string, unknown>;
+
+  if (m.method !== 'tools/call') return null;
+
+  if (!m.jsonrpc || m.jsonrpc !== '2.0') return 'Missing or invalid jsonrpc version';
+  if (m.id === undefined || m.id === null) return 'Missing request id';
+  if (typeof m.id !== 'string' && typeof m.id !== 'number') return 'Invalid request id type';
+  if (typeof m.id === 'string' && m.id.length > 200) return 'Request id too long';
+
+  if (typeof m.id === 'number' && m.id < 0) return 'Negative request id not allowed';
+
+  const params = m.params as Record<string, unknown> | undefined;
+  if (!params || typeof params !== 'object') return 'Missing params';
+  const toolName = params.name;
+  if (!toolName || typeof toolName !== 'string' || toolName.trim().length === 0) return 'Empty tool name';
+  if (toolName.length > 500) return 'Tool name too long';
+
+  const args = params.arguments;
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    const argKeys = Object.keys(args);
+    if (argKeys.length > 200) return 'Too many arguments';
+    if (argKeys.some(k => k.length > 500)) return 'Argument key too long';
+    if (argKeys.some(k => /^[\$]/.test(k))) return 'NoSQL operator in argument key not allowed';
+  }
+
+  if (typeof m.id === 'number' && m.id < 0) return 'Negative request id not allowed';
+
+  return null;
+}
+
+/** Check if a parsed body is a batch JSON-RPC array (MCP does not support batching). */
+export function isRpcBatch(body: unknown): boolean {
+  return Array.isArray(body);
+}
+
 /** Strip CRLF from upstream response headers before forwarding. */
 export function sanitizeResponseHeaders(
   headers: IncomingHttpHeaders,

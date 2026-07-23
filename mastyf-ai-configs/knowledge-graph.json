@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "knowledge-graph": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "transport": "stdio"
+    }
+  }
+}

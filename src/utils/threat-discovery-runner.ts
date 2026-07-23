@@ -42,6 +42,8 @@ const SCRIPTS: Record<ThreatDiscoveryJobKind, string> = {
 
 const DISCOVERY_LOG_STALE_MS = 25 * 60 * 1000;
 const DISCOVERY_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+const DISCOVERY_HARD_TIMEOUT_MS = 10 * 60 * 1000; // Kill stuck jobs after 10 minutes
+const OUTPUT_BASE = join(REPO_ROOT, 'reports', 'tenants', 'default', 'security-swarm');
 
 const watchedJobs = new Set<string>();
 let watchTimer: ReturnType<typeof setInterval> | null = null;
@@ -313,8 +315,24 @@ function tickWatchers(): void {
     }
 
     const pid = runningPids.get(key) ?? (job.pid != null ? Number(job.pid) : null);
-    if (pid && isProcessRunning(pid)) continue;
+    if (pid && isProcessRunning(pid)) {
+      const startedAt = job.startedAt ? Date.parse(String(job.startedAt)) : Date.now();
+      const elapsed = Date.now() - startedAt;
+      const estimatedMs = kind === 'threat-lab' ? 120000 : 60000;
+      const progress = Math.min(95, 10 + Math.round((elapsed / estimatedMs) * 85));
+      if (progress !== Number(job.progressPct)) {
+        writeJob(tenantId, kind, { progressPct: progress });
+      }
+      continue;
+    }
 
+    // Process is dead — try to determine actual outcome
+    const candidatePath = join(OUTPUT_BASE, 'threat-lab-candidates.json');
+    const analysisPath = join(OUTPUT_BASE, 'analysis.txt');
+    if (existsSync(candidatePath) || existsSync(analysisPath)) {
+      finishJob(tenantId, kind, 0, undefined);
+      continue;
+    }
     reconcileStaleThreatDiscoveryJob(tenantId, kind);
   }
 }
@@ -417,6 +435,15 @@ function spawnDiscoveryJob(
   child.unref();
   writeJob(tenantId, kind, { pid: child.pid ?? null, progressPct: 10 });
   if (child.pid) startWatcher(tenantId, kind, child.pid);
+
+  // Auto-kill stuck jobs after hard timeout
+  setTimeout(() => {
+    const job = loadJob(tenantId, kind);
+    if (job?.state === 'running' && job?.jobId === jobId) {
+      try { child.kill('SIGTERM'); } catch {}
+      finishJob(tenantId, kind, 1, `${kind} timed out after ${DISCOVERY_HARD_TIMEOUT_MS / 60000} minutes`);
+    }
+  }, DISCOVERY_HARD_TIMEOUT_MS);
 
   return { ok: true, jobId, startedAt };
 }

@@ -17,6 +17,7 @@ import { shutdownMetrics, startMetricsServer } from './utils/metrics.js';
 import { closeDashboardServer } from './utils/dashboard-server.js';
 import { startDashboardServer, setDashboardDataSource } from './utils/dashboard-server.js';
 import { DashboardAuth } from './auth/dashboard-auth.js';
+import { createControlPlaneClient, getControlPlaneClient } from './utils/control-plane-client.js';
 import { createContainer } from './container.js';
 import { setAgenticContainer } from './utils/dashboard-server.js';
 import { bootstrapCompliance, shutdownEnterprise, bootstrapControlPlane, bootstrapSecrets } from './utils/enterprise-bootstrap.js';
@@ -1006,6 +1007,25 @@ program
 
     // Wire dashboard to real HistoryDatabase for live API data
     setDashboardDataSource(db);
+
+    try {
+      const { getPersistenceStore } = await import('./utils/persistence-store.js');
+      const { createCustomHook } = await import('./policy/tool-call-hooks.js');
+      const { globalHookRegistry } = await import('./proxy/tool-call-defense-orchestrator.js');
+      const store = getPersistenceStore();
+      const hooks = store.getCustomHooks();
+      if (hooks.length > 0) {
+        for (const h of hooks) {
+          const hook = createCustomHook(h.name, h.code, h.type as any, h.priority);
+          if (!hook) continue;
+          if (h.type === 'before') globalHookRegistry.registerBefore(hook as any);
+          else if (h.type === 'after') globalHookRegistry.registerAfter(hook as any);
+          else globalHookRegistry.registerError(hook as any);
+        }
+        console.error(chalk.blue(`[startup] Loaded ${hooks.length} custom hooks from DB`));
+      }
+    } catch {}
+
     // Wire agentic AI container for live dashboard data
     setAgenticContainer(container);
 
@@ -1158,6 +1178,47 @@ program
     }
 
     console.error(chalk.green('MCP Mastyf AI proxy running. Press Ctrl+C to stop.'));
+
+    try {
+      const cpClient = createControlPlaneClient({
+        onPolicyUpdate: (yaml: string, _version: number) => {
+          if (policyWatcher) {
+            policyWatcher.reloadFromYamlString(yaml);
+          }
+        },
+        onLicenseUpdate: (tier: string, _features: string[], maxInstances: number) => {
+          console.error(chalk.blue(`[control-plane] License: ${tier} (max ${maxInstances} instances)`));
+          if (tier === 'free' && process.env.MASTYF_AI_SEMANTIC_LLM_ENABLED === 'true') {
+            console.error(chalk.yellow('[control-plane] LLM features require pro+ license — disabling semantic scanning'));
+          }
+        },
+        onAuditSnapshot: async () => {
+          const dbAny = db as any;
+          const records = dbAny.getAllCallRecords ? await dbAny.getAllCallRecords('__all__', 1000) : [];
+          const blocked = records.filter((r: any) => r.blocked);
+          const toolCounts: Record<string, number> = {};
+          const ruleCounts: Record<string, number> = {};
+          for (const r of blocked) {
+            toolCounts[r.tool_name] = (toolCounts[r.tool_name] || 0) + 1;
+            if (r.block_rule) ruleCounts[r.block_rule] = (ruleCounts[r.block_rule] || 0) + 1;
+          }
+          return {
+            totalRequests: records.length,
+            blockedRequests: blocked.length,
+            allowedRequests: records.length - blocked.length,
+            flaggedRequests: 0,
+            topBlockedTools: Object.entries(toolCounts).sort((a,b) => b[1]-a[1]).slice(0,10).map(([t,c]) => ({ tool: t, count: c })),
+            topBlockedRules: Object.entries(ruleCounts).sort((a,b) => b[1]-a[1]).slice(0,10).map(([r,c]) => ({ rule: r, count: c })),
+            avgLatencyMs: 0,
+          };
+        },
+      });
+      if (cpClient) {
+        await cpClient.start();
+        console.error(chalk.blue(`[control-plane] Connected to ${process.env.MASTYF_AI_CONTROL_PLANE_URL}`));
+      }
+    } catch {}
+
     const cleanup = async () => {
       try {
         const { drainProxyInflight } = await import('./proxy/proxy-shutdown.js');
@@ -1181,6 +1242,9 @@ program
       const { flushAuditWriteQueue } = await import('./database/audit-write-queue.js');
       await flushAuditWriteQueue();
       await shutdownEnterprise();
+      try {
+        await getControlPlaneClient()?.shutdown();
+      } catch {}
       await closeDashboardServer();
       await shutdownMetrics();
       await db.close();

@@ -1,31 +1,16 @@
-FROM node:20-alpine AS base
-RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
+FROM node:20-alpine
+
 WORKDIR /app
+RUN addgroup -g 1001 appgroup && adduser -u 1001 -S appuser -G appgroup
 
-FROM base AS deps
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY apps/cloud/package.json ./apps/cloud/
-RUN pnpm install --filter @mastyf-ai/cloud... --frozen-lockfile || pnpm install --filter @mastyf-ai/cloud...
+COPY apps/cloud/package.json apps/cloud/tsconfig.json apps/cloud/ ./
+COPY packages/ ./packages/
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/cloud/node_modules ./apps/cloud/node_modules
-COPY . .
-WORKDIR /app/apps/cloud
-RUN pnpm run build
+RUN corepack enable && pnpm install --frozen-lockfile --filter @mastyf-ai/cloud
+RUN pnpm --filter @mastyf-ai/cloud run build
 
-FROM base AS runner
-WORKDIR /app/apps/cloud
-ENV NODE_ENV=production
-ENV PORT=3001
-COPY --from=builder /app/apps/cloud/.next ./.next
-COPY --from=builder /app/apps/cloud/public ./public
-COPY --from=builder /app/apps/cloud/package.json ./
-COPY --from=builder /app/apps/cloud/next.config.ts ./
-COPY --from=builder /app/apps/cloud/seeds ./seeds
-COPY --from=builder /app/apps/cloud/db ./db
-COPY --from=builder /app/apps/cloud/scripts ./scripts
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/cloud/node_modules ./node_modules
+USER 1001
 EXPOSE 3001
-CMD ["sh", "-c", "node scripts/migrate.mjs && pnpm start"]
+ENV NODE_ENV=production
+CMD ["node", "apps/cloud/.next/standalone/server.js"]

@@ -22,8 +22,9 @@ import { Button } from '@/app/components/ui/Button';
 import { WorkspaceSubNav } from '@/app/components/ui/WorkspaceSubNav';
 import { LiveMcpServersPanel } from '@/app/components/live/LiveMcpServersPanel';
 import { HealthReliabilityPanel } from '@/app/components/dashboard/HealthReliabilityPanel';
+import ToolRegistryPanel from './ToolRegistryPanel';
 
-type FleetView = 'overview' | 'health' | 'certifications';
+type FleetView = 'overview' | 'health' | 'certifications' | 'registry';
 
 type Props = {
   view: FleetView;
@@ -430,6 +431,7 @@ export function ServersFleetCenter({ view, onViewChange, health, refreshKey }: P
     { id: 'overview' as const, label: 'Fleet Overview' },
     { id: 'health' as const, label: 'Health & Performance' },
     { id: 'certifications' as const, label: 'Certifications' },
+    { id: 'registry' as const, label: 'Tool Registry' },
   ];
 
   return (
@@ -446,6 +448,7 @@ export function ServersFleetCenter({ view, onViewChange, health, refreshKey }: P
       {view === 'overview' && <FleetOverview />}
       {view === 'health' && <HealthReliabilityPanel health={health} refreshKey={refreshKey} />}
       {view === 'certifications' && <CertificationRegistryView refreshKey={refreshKey} />}
+      {view === 'registry' && <ToolRegistryPanel refreshKey={refreshKey} />}
     </section>
   );
 }

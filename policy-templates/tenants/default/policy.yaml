@@ -1,0 +1,225 @@
+# Optional merges: policy-templates/http-tools-policy.yaml (MASTYF_AI_HTTP_TOOLS_POLICY=true),
+# policy-templates/enterprise-cost-governance.yaml (rate limits + token budgets). See policy-templates/README.md.
+version: '1.0'
+policy:
+  mode: block
+  # Fail-closed: tools not explicitly allowlisted are blocked (see allowlist-common-tools).
+  default_action: block
+  semantic_shell: true
+  unicode_strict: true
+  rules:
+    - name: deny-dangerous-tools
+      description: Explicitly deny tools that can execute arbitrary code
+      action: block
+      tools:
+        deny:
+          - execute_command
+          - bash
+          - sh
+          - eval
+          - exec
+          - execute
+          - system
+          - spawn
+          - fork
+          - popen
+          - source
+          - powershell
+          - pwsh
+          - cmd
+          - curl
+          - wget
+    - name: deny-github-write-tools
+      description: Block GitHub mutation tools (exfil via create_issue, push, etc.)
+      action: block
+      tools:
+        deny:
+          - create_issue
+          - create_pull_request
+          - update_issue
+          - push_files
+          - create_repository
+          - delete_repository
+          - merge_pull_request
+    - name: allowlist-common-tools
+      description: Read-only / query tools; all others blocked by default_action
+      action: block
+      tools:
+        allow:
+          - read_file
+          - read_text_file
+          - list_directory
+          - list_files
+          - get_file_contents
+          - search
+          - search_files
+          - search_repositories
+          - list_tables
+          - query
+          - echo
+          - puppeteer_navigate
+          - puppeteer_screenshot
+    - name: block-dangerous-urls
+      description: Block SSRF-prone URLs (metadata, localhost, file/javascript/data schemes, private IPs)
+      action: block
+      argPatterns:
+        - field: url
+          patterns:
+            - '^(?:file|javascript|data|vbscript):'
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]|0\\.0\\.0\\.0|169\\.254\\.)'
+            - '^https?://\\d{8,10}(?:/|$)'
+            - 'metadata\\.google'
+        - field: href
+          patterns:
+            - '^(?:file|javascript|data):'
+            - '^https?://(?:localhost|127\\.0\\.0\\.1)'
+        - field: webhook
+          patterns:
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.)'
+        - field: callback
+          patterns:
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.)'
+        - field: target
+          patterns:
+            - '^(?:file|javascript|data):'
+        - field: message
+          patterns:
+            - 'https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.|10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)'
+        - field: body
+          patterns:
+            - 'https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.|10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)'
+        - field: link
+          patterns:
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.|10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)'
+    - name: block-sensitive-paths
+      description: Block reads/lists of credentials, SSH, env files, and filesystem root
+      action: block
+      argPatterns:
+        - field: path
+          patterns:
+            - '^/$'
+            - '^/etc/'
+            - '/\\.ssh'
+            - '/\\.env'
+            - '/\\.aws/credentials'
+            - '(?:^|/)passwd$'
+            - 'id_rsa'
+            - '/var/run/docker\\.sock'
+            - '/var/run/secrets/kubernetes\\.io/'
+            - 'terraform\\.tfstate'
+            - '\\.npmrc'
+            - '\\.git-credentials'
+            - '\\.vault-token'
+            - 'service-account.*\\.json'
+            - '\\.kube/config'
+            - '/root/\\.kube/config'
+            - '/etc/kubernetes/admin\\.conf'
+        - field: file
+          patterns:
+            - '^/$'
+            - '^/etc/'
+            - '/\\.ssh'
+            - '/\\.env'
+            - '/\\.aws/credentials'
+            - '/var/run/docker\\.sock'
+            - '/var/run/secrets/kubernetes\\.io/'
+            - 'terraform\\.tfstate'
+            - '\\.npmrc'
+            - '\\.git-credentials'
+            - '\\.vault-token'
+            - 'service-account.*\\.json'
+            - '\\.kube/config'
+            - '/root/\\.kube/config'
+        - field: directory
+          patterns:
+            - '^/$'
+            - '^/etc/'
+            - '/var/run/secrets/kubernetes\\.io/'
+    - name: block-sql-exfil
+      description: Block obvious bulk data exfiltration SQL in tool arguments
+      action: block
+      argPatterns:
+        - field: sql
+          patterns:
+            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - \bunion\b.+\bselect\b
+            - \bdelete\s+from\b
+            - \b(?:drop|truncate)\s+table\b
+            - \bload_file\s*\(
+            - \bsleep\s*\(
+            - \bbenchmark\s*\(
+            - '\\$where'
+            - '\\$ne'
+            - '\\$gt'
+            - '\\$regex'
+            - __schema
+            - introspection
+            - admin\)\(&
+        - field: query
+          patterns:
+            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - \bunion\b.+\bselect\b
+            - \bdelete\s+from\b
+            - \badmin'\s*--
+            - '\\$where'
+            - '\\$ne'
+        - field: q
+          patterns:
+            - \badmin'\s*--
+            - \bor\s+['"]?1['"]?\s*=\s*['"]?1['"]?\b
+            - \bunion\b.+\bselect\b
+        - field: blob
+          patterns:
+            - '^.{50000,}$'
+        - field: data
+          patterns:
+            - '^.{50000,}$'
+        - field: body
+          patterns:
+            - \bdelete\s+from\b
+            - \bselect\s+\*\s+from\b.+\b(payments|transactions|credentials|users)\b
+            - '\\$ne'
+    - name: block-encoding-evasion
+      description: Block base64 and raw hex blobs used to hide instructions (layered decode in encoding-guard)
+      action: block
+      patterns:
+        - (?:^|[^A-Za-z0-9+/])(?=[A-Za-z0-9+/]{24,}(?:.*[+/=A-Z0-9]))[A-Za-z0-9+/]{24,}={0,2}(?:[^A-Za-z0-9+/]|$)
+        - '\b(?:(?!(.)\1{31,})[0-9a-fA-F]){32,}\b'
+      argPatterns:
+        - field: '*'
+          patterns:
+            - (?:^|[^A-Za-z0-9+/])(?=[A-Za-z0-9+/]{20,}(?:.*[+/=A-Z0-9]))[A-Za-z0-9+/]{20,}={0,2}
+            - \\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}
+    - name: block-path-traversal
+      description: Block tool calls with path traversal attempts
+      action: block
+      patterns:
+        - \.\.
+    - name: block-shell-injection
+      description: Block shell injection, downloaders, and PowerShell encoded commands
+      action: block
+      patterns:
+        - curl\s|wget\s
+        - rm\s+-rf
+        - ;\s*\w
+        - '&&|\|\|'
+        - \$\{
+        - \{\{
+        - <%|#\{
+        - \$\([^)]+\)
+        - '`[^`]+`'
+        - powershell|pwsh|-enc|-EncodedCommand
+    - name: burst-rate-limit
+      description: Block burst floods exceeding 40 calls per 10 seconds per server+tool
+      action: block
+      maxCallsPer10Seconds: 40
+    - name: rate-limit-tool-calls
+      description: Block tool calls exceeding 120 per minute per server+tool
+      action: block
+      maxCallsPerMinute: 120
+    - name: token-budget
+      description: Block tool calls exceeding 50K input tokens
+      action: block
+      maxTokens: 50000

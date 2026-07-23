@@ -1,0 +1,22 @@
+[
+  {
+    "command": "/Users/rudraneeldas/mastyf/scripts/mastyf-ai-proxy.sh",
+    "args": [
+      "--config",
+      "/Users/rudraneeldas/mastyf/mastyf-ai-configs/0.json",
+      "--policy",
+      "/Users/rudraneeldas/mastyf/default-policy.yaml"
+    ],
+    "transport": "stdio"
+  },
+  {
+    "command": "/Users/rudraneeldas/mastyf/scripts/mastyf-ai-proxy.sh",
+    "args": [
+      "--config",
+      "/Users/rudraneeldas/mastyf/mastyf-ai-configs/1.json",
+      "--policy",
+      "/Users/rudraneeldas/mastyf/default-policy.yaml"
+    ],
+    "transport": "stdio"
+  }
+]

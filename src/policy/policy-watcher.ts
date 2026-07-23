@@ -188,6 +188,32 @@ export class PolicyWatcher {
     }
   }
 
+  /** Apply a YAML string from a remote source (e.g., control plane) without writing to disk. */
+  reloadFromYamlString(yaml: string): boolean {
+    try {
+      const config = applyPolicyMerges(parsePolicyConfig(load(yaml)));
+      validateAllowlistRbac(config);
+      setTribunalPolicyFromConfig(config.policy.tribunal);
+      this.loadedPolicyVersion = config.version;
+      setPolicyVersionForCache(config.version);
+      const engine = getOrCreatePolicyEngine(config);
+      this.current = engine;
+      this.pendingEngine = null;
+      Logger.info(`[policy-watcher] Policy updated from remote (version: ${config.version}, mode: ${config.policy.mode}, rules: ${config.policy.rules.length})`);
+      if (this.onReload) this.onReload();
+      return true;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Logger.error(`[policy-watcher] Failed to apply remote policy: ${msg}`);
+      recordPolicyLoadError(msg);
+      return false;
+    }
+  }
+
+  getPolicyVersion(): string {
+    return this.loadedPolicyVersion;
+  }
+
   private startWatching(): void {
     this.watcher = watch(this.policyPath, {
       persistent: true,

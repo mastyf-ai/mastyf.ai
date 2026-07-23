@@ -2,84 +2,57 @@ name: Publish
 
 on:
   push:
-    tags:
-      - "v*"
-
-permissions:
-  contents: read
-  id-token: write
-  attestations: write
+    tags: ['v*']
 
 jobs:
-  publish:
-    name: Publish to npm
+  docker:
     runs-on: ubuntu-latest
-    environment: npm-publish
-    # Requires GitHub Environment secret NPM_TOKEN (npm automation token with publish scope).
-
+    permissions:
+      packages: write
     steps:
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
-          version: 10
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ github.ref_name }}
 
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: pnpm
-          registry-url: "https://registry.npmjs.org"
-
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @mastyf-ai/langchain-middleware run prepublishOnly
+      - run: cd packages/langchain-middleware && npm publish --access public
+        env: { NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}' }
+      - run: cd packages/openai-agents-middleware && npm publish --access public
+        env: { NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}' }
+      - run: cd packages/tool-registry && npm publish --access public
+        env: { NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}' }
 
-      - name: Build all packages
-        run: pnpm run build
-
-      - name: Run full test suite
-        run: pnpm -r test
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-
-      - name: Run corpus evaluation
-        run: pnpm tsx corpus/run-eval.ts
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-
-      - name: Generate release SBOM
-        run: pnpm dlx @cyclonedx/cyclonedx-npm --output-file sbom.cdx.json --omit dev
-
-      - name: Publish @mastyf-ai/plugin-sdk
-        working-directory: packages/plugin-sdk
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @mastyf-ai/core
-        working-directory: packages/core
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @mastyf-ai/server (root — full dep tree)
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @mastyf-ai/cli
-        working-directory: packages/cli
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Upload release SBOM
-        uses: actions/upload-artifact@v4
+  offline-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: node scripts/build-offline-bundle.mjs --output mastyf-offline-bundle.tar.gz
+      - uses: actions/upload-artifact@v4
         with:
-          name: release-sbom
-          path: sbom.cdx.json
-
-      - name: Attest build provenance (root package)
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: |
-            dist/index.js
-            dist/cli.js
+          name: offline-bundle
+          path: mastyf-offline-bundle.tar.gz

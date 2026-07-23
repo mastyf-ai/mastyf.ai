@@ -1,0 +1,66 @@
+{
+  "version": "4.2.0",
+  "testDate": "2026-07-22",
+  "environment": {
+    "cpu": "Apple M-series",
+    "node": "v23.11.0",
+    "ollama": "qwen3:8b"
+  },
+  "detectionRates": {
+    "corpusSize": 89,
+    "staticPayloads": 78,
+    "dynamicPayloads": 11,
+    "categories": {
+      "sensitive-path": { "tested": 7, "blocked": 7 },
+      "shell-injection": { "tested": 8, "blocked": 8 },
+      "ssrf": { "tested": 8, "blocked": 8 },
+      "sql-injection": { "tested": 4, "blocked": 4 },
+      "nosql-injection": { "tested": 4, "blocked": 2 },
+      "prompt-injection": { "tested": 8, "blocked": 8 },
+      "encoding-evasion": { "tested": 6, "blocked": 6 },
+      "data-exfil": { "tested": 4, "blocked": 4 },
+      "tool-deny": { "tested": 10, "blocked": 10 },
+      "indirect-injection": { "tested": 4, "blocked": 4 },
+      "multi-step-chain": { "tested": 4, "blocked": 4 },
+      "credential-theft": { "tested": 5, "blocked": 5 },
+      "xss": { "tested": 2, "blocked": 2 },
+      "deserialization": { "tested": 2, "blocked": 2 },
+      "benign": { "tested": 11, "blocked": 0 }
+    }
+  },
+  "protocolHardening": {
+    "tested": 15,
+    "blocked": 9,
+    "bypasses": 6,
+    "bypassDetails": [
+      "truncated-json-rpc",
+      "batch-array",
+      "privilege-escalation-method",
+      "empty-tool-name (fixed)",
+      "nosql-operator-in-args (fixed)",
+      "deep-nesting-6-levels"
+    ]
+  },
+  "latencyMs": {
+    "samples": 50,
+    "mean": 79,
+    "p50": 57,
+    "p95": 115,
+    "p99": 659,
+    "min": 54,
+    "max": 659,
+    "estimatedOverhead": "5-15ms (detection layers + hooks + strategies on top of upstream latency)"
+  },
+  "audit": {
+    "hashChainEntries": 3,
+    "integrity": "verified (0 breaks)",
+    "corpusRuleStats": "active"
+  },
+  "tribunal": {
+    "seededRecords": 25,
+    "debated": 25,
+    "useLlm": true,
+    "model": "qwen3:8b",
+    "status": "working"
+  }
+}

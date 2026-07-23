@@ -216,22 +216,14 @@ export async function runSemanticScan(
   const useOllama = ollamaExplicit && llmConfig.provider === "ollama";
 
   if (!apiKey && !useOllama) {
-    if (isCoreLocalSemanticEnabled()) {
-      const localHits = runLocalSemanticFallback(tool);
-      if (localHits.length) return localHits;
-    }
     return [semanticUnavailableIssue(
-      'Semantic scan skipped: no LLM API key and Ollama disabled',
+      'Semantic scan skipped — LLM mandatory. Configure OLLAMA_BASE_URL and set OLLAMA_ENABLED=true or set ANTHROPIC_API_KEY',
       'configuration',
       'MCPG-META-001',
     )];
   }
 
   if (isCoreSemanticCircuitOpen()) {
-    if (isCoreLocalSemanticEnabled()) {
-      const localHits = runLocalSemanticFallback(tool);
-      if (localHits.length) return localHits;
-    }
     return [semanticUnavailableIssue(
       'Semantic scan skipped: circuit breaker open',
       'configuration',
@@ -303,8 +295,12 @@ export async function runSemanticScan(
         await cache.set(cacheKey, rawText);
         recordCoreSemanticSuccess();
         return verdictToIssues(parseVerdictFromText(rawText));
-      } catch {
-        /* fall through to local heuristic */
+      } catch (ollamaErr) {
+        return [semanticUnavailableIssue(
+          `Claude API unavailable, Ollama also failed: ${(ollamaErr as Error).message}`,
+          'error',
+          'MCPG-META-003',
+        )];
       }
     }
     if (useOllama) {
@@ -314,21 +310,18 @@ export async function runSemanticScan(
         recordCoreSemanticSuccess();
         return verdictToIssues(parseVerdictFromText(rawText));
       } catch (ollamaErr) {
-        if (isCoreLocalSemanticEnabled()) {
-          const localHits = runLocalSemanticFallback(tool);
-          if (localHits.length) return localHits;
-        }
         return [semanticUnavailableIssue(
-          `Semantic scan failed (Ollama fallback): ${(ollamaErr as Error).message}`,
+          `Semantic scan failed — LLM mandatory: ${(ollamaErr as Error).message}`,
           'error',
           'MCPG-META-003',
         )];
       }
     }
-    if (isCoreLocalSemanticEnabled()) {
-      const localHits = runLocalSemanticFallback(tool);
-      if (localHits.length) return localHits;
-    }
+    return [semanticUnavailableIssue(
+      `Semantic scan failed — LLM required but not available`,
+      'error',
+      'MCPG-META-003',
+    )];
     if ((err as Error).name === "AbortError") {
       return [semanticUnavailableIssue(
         `Semantic scan timed out after ${timeoutMs}ms`,
@@ -337,7 +330,7 @@ export async function runSemanticScan(
       )];
     }
     return [semanticUnavailableIssue(
-      `Semantic scan failed: ${sanitizeLlmErrorBody((err as Error).message, apiKey ? [apiKey] : [])}`,
+      `Semantic scan failed: ${sanitizeLlmErrorBody((err as Error).message, (apiKey ? [apiKey] : []) as string[])}`,
       'error',
       'MCPG-META-003',
     )];

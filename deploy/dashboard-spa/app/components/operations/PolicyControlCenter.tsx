@@ -24,8 +24,10 @@ import { Badge } from '@/app/components/ui/Badge';
 import { KpiCard } from '@/app/components/ui/KpiCard';
 import { EmptyState } from '@/app/components/ui/EmptyState';
 import { WorkspaceSubNav } from '@/app/components/ui/WorkspaceSubNav';
+import EvalPlaygroundPanel from './EvalPlaygroundPanel';
+import CorpusReviewPanel from './CorpusReviewPanel';
 
-type PolicyView = 'rules' | 'editor' | 'test' | 'history';
+type PolicyView = 'rules' | 'editor' | 'test' | 'eval' | 'review' | 'history';
 
 type Props = {
   view: PolicyView;
@@ -40,6 +42,8 @@ const VIEW_LABELS: { id: PolicyView; label: string }[] = [
   { id: 'rules', label: 'Active Rules' },
   { id: 'editor', label: 'Policy Editor' },
   { id: 'test', label: 'Test & Simulate' },
+  { id: 'eval', label: 'Policy Eval' },
+  { id: 'review', label: 'Corpus Review' },
   { id: 'history', label: 'Version History' },
 ];
 
@@ -487,6 +491,8 @@ export function PolicyControlCenter({ view, onViewChange, roles, lastBlocked, on
       {view === 'rules' && renderRulesView()}
       {view === 'editor' && renderEditorView()}
       {view === 'test' && renderTestView()}
+      {view === 'eval' && <EvalPlaygroundPanel refreshKey={0} />}
+      {view === 'review' && <CorpusReviewPanel refreshKey={0} />}
       {view === 'history' && renderHistoryView()}
     </section>
   );

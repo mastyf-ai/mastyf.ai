@@ -244,6 +244,7 @@
   "license": "AGPL-3.0",
   "pnpm": {
     "onlyBuiltDependencies": [
+      "argon2",
       "better-sqlite3",
       "esbuild",
       "sharp"

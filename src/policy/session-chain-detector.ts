@@ -53,6 +53,16 @@ const ENCODE_TOOLS = new Set([
   'node',
 ]);
 
+const SAFE_EXFIL_DOMAINS = new Set([
+  'localhost', '127.0.0.1',
+  'example.com', 'httpbin.org', 'jsonplaceholder.typicode.com',
+  'github.com', 'api.github.com', 'raw.githubusercontent.com',
+  'npmjs.com', 'registry.npmjs.org', 'registry.yarnpkg.com',
+  'googleapis.com', 'google.com',
+  'docs.python.org', 'developer.mozilla.org', 'stackoverflow.com',
+  'ollama.com', '127.0.0.1:11434',
+]);
+
 const EXFIL_TOOLS = new Set([
   'http_request',
   'post_webhook',
@@ -68,6 +78,15 @@ const ENCODE_ARG_HINTS = /\b(?:base64|btoa|encode|hex|rot13|gzip|compress)\b/i;
 const EXFIL_ARG_HINTS = /\b(?:webhook|callback|post|upload|send|forward|https?:\/\/)\b/i;
 const SENSITIVE_ARG_HINTS =
   /\b(?:\/etc\/passwd|\.env|\.ssh|id_rsa|credentials|secret|token|api[_-]?key)\b/i;
+
+function isSafeExfilUrl(text: string): boolean {
+  try {
+    const urls = text.match(/https?:\/\/[^\s"'<>,;]+/g) || [];
+    return urls.length > 0 && urls.every(u => {
+      try { return SAFE_EXFIL_DOMAINS.has(new URL(u).hostname); } catch { return false; }
+    });
+  } catch { return false; }
+}
 
 function argShapeHash(args: Record<string, unknown> | undefined): string | undefined {
   if (!args) return undefined;
@@ -95,7 +114,8 @@ function classifyNode(toolName: string, args: Record<string, unknown> | undefine
     argShapeHash: argShapeHash(args),
     sensitiveRead: READ_TOOLS.has(lower) && SENSITIVE_ARG_HINTS.test(blob),
     encodeHint: ENCODE_TOOLS.has(lower) || ENCODE_ARG_HINTS.test(blob) || ENCODE_ARG_HINTS.test(lower),
-    exfilHint: EXFIL_TOOLS.has(lower) || EXFIL_ARG_HINTS.test(blob) || EXFIL_ARG_HINTS.test(lower),
+    exfilHint: (EXFIL_TOOLS.has(lower) || EXFIL_ARG_HINTS.test(blob) || EXFIL_ARG_HINTS.test(lower))
+      && !isSafeExfilUrl(blob) && !isSafeExfilUrl(lower),
   };
 }
 

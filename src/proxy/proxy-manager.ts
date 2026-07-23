@@ -12,7 +12,76 @@ import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
 import { TenantPolicyRegistry } from '../policy/tenant-policy-registry.js';
 import { OAuthValidator } from '../auth/oauth.js';
+import { credentialBroker } from '../auth/credential-broker.js';
+import { globalHookRegistry } from './tool-call-defense-orchestrator.js';
+import { createRateLimitHook, createPiiRedactionHook, createSensitivePathGuard, createSlackNotifierHook, createPagerDutyHook, createTimeBasedAccessHook, createGeoFencingHook, createCustomHook } from '../policy/tool-call-hooks.js';
+import { getUserToolEnforcementEngine } from '../policy/strategies/user-tool-enforcement-strategy.js';
+import { getPersistenceStore } from '../utils/persistence-store.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
+
+let hooksInitialized = false;
+function initBuiltinHooks(): void {
+  if (hooksInitialized) return;
+  hooksInitialized = true;
+  try {
+    globalHookRegistry.registerBefore(createRateLimitHook({ maxCallsPerMinute: 60, perUser: true }));
+    globalHookRegistry.registerAfter(createPiiRedactionHook(['api_key', 'password', 'secret', 'token', 'access_token', 'private_key']));
+    globalHookRegistry.registerBefore(createSensitivePathGuard(
+      ['/home/*', '/tmp/*', '/workspace/*', '/app/*'],
+      ['/etc/shadow', '/etc/ssl/private/*', '*.pem', '*.key', '.env', '.aws/*', '.ssh/*'],
+    ));
+    // Conditional hooks — activate when env vars are set
+    const slackUrl = process.env.MASTYF_AI_SLACK_WEBHOOK || process.env.ALERT_SLACK_WEBHOOK;
+    if (slackUrl) { globalHookRegistry.registerBefore(createSlackNotifierHook(slackUrl)); globalHookRegistry.registerAfter(createSlackNotifierHook(slackUrl) as any); }
+    const pdKey = process.env.ALERT_PAGERDUTY_KEY;
+    if (pdKey) globalHookRegistry.registerAfter(createPagerDutyHook(pdKey));
+    const allowedRegions = process.env.MASTYF_AI_ALLOWED_REGIONS || process.env.MASTYF_AI_ZERO_TRUST_ALLOWED_REGIONS;
+    if (allowedRegions) globalHookRegistry.registerBefore(createGeoFencingHook(allowedRegions.split(',').map(r => r.trim())));
+    if (process.env.MASTYF_AI_ACCESS_HOURS) {
+      const [start, end] = process.env.MASTYF_AI_ACCESS_HOURS.split('-').map(Number);
+      if (!isNaN(start) && !isNaN(end)) globalHookRegistry.registerBefore(createTimeBasedAccessHook({ allowedHours: [start, end] }));
+    }
+    if (process.env.MASTYF_AI_ACCESS_DENIED_DAYS) {
+      const days = process.env.MASTYF_AI_ACCESS_DENIED_DAYS.split(',').map(Number).filter(n => n >= 0 && n <= 6);
+      if (days.length > 0) globalHookRegistry.registerBefore(createTimeBasedAccessHook({ deniedDays: days }));
+    }
+  } catch {}
+}
+
+function loadUserPoliciesFromDb(): void {
+  try {
+    const store = getPersistenceStore();
+    const rows = store.getUserPolicies('default');
+    if (rows.length === 0) return;
+    const safe = (s: string) => { try { return JSON.parse(s); } catch { return []; } };
+    const policies = rows.map(r => ({
+      userId: r.user_id, username: r.username, tenantId: r.tenant_id,
+      roles: safe(r.roles), allowedTools: safe(r.allowed_tools), deniedTools: safe(r.denied_tools),
+      rateLimitPerMinute: r.rate_limit_per_minute, maxTokensPerCall: r.max_tokens_per_call,
+      allowedPaths: safe(r.allowed_paths), deniedPaths: safe(r.denied_paths),
+    }));
+    if (policies.length > 0) {
+      getUserToolEnforcementEngine().registerUserPolicies(policies);
+      Logger.info(`[proxy-manager] Loaded ${policies.length} user policies from DB`);
+    }
+  } catch {}
+}
+
+function loadCustomHooksFromDb(): void {
+  try {
+    const store = getPersistenceStore();
+    const hooks = store.getCustomHooks();
+    if (hooks.length === 0) return;
+    for (const h of hooks) {
+      const hook = createCustomHook(h.name, h.code, h.type as any, h.priority);
+      if (!hook) continue;
+      if (h.type === 'before') globalHookRegistry.registerBefore(hook as any);
+      else if (h.type === 'after') globalHookRegistry.registerAfter(hook as any);
+      else globalHookRegistry.registerError(hook as any);
+    }
+    Logger.info(`[proxy-manager] Loaded ${hooks.length} custom hooks from DB`);
+  } catch {}
+}
 import * as Metrics from '../utils/metrics.js';
 import { isStreamableHttpMcpUrl, resolveStreamableHttpUpstreamBase } from '../utils/mcp-transport-url.js';
 
@@ -30,6 +99,9 @@ export class ProxyManager {
     policyEngineOrWatcher?: PolicyEngine | PolicyWatcher,
     private authValidator?: OAuthValidator,
   ) {
+    initBuiltinHooks();
+    loadUserPoliciesFromDb();
+    loadCustomHooksFromDb();
     if (policyEngineOrWatcher instanceof PolicyWatcher) {
       this.policyEngine = policyEngineOrWatcher.get() ?? undefined;
       const updateEngine = () => {

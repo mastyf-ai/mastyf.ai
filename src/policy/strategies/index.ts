@@ -13,6 +13,7 @@ export { certificationStrategy } from './certification-strategy.js';
 export { behavioralBiometricsStrategy } from './behavioral-biometrics-strategy.js';
 export { zeroTrustStrategy } from './zero-trust-strategy.js';
 export { yamlRulesStrategy } from './yaml-rules-strategy.js';
+export { userToolEnforcementStrategy, getUserToolEnforcementEngine } from './user-tool-enforcement-strategy.js';
 export { evaluateRedisRateLimit } from './rate-limit-strategy.js';
 export { evaluateRedisTokenBudget } from './token-budget-strategy.js';
 export { evaluateIdempotency } from './idempotency-strategy.js';
@@ -35,10 +36,12 @@ import { certificationStrategy } from './certification-strategy.js';
 import { behavioralBiometricsStrategy } from './behavioral-biometrics-strategy.js';
 import { zeroTrustStrategy } from './zero-trust-strategy.js';
 import { yamlRulesStrategy } from './yaml-rules-strategy.js';
+import { userToolEnforcementStrategy } from './user-tool-enforcement-strategy.js';
 import type { PolicyStrategy } from './types.js';
 
 /** Ordered sync evaluation pipeline (same order as pre-refactor PolicyEngine.evaluate). */
 export const SYNC_POLICY_STRATEGIES: PolicyStrategy[] = [
+  userToolEnforcementStrategy,
   resourceGuardStrategy,
   encodingGuardStrategy,
   requestPromptInjectionStrategy,

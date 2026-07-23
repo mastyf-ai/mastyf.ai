@@ -277,24 +277,20 @@ async function main(): Promise<void> {
 
   for (const b of bypasses.slice(0, max)) {
     if (candidates.length >= max) break;
+    log(`[threat-lab] bypass ${seq}...`);
     const discovery = await discoverFromBypass(b as Parameters<typeof discoverFromBypass>[0], { llm, seq });
-    if (!discovery) continue;
+    if (!discovery) { seq++; continue; }
     await queueCandidate(
-      candidates,
-      seen,
-      discovery,
-      {
-        source: 'bypass',
-        llmUsed: true,
-        inputFingerprint: String((b as { fingerprint?: string }).fingerprint || ''),
-      },
-      requireReplay,
-      'security-swarm/threat-lab',
+      candidates, seen, discovery,
+      { source: 'bypass', llmUsed: true, inputFingerprint: String((b as { fingerprint?: string }).fingerprint || '') },
+      requireReplay, 'security-swarm/threat-lab',
     );
+    log(`[threat-lab] bypass ${seq} ✓`);
     seq++;
   }
 
   if (candidates.length < max && threatLabSemanticEnabled()) {
+    log('[threat-lab] phase=semantic-audit');
     const records = await loadSemanticAuditRecordsAsync({ sinceMs: 7 * 24 * 60 * 60 * 1000, limit: 50 });
     const tps = records.filter(isAuthenticSemanticTp);
     for (const rec of tps) {
@@ -314,6 +310,7 @@ async function main(): Promise<void> {
   }
 
   if (candidates.length < max && process.env.SWARM_THREAT_LAB_THREAT_INTEL !== 'false') {
+    log('[threat-lab] phase=threat-intel');
     const ti = getSharedThreatIntel();
     try {
       await ti.pollLiveFeeds();
@@ -340,6 +337,7 @@ async function main(): Promise<void> {
   }
 
   if (mode === 'proactive' && candidates.length < max) {
+    log('[threat-lab] phase=corpus-seed');
     const seeds = loadCorpusSamples({ limit: max - candidates.length });
     for (const seed of seeds) {
       if (candidates.length >= max) break;
@@ -409,6 +407,7 @@ async function main(): Promise<void> {
     ok: true,
     extra: { candidateCount: candidates.length },
   });
+  process.exit(0);
 }
 
 main().catch((err) => {

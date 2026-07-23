@@ -1,0 +1,85 @@
+name: MCP Protocol Fuzzer CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/policy/**'
+      - 'src/proxy/**'
+      - 'packages/core/**'
+      - 'default-policy.yaml'
+  pull_request:
+    paths:
+      - 'src/policy/**'
+      - 'src/proxy/**'
+      - 'packages/core/**'
+      - 'default-policy.yaml'
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: MCP server URL to fuzz
+        required: false
+        default: 'http://localhost:4000/mcp'
+
+jobs:
+  fuzz-mcp-server:
+    runs-on: ubuntu-latest
+
+    services:
+      mastyf:
+        image: ghcr.io/mastyf-ai/mastyf:latest
+        ports:
+          - 4000:4000
+        env:
+          DASHBOARD_ENABLED: 'true'
+          DASHBOARD_PORT: '4000'
+          DASHBOARD_AUTH_DISABLED: 'true'
+          METRICS_ENABLED: 'true'
+          METRICS_PORT: '9090'
+          MASTYF_AI_DB_PATH: /data/history.db
+        options: >-
+          --health-cmd "curl -f http://localhost:4000/ || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Wait for Mastyf AI to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -s -f http://localhost:4000/ > /dev/null 2>&1; then
+              echo "Mastyf AI is ready"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Mastyf AI failed to start"
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Run MCP Protocol Fuzzer
+        uses: ./.github/actions/mcp-fuzzer
+        with:
+          target_url: ${{ github.event.inputs.target_url || 'http://localhost:4000/mcp' }}
+          min_block_rate: '80'
+          timeout_seconds: '10'
+          fail_on_bypass: 'true'
+
+      - name: Fuzz report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-fuzz-report
+          path: |
+            fuzz-report.json
+          retention-days: 30

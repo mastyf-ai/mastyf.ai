@@ -3415,3 +3415,282 @@ export function resolveWsUrl(): string {
     return 'ws://localhost:4000/ws';
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SSO / IdP Federation
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type SsoProviderSummary = {
+  id: string;
+  name: string;
+  providerType: 'oidc' | 'saml';
+};
+
+export type SsoProvidersResponse = {
+  providers: SsoProviderSummary[];
+};
+
+export async function fetchSsoProviders(): Promise<SsoProviderSummary[]> {
+  const res = await mastyfAiFetch('/api/auth/sso/providers');
+  if (!res.ok) return [];
+  const data = (await res.json()) as SsoProvidersResponse;
+  return data.providers || [];
+}
+
+export type IdpConfigFull = {
+  id: string;
+  name: string;
+  providerType: 'oidc' | 'saml';
+  issuerUrl: string;
+  clientId: string;
+  redirectUri: string;
+  scopes: string[];
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function fetchSsoSettings(): Promise<IdpConfigFull[]> {
+  const res = await mastyfAiFetch('/api/auth/sso/settings');
+  if (!res.ok) return [];
+  const data = (await res.json()) as { configs: IdpConfigFull[] };
+  return data.configs || [];
+}
+
+export async function saveSsoConfig(config: Partial<IdpConfigFull>): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const method = config.id ? 'PUT' : 'POST';
+  const url = config.id ? `/api/auth/sso/settings/${config.id}` : '/api/auth/sso/settings';
+  const res = await mastyfAiFetch(url, { method, headers, body: JSON.stringify(config) });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error || `HTTP ${res.status}` };
+  }
+  return { ok: true };
+}
+
+export async function deleteSsoConfig(configId: string): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(`/api/auth/sso/settings/${configId}`, { method: 'DELETE', headers });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error || `HTTP ${res.status}` };
+  }
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tool Registry
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type RegistryScanResult = {
+  packageName: string;
+  trustScore: number;
+  trustGrade: string;
+  cveCount: number;
+  criticalCveCount: number;
+  dimensions: Record<string, number>;
+  scannedAt: string;
+};
+
+export type RegistryScanResponse = {
+  result: RegistryScanResult;
+};
+
+export async function scanPackage(packageName: string): Promise<RegistryScanResult | null> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/registry/scan', {
+    method: 'POST', headers, body: JSON.stringify({ packageName }),
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as RegistryScanResponse;
+  return data.result || null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Eval Playground
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type EvalPayload = {
+  tool: string;
+  args: Record<string, unknown>;
+  expectedAction: 'block' | 'pass' | 'flag';
+  category: string;
+  description: string;
+};
+
+export type EvalResult = {
+  payload: EvalPayload;
+  actualAction: 'block' | 'pass' | 'flag';
+  matched: boolean;
+  matchedRule: string;
+  matchedReason: string;
+  durationMs: number;
+};
+
+export type EvalStats = {
+  total: number;
+  correct: number;
+  incorrect: number;
+  accuracy: number;
+  truePositives: number;
+  trueNegatives: number;
+  falsePositives: number;
+  falseNegatives: number;
+  missedCritical: number;
+  byCategory: Record<string, { total: number; correct: number }>;
+};
+
+export type EvalRunResponse = {
+  results: EvalResult[];
+  stats: EvalStats;
+};
+
+export type EvalPayloadsResponse = {
+  payloads: EvalPayload[];
+  total: number;
+};
+
+export async function fetchEvalPayloads(): Promise<EvalPayload[]> {
+  const res = await mastyfAiFetch('/api/eval/payloads');
+  if (!res.ok) return [];
+  const data = (await res.json()) as EvalPayloadsResponse;
+  return data.payloads || [];
+}
+
+export async function runEval(payloads: EvalPayload[]): Promise<EvalRunResponse | null> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/eval/run', {
+    method: 'POST', headers, body: JSON.stringify({ payloads }),
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as EvalRunResponse;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Threat Feed Syndication
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type ThreatFeedSubscription = {
+  id: string;
+  tenantId: string;
+  name: string;
+  feedUrl: string;
+  enabled: boolean;
+  lastSync?: string;
+  addedCount: number;
+  createdAt: string;
+};
+
+export type ThreatFeedListResponse = {
+  subscriptions: ThreatFeedSubscription[];
+};
+
+export async function fetchThreatFeedSubscriptions(): Promise<ThreatFeedSubscription[]> {
+  const res = await mastyfAiFetch('/api/threat-feeds/subscriptions');
+  if (!res.ok) return [];
+  const data = (await res.json()) as ThreatFeedListResponse;
+  return data.subscriptions || [];
+}
+
+export async function addThreatFeedSubscription(feed: { name: string; feedUrl: string }): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/threat-feeds/subscriptions', {
+    method: 'POST', headers, body: JSON.stringify(feed),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error || `HTTP ${res.status}` };
+  }
+  return { ok: true };
+}
+
+export async function syncThreatFeeds(): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/threat-feeds/sync', { method: 'POST', headers });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error || `HTTP ${res.status}` };
+  }
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Hook Management
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type HookInfo = {
+  name: string;
+  type: 'before' | 'after' | 'error';
+  enabled: boolean;
+  priority?: number;
+};
+
+export type HooksListResponse = {
+  hooks: HookInfo[];
+};
+
+export async function fetchHooks(): Promise<HookInfo[]> {
+  const res = await mastyfAiFetch('/api/hooks');
+  if (!res.ok) return [];
+  const data = (await res.json()) as HooksListResponse;
+  return data.hooks || [];
+}
+
+export async function toggleHook(hookName: string, enabled: boolean): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const headers = await buildMutatingHeaders();
+    const res = await mastyfAiFetch(`/api/hooks/${hookName}`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ action: enabled ? 'enable' : 'disable' }),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return { ok: true };
+  } catch {
+    const res = await mastyfAiFetch(`/api/hooks/${hookName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: enabled ? 'enable' : 'disable' }),
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    return { ok: true };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Embeddable Widgets
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type WidgetMetricsResponse = {
+  totalRequests: number;
+  blockedRequests: number;
+  blockRate: number;
+  activeSessions: number;
+  activeProxies: number;
+  avgLatencyMs: number;
+  updatedAt: string;
+};
+
+export async function fetchWidgetMetrics(): Promise<WidgetMetricsResponse | null> {
+  const res = await mastyfAiFetch('/api/widgets/metrics');
+  if (!res.ok) return null;
+  return (await res.json()) as WidgetMetricsResponse;
+}
+
+export type WidgetAuditResponse = {
+  totalEvents: number;
+  blockedEvents: number;
+  allowedEvents: number;
+  flaggedEvents: number;
+  topBlockedTools: Array<{ tool: string; count: number }>;
+  topBlockedRules: Array<{ rule: string; count: number }>;
+};
+
+export async function fetchWidgetAudit(): Promise<WidgetAuditResponse | null> {
+  const res = await mastyfAiFetch('/api/widgets/audit');
+  if (!res.ok) return null;
+  return (await res.json()) as WidgetAuditResponse;
+}

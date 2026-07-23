@@ -2,7 +2,7 @@ import { PolicyRule, PolicyAction } from '../policy/policy-types.js';
 import { Logger } from '../utils/logger.js';
 import { isDemoThreatId } from '../utils/dashboard-live-data.js';
 import { resolveThreatStatePath } from './ai-paths.js';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
 import { dirname } from 'path';
 
 export interface ThreatIntelEntry {
@@ -518,7 +518,8 @@ export class ThreatIntel {
       const dir = dirname(this.statePath);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       this.lastUpdated = new Date().toISOString();
-      writeFileSync(this.statePath, JSON.stringify({
+      const tmpPath = `${this.statePath}.tmp`;
+      writeFileSync(tmpPath, JSON.stringify({
         ids: [...this.knownEntries.keys()],
         updated: this.lastUpdated,
         lastPollAt: this.lastPollAt,
@@ -526,6 +527,7 @@ export class ThreatIntel {
         suppressed: Object.fromEntries(this.suppressed.entries()),
         quarantineArchive: this.quarantineArchive,
       }, null, 2));
+      renameSync(tmpPath, this.statePath);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       Logger.warn(`[ThreatIntel] Failed to save state: ${message}`);

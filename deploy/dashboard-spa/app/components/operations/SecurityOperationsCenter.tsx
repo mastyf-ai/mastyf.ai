@@ -57,10 +57,11 @@ import { SocAiLearningView } from './SocAiLearningView';
 import { useThreatDiscoveryJobs } from '@/lib/use-threat-discovery-jobs';
 import { ThreatDiscoveryJobStatus } from '../ThreatDiscoveryJobStatus';
 import { ThreatLabWorkbench } from '../ThreatLabWorkbench';
+import ThreatFeedsPanel from './ThreatFeedsPanel';
 import { useDashboardWindow } from '../dashboard/DashboardWindowContext';
 import type { ThreatLabContext } from '../IncidentInvestigatorDrawer';
 
-type SecurityView = 'overview' | 'threats' | 'intel' | 'swarm' | 'learning' | 'quarantine';
+type SecurityView = 'overview' | 'threats' | 'intel' | 'swarm' | 'learning' | 'quarantine' | 'feeds';
 type ThreatDiscoverySubTab = 'overview' | 'threat-lab' | 'auto-research';
 
 type Props = {
@@ -84,6 +85,7 @@ const VIEW_TABS = [
   { id: 'swarm' as const, label: 'Swarm Analysis' },
   { id: 'learning' as const, label: 'AI Learning' },
   { id: 'quarantine' as const, label: 'Quarantine' },
+  { id: 'feeds' as const, label: 'Threat Feeds' },
 ];
 
 const THREAT_SUB_TABS: { id: ThreatDiscoverySubTab; label: string }[] = [
@@ -1149,6 +1151,7 @@ export function SecurityOperationsCenter({
         />
       )}
       {view === 'quarantine' && <QuarantineView roles={roles} refreshKey={refreshKey} onAction={onAction} />}
+      {view === 'feeds' && <ThreatFeedsPanel refreshKey={refreshKey} />}
     </section>
   );
 }

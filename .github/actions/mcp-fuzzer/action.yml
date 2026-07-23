@@ -1,0 +1,59 @@
+name: MCP Protocol Fuzzer
+description: Fuzz tests any MCP server against 15 protocol-level attack payloads
+inputs:
+  target_url:
+    description: MCP server URL to fuzz (e.g., http://localhost:4000/mcp)
+    required: true
+  min_block_rate:
+    description: Minimum block rate percentage to pass (default 80)
+    default: '80'
+  timeout_seconds:
+    description: Timeout per fuzz request (default 10)
+    default: '10'
+  fail_on_bypass:
+    description: Fail the action if any critical payload bypasses detection
+    default: 'true'
+
+outputs:
+  total_tests:
+    description: Total number of fuzz payloads sent
+    value: ${{ steps.fuzz.outputs.total }}
+  blocked_count:
+    description: Number of payloads blocked
+    value: ${{ steps.fuzz.outputs.blocked }}
+  passed_count:
+    description: Number of payloads that passed (bypasses)
+    value: ${{ steps.fuzz.outputs.passed }}
+  block_rate:
+    description: Block rate percentage
+    value: ${{ steps.fuzz.outputs.block_rate }}
+  report:
+    description: JSON fuzz report
+    value: ${{ steps.fuzz.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        cd $GITHUB_ACTION_PATH
+        npm init -y --silent 2>/dev/null || true
+
+    - name: Run MCP protocol fuzzer
+      id: fuzz
+      shell: bash
+      run: |
+        node "$GITHUB_ACTION_PATH/fuzz.mjs" \
+          --target "${{ inputs.target_url }}" \
+          --min-block-rate "${{ inputs.min_block_rate }}" \
+          --timeout "${{ inputs.timeout_seconds }}" \
+          --fail-on-bypass "${{ inputs.fail_on_bypass }}"
+
+branding:
+  icon: shield
+  color: red

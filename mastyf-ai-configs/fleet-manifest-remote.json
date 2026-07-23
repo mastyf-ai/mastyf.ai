@@ -1,43 +1,51 @@
 {
   "mcpServers": {
     "filesystem-proxy": {
-      "url": "http://127.0.0.1:9107/sse",
-      "transport": "stdio",
-      "env": {
-        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9107",
-        "MASTYF_AI_SSE_PROXY_PORT": "9107"
-      }
-    },
-    "fixture_echo": {
-      "url": "http://127.0.0.1:9101/mcp",
-      "transport": "stdio",
-      "env": {
-        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9101",
-        "MASTYF_AI_SSE_PROXY_PORT": "9101"
-      }
-    },
-    "github-proxy": {
-      "url": "http://127.0.0.1:9108/sse",
-      "transport": "stdio",
-      "env": {
-        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9108",
-        "MASTYF_AI_SSE_PROXY_PORT": "9108"
-      }
-    },
-    "mcp-guardian": {
-      "url": "http://127.0.0.1:9109/mcp",
+      "url": "http://127.0.0.1:9109/sse",
       "transport": "stdio",
       "env": {
         "MASTYF_AI_STREAMABLE_HTTP_PORT": "9109",
         "MASTYF_AI_SSE_PROXY_PORT": "9109"
       }
     },
-    "remote-api": {
-      "url": "http://localhost:3001/mcp",
-      "transport": "sse",
+    "fixture_echo": {
+      "url": "http://127.0.0.1:9110/mcp",
+      "transport": "stdio",
       "env": {
         "MASTYF_AI_STREAMABLE_HTTP_PORT": "9110",
         "MASTYF_AI_SSE_PROXY_PORT": "9110"
+      }
+    },
+    "github-proxy": {
+      "url": "http://127.0.0.1:9111/sse",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9111",
+        "MASTYF_AI_SSE_PROXY_PORT": "9111"
+      }
+    },
+    "mcp-guardian": {
+      "url": "http://127.0.0.1:9112/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9112",
+        "MASTYF_AI_SSE_PROXY_PORT": "9112"
+      }
+    },
+    "my-filesystem": {
+      "url": "http://127.0.0.1:9113/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9113",
+        "MASTYF_AI_SSE_PROXY_PORT": "9113"
+      }
+    },
+    "remote-api": {
+      "url": "http://127.0.0.1:9114/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9114",
+        "MASTYF_AI_SSE_PROXY_PORT": "9114"
       }
     }
   }

@@ -12,15 +12,15 @@ export type WorkspaceId =
   | 'logs';
 
 export type ActivityView = 'realtime' | 'audit' | 'analytics' | 'infrastructure';
-export type SecurityView = 'overview' | 'threats' | 'intel' | 'swarm' | 'learning' | 'quarantine';
-export type PolicyView = 'rules' | 'editor' | 'test' | 'history';
+export type SecurityView = 'overview' | 'threats' | 'intel' | 'swarm' | 'learning' | 'quarantine' | 'feeds';
+export type PolicyView = 'rules' | 'editor' | 'test' | 'history' | 'eval' | 'review';
 export type CostView = 'overview' | 'breakdown' | 'budgets';
-export type ServersView = 'overview' | 'health' | 'certifications';
+export type ServersView = 'overview' | 'health' | 'certifications' | 'registry';
 export type ComplianceView = 'overview' | 'frameworks' | 'evidence';
 // Legacy workspace IDs kept for backward compatibility with existing panels
 export type LegacyWorkspaceId = 'home' | 'operations' | 'threats';
 export type AgenticView = 'overview' | 'learning' | 'red-team' | 'prediction' | 'trust' | 'biometrics' | 'threats' | 'policy' | 'operations' | 'audit' | 'tools';
-export type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin' | 'users' | 'groups' | 'roles' | 'security' | 'audit-log' | 'profile';
+export type SettingsView = 'general' | 'tenants' | 'integrations' | 'admin' | 'users' | 'groups' | 'roles' | 'security' | 'sso' | 'hooks' | 'credentials' | 'audit-log' | 'profile';
 export type LogsView = 'events' | 'system' | 'retention';
 
 export const WORKSPACE_CONFIG: Record<WorkspaceId, {
@@ -54,6 +54,7 @@ export const WORKSPACE_CONFIG: Record<WorkspaceId, {
       { id: 'swarm', label: 'Swarm Analysis' },
       { id: 'learning', label: 'AI Learning' },
       { id: 'quarantine', label: 'Quarantine' },
+      { id: 'feeds', label: 'Threat Feeds' },
     ],
   },
   policy: {
@@ -63,6 +64,8 @@ export const WORKSPACE_CONFIG: Record<WorkspaceId, {
       { id: 'rules', label: 'Active Rules' },
       { id: 'editor', label: 'Policy Editor' },
       { id: 'test', label: 'Test & Simulate' },
+      { id: 'eval', label: 'Policy Eval' },
+      { id: 'review', label: 'Corpus Review' },
       { id: 'history', label: 'Version History' },
     ],
   },
@@ -82,6 +85,7 @@ export const WORKSPACE_CONFIG: Record<WorkspaceId, {
       { id: 'overview', label: 'Inventory' },
       { id: 'health', label: 'Health & Performance' },
       { id: 'certifications', label: 'Certifications' },
+      { id: 'registry', label: 'Tool Registry' },
     ],
   },
   compliance: {
@@ -117,6 +121,8 @@ export const WORKSPACE_CONFIG: Record<WorkspaceId, {
       { id: 'groups', label: 'Groups' },
       { id: 'roles', label: 'Roles' },
       { id: 'security', label: 'Security Settings' },
+      { id: 'sso', label: 'SSO Providers' },
+      { id: 'hooks', label: 'Hooks' },
       { id: 'audit-log', label: 'Audit Log' },
       { id: 'profile', label: 'My Profile' },
     ],

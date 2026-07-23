@@ -72,3 +72,4 @@ tests/e2e/adversarial-test-config.json
 deploy/dashboard-spa/app/data/
 # Runtime logs
 data/tenants/default/logs/*.jsonl
+mastyf-ai-docker.tar
