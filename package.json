@@ -1,7 +1,7 @@
 {
   "name": "@mastyf-ai/server",
   "version": "4.1.7",
-  "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
+  "description": "Security, cost, and health governance proxy for MCP infrastructure \u2014 three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
     "dist",
@@ -26,47 +26,6 @@
       "default": "./dist/agentic/trust-score/score-package-by-name.js"
     }
   },
-  "scripts": {
-    "test": "pnpm vitest run",
-    "typecheck": "tsc --noEmit"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/mastyf-ai/mastyf-ai.git"
-  },
-  "bugs": "https://github.com/mastyf-ai/mastyf-ai/issues",
-  "homepage": "https://www.npmjs.com/package/@mastyf-ai/server",
-  "mcpName": "io.github.mastyf-ai/mastyf-ai",
-  "publishConfig": {
-    "access": "public"
-  },
-  "keywords": [
-    "mcp",
-    "mcp-server",
-    "mcp-gateway",
-    "mcp-proxy",
-    "mcp-security",
-    "model-context-protocol",
-    "ai-security",
-    "llm-guardrails",
-    "llm-security",
-    "security",
-    "governance",
-    "audit",
-    "proxy",
-    "gateway",
-    "observability",
-    "monitoring",
-    "zero-trust",
-    "infrastructure",
-    "agent-ai",
-    "cli",
-    "typescript",
-    "cost-tracking"
-  ],
   "scripts": {
     "build": "pnpm --filter @mastyf-ai/plugin-sdk run build && pnpm --filter @mastyf-ai/core run build && pnpm --filter @mastyf-ai/mcp-server run build && tsc --project tsconfig.json && mkdir -p dist/database/migrations dist/policy dist/scripts/redis && cp src/database/migrations/*.sql dist/database/migrations/ && cp src/policy/regex-eval-worker.mjs dist/policy/ && cp scripts/redis/*.lua dist/scripts/redis/ && turbo run build",
     "build:mastyf-ai": "pnpm --filter @mastyf-ai/plugin-sdk run build && pnpm --filter @mastyf-ai/core run build && pnpm --filter @mastyf-ai/mcp-server run build && tsc --project tsconfig.json && cp src/policy/regex-eval-worker.mjs dist/policy/",
@@ -184,6 +143,43 @@
     "prepack": "node scripts/prepack-npm-deps.mjs",
     "prepublishOnly": "npm run build && npm run dashboard:build && node scripts/validate-npm-pack.mjs && npm test"
   },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastyf-ai/mastyf-ai.git"
+  },
+  "bugs": "https://github.com/mastyf-ai/mastyf-ai/issues",
+  "homepage": "https://www.npmjs.com/package/@mastyf-ai/server",
+  "mcpName": "io.github.mastyf-ai/mastyf-ai",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "mcp-gateway",
+    "mcp-proxy",
+    "mcp-security",
+    "model-context-protocol",
+    "ai-security",
+    "llm-guardrails",
+    "llm-security",
+    "security",
+    "governance",
+    "audit",
+    "proxy",
+    "gateway",
+    "observability",
+    "monitoring",
+    "zero-trust",
+    "infrastructure",
+    "agent-ai",
+    "cli",
+    "typescript",
+    "cost-tracking"
+  ],
   "dependencies": {
     "@mastyf-ai/core": "workspace:^4.1.7",
     "@mastyf-ai/mcp-server": "workspace:^4.1.7",
@@ -238,7 +234,10 @@
     "turbo": "^2.9.14",
     "typescript": "^5.4.0",
     "vitest": "^3.2.4",
-    "zod-to-json-schema": "^3.24.5"
+    "zod-to-json-schema": "^3.24.5",
+    "next": "^15.3.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "packageManager": "pnpm@10.28.2+sha512.41872f037ad22f7348e3b1debbaf7e867cfd448f2726d9cf74c08f19507c31d2c8e7a11525b983febc2df640b5438dee6023ebb1f84ed43cc2d654d2bc326264",
   "license": "AGPL-3.0",
