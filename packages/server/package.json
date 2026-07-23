@@ -28,7 +28,7 @@
   "dependencies": {
     "@mastyf-ai/core": "workspace:^4.1.7",
     "@modelcontextprotocol/sdk": "^1.25.2",
-    "@opentelemetry/core": "^2.8.0"
+    "@opentelemetry/core": "^2.10.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
