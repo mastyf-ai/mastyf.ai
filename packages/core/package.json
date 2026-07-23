@@ -37,7 +37,7 @@
     "ajv": "^8.17.1",
     "ioredis": "^5.10.1",
     "lru-cache": "^11.3.6",
-    "undici": "^7.28.0"
+    "undici": "^8.5.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
