@@ -7,7 +7,7 @@
  *
  * Usage:
  * ```ts
- * import { createMastyfToolWrapper } from '@mastyf-ai/langchain-middleware';
+ * import { createMastyfToolWrapper } from '@mastyf_ai/langchain-middleware';
  *
  * const secureTools = tools.map(tool =>
  *   createMastyfToolWrapper(tool, {

@@ -43,9 +43,9 @@ function copyFile(src, dest) {
 
 console.log('[1/7] Collecting build artifacts...');
 try {
-  execSync('pnpm --filter @mastyf-ai/plugin-sdk run build && ' +
-           'pnpm --filter @mastyf-ai/core run build && ' +
-           'pnpm --filter @mastyf-ai/mcp-server run build && ' +
+  execSync('pnpm --filter @mastyf_ai/plugin-sdk run build && ' +
+           'pnpm --filter @mastyf_ai/core run build && ' +
+           'pnpm --filter @mastyf_ai/mcp-server run build && ' +
            'tsc --project tsconfig.json', { cwd: ROOT, stdio: 'pipe' });
 } catch (err) {
   console.log('  Using existing build artifacts (build skipped)');
@@ -57,7 +57,7 @@ if (existsSync(join(ROOT, 'dist'))) {
 
 console.log('[2/7] Building dashboard SPA...');
 try {
-  execSync('NODE_ENV=production pnpm --filter @mastyf-ai/dashboard-spa run build', { cwd: ROOT, stdio: 'pipe' });
+  execSync('NODE_ENV=production pnpm --filter @mastyf_ai/dashboard-spa run build', { cwd: ROOT, stdio: 'pipe' });
 } catch {
   console.log('  Dashboard SPA already built');
 }

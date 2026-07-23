@@ -6,7 +6,7 @@
  *
  * Usage:
  * ```ts
- * import { createMastyfGuardMiddleware } from '@mastyf-ai/openai-agents-middleware';
+ * import { createMastyfGuardMiddleware } from '@mastyf_ai/openai-agents-middleware';
  *
  * const guard = createMastyfGuardMiddleware({
  *   proxyUrl: 'http://localhost:4000',

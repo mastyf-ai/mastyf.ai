@@ -15,9 +15,9 @@
     "observability",
     "cost-tracking"
   ],
-  "install": "npm install -g @mastyf-ai/server@latest",
+  "install": "npm install -g @mastyf_ai/server@latest",
   "repository": "https://github.com/mastyf-ai/mastyf.ai",
-  "homepage": "https://www.npmjs.com/package/@mastyf-ai/server",
+  "homepage": "https://www.npmjs.com/package/@mastyf_ai/server",
   "license": "MIT",
   "runtime": "node",
   "transport": [

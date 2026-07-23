@@ -133,7 +133,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
 
   if (!fs.existsSync(path.join(installRoot, 'dist/cli.js'))) {
     throw new Error(
-      `Build required: dist/cli.js not found under ${installRoot}. Reinstall @mastyf-ai/server or run pnpm build in the repo.`,
+      `Build required: dist/cli.js not found under ${installRoot}. Reinstall @mastyf_ai/server or run pnpm build in the repo.`,
     );
   }
   if (!fs.existsSync(wrapperScript)) {

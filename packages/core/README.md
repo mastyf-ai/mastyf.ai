@@ -2,8 +2,8 @@
 
 **Runtime security, cost governance, and health monitoring proxy for MCP infrastructure.**
 
-[![npm version](https://img.shields.io/npm/v/@mastyf-ai/server)](https://www.npmjs.com/package/@mastyf-ai/server)
-[![npm downloads](https://img.shields.io/npm/dm/@mastyf-ai/server)](https://www.npmjs.com/package/@mastyf-ai/server)
+[![npm version](https://img.shields.io/npm/v/@mastyf_ai/server)](https://www.npmjs.com/package/@mastyf_ai/server)
+[![npm downloads](https://img.shields.io/npm/dm/@mastyf_ai/server)](https://www.npmjs.com/package/@mastyf_ai/server)
 [![mastyf-ai MCP server](https://glama.ai/mcp/servers/mastyf-ai/mastyf-ai/badges/score.svg)](https://glama.ai/mcp/servers/mastyf-ai/mastyf-ai)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP_SDK-1.0-green)](https://github.com/modelcontextprotocol/typescript-sdk)
@@ -24,7 +24,7 @@ It works as a **transparent proxy**, a **standalone CLI**, an **MCP server** (so
 
 See [ENTERPRISE_DEPLOYMENT.md](../../docs/ENTERPRISE_DEPLOYMENT.md) for Redis, multi-replica, and license requirements.
 
-**Semantic queue note:** `@mastyf-ai/core` semantic queue caps are **per Node.js process** (and per worker thread). Multi-replica proxy deployments should use proxy-level Redis caps or run semantic scans on the main thread.
+**Semantic queue note:** `@mastyf_ai/core` semantic queue caps are **per Node.js process** (and per worker thread). Multi-replica proxy deployments should use proxy-level Redis caps or run semantic scans on the main thread.
 
 ---
 
@@ -32,7 +32,7 @@ See [ENTERPRISE_DEPLOYMENT.md](../../docs/ENTERPRISE_DEPLOYMENT.md) for Redis, m
 
 ```bash
 # Install globally
-npm install -g @mastyf-ai/server
+npm install -g @mastyf_ai/server
 
 # Scan your MCP servers for CVEs, secrets, and injection attacks
 mastyf-ai scan --all
@@ -126,10 +126,10 @@ mastyf-ai       # stdio transport, auto-starts MCP server
 
 ```bash
 # Global CLI
-npm install -g @mastyf-ai/server
+npm install -g @mastyf_ai/server
 
 # As an MCP server (for AI assistant integration)
-npx @mastyf-ai/server
+npx @mastyf_ai/server
 
 # From source (monorepo)
 git clone https://github.com/mastyf-ai/mastyf-ai.git
@@ -271,7 +271,7 @@ MCP Mastyf AI runs as a first-class MCP server, exposing security tools to AI as
   "mcpServers": {
     "mastyf-ai": {
       "command": "npx",
-      "args": ["@mastyf-ai/server"]
+      "args": ["@mastyf_ai/server"]
     }
   }
 }
@@ -507,10 +507,10 @@ Add them to the `MASTYF_AI_SECRET_ALLOWLIST` environment variable (comma-separat
 
 ### Can I use it as a library in my own tool?
 
-Yes. The `@mastyf-ai/core` package exports the detection engine directly:
+Yes. The `@mastyf_ai/core` package exports the detection engine directly:
 
 ```typescript
-import { scanServer, fetchToolsFromStdio } from '@mastyf-ai/core';
+import { scanServer, fetchToolsFromStdio } from '@mastyf_ai/core';
 
 const tools = await fetchToolsFromStdio({ command: 'npx', args: ['@my-mcp-server'] });
 const result = await scanServer('my-server', tools, 'stdio');
@@ -518,7 +518,7 @@ const result = await scanServer('my-server', tools, 'stdio');
 // result.tools: per-tool scan results with issues
 ```
 
-The root package (`@mastyf-ai/server`) exports the full CLI, proxy, and MCP server.
+The root package (`@mastyf_ai/server`) exports the full CLI, proxy, and MCP server.
 
 ### What's the default policy if I don't provide one?
 

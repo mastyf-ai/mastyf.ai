@@ -10,23 +10,23 @@ const root = path.dirname(fileURLToPath(import.meta.url));
  */
 export const workspacePackageAliases = [
   {
-    find: '@mastyf-ai/mcp-server/http-proxy-utils',
+    find: '@mastyf_ai/mcp-server/http-proxy-utils',
     replacement: path.resolve(root, 'packages/server/src/http-proxy-utils.ts'),
   },
   {
-    find: '@mastyf-ai/mcp-server/http-proxy',
+    find: '@mastyf_ai/mcp-server/http-proxy',
     replacement: path.resolve(root, 'packages/server/src/http-proxy.ts'),
   },
   {
-    find: '@mastyf-ai/mcp-server',
+    find: '@mastyf_ai/mcp-server',
     replacement: path.resolve(root, 'packages/server/src/index.ts'),
   },
   {
-    find: '@mastyf-ai/core',
+    find: '@mastyf_ai/core',
     replacement: path.resolve(root, 'packages/core/src/index.ts'),
   },
   {
-    find: '@mastyf-ai/plugin-sdk',
+    find: '@mastyf_ai/plugin-sdk',
     replacement: path.resolve(root, 'packages/plugin-sdk/dist/index.js'),
   },
 ];

@@ -17,7 +17,7 @@ import {
 import { validateAllowlistRbac } from './policy-allowlist-guard.js';
 import { clearPolicyLoadError, recordPolicyLoadError } from './policy-load-metrics.js';
 import { setTribunalPolicyFromConfig } from './tribunal-policy.js';
-import { setPolicyVersionForCache, invalidateLlmCache } from '@mastyf-ai/core';
+import { setPolicyVersionForCache, invalidateLlmCache } from '@mastyf_ai/core';
 
 const RELOAD_DEBOUNCE_MS = 50;
 const RELOAD_DRAIN_MS = parseInt(process.env['MASTYF_AI_POLICY_RELOAD_DRAIN_TIMEOUT_MS'] || '30000', 10);

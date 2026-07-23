@@ -7,8 +7,8 @@ COPY apps/cloud/package.json apps/cloud/tsconfig.json apps/cloud/ ./
 COPY packages/ ./packages/
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-RUN corepack enable && pnpm install --frozen-lockfile --filter @mastyf-ai/cloud
-RUN pnpm --filter @mastyf-ai/cloud run build
+RUN corepack enable && pnpm install --frozen-lockfile --filter @mastyf_ai/cloud
+RUN pnpm --filter @mastyf_ai/cloud run build
 
 USER 1001
 EXPOSE 3001

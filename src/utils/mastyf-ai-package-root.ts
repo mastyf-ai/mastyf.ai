@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 let cachedInstallRoot: string | null = null;
 
 /**
- * Directory containing dist/cli.js (git clone or global npm @mastyf-ai/server).
+ * Directory containing dist/cli.js (git clone or global npm @mastyf_ai/server).
  * Not the process cwd — use workspaceRoot for mastyf-ai-configs output.
  */
 export function resolveMastyfAiInstallRoot(): string {
@@ -17,7 +17,7 @@ export function resolveMastyfAiInstallRoot(): string {
     if (existsSync(pkgPath)) {
       try {
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { name?: string };
-        if (pkg.name === '@mastyf-ai/server' && existsSync(join(dir, 'dist', 'cli.js'))) {
+        if (pkg.name === '@mastyf_ai/server' && existsSync(join(dir, 'dist', 'cli.js'))) {
           cachedInstallRoot = dir;
           return dir;
         }

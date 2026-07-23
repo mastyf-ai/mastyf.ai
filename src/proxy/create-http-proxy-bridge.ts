@@ -5,12 +5,12 @@ import {
   createHttpProxy,
   type CreateHttpProxyOptions,
   type HttpProxyAuthValidator,
-} from '@mastyf-ai/mcp-server/http-proxy';
+} from '@mastyf_ai/mcp-server/http-proxy';
 import type {
   ToolCallDefenseHook,
   ToolCallDefenseHookResult,
   ToolCallDefenseRequest,
-} from '@mastyf-ai/mcp-server/tool-call-defense-hook';
+} from '@mastyf_ai/mcp-server/tool-call-defense-hook';
 import { OAuthValidator } from '../auth/oauth.js';
 import type { AuthConfig } from '../auth/auth-types.js';
 import { getMtlsAgent } from '../utils/mtls-agent-registry.js';

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Fail if npm registry manifest still lists workspace: deps (broken install).
- * Usage: node scripts/verify-npm-registry-manifest.mjs @mastyf-ai/server 4.1.5
+ * Usage: node scripts/verify-npm-registry-manifest.mjs @mastyf_ai/server 4.1.5
  */
 const [name, version] = process.argv.slice(2);
 if (!name || !version) {

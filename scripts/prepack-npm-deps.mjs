@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Prepare root @mastyf-ai/server for npm pack/publish:
+ * Prepare root @mastyf_ai/server for npm pack/publish:
  * - Rewrite workspace: deps to semver (^matching published package versions)
  * - Strip maintainer-only lifecycle scripts from the tarball (reduces install-script scanner alerts)
  * Restored by postpack-npm-deps.mjs.

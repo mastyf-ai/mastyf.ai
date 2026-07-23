@@ -55,7 +55,7 @@ export function runOnboard(opts: OnboardOptions): OnboardArtifact {
   if (!existsSync(distCli)) {
     throw new Error(
       `MCP Mastyf AI install incomplete: dist/cli.js missing under ${installRoot}. ` +
-        `Reinstall with: npm install -g @mastyf-ai/server@latest`,
+        `Reinstall with: npm install -g @mastyf_ai/server@latest`,
     );
   }
 

@@ -11,16 +11,16 @@ import { execSync } from 'node:child_process';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const required = [
-  { label: '@mastyf-ai/core', path: 'packages/core/dist/index.js', build: 'pnpm --filter @mastyf-ai/core run build' },
+  { label: '@mastyf_ai/core', path: 'packages/core/dist/index.js', build: 'pnpm --filter @mastyf_ai/core run build' },
   {
-    label: '@mastyf-ai/mcp-server/http-proxy',
+    label: '@mastyf_ai/mcp-server/http-proxy',
     path: 'packages/server/dist/http-proxy.js',
-    build: 'pnpm --filter @mastyf-ai/mcp-server run build',
+    build: 'pnpm --filter @mastyf_ai/mcp-server run build',
   },
   {
-    label: '@mastyf-ai/plugin-sdk',
+    label: '@mastyf_ai/plugin-sdk',
     path: 'packages/plugin-sdk/dist/index.js',
-    build: 'pnpm --filter @mastyf-ai/plugin-sdk run build',
+    build: 'pnpm --filter @mastyf_ai/plugin-sdk run build',
   },
 ];
 

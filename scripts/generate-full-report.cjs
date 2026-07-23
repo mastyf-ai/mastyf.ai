@@ -17,7 +17,7 @@ append('╔═══════════════════════
 append('║  MASTYF AI v' + VERSION + ' — COMPREHENSIVE TEST & ANALYSIS REPORT' + ' '.repeat(Math.max(0, 67 - VERSION.length)) + '║');
 append('║  Generated: ' + new Date().toISOString() + '                                           ║');
 append('║  Repository: https://github.com/mastyf-ai/mastyf-ai                              ║');
-append('║  npm: @mastyf-ai/server@' + VERSION + ' '.repeat(Math.max(0, 50 - VERSION.length)) + '║');
+append('║  npm: @mastyf_ai/server@' + VERSION + ' '.repeat(Math.max(0, 50 - VERSION.length)) + '║');
 append('╚══════════════════════════════════════════════════════════════════════════════════════╝');
 
 // 1. TypeScript Compile

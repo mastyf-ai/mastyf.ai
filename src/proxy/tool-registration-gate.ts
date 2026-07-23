@@ -2,8 +2,8 @@
  * Registration-time tool corpus gate — blocks tools/call for tools marked critical at last tools/list scan.
  */
 import { LRUCache } from 'lru-cache';
-import { scanTool, type ScanEngineOptions } from '@mastyf-ai/core';
-import type { ToolDefinition } from '@mastyf-ai/core';
+import { scanTool, type ScanEngineOptions } from '@mastyf_ai/core';
+import type { ToolDefinition } from '@mastyf_ai/core';
 import { Logger } from '../utils/logger.js';
 
 export interface RegistrationGateResult {

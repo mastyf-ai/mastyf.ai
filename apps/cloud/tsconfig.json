@@ -16,7 +16,7 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./*"],
-      "@mastyf-ai/server/package-scorer": ["../../dist/agentic/trust-score/score-package-by-name"]
+      "@mastyf_ai/server/package-scorer": ["../../dist/agentic/trust-score/score-package-by-name"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

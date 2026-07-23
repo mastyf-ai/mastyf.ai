@@ -28,9 +28,9 @@ const TRUSTED_MCP_PACKAGES = [
   'mcp-server-cloudflare',
   '@anthropic-ai/sdk',
   'mastyf-ai',
-  '@mastyf-ai/server',
-  '@mastyf-ai/core',
-  '@mastyf-ai/cli',
+  '@mastyf_ai/server',
+  '@mastyf_ai/core',
+  '@mastyf_ai/cli',
   'pino',
 ] as const;
 

@@ -32,7 +32,7 @@ Restart the dev server, open `/login`, and click **Continue as local dev user**.
 For real GitHub OAuth locally, run:
 
 ```bash
-pnpm --filter @mastyf-ai/cloud oauth:setup
+pnpm --filter @mastyf_ai/cloud oauth:setup
 ```
 
 ## 2. GitHub OAuth App

@@ -1,6 +1,6 @@
 /**
- * @mastyf-ai/server — MCP server exposing security scan tools to AI assistants.
- * Integrates with @mastyf-ai/core detection engine at runtime.
+ * @mastyf_ai/server — MCP server exposing security scan tools to AI assistants.
+ * Integrates with @mastyf_ai/core detection engine at runtime.
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -8,7 +8,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { scanServer, verifyToolDefinitions, fetchToolsFromStdio, fetchToolsFromHttp } from '@mastyf-ai/core';
+import { scanServer, verifyToolDefinitions, fetchToolsFromStdio, fetchToolsFromHttp } from '@mastyf_ai/core';
 
 const server = new Server(
   { name: 'mastyf-ai', version: process.env.npm_package_version || '2.3.4' },

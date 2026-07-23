@@ -65,9 +65,9 @@ function generateSbom() {
       tools: [{ vendor: 'mastyf-ai', name: 'generate-sbom', version: PKG_JSON.version }],
       component: {
         type: 'application',
-        name: '@mastyf-ai/server',
+        name: '@mastyf_ai/server',
         version: PKG_JSON.version,
-        'bom-ref': `@mastyf-ai/server@${PKG_JSON.version}`,
+        'bom-ref': `@mastyf_ai/server@${PKG_JSON.version}`,
       },
     },
     components,

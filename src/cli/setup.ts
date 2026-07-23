@@ -31,7 +31,7 @@ export async function runSetup(opts: SetupOptions = {}): Promise<void> {
 
   if (!existsSync(workspace) || !existsSync(pkg)) {
     console.error(chalk.red('mastyf-ai setup is for git clones of the monorepo.'));
-    console.error(chalk.dim('  npm users: npm install -g @mastyf-ai/server && mastyf-ai onboard --apply && mastyf-ai start'));
+    console.error(chalk.dim('  npm users: npm install -g @mastyf_ai/server && mastyf-ai onboard --apply && mastyf-ai start'));
     process.exit(1);
   }
 

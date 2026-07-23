@@ -18,7 +18,7 @@ import type { ThreatLabDiscovery } from '../src/ai/threat-lab.js';
 import {
   resetLearnedRulesForTests,
   setLearnedRulesPathForTests,
-} from '@mastyf-ai/core';
+} from '@mastyf_ai/core';
 
 const GITHUB_PAT = 'ghp_abcdefghijklmnopqrstuvwxyz1234567890';
 const ANTHROPIC_KEY =

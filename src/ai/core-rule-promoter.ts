@@ -1,5 +1,5 @@
 /**
- * Promote Threat Lab discoveries into @mastyf-ai/core runtime learned-rules overlay.
+ * Promote Threat Lab discoveries into @mastyf_ai/core runtime learned-rules overlay.
  */
 import {
   appendLearnedRule,
@@ -9,7 +9,7 @@ import {
   reloadLearnedRules,
   type LearnedRuleDef,
   type LearnedRuleTarget,
-} from '@mastyf-ai/core';
+} from '@mastyf_ai/core';
 import type { ThreatLabDiscovery } from './threat-lab.js';
 import { isDangerousUnblockPattern } from './learning-quorum.js';
 import { queuePendingAttackSuggestion } from './instant-attack-learning.js';

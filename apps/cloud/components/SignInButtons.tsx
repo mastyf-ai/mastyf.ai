@@ -36,7 +36,7 @@ export function SignInButtons({
           {devSetupNeeded ? (
             <p>
               <strong>Local development:</strong> run{' '}
-              <code>pnpm --filter @mastyf-ai/cloud oauth:setup</code> or add GitHub/Google OAuth to{' '}
+              <code>pnpm --filter @mastyf_ai/cloud oauth:setup</code> or add GitHub/Google OAuth to{' '}
               <code>apps/cloud/.env.local</code>. See the{' '}
               <a href={OAUTH_SETUP_DOC}>OAuth setup guide</a>.
             </p>
@@ -90,7 +90,7 @@ export function SignInButtons({
       {devEnabled && !githubEnabled && !googleEnabled ? (
         <p className="muted" style={{ fontSize: '0.85rem', margin: '0.5rem 0 0', textAlign: 'left' }}>
           Dev-only sign-in (<code>AUTH_DEV_LOGIN=true</code>). For real OAuth, run{' '}
-          <code>pnpm --filter @mastyf-ai/cloud oauth:setup</code>.
+          <code>pnpm --filter @mastyf_ai/cloud oauth:setup</code>.
         </p>
       ) : null}
     </div>

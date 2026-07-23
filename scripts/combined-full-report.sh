@@ -17,7 +17,7 @@ run_section() {
 echo "MASTYF AI v2.3.3 — COMBINED FULL REPORT" > "$OUT"
 echo "Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "$OUT"
 echo "Repository: https://github.com/mastyf-ai/mastyf-ai" >> "$OUT"
-echo "npm: @mastyf-ai/server@2.3.3" >> "$OUT"
+echo "npm: @mastyf_ai/server@2.3.3" >> "$OUT"
 echo "" >> "$OUT"
 
 # 1. TypeScript Compile

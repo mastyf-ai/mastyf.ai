@@ -14,7 +14,7 @@ RUN corepack enable && pnpm install --frozen-lockfile
 # Verify better-sqlite3 native prebuild (onlyBuiltDependencies in package.json)
 RUN node -e "require('better-sqlite3'); console.log('better-sqlite3 prebuild OK')"
 
-RUN pnpm --filter @mastyf-ai/plugin-sdk run build
+RUN pnpm --filter @mastyf_ai/plugin-sdk run build
 RUN cd packages/core && pnpm build
 RUN cd packages/server && pnpm build
 RUN npx tsc --project tsconfig.json
@@ -31,7 +31,7 @@ RUN mkdir -p dist/database/migrations dist/policy dist/scripts/redis \
 
 # Build the Next.js dashboard SPA (static export → deploy/dashboard-spa/out/)
 # NODE_ENV must be production so next.config.ts enables output:'export'
-RUN NODE_ENV=production pnpm --filter @mastyf-ai/dashboard-spa run build
+RUN NODE_ENV=production pnpm --filter @mastyf_ai/dashboard-spa run build
 
 # Adversarial harness Python venv for swarm parity gates (run.mjs --fast)
 RUN cd adversarial-harness \

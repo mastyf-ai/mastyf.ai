@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish all @mastyf-ai packages (skip build). Use after pnpm run build.
+# Publish all @mastyf_ai packages (skip build). Use after pnpm run build.
 # Server/CLI publish from .tgz so registry manifest matches tarball.
 # Requires interactive Terminal for --auth-type=web (browser SSO / passkey).
 set -euo pipefail
@@ -30,14 +30,14 @@ publish_pkg packages/plugin-sdk
 publish_pkg packages/core
 
 echo ""
-echo "=== Publishing @mastyf-ai/server from tarball ==="
+echo "=== Publishing @mastyf_ai/server from tarball ==="
 node scripts/validate-npm-pack.mjs
 SERVER_TGZ=$(npm pack --silent 2>/dev/null | grep '\.tgz$' | tail -1)
 npm publish "$SERVER_TGZ" "${PUBLISH_ARGS[@]}"
 rm -f "$SERVER_TGZ"
 
 echo ""
-echo "=== Publishing @mastyf-ai/cli from tarball ==="
+echo "=== Publishing @mastyf_ai/cli from tarball ==="
 (cd packages/cli && node ../../scripts/validate-npm-pack.mjs)
 CLI_TGZ=$(cd packages/cli && npm pack --silent 2>/dev/null | grep '\.tgz$' | tail -1)
 (cd packages/cli && npm publish "$CLI_TGZ" "${PUBLISH_ARGS[@]}")
@@ -45,4 +45,4 @@ rm -f "packages/cli/$CLI_TGZ"
 
 echo ""
 echo "Done. Verify:"
-echo "  npm view @mastyf-ai/server@$(node -p "require('./package.json').version") dependencies"
+echo "  npm view @mastyf_ai/server@$(node -p "require('./package.json').version") dependencies"

@@ -9,7 +9,7 @@
 ## Database migration rollback
 
 1. If migration failed mid-deploy, restore Neon/Postgres snapshot
-2. Re-run `pnpm --filter @mastyf-ai/cloud db:migrate` against known-good schema
+2. Re-run `pnpm --filter @mastyf_ai/cloud db:migrate` against known-good schema
 
 ## Verification
 

@@ -39,7 +39,7 @@ async function maybeBuildDashboard(installRoot: string, force: boolean): Promise
       console.error(
         chalk.yellow(
           '  Dashboard SPA not built; npm package should include deploy/dashboard-spa/out/. ' +
-            'Reinstall @mastyf-ai/server or run from a git clone with `mastyf-ai setup`.',
+            'Reinstall @mastyf_ai/server or run from a git clone with `mastyf-ai setup`.',
         ),
       );
     }
@@ -137,7 +137,7 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   if (!existsSync(distCli)) {
     console.error(chalk.red(`MCP Mastyf AI not built: missing ${distCli}`));
     console.error(chalk.dim('  Git clone: run `mastyf-ai setup` or `pnpm install && pnpm build`'));
-    console.error(chalk.dim('  npm: reinstall `npm install -g @mastyf-ai/server@latest`'));
+    console.error(chalk.dim('  npm: reinstall `npm install -g @mastyf_ai/server@latest`'));
     process.exit(1);
   }
 

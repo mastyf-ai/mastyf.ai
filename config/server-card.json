@@ -3,7 +3,7 @@
   "description": "Security, cost, and health governance proxy for MCP infrastructure. Three-layer detection engine (regex → schema → LLM), YAML policy engine with hot-reload, real tiktoken cost enforcement, self-auditing MCP server.",
   "version": "2.3.21",
   "repository": "https://github.com/mastyf-ai/mastyf-ai",
-  "homepage": "https://www.npmjs.com/package/@mastyf-ai/server",
+  "homepage": "https://www.npmjs.com/package/@mastyf_ai/server",
   "license": "MIT",
   "runtime": "node",
   "entrypoint": "dist/index.js",
@@ -73,5 +73,5 @@
       }
     }
   ],
-  "install": "npx -y @mastyf-ai/server"
+  "install": "npx -y @mastyf_ai/server"
 }

@@ -169,7 +169,7 @@ export class SignatureVerifier {
     const trustedPublishers = [
       '@modelcontextprotocol/',
       '@anthropic/',
-      '@mastyf-ai/',
+      '@mastyf_ai/',
       '@openai/',
       '@google/',
       '@microsoft/',

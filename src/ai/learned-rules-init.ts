@@ -5,7 +5,7 @@ import {
   reloadLearnedRules,
   startLearnedRulesReloadTimer,
   getLearnedRulesStats,
-} from '@mastyf-ai/core';
+} from '@mastyf_ai/core';
 import { Logger } from '../utils/logger.js';
 
 let stopReload: (() => void) | null = null;

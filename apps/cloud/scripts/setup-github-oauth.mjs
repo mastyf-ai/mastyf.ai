@@ -3,7 +3,7 @@
  * Interactive helper — add GitHub OAuth credentials to apps/cloud/.env.local
  *
  * Usage: node scripts/setup-github-oauth.mjs
- *    or: pnpm --filter @mastyf-ai/cloud oauth:setup
+ *    or: pnpm --filter @mastyf_ai/cloud oauth:setup
  */
 
 import { createInterface } from 'node:readline/promises';

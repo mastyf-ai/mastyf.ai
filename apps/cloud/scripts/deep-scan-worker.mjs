@@ -26,7 +26,7 @@ async function loadScorer() {
   try {
     return require(join(repoRoot, 'packages/server/dist/package-scorer.js'));
   } catch {
-    return require('@mastyf-ai/mcp-server/package-scorer');
+    return require('@mastyf_ai/mcp-server/package-scorer');
   }
 }
 

@@ -36,7 +36,7 @@ run_vercel() {
 
 echo "==> Building cloud app locally..."
 cd "$ROOT"
-pnpm --filter @mastyf-ai/cloud run build
+pnpm --filter @mastyf_ai/cloud run build
 
 echo "==> Vercel account:"
 run_vercel whoami 2>/dev/null || {

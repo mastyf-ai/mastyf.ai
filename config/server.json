@@ -10,7 +10,7 @@
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "@mastyf-ai/server",
+      "identifier": "@mastyf_ai/server",
       "version": "2.3.21",
       "transport": {
         "type": "stdio"

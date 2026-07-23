@@ -1,5 +1,5 @@
 /**
- * Cluster-wide semantic scan caps for @mastyf-ai/core (Redis Lua).
+ * Cluster-wide semantic scan caps for @mastyf_ai/core (Redis Lua).
  */
 import { Redis } from "ioredis";
 

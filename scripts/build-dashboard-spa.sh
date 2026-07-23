@@ -43,9 +43,9 @@ has_next() {
 if in_workspace; then
   if ! has_next; then
     echo "[dashboard:build] Installing dashboard-spa workspace deps…" >&2
-    (cd "$ROOT" && pnpm install --filter @mastyf-ai/dashboard-spa...)
+    (cd "$ROOT" && pnpm install --filter @mastyf_ai/dashboard-spa...)
   fi
-  exec pnpm --dir "$ROOT" --filter @mastyf-ai/dashboard-spa run build
+  exec pnpm --dir "$ROOT" --filter @mastyf_ai/dashboard-spa run build
 fi
 
 echo "[dashboard:build] dashboard-spa not in pnpm-workspace — using npm in $SPA" >&2

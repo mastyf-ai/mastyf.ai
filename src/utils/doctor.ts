@@ -82,7 +82,7 @@ export function runDoctor(opts: DoctorOptions = {}): number {
     console.log(chalk.green('  dist/cli.js: OK'));
   } else {
     console.log(chalk.red(`  dist/cli.js missing under ${installRoot}`));
-    console.log(chalk.dim('    Fix: mastyf-ai setup   (git clone) or npm install -g @mastyf-ai/server'));
+    console.log(chalk.dim('    Fix: mastyf-ai setup   (git clone) or npm install -g @mastyf_ai/server'));
     issues++;
   }
 
@@ -207,7 +207,7 @@ export function runDoctor(opts: DoctorOptions = {}): number {
   }
 
   console.log(chalk.cyan('\n  Quick start:'));
-  console.log(chalk.dim('    npm install -g @mastyf-ai/server@latest'));
+  console.log(chalk.dim('    npm install -g @mastyf_ai/server@latest'));
   console.log(chalk.dim('    mastyf-ai onboard --apply'));
   console.log(chalk.dim('    mastyf-ai start\n'));
 
