@@ -1,5 +1,5 @@
 {
-  "name": "@mastyf-ai/core",
+  "name": "@mastyf_ai/core",
   "version": "4.1.7",
   "description": "Detection engine: regex + schema + semantic analysis for MCP tool definitions",
   "type": "module",

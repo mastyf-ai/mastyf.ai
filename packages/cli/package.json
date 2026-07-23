@@ -1,5 +1,5 @@
 {
-  "name": "@mastyf-ai/cli",
+  "name": "@mastyf_ai/cli",
   "version": "4.1.7",
   "description": "CLI binary for scanning MCP tool definitions",
   "type": "module",
@@ -15,8 +15,8 @@
     "prepublishOnly": "pnpm run build && node ../../scripts/validate-npm-pack.mjs"
   },
   "dependencies": {
-    "@mastyf-ai/core": "workspace:^4.1.7",
-    "@mastyf-ai/mcp-server": "workspace:^4.1.7"
+    "@mastyf_ai/core": "workspace:^4.1.7",
+    "@mastyf_ai/mcp-server": "workspace:^4.1.7"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

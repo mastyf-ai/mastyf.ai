@@ -1,5 +1,5 @@
 {
-  "name": "@mastyf-ai/mtx",
+  "name": "@mastyf_ai/mtx",
   "version": "4.1.7",
   "description": "MCP Threat Exchange (MTX) v1 format for anonymized threat intelligence",
   "type": "module",

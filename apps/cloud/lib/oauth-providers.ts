@@ -48,6 +48,7 @@ export function configuredOAuthProviders(): Provider[] {
       GitHub({
         clientId: githubId,
         clientSecret: githubSecret,
+        allowDangerousEmailAccountLinking: true,
         authorization: { params: { scope: 'read:user user:email' } },
       }),
     );

@@ -1,5 +1,5 @@
 {
-  "name": "@mastyf-ai/tool-registry",
+  "name": "@mastyf_ai/tool-registry",
   "version": "0.1.0",
   "description": "Mastyf AI MCP Tool Registry — discover, score, and publish MCP servers with trust grades",
   "type": "module",

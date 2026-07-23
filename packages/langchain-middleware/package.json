@@ -1,5 +1,5 @@
 {
-  "name": "@mastyf-ai/langchain-middleware",
+  "name": "@mastyf_ai/langchain-middleware",
   "version": "0.1.0",
   "description": "Mastyf AI security middleware for LangChain — intercepts and evaluates tool calls through the Mastyf policy proxy",
   "type": "module",

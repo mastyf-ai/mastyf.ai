@@ -1,5 +1,5 @@
 {
-  "name": "@mastyf-ai/server",
+  "name": "@mastyf_ai/server",
   "version": "4.1.7",
   "description": "Security, cost, and health governance proxy for MCP infrastructure \u2014 three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
@@ -27,8 +27,8 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @mastyf-ai/plugin-sdk run build && pnpm --filter @mastyf-ai/core run build && pnpm --filter @mastyf-ai/mcp-server run build && tsc --project tsconfig.json && mkdir -p dist/database/migrations dist/policy dist/scripts/redis && cp src/database/migrations/*.sql dist/database/migrations/ && cp src/policy/regex-eval-worker.mjs dist/policy/ && cp scripts/redis/*.lua dist/scripts/redis/ && turbo run build",
-    "build:mastyf-ai": "pnpm --filter @mastyf-ai/plugin-sdk run build && pnpm --filter @mastyf-ai/core run build && pnpm --filter @mastyf-ai/mcp-server run build && tsc --project tsconfig.json && cp src/policy/regex-eval-worker.mjs dist/policy/",
+    "build": "pnpm --filter @mastyf_ai/plugin-sdk run build && pnpm --filter @mastyf_ai/core run build && pnpm --filter @mastyf_ai/mcp-server run build && tsc --project tsconfig.json && mkdir -p dist/database/migrations dist/policy dist/scripts/redis && cp src/database/migrations/*.sql dist/database/migrations/ && cp src/policy/regex-eval-worker.mjs dist/policy/ && cp scripts/redis/*.lua dist/scripts/redis/ && turbo run build",
+    "build:mastyf-ai": "pnpm --filter @mastyf_ai/plugin-sdk run build && pnpm --filter @mastyf_ai/core run build && pnpm --filter @mastyf_ai/mcp-server run build && tsc --project tsconfig.json && cp src/policy/regex-eval-worker.mjs dist/policy/",
     "pretest": "node scripts/ensure-workspace-built.mjs",
     "dev": "node scripts/dev.mjs mastyf-ai-configs/testbed-memory.json",
     "dev:thinking": "node scripts/dev.mjs mastyf-ai-configs/testbed-thinking.json",
@@ -108,14 +108,14 @@
     "dashboard:build": "sh scripts/build-dashboard-spa.sh",
     "dashboard:serve": "node scripts/serve-dashboard.mjs",
     "dashboard:proxy": "sh scripts/start-dashboard-proxy.sh",
-    "dashboard:dev": "pnpm --filter @mastyf-ai/dashboard-spa run dev",
+    "dashboard:dev": "pnpm --filter @mastyf_ai/dashboard-spa run dev",
     "soc:api": "tsx src/soc-api-server.ts",
     "soc:api:dev": "SOC_API_PORT=4040 tsx watch src/soc-api-server.ts",
     "soc:full": "concurrently --kill-others \"pnpm soc:api:dev\" \"pnpm dashboard:dev\"",
-    "cloud:dev": "pnpm --filter @mastyf-ai/cloud dev",
-    "cloud:build": "pnpm --filter @mastyf-ai/cloud build",
-    "cloud:test": "pnpm --filter @mastyf-ai/cloud test",
-    "cloud:migrate": "pnpm --filter @mastyf-ai/cloud run db:migrate",
+    "cloud:dev": "pnpm --filter @mastyf_ai/cloud dev",
+    "cloud:build": "pnpm --filter @mastyf_ai/cloud build",
+    "cloud:test": "pnpm --filter @mastyf_ai/cloud test",
+    "cloud:migrate": "pnpm --filter @mastyf_ai/cloud run db:migrate",
     "cloud:migrate:prod": "./scripts/cloud-migrate-production.sh",
     "cloud:verify-prod": "./scripts/verify-pro-production.sh",
     "cloud:domain": "./scripts/vercel-domain-setup.sh",
@@ -151,7 +151,7 @@
     "url": "git+https://github.com/mastyf-ai/mastyf-ai.git"
   },
   "bugs": "https://github.com/mastyf-ai/mastyf-ai/issues",
-  "homepage": "https://www.npmjs.com/package/@mastyf-ai/server",
+  "homepage": "https://www.npmjs.com/package/@mastyf_ai/server",
   "mcpName": "io.github.mastyf-ai/mastyf-ai",
   "publishConfig": {
     "access": "public"
@@ -181,9 +181,9 @@
     "cost-tracking"
   ],
   "dependencies": {
-    "@mastyf-ai/core": "workspace:^4.1.7",
-    "@mastyf-ai/mcp-server": "workspace:^4.1.7",
-    "@mastyf-ai/plugin-sdk": "workspace:^4.1.7",
+    "@mastyf_ai/core": "workspace:^4.1.7",
+    "@mastyf_ai/mcp-server": "workspace:^4.1.7",
+    "@mastyf_ai/plugin-sdk": "workspace:^4.1.7",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.75.0",

@@ -1,5 +1,5 @@
 {
-  "name": "@mastyf-ai/openai-agents-middleware",
+  "name": "@mastyf_ai/openai-agents-middleware",
   "version": "0.1.0",
   "description": "Mastyf AI security middleware for OpenAI Agents SDK — intercepts tool calls through the Mastyf policy proxy",
   "type": "module",

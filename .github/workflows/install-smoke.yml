@@ -34,7 +34,7 @@ jobs:
       - name: Verify global install artifacts
         run: |
           mastyf-ai --version
-          ROOT="$(npm root -g)/@mastyf-ai/server"
+          ROOT="$(npm root -g)/@mastyf_ai/server"
           test -f "$ROOT/dist/cli.js"
           test -f "$ROOT/deploy/dashboard-spa/out/index.html"
 

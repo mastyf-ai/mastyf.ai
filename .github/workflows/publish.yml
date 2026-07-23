@@ -35,7 +35,7 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @mastyf-ai/langchain-middleware run prepublishOnly
+      - run: pnpm --filter @mastyf_ai/langchain-middleware run prepublishOnly
       - run: cd packages/langchain-middleware && npm publish --access public
         env: { NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}' }
       - run: cd packages/openai-agents-middleware && npm publish --access public

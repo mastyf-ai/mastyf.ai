@@ -1,5 +1,5 @@
 {
-  "name": "@mastyf-ai/plugin-sdk",
+  "name": "@mastyf_ai/plugin-sdk",
   "version": "4.1.7",
   "description": "Stable detector plugin SDK for MCP MastyfAi",
   "type": "module",
