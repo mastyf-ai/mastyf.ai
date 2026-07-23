@@ -21,7 +21,7 @@ jobs:
     environment: production
     if: github.repository == 'mastyf-ai/mastyf.ai'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
         with:
