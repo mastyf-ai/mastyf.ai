@@ -231,7 +231,7 @@
     "playwright": "^1.52.0",
     "pptxgenjs": "^4.0.1",
     "tsx": "^4.7.0",
-    "turbo": "^2.9.14",
+    "turbo": "^2.10.6",
     "typescript": "^5.4.0",
     "vitest": "^3.2.4",
     "zod-to-json-schema": "^3.24.5",
