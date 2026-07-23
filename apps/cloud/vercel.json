@@ -2,5 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "npm install next@15 react@19 react-dom@19 @auth/drizzle-adapter bcryptjs drizzle-orm next-auth postgres zod --legacy-peer-deps",
-  "buildCommand": "NEXT_SKIP_PREBUILD=1 npm run build"
+  "buildCommand": "npx next build"
 }

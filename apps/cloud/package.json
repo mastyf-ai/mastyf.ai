@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",
-    "@mastyf-ai/server": "link:../../",
     "@vercel/analytics": "^2.0.1",
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.45.2",
