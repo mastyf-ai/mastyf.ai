@@ -1,13 +1,16 @@
 {
   "name": "@mastyf_ai/langchain-middleware",
-  "version": "0.1.0",
-  "description": "Mastyf AI security middleware for LangChain — intercepts and evaluates tool calls through the Mastyf policy proxy",
+  "version": "0.1.1",
+  "description": "Mastyf AI security middleware for LangChain \u2014 intercepts and evaluates tool calls through the Mastyf policy proxy",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "tsc",
@@ -17,6 +20,12 @@
     "@langchain/core": ">=0.3.0"
   },
   "dependencies": {},
-  "keywords": ["mcp", "security", "langchain", "ai-security", "mastyf"],
+  "keywords": [
+    "mcp",
+    "security",
+    "langchain",
+    "ai-security",
+    "mastyf"
+  ],
   "license": "MIT"
 }

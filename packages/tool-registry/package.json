@@ -1,7 +1,7 @@
 {
   "name": "@mastyf_ai/tool-registry",
-  "version": "0.1.0",
-  "description": "Mastyf AI MCP Tool Registry — discover, score, and publish MCP servers with trust grades",
+  "version": "0.1.1",
+  "description": "Mastyf AI MCP Tool Registry \u2014 discover, score, and publish MCP servers with trust grades",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
@@ -9,13 +9,22 @@
     "./scanner": "./dist/scanner.js",
     "./api": "./dist/api.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "tsc",
     "dev": "tsx src/server.ts",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["mcp", "registry", "trust-score", "security", "mastyf"],
+  "keywords": [
+    "mcp",
+    "registry",
+    "trust-score",
+    "security",
+    "mastyf"
+  ],
   "license": "MIT"
 }

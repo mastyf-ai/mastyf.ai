@@ -1,13 +1,16 @@
 {
   "name": "@mastyf_ai/openai-agents-middleware",
-  "version": "0.1.0",
-  "description": "Mastyf AI security middleware for OpenAI Agents SDK — intercepts tool calls through the Mastyf policy proxy",
+  "version": "0.1.1",
+  "description": "Mastyf AI security middleware for OpenAI Agents SDK \u2014 intercepts tool calls through the Mastyf policy proxy",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "tsc",
@@ -17,6 +20,13 @@
     "openai": ">=4.0.0"
   },
   "dependencies": {},
-  "keywords": ["mcp", "security", "openai", "agents", "ai-security", "mastyf"],
+  "keywords": [
+    "mcp",
+    "security",
+    "openai",
+    "agents",
+    "ai-security",
+    "mastyf"
+  ],
   "license": "MIT"
 }
