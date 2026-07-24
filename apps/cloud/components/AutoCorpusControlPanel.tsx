@@ -116,9 +116,11 @@ export default function AutoCorpusControlPanel() {
     setBusy('research');
     try {
       const res = await fetch('/api/threat-discovery/auto-research/run', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        alert(data.ok ? `Auto Research started -- job ${data.jobId}` : data.error || 'Failed to start');
+      const data = await res.json();
+      if (data.jobId) {
+        alert('Auto Research started -- job ' + data.jobId);
+      } else {
+        alert(data.error || 'Failed to start Auto Research');
       }
       await load();
     } catch { /* ignore */ }
