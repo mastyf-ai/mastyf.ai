@@ -60,9 +60,11 @@ import { ThreatLabWorkbench } from '../ThreatLabWorkbench';
 import ThreatFeedsPanel from './ThreatFeedsPanel';
 import { useDashboardWindow } from '../dashboard/DashboardWindowContext';
 import type { ThreatLabContext } from '../IncidentInvestigatorDrawer';
+import RugPullSection from '../RugPullSection';
+import AutoCorpusPanel from '../AutoCorpusPanel';
 
 type SecurityView = 'overview' | 'threats' | 'intel' | 'swarm' | 'learning' | 'quarantine' | 'feeds';
-type ThreatDiscoverySubTab = 'overview' | 'threat-lab' | 'auto-research';
+type ThreatDiscoverySubTab = 'overview' | 'threat-lab' | 'auto-research' | 'rug-pull' | 'auto-corpus';
 
 type Props = {
   view: SecurityView;
@@ -92,6 +94,8 @@ const THREAT_SUB_TABS: { id: ThreatDiscoverySubTab; label: string }[] = [
   { id: 'overview', label: 'Pipeline' },
   { id: 'threat-lab', label: 'Threat Lab' },
   { id: 'auto-research', label: 'Auto Research' },
+  { id: 'rug-pull', label: 'Rug-Pull' },
+  { id: 'auto-corpus', label: 'Auto-Corpus' },
 ];
 
 function scoreLevel(score: number | null): 'good' | 'fair' | 'poor' {
@@ -500,6 +504,10 @@ function ThreatsView({
           status={status}
         />
       ) : null}
+
+      {subTab === 'rug-pull' ? <RugPullSection /> : null}
+
+      {subTab === 'auto-corpus' ? <AutoCorpusPanel /> : null}
 
       {subTab === 'overview' ? (
     <>
