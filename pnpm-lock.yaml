@@ -196,8 +196,8 @@ importers:
         specifier: ^2.0.1
         version: 2.0.1(next@15.5.21(@opentelemetry/api@1.9.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       bcryptjs:
-        specifier: ^2.4.3
-        version: 2.4.3
+        specifier: ^3.0.3
+        version: 3.0.3
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(@upstash/redis@1.38.0)(better-sqlite3@12.11.1)(pg@8.22.0)(postgres@3.4.9)
@@ -224,8 +224,8 @@ importers:
         version: 3.25.76
     devDependencies:
       '@types/bcryptjs':
-        specifier: ^2.4.6
-        version: 2.4.6
+        specifier: ^3.0.0
+        version: 3.0.0
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -1500,8 +1500,9 @@ packages:
   '@types/aws-lambda@8.10.162':
     resolution: {integrity: sha512-Fn658grtLOci1oxi1391vvDWJRKNGWRSqfxRkmN/Iy3c0tQH1USMKEXcPYHLvope+ZgTFocx9FRQJx1muBL6qw==}
 
-  '@types/bcryptjs@2.4.6':
-    resolution: {integrity: sha512-9xlo6R2qDs5uixm0bcIqCeMCE6HiQsIyel9KQySStiyqNl2tnj2mP3DX1Nf56MD6KMenNNlBBsy3LJ7gUEQPXQ==}
+  '@types/bcryptjs@3.0.0':
+    resolution: {integrity: sha512-WRZOuCuaz8UcZZE4R5HXTco2goQSI2XxjGY3hbM/xDvwmqFWd4ivooImsMx65OKM6CtNKbnZ5YL+YwAwK7c1dg==}
+    deprecated: This is a stub types definition. bcryptjs provides its own type definitions, so you do not need this installed.
 
   '@types/better-sqlite3@7.6.13':
     resolution: {integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==}
@@ -1798,8 +1799,9 @@ packages:
     resolution: {integrity: sha512-AQR43o4W4sj4Jf+oy4cFtGgyBps4B+MYnJg6Xds8VVC7yomFtQekhOORQNHfQ8D6YJ0XENykr3TpxMn3rUtgeg==}
     engines: {node: '>=4'}
 
-  bcryptjs@2.4.3:
-    resolution: {integrity: sha512-V/Hy/X9Vt7f3BbPJEi8BdVFMByHi+jNXrYkW3huaybV/kQ0KJg0Y6PkEMbn+zeT+i+SiKZ/HMqJGIIt4LZDqNQ==}
+  bcryptjs@3.0.3:
+    resolution: {integrity: sha512-GlF5wPWnSa/X5LKM1o0wz0suXIINz1iHRLvTS+sLyi7XPbe5ycmYI3DlZqVGZZtDgl4DmasFg7gOB3JYbphV5g==}
+    hasBin: true
 
   better-sqlite3@12.11.1:
     resolution: {integrity: sha512-dq9AtApgg5PGFtBzPFSBl3HZQjHok5gaQCM6zh2Yk0aSmDCs1CbnVI8/HgASQkNKsWFpseIO9beg5xxpYhbIfA==}
@@ -4770,7 +4772,9 @@ snapshots:
 
   '@types/aws-lambda@8.10.162': {}
 
-  '@types/bcryptjs@2.4.6': {}
+  '@types/bcryptjs@3.0.0':
+    dependencies:
+      bcryptjs: 3.0.3
 
   '@types/better-sqlite3@7.6.13':
     dependencies:
@@ -5103,7 +5107,7 @@ snapshots:
       transform-spread-iterable: 1.4.1
       unescape-js: 1.1.4
 
-  bcryptjs@2.4.3: {}
+  bcryptjs@3.0.3: {}
 
   better-sqlite3@12.11.1:
     dependencies:
