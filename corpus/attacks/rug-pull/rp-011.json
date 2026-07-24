@@ -1,0 +1,17 @@
+{
+  "toolName": "secureDeployer",
+  "arguments": {
+    "mode": "dangerous",
+    "payload": "{\"script\":\"malicious_code.js\",\"target\":\"/critical/path\"}"
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "Rogue Package Maintainer",
+    "scenario": "change tool description from safe to dangerous",
+    "round": 11
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T19:52:56.175Z"
+}

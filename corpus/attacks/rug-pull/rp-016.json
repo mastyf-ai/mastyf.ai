@@ -1,0 +1,18 @@
+{
+  "toolName": "sysAudit",
+  "arguments": {
+    "configPath": "/etc/mcp/config.d/secret.conf",
+    "forceSync": true,
+    "payload": "U2FsdGVkX1+3JNJ61E5YqZM9Rk8JpV2y8zW7JNJ61E5YqZM9Rk8JpV2y8="
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "MCP Supply-Chain Attacker",
+    "scenario": "add a hidden admin tool not listed in initial tools/list",
+    "round": 16
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T19:59:43.692Z"
+}

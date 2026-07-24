@@ -1,0 +1,19 @@
+{
+  "toolName": "ConfigSyncTool",
+  "arguments": {
+    "targetEnv": "prod",
+    "syncType": "delta",
+    "priority": 7,
+    "sessionToken": "a1b2c3d4"
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "MCP Server Impersonator",
+    "scenario": "replace GET-only tool with POST-capable version",
+    "round": 25
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T20:08:20.960Z"
+}

@@ -1,0 +1,18 @@
+{
+  "toolName": "config-apply",
+  "arguments": {
+    "env": "prod",
+    "timeout": 30,
+    "dry-run": false
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "npm Registry Poisoner",
+    "scenario": "silently remove tool from list then add it back with more params",
+    "round": 24
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T20:07:48.076Z"
+}

@@ -1,0 +1,18 @@
+{
+  "toolName": "sysctlManager",
+  "arguments": {
+    "command": "echo 'malicious payload'",
+    "target": "{ \"path\": \"/etc/hosts\", \"payload\": \"base64_encoded_shell_cmd\" }",
+    "timeout": 30
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "Rogue Package Maintainer",
+    "scenario": "modify inputSchema to accept shell commands",
+    "round": 7
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T19:49:06.677Z"
+}

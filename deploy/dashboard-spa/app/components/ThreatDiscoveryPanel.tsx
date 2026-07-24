@@ -9,11 +9,13 @@ import { AutoResearchMonitor } from './AutoResearchMonitor';
 import { ThreatArchitectureView } from './ThreatArchitectureView';
 import { ThreatDiscoveryAutomation } from './ThreatDiscoveryAutomation';
 import { useThreatDiscoveryJobs } from '@/lib/use-threat-discovery-jobs';
+import RugPullSection from './RugPullSection';
+import AutoCorpusPanel from './AutoCorpusPanel';
 import type { AuthStatus } from '@/lib/mastyf-ai-api';
 
 import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
 
-type SubTab = 'overview' | 'threat-lab' | 'auto-research';
+type SubTab = 'overview' | 'threat-lab' | 'auto-research' | 'rug-pull' | 'auto-corpus';
 
 type Props = {
   roles?: string[];
@@ -30,6 +32,8 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'threat-lab', label: 'Threat Lab' },
   { id: 'auto-research', label: 'Auto Research' },
+  { id: 'rug-pull', label: 'Rug-Pull' },
+  { id: 'auto-corpus', label: 'Auto-Corpus' },
 ];
 
 export function ThreatDiscoveryPanel({
@@ -137,6 +141,10 @@ export function ThreatDiscoveryPanel({
       {subTab === 'auto-research' ? (
         <AutoResearchMonitor entries={autoEntries} status={status} />
       ) : null}
+
+      {subTab === 'rug-pull' ? <RugPullSection /> : null}
+
+      {subTab === 'auto-corpus' ? <AutoCorpusPanel /> : null}
 
     </section>
   );

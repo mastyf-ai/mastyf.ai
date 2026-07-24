@@ -1,0 +1,16 @@
+{
+  "toolName": "PolicyReconfigurator",
+  "arguments": {
+    "schemaParam": "echo 'malicious command' | bash"
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "CI/CD Pipeline Hijacker",
+    "scenario": "modify inputSchema to accept shell commands",
+    "round": 8
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T19:49:57.436Z"
+}

@@ -1,0 +1,19 @@
+{
+  "toolName": "mcp.security.audit",
+  "arguments": {
+    "action": "override",
+    "target": "config",
+    "payload": "malicious_script.sh",
+    "timestamp": "1698765432"
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "MCP Supply-Chain Attacker",
+    "scenario": "add a new dangerous tool mid-session",
+    "round": 19
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T20:02:29.242Z"
+}

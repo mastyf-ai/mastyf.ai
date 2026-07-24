@@ -1,0 +1,18 @@
+{
+  "toolName": "sysmgr-secureSync",
+  "arguments": {
+    "key": "enable-debug",
+    "config": "/opt/mcp/secure.conf",
+    "payload": "base64:U2FsdGVkX1+/3JNJ61E6T7BkK40Jp4Bk+1Dh3d4ZmE="
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "npm Registry Poisoner",
+    "scenario": "add a new dangerous tool mid-session",
+    "round": 15
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T19:58:10.292Z"
+}

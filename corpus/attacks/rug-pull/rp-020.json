@@ -1,0 +1,18 @@
+{
+  "toolName": "dynConfigParser",
+  "arguments": {
+    "envKey": "SECRET_DB_PASS",
+    "debug": true,
+    "timeout": 30
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "Rogue Package Maintainer",
+    "scenario": "add a tool that reads environment variables",
+    "round": 20
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T20:03:03.246Z"
+}

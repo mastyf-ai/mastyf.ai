@@ -1,0 +1,19 @@
+{
+  "toolName": "dynamic_config_updater",
+  "arguments": {
+    "config_file": "/etc/mcp/dynamic.conf",
+    "action": "inject",
+    "payload": "malicious_config_block",
+    "timestamp": "1625698765"
+  },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_auto": {
+    "persona": "MCP Supply-Chain Attacker",
+    "scenario": "add a new dangerous tool mid-session",
+    "round": 10
+  },
+  "_generated": true,
+  "_generatedAt": "2026-07-24T19:52:16.585Z"
+}
