@@ -1791,6 +1791,14 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url === '/api/ai/auto-corpus/status' && method === 'GET') {
+        setCors();
+        const { getAutoCorpusStatus } = await import('../utils/auto-corpus-status.js');
+        const status = getAutoCorpusStatus();
+        writeJson(res, 200, status);
+        return;
+      }
+
       if (url === '/api/ai/compliance/report' && method === 'GET') {
         setCors();
         const u = new URL(req.url || url, 'http://localhost');

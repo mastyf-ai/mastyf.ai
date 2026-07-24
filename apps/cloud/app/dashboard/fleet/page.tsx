@@ -1,5 +1,6 @@
 import { LaunchDashboard } from '@/components/LaunchDashboard';
 import RugPullSection from '@/components/RugPullSection';
+import AutoCorpusPanel from '@/components/AutoCorpusPanel';
 import { auth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { getUserOrg } from '@/lib/org-context';
@@ -194,6 +195,7 @@ export default async function FleetPage() {
         <h2>🛡️ Rug-Pull Detection</h2>
         <p>Tool-definition drift events detected by OWASP MCP03 fingerprinting. A mismatch means the MCP server changed its tools mid-session — a potential supply-chain attack.</p>
         <RugPullSection />
+        <AutoCorpusPanel />
       </section>
     </main>
   );
