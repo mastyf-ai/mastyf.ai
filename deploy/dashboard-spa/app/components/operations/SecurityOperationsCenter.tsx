@@ -61,7 +61,7 @@ import ThreatFeedsPanel from './ThreatFeedsPanel';
 import { useDashboardWindow } from '../dashboard/DashboardWindowContext';
 import type { ThreatLabContext } from '../IncidentInvestigatorDrawer';
 import RugPullSection from '../RugPullSection';
-import AutoCorpusPanel from '../AutoCorpusPanel';
+import AutoCorpusControlPanel from '../AutoCorpusControlPanel';
 
 type SecurityView = 'overview' | 'threats' | 'intel' | 'swarm' | 'learning' | 'quarantine' | 'feeds';
 type ThreatDiscoverySubTab = 'overview' | 'threat-lab' | 'auto-research' | 'rug-pull' | 'auto-corpus';
@@ -507,7 +507,7 @@ function ThreatsView({
 
       {subTab === 'rug-pull' ? <RugPullSection /> : null}
 
-      {subTab === 'auto-corpus' ? <AutoCorpusPanel /> : null}
+      {subTab === 'auto-corpus' ? <AutoCorpusControlPanel /> : null}
 
       {subTab === 'overview' ? (
     <>

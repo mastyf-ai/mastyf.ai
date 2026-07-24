@@ -1791,11 +1791,105 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url === '/api/fleet/rug-pull-events' && method === 'PATCH') {
+        setCors();
+        const u = new URL(req.url || url, 'http://localhost');
+        const body = await readBody(req);
+        const eventId = (u.searchParams.get('id') || body.id || '') as string;
+        const action = (u.searchParams.get('action') || body.action || '') as string;
+        if (!eventId || !action) {
+          writeJson(res, 400, { error: 'Missing id or action parameter' });
+          return;
+        }
+        const validActions = ['review', 'dismiss', 'mitigate'];
+        if (!validActions.includes(action)) {
+          writeJson(res, 400, { error: 'Invalid action. Use: review, dismiss, mitigate' });
+          return;
+        }
+        const { updateRugPullEvent } = await import('../audit/rug-pull-store.js');
+        const ok = updateRugPullEvent(eventId, {
+          status: action === 'review' ? 'reviewed' : action === 'dismiss' ? 'dismissed' : 'mitigated',
+          reviewedBy: authResult.identity || 'dashboard',
+        });
+        writeJson(res, ok ? 200 : 404, { ok, error: ok ? undefined : 'Event not found' });
+        return;
+      }
+
+      if (url === '/api/fleet/rug-pull-events' && method === 'DELETE') {
+        setCors();
+        const u = new URL(req.url || url, 'http://localhost');
+        const serverName = u.searchParams.get('server') || undefined;
+        const { clearRugPullEvents } = await import('../audit/rug-pull-store.js');
+        clearRugPullEvents(serverName || undefined);
+        writeJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (url === '/api/fleet/rug-pull-status' && method === 'GET') {
+        setCors();
+        const { getRugPullStatus } = await import('../audit/rug-pull-store.js');
+        const status = getRugPullStatus();
+        writeJson(res, 200, status);
+        return;
+      }
+
+      if (url === '/api/fleet/rug-pull-events/scan' && method === 'POST') {
+        setCors();
+        const { triggerRugPullScan } = await import('../audit/rug-pull-scanner.js');
+        const result = await triggerRugPullScan(requestTenantId);
+        writeJson(res, 200, result);
+        return;
+      }
+
       if (url === '/api/ai/auto-corpus/status' && method === 'GET') {
         setCors();
         const { getAutoCorpusStatus } = await import('../utils/auto-corpus-status.js');
         const status = getAutoCorpusStatus();
         writeJson(res, 200, status);
+        return;
+      }
+
+      if (url === '/api/ai/auto-corpus/manifest' && method === 'GET') {
+        setCors();
+        const u = new URL(req.url || url, 'http://localhost');
+        const statusFilter = u.searchParams.get('status') || undefined;
+        const limit = parseInt(u.searchParams.get('limit') || '50', 10);
+        const { readAutoCorpusManifest } = await import('../ai/auto-corpus-writer.js');
+        const manifest = readAutoCorpusManifest();
+        let entries = (manifest?.entries || []) as any[];
+        if (statusFilter) entries = entries.filter((e: any) => e.status === statusFilter);
+        if (limit > 0) entries = entries.slice(0, limit);
+        writeJson(res, 200, { entries, total: entries.length, timestamp: manifest?.timestamp });
+        return;
+      }
+
+      if (url === '/api/ai/auto-corpus/approve' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const advId = (body.advId || '') as string;
+        if (!advId) { writeJson(res, 400, { error: 'advId required' }); return; }
+        const { approveAutoCorpusEntry } = await import('../ai/auto-corpus-promoter.js');
+        const result = approveAutoCorpusEntry(advId);
+        writeJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
+
+      if (url === '/api/ai/auto-corpus/reject' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const advId = (body.advId || '') as string;
+        if (!advId) { writeJson(res, 400, { error: 'advId required' }); return; }
+        const { rejectAutoCorpusEntry } = await import('../ai/auto-corpus-promoter.js');
+        const result = rejectAutoCorpusEntry(advId);
+        writeJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
+
+      if (url === '/api/ai/auto-corpus/approve-bulk' && method === 'POST') {
+        setCors();
+        const { approveAllPending } = await import('../ai/auto-corpus-promoter.js');
+        const result = approveAllPending();
+        writeJson(res, 200, result);
         return;
       }
 

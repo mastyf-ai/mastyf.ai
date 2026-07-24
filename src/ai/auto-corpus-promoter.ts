@@ -59,6 +59,7 @@ export interface CorpusPromotionManifest {
     confidence: number;
     source: AutoCorpusSource;
     promotedAt: string;
+    status?: 'pending' | 'approved' | 'rejected' | 'promoted';
   }>;
 }
 
@@ -422,6 +423,60 @@ export function getPromotionStats(): {
       ? manifest.entries[manifest.entries.length - 1].promotedAt
       : null,
   };
+}
+
+/** Export: list entries that are still pending review */
+export function listPendingPromotions(): Array<{
+  advId: string;
+  category: string;
+  confidence: number;
+  source: string;
+  createdAt: string;
+}> {
+  const manifest = loadPromotionManifest();
+  return manifest.entries
+    .filter(e => !e.status || e.status === 'pending')
+    .map(e => ({
+      advId: e.advId,
+      category: e.category,
+      confidence: e.confidence,
+      source: e.source,
+      createdAt: e.promotedAt,
+    }));
+}
+
+/** Export: mark an entry as approved for promotion */
+export function approveAutoCorpusEntry(advId: string): { ok: boolean; error?: string } {
+  const manifest = loadPromotionManifest();
+  const entry = manifest.entries.find(e => e.advId === advId);
+  if (!entry) return { ok: false, error: 'Entry not found' };
+  entry.status = 'approved';
+  savePromotionManifest(manifest);
+  return { ok: true };
+}
+
+/** Export: mark an entry as rejected */
+export function rejectAutoCorpusEntry(advId: string): { ok: boolean; error?: string } {
+  const manifest = loadPromotionManifest();
+  const entry = manifest.entries.find(e => e.advId === advId);
+  if (!entry) return { ok: false, error: 'Entry not found' };
+  entry.status = 'rejected';
+  savePromotionManifest(manifest);
+  return { ok: true };
+}
+
+/** Export: approve all pending entries */
+export function approveAllPending(): { ok: boolean; count: number } {
+  const manifest = loadPromotionManifest();
+  let count = 0;
+  for (const entry of manifest.entries) {
+    if (!entry.status || entry.status === 'pending') {
+      entry.status = 'approved';
+      count++;
+    }
+  }
+  savePromotionManifest(manifest);
+  return { ok: true, count };
 }
 
 /** Exported for test use */
