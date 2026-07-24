@@ -15,6 +15,8 @@ import { OAuthValidator } from '../auth/oauth.js';
 import { credentialBroker } from '../auth/credential-broker.js';
 import { globalHookRegistry } from './tool-call-defense-orchestrator.js';
 import { createRateLimitHook, createPiiRedactionHook, createSensitivePathGuard, createSlackNotifierHook, createPagerDutyHook, createTimeBasedAccessHook, createGeoFencingHook, createCustomHook } from '../policy/tool-call-hooks.js';
+import { createApprovalHook } from '../policy/approval-hook.js';
+import { createSessionRateLimitHook } from '../policy/session-rate-limit.js';
 import { getUserToolEnforcementEngine } from '../policy/strategies/user-tool-enforcement-strategy.js';
 import { getPersistenceStore } from '../utils/persistence-store.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
@@ -44,6 +46,21 @@ function initBuiltinHooks(): void {
     if (process.env.MASTYF_AI_ACCESS_DENIED_DAYS) {
       const days = process.env.MASTYF_AI_ACCESS_DENIED_DAYS.split(',').map(Number).filter(n => n >= 0 && n <= 6);
       if (days.length > 0) globalHookRegistry.registerBefore(createTimeBasedAccessHook({ deniedDays: days }));
+    }
+    // Approval hook — activated when MASTYF_AI_APPROVAL_ENABLED not explicitly false
+    if (process.env['MASTYF_AI_APPROVAL_ENABLED'] !== 'false') {
+      const approvalTools = (process.env['MASTYF_AI_APPROVAL_TOOLS'] || 'execute_command,bash,shell,run_sql,git_push,deploy,delete_record,rm').split(',');
+      globalHookRegistry.registerBefore(createApprovalHook({
+        matchTools: approvalTools,
+        approvers: ['admin'],
+        timeoutSeconds: parseInt(process.env['MASTYF_AI_APPROVAL_TIMEOUT_SEC'] || '300', 10),
+        notifyChannel: (process.env['MASTYF_AI_APPROVAL_CHANNEL'] as any) || 'stdout',
+      }));
+    }
+    // Session rate-limit hook — activated when MASTYF_AI_SESSION_RATE_LIMIT_ENABLED not explicitly false
+    if (process.env['MASTYF_AI_SESSION_RATE_LIMIT_ENABLED'] !== 'false') {
+      const perSessionMax = parseInt(process.env['MASTYF_AI_SESSION_RATE_LIMIT_MAX'] || '120', 10);
+      globalHookRegistry.registerBefore(createSessionRateLimitHook(perSessionMax));
     }
   } catch {}
 }

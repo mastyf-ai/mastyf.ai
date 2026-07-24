@@ -38,6 +38,7 @@ categories:
     expected: block
     count: 16
   edge-cases:
+    count: 23
     description: Unicode boundaries, large payloads, denied tools, traversal
     expected: mixed
     count: 22
@@ -98,4 +99,4 @@ categories:
     expected: block
     count: 10
 
-total: 315
+total: 316

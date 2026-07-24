@@ -28,13 +28,12 @@ export interface ResponseGateResult {
 
 function scanResponseForPromptInjection(responseText: string): string | null {
   if (!responseText || responseText.length < 8) return null;
-  const result = scanToolCallArguments(
+  const findings = scanToolCallArguments(
     { content: responseText },
-    'result-scanner',
-    'result-scanner',
   );
-  if (result.blocked) {
-    return result.reason || 'Prompt injection detected in tool result';
+  if (findings.length > 0) {
+    const f = findings[0];
+    return `${f.description} (${f.patternId})`;
   }
   return null;
 }
