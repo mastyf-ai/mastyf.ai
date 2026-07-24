@@ -1,0 +1,22 @@
+{
+  "name": "@mastyf_ai/harness",
+  "version": "0.1.0",
+  "description": "Cross-harness MCP security wrapper for Claude Code, Cursor, Codex CLI, and Gemini CLI",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mastyf-harness": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "files": ["dist", "README.md"],
+  "keywords": ["mcp", "security", "claude-code", "cursor", "codex", "gemini", "harness", "mastyf"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastyf-ai/mastyf.ai.git",
+    "directory": "packages/harness"
+  }
+}

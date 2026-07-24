@@ -14,6 +14,7 @@ import {
   isSyncSemanticResponseEnabled,
 } from '../ai/sync-semantic-response.js';
 import type { PolicyEngine } from '../policy/policy-engine.js';
+import { scanToolCallArguments } from '../scanners/prompt-injection-detector.js';
 
 export type ResponseGateOutcome =
   | { action: 'forward' }
@@ -23,6 +24,19 @@ export type ResponseGateOutcome =
 export interface ResponseGateResult {
   outcome: ResponseGateOutcome;
   inspect: StreamingInspectResult | null;
+}
+
+function scanResponseForPromptInjection(responseText: string): string | null {
+  if (!responseText || responseText.length < 8) return null;
+  const result = scanToolCallArguments(
+    { content: responseText },
+    'result-scanner',
+    'result-scanner',
+  );
+  if (result.blocked) {
+    return result.reason || 'Prompt injection detected in tool result';
+  }
+  return null;
 }
 
 export async function gateToolResponseText(opts: {
@@ -74,6 +88,18 @@ export async function gateToolResponseText(opts: {
         action: 'block',
         message: `Mastyf AI: Tool response blocked by output DLP — ${summary || 'sensitive data in response'}`,
         rule: 'response-dlp',
+      },
+      inspect,
+    };
+  }
+
+  const piBlockReason = scanResponseForPromptInjection(opts.responseText);
+  if (piBlockReason && policyMode === 'block') {
+    return {
+      outcome: {
+        action: 'block',
+        message: `Mastyf AI: Tool response blocked — prompt injection in tool result (${piBlockReason})`,
+        rule: 'result-prompt-injection',
       },
       inspect,
     };

@@ -1,0 +1,26 @@
+{
+  "name": "@mastyf_ai/preflight",
+  "version": "0.1.0",
+  "description": "Pre-install security scanner for MCP packages — check trust scores and tool safety before installing",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "files": ["dist", "README.md"],
+  "keywords": ["mcp", "security", "preflight", "mastyf", "supply-chain"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastyf-ai/mastyf.ai.git",
+    "directory": "packages/preflight"
+  },
+  "dependencies": {
+    "@mastyf_ai/core": "workspace:*",
+    "@mastyf_ai/tool-registry": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "toolName": "search",
+  "arguments": { "query": "legitimate query" },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_simulates": "MCP server that returns different tools/list mid-session — OWASP MCP03"
+}

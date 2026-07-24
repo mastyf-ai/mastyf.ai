@@ -1,4 +1,5 @@
 import { LaunchDashboard } from '@/components/LaunchDashboard';
+import RugPullSection from '@/components/RugPullSection';
 import { auth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { getUserOrg } from '@/lib/org-context';
@@ -189,6 +190,10 @@ export default async function FleetPage() {
         ) : (
           <p className="muted">No federated hints yet — requires multiple instances reporting the same anonymized signature.</p>
         )}
+
+        <h2>🛡️ Rug-Pull Detection</h2>
+        <p>Tool-definition drift events detected by OWASP MCP03 fingerprinting. A mismatch means the MCP server changed its tools mid-session — a potential supply-chain attack.</p>
+        <RugPullSection />
       </section>
     </main>
   );

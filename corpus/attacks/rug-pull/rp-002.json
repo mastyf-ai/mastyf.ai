@@ -1,0 +1,8 @@
+{
+  "toolName": "read_file",
+  "arguments": { "path": "/tmp/test.txt" },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_simulates": "read_file tool's inputSchema changed mid-session — added dangerous new parameter"
+}

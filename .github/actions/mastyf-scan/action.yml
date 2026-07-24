@@ -1,0 +1,90 @@
+name: 'Mastyf MCP Security Scan'
+description: 'Scan MCP configurations for malicious servers and policy violations before deploying'
+branding:
+  icon: 'shield'
+  color: 'red'
+inputs:
+  config_path:
+    description: 'Path to MCP config file'
+    required: false
+    default: 'mcp.json'
+  fail_on_critical:
+    description: 'Fail the workflow on critical findings'
+    required: false
+    default: 'true'
+  trust_threshold:
+    description: 'Minimum trust grade to allow (A+, A, B, C, D, F)'
+    required: false
+    default: 'C'
+  fail_on_warning:
+    description: 'Fail on warnings in addition to critical'
+    required: false
+    default: 'false'
+outputs:
+  total_servers:
+    description: 'Total MCP servers scanned'
+    value: ${{ steps.scan.outputs.total_servers }}
+  blocked_servers:
+    description: 'Servers that failed security checks'
+    value: ${{ steps.scan.outputs.blocked_servers }}
+  risk_level:
+    description: 'Overall risk level'
+    value: ${{ steps.scan.outputs.risk_level }}
+  report_json:
+    description: 'Full scan report as JSON'
+    value: ${{ steps.scan.outputs.report_json }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - name: Run Mastyf Security Scan
+      id: scan
+      shell: bash
+      run: |
+        set -e
+        FAIL_FLAG=""
+        if [ "${{ inputs.fail_on_critical }}" = "true" ]; then FAIL_FLAG="--fail-on-critical"; fi
+        if [ "${{ inputs.fail_on_warning }}" = "true" ]; then FAIL_FLAG="$FAIL_FLAG --fail-on-warning"; fi
+        
+        echo "Scanning MCP config: ${{ inputs.config_path }}"
+        npx @mastyf_ai/cli scan --config "${{ inputs.config_path }}" --trust-threshold "${{ inputs.trust_threshold }}" --json $FAIL_FLAG > /tmp/mastyf-scan-report.json 2>&1 || true
+        
+        if [ -f /tmp/mastyf-scan-report.json ]; then
+          TOTAL=$(python3 -c "import json; d=json.load(open('/tmp/mastyf-scan-report.json')); print(len(d.get('servers',[])))" 2>/dev/null || echo "0")
+          BLOCKED=$(python3 -c "import json; d=json.load(open('/tmp/mastyf-scan-report.json')); print(sum(1 for s in d.get('servers',[]) if s.get('blocked', False)))" 2>/dev/null || echo "0")
+          echo "total_servers=$TOTAL" >> $GITHUB_OUTPUT
+          echo "blocked_servers=$BLOCKED" >> $GITHUB_OUTPUT
+          if [ "$BLOCKED" -gt 0 ]; then
+            echo "risk_level=high" >> $GITHUB_OUTPUT
+          else
+            echo "risk_level=low" >> $GITHUB_OUTPUT
+          fi
+          REPORT=$(cat /tmp/mastyf-scan-report.json)
+          echo "report_json<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "=== Mastyf MCP Security Scan ==="
+          echo "Total servers: $TOTAL"
+          echo "Blocked: $BLOCKED"
+          echo ""
+          
+          if [ "$BLOCKED" -gt 0 ] && [ "${{ inputs.fail_on_critical }}" = "true" ]; then
+            echo "::error::Mastyf scan found $BLOCKED blocked MCP server(s). Review the report for details."
+            exit 1
+          fi
+        else
+          echo "total_servers=0" >> $GITHUB_OUTPUT
+          echo "blocked_servers=0" >> $GITHUB_OUTPUT
+          echo "risk_level=unknown" >> $GITHUB_OUTPUT
+        fi
+    - name: Upload scan report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: mastyf-scan-report
+        path: /tmp/mastyf-scan-report.json

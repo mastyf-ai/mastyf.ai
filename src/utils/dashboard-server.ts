@@ -1770,6 +1770,27 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url === '/api/fleet/rug-pull-events' && method === 'GET') {
+        setCors();
+        const u = new URL(req.url || url, 'http://localhost');
+        const windowHours = parseInt(u.searchParams.get('window') || '24', 10);
+        const serverName = u.searchParams.get('server') || undefined;
+        const limit = parseInt(u.searchParams.get('limit') || '100', 10);
+        const { listRugPullEvents, countRugPullEvents } = await import('../audit/rug-pull-store.js');
+        const events = listRugPullEvents({
+          tenantId: requestTenantId,
+          serverName,
+          windowHours: Number.isFinite(windowHours) ? windowHours : 24,
+          limit: Number.isFinite(limit) ? limit : 100,
+        });
+        writeJson(res, 200, {
+          events,
+          total: countRugPullEvents({ tenantId: requestTenantId, windowHours }),
+          windowHours,
+        });
+        return;
+      }
+
       if (url === '/api/ai/compliance/report' && method === 'GET') {
         setCors();
         const u = new URL(req.url || url, 'http://localhost');

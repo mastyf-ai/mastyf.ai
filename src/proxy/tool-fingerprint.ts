@@ -5,6 +5,7 @@ import { createHash } from 'crypto';
 import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
+import { persistRugPullEvent } from '../audit/rug-pull-store.js';
 
 export type ToolListEntry = {
   name?: string;
@@ -95,6 +96,13 @@ export function applyToolFingerprint(
     'rug_pull',
   );
   void ctx.onMismatch?.({
+    serverName: ctx.serverName,
+    tenantId: ctx.tenantId,
+    previousFingerprint: prev,
+    currentFingerprint: hash,
+    toolCount: tools.length,
+  });
+  persistRugPullEvent({
     serverName: ctx.serverName,
     tenantId: ctx.tenantId,
     previousFingerprint: prev,

@@ -1,0 +1,42 @@
+{
+  "name": "mastyf-ai-vscode",
+  "displayName": "mastyf.ai — MCP Security Scanner",
+  "version": "0.1.0",
+  "description": "Scan MCP configurations for malicious servers and check trust scores inline",
+  "publisher": "mastyf-ai",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Linters", "Security", "Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [{
+      "command": "mastyf.scanMCPConfig",
+      "title": "Mastyf: Scan MCP Configurations"
+    }],
+    "problemMatchers": [{
+      "name": "mastyf-mcp-server-security",
+      "label": "Mastyf MCP Server Security",
+      "owner": "mcp-security",
+      "pattern": [{
+        "regexp": "^(.*):(\\d+):(\\d+):\\s+(\\w+)\\s+(.+)$",
+        "file": 1,
+        "line": 2,
+        "column": 3,
+        "severity": 4,
+        "message": 5
+      }]
+    }]
+  },
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "build": "tsc -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@mastyf_ai/tool-registry": "workspace:*"
+  }
+}
