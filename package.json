@@ -189,7 +189,7 @@
     "@opentelemetry/auto-instrumentations-node": "^0.75.0",
     "@opentelemetry/core": "^2.7.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.217.0",
-    "@opentelemetry/sdk-node": "^0.217.0",
+    "@opentelemetry/sdk-node": "^0.221.0",
     "axios": "^1.7.0",
     "argon2": "^0.41.1",
     "bash-parser": "^0.5.0",
