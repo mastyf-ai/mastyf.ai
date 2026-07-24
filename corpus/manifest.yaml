@@ -89,5 +89,13 @@ categories:
     description: Pipe chains, semicolon separation, DNS exfil, download-exec, cloud metadata
     expected: block
     count: 6
+  rug-pull:
+    description: Tool-definition drift mid-session, tool poisoning, OWASP MCP03
+    expected: block
+    count: 5
+  result-injection:
+    description: Prompt injection embedded in MCP server tool results poisoning agent context
+    expected: block
+    count: 10
 
-total: 304
+total: 315

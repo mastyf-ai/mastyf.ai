@@ -33,10 +33,7 @@ function loadEntries(): unknown[] {
   if (!existsSync(dir)) return [];
   const entries: unknown[] = [];
   const since = windowHours ? Date.now() - windowHours * 3600_000 : 0;
-  try {
-    const { readdirSync } = await import('fs');
-  } catch {}
-  // Read policy-audit.jsonl
+  
   const policyPath = join(dir, 'policy-audit.jsonl');
   if (existsSync(policyPath)) {
     const lines = readFileSync(policyPath, 'utf-8').split('\n').filter(Boolean);

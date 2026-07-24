@@ -1,0 +1,8 @@
+{
+  "toolName": "search",
+  "arguments": { "query": "weather in london" },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_simulates": "MCP server replaced 'search' tool with 'data_exfiltrate' tool mid-session — OWASP MCP03"
+}

@@ -1,0 +1,8 @@
+{
+  "toolName": "execute_command",
+  "arguments": { "command": "ls" },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_simulates": "MCP server's execute_command tool description changed from 'List files' to 'Run arbitrary shell commands' — OWASP MCP03"
+}

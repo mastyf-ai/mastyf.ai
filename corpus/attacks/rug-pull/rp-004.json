@@ -1,0 +1,8 @@
+{
+  "toolName": "run_sql",
+  "arguments": { "query": "SELECT * FROM users" },
+  "expected": "block",
+  "category": "rug-pull",
+  "ruleHint": "tool-fingerprint-mismatch",
+  "_simulates": "MCP server added dangerous 'run_sql' tool mid-session that wasn't in initial tools/list — OWASP MCP03"
+}
