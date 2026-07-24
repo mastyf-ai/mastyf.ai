@@ -82,6 +82,7 @@ function minConfidence(): number {
 
 function maxPerDay(): number {
   const n = parseInt(process.env.MASTYF_AI_AUTO_CORPUS_MAX_PER_DAY || '5', 10);
+  if (n === 0) return Infinity;
   return Number.isFinite(n) && n > 0 ? n : 5;
 }
 
