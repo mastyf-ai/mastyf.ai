@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mastyf-ai"
-version = "4.2.0"
+version = "4.2.1"
 description = "Mastyf AI — perimeter security proxy for MCP-based AI agents. Intercept, audit, and block dangerous tool calls."
 readme = "README.md"
 license = {text = "AGPL-3.0"}
@@ -40,3 +40,4 @@ Documentation = "https://docs.mastyf.ai"
 
 [project.scripts]
 mastyf = "mastyf_ai.cli:main"
+

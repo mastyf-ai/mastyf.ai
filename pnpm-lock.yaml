@@ -335,6 +335,8 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@20.19.43)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.9.0)
 
+  packages/harness: {}
+
   packages/langchain-middleware:
     dependencies:
       '@langchain/core':
@@ -351,10 +353,23 @@ importers:
 
   packages/plugin-sdk: {}
 
+  packages/preflight:
+    dependencies:
+      '@mastyf_ai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@mastyf_ai/tool-registry':
+        specifier: workspace:*
+        version: link:../tool-registry
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/server:
     dependencies:
       '@mastyf_ai/core':
-        specifier: workspace:^4.1.7
+        specifier: workspace:^4.1.9
         version: link:../core
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
@@ -374,6 +389,19 @@ importers:
         version: 3.2.7(@types/node@20.19.43)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.9.0)
 
   packages/tool-registry: {}
+
+  packages/vscode-extension:
+    dependencies:
+      '@mastyf_ai/tool-registry':
+        specifier: workspace:*
+        version: link:../tool-registry
+    devDependencies:
+      '@types/vscode':
+        specifier: ^1.85.0
+        version: 1.125.0
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
 packages:
 
@@ -1615,6 +1643,9 @@ packages:
 
   '@types/tedious@4.0.14':
     resolution: {integrity: sha512-KHPsfX/FoVbUGbyYvk1q9MMQHLPeRZhRJZdO45Q4YjvFkv4hMNghCWTvy7rdKessBsmtz4euWCWAB6/tVpI1Iw==}
+
+  '@types/vscode@1.125.0':
+    resolution: {integrity: sha512-0icm/ZQAaism87P0ekHqi4/Ju9du+Tm0RUW+y7vqRsxY2cY0FNRX1nAnaW7nT6npPt2tfHiheZ55Zm9UhqonFA==}
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
@@ -4906,6 +4937,8 @@ snapshots:
   '@types/tedious@4.0.14':
     dependencies:
       '@types/node': 20.19.43
+
+  '@types/vscode@1.125.0': {}
 
   '@types/ws@8.18.1':
     dependencies:
