@@ -1833,6 +1833,27 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url === '/api/fleet/rug-pull-servers' && method === 'GET') {
+        setCors();
+        const { readFleetState } = await import('../fleet/fleet-state.js');
+        const { getRugPullStatus } = await import('../audit/rug-pull-store.js');
+        const fleet = readFleetState();
+        const rbStatus = getRugPullStatus();
+        const servers = (fleet?.servers ?? []).map((s: any) => ({
+          name: s.name,
+          port: s.port,
+          transport: s.transport,
+          status: s.status,
+          localUrl: s.localUrl,
+          rugPullEvents: rbStatus.serverStatuses?.[s.name]?.pending ?? 0,
+          reviewedEvents: rbStatus.serverStatuses?.[s.name]?.reviewed ?? 0,
+          lastEvent: rbStatus.serverStatuses?.[s.name]?.lastEvent ?? null,
+          blocked: rbStatus.activeBlockedServers?.includes(s.name) ?? false,
+        }));
+        writeJson(res, 200, { servers, fleetStartedAt: fleet?.startedAt ?? null });
+        return;
+      }
+
       if (url === '/api/fleet/rug-pull-events/scan' && method === 'POST') {
         setCors();
         const { triggerRugPullScan } = await import('../audit/rug-pull-scanner.js');
@@ -1857,7 +1878,7 @@ export async function startDashboardServer(
         const { readAutoCorpusManifest } = await import('../ai/auto-corpus-writer.js');
         const manifest = readAutoCorpusManifest();
         let entries = (manifest?.entries || []) as any[];
-        if (statusFilter) entries = entries.filter((e: any) => e.status === statusFilter);
+        if (statusFilter) entries = entries.filter((e: any) => statusFilter === 'pending' ? (!e.status || e.status === 'pending') : e.status === statusFilter);
         if (limit > 0) entries = entries.slice(0, limit);
         writeJson(res, 200, { entries, total: entries.length, timestamp: manifest?.timestamp });
         return;

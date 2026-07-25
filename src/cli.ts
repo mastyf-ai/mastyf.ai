@@ -8,6 +8,7 @@ import { ReportGenerator } from './reporter/report-generator.js';
 import { FullReport, SecurityReport, McpServerConfig } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
 import { ProxyManager } from './proxy/proxy-manager.js';
+import { registerProxyManager } from './proxy/proxy-manager-registry.js';
 import { PolicyEngine } from './policy/policy-engine.js';
 import { PolicyWatcher } from './policy/policy-watcher.js';
 import { PolicyConfig } from './policy/policy-types.js';
@@ -990,6 +991,7 @@ program
     // When mode override is active, pass the engine directly since the watcher was re-seeded
     const manager = new ProxyManager(db, useWatcherForManager ? policyWatcher : policyEngine, authValidator);
     await manager.startAll(servers);
+    registerProxyManager(manager);
 
     if (authValidator) {
       void authValidator.init().then(() => authValidator!.startBackgroundJwksRefresh()).catch(() => {});
