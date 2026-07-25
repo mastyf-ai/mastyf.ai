@@ -52,7 +52,7 @@ export interface ScanResult {
   scannedAt: string;
 }
 
-function computeGrade(score: number): TrustGrade {
+export function computeGrade(score: number): TrustGrade {
   if (score >= 90) return 'A+';
   if (score >= 80) return 'A';
   if (score >= 60) return 'B';
