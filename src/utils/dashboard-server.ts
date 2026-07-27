@@ -799,6 +799,10 @@ export async function startDashboardServer(
       || path === '/api/analytics/summary'
       || path === '/api/security/dashboard'
       || path === '/api/autopilot/status'
+      || path === '/api/vuln-findings'
+      || path.startsWith('/api/vuln-findings/')
+      || path === '/api/vuln-live-stats'
+      || path === '/api/vuln-precision'
       || path === '/api/reports/digests/latest'
       || path === '/api/servers/registry'
       || path === '/api/visuals/live'
@@ -1877,8 +1881,18 @@ export async function startDashboardServer(
         const limit = parseInt(u.searchParams.get('limit') || '50', 10);
         const { readAutoCorpusManifest } = await import('../ai/auto-corpus-writer.js');
         const manifest = readAutoCorpusManifest();
-        let entries = (manifest?.entries || []) as any[];
-        if (statusFilter) entries = entries.filter((e: any) => statusFilter === 'pending' ? (!e.status || e.status === 'pending') : e.status === statusFilter);
+        let entries = (manifest?.entries || []).map((e) => ({
+          ...e,
+          createdAt: (e as { createdAt?: string }).createdAt || e.timestamp || null,
+          status: e.status || 'pending',
+        }));
+        if (statusFilter) {
+          entries = entries.filter((e) =>
+            statusFilter === 'pending'
+              ? (!e.status || e.status === 'pending')
+              : e.status === statusFilter,
+          );
+        }
         if (limit > 0) entries = entries.slice(0, limit);
         writeJson(res, 200, { entries, total: entries.length, timestamp: manifest?.timestamp });
         return;
@@ -4124,6 +4138,322 @@ export async function startDashboardServer(
           writeJson(res, 500, {
             error: err instanceof Error ? err.message : 'Autopilot status failed',
           });
+        }
+        return;
+      }
+
+      if (url === '/api/vuln-findings' && method === 'GET') {
+        setCors();
+        try {
+          const { listFindings, isVulnDiscoveryEnabled, discoveryLane, novelPrecisionSummary, getLiveTrafficStats } = await import('../vuln-discovery/index.js');
+          const { loadReport } = await import('../vuln-discovery/vuln-analyst.js');
+          const findings = listFindings().map((f) => {
+            const report = loadReport(f.id);
+            return {
+              ...f,
+              scanner: f.evidence?.scanner,
+              discoveryLane: discoveryLane(f),
+              hasAnalysisReport: !!report || !!f.analysisReportId,
+              analysisStatus: report?.status,
+            };
+          });
+          writeJson(res, 200, available({
+            enabled: isVulnDiscoveryEnabled(),
+            findings,
+            total: findings.length,
+            precision: novelPrecisionSummary(),
+            liveTraffic: getLiveTrafficStats().slice(0, 20),
+          }));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Vuln findings failed',
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/vuln-live-stats' && method === 'GET') {
+        setCors();
+        try {
+          const { getLiveTrafficStats, isVulnDiscoveryEnabled } = await import('../vuln-discovery/index.js');
+          writeJson(res, 200, available({
+            enabled: isVulnDiscoveryEnabled(),
+            stats: getLiveTrafficStats(),
+          }));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Live stats failed',
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/vuln-precision' && method === 'GET') {
+        setCors();
+        try {
+          const { novelPrecisionSummary, getPrecisionMetrics } = await import('../vuln-discovery/index.js');
+          writeJson(res, 200, available({
+            novel: novelPrecisionSummary(),
+            byScanner: getPrecisionMetrics(),
+          }));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Precision metrics failed',
+          });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/vuln-findings/') && method === 'GET') {
+        setCors();
+        const parts = url.split('/').filter(Boolean);
+        // /api/vuln-findings/:id or /api/vuln-findings/:id/analysis or …/export
+        const id = parts[2];
+        const sub = parts[3];
+        try {
+          if (sub === 'export') {
+            const fullUrl = new URL(req.url || '/', 'http://localhost');
+            const format = (fullUrl.searchParams.get('format') || 'json').toLowerCase();
+            const {
+              buildDisclosurePackage,
+              prepareDisclosurePackage,
+              readDisclosurePackageZip,
+            } = await import('../vuln-discovery/disclosure-package.js');
+            let pkg;
+            try {
+              pkg = await buildDisclosurePackage(id);
+            } catch {
+              pkg = await prepareDisclosurePackage(id);
+            }
+            if (format === 'zip') {
+              const zip = readDisclosurePackageZip(id);
+              if (!zip) {
+                writeJson(res, 404, { error: 'Zip not available' });
+                return;
+              }
+              res.writeHead(200, {
+                'Content-Type': 'application/zip',
+                'Content-Disposition': `attachment; filename="${id}-disclosure.zip"`,
+                'Content-Length': String(zip.length),
+                'Access-Control-Allow-Origin': '*',
+              });
+              res.end(zip);
+              return;
+            }
+            if (format === 'md' || format === 'txt') {
+              const body =
+                format === 'txt'
+                  ? pkg.report.fullText.replace(/^#+\s*/gm, '').replace(/^>\s*/gm, '')
+                  : pkg.report.fullText;
+              res.writeHead(200, {
+                'Content-Type': format === 'md' ? 'text/markdown; charset=utf-8' : 'text/plain; charset=utf-8',
+                'Content-Disposition': `attachment; filename="${id}-report.${format}"`,
+                'Access-Control-Allow-Origin': '*',
+              });
+              res.end(body);
+              return;
+            }
+            writeJson(res, 200, available(pkg as unknown as Record<string, unknown>));
+            return;
+          }
+
+          const { getFinding } = await import('../vuln-discovery/index.js');
+          const { loadReport } = await import('../vuln-discovery/vuln-analyst.js');
+          const finding = getFinding(id);
+          if (!finding) {
+            writeJson(res, 404, { error: 'Finding not found' });
+            return;
+          }
+          if (sub === 'analysis') {
+            const report = loadReport(id);
+            if (!report) {
+              writeJson(res, 404, { error: 'Analysis not found — POST /analyze first' });
+              return;
+            }
+          writeJson(res, 200, available({
+            ...(report as unknown as Record<string, unknown>),
+            report,
+            fullText: report.fullText,
+          }));
+            return;
+          }
+          writeJson(res, 200, available({
+            finding,
+            analysis: loadReport(id),
+          } as Record<string, unknown>));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Vuln finding failed',
+          });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/vuln-findings/') && url.endsWith('/prepare-disclosure') && method === 'POST') {
+        setCors();
+        const id = url.split('/').filter(Boolean)[2];
+        try {
+          const body = await readBody(req).catch(() => ({} as Record<string, unknown>));
+          const { prepareDisclosurePackage } = await import('../vuln-discovery/disclosure-package.js');
+          const pkg = await prepareDisclosurePackage(id, {
+            forceAnalyze: body.force === true,
+          });
+          writeJson(res, 200, available({
+            findingId: pkg.findingId,
+            vendorReady: pkg.vendorReady,
+            preview: pkg.preview,
+            cveStatus: pkg.cveStatus,
+            relatedCve: pkg.relatedCve,
+            paths: pkg.paths,
+            builtAt: pkg.builtAt,
+            analysisStatus: pkg.report.status,
+          } as Record<string, unknown>));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Prepare disclosure failed';
+          const isLlm = /LLM is required/i.test(msg);
+          writeJson(res, isLlm ? 503 : msg.includes('not found') ? 404 : 500, { error: msg });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/vuln-findings/') && url.endsWith('/analyze') && method === 'POST') {
+        setCors();
+        const id = url.split('/').filter(Boolean)[2];
+        try {
+          const { analyzeFinding, VulnAnalysisLlmUnavailableError } = await import(
+            '../vuln-discovery/index.js'
+          );
+          const report = await analyzeFinding(id, { force: true });
+          if (!report) {
+            writeJson(res, 404, { error: 'Analysis failed or finding not found' });
+            return;
+          }
+          writeJson(res, 200, available({
+            ...(report as unknown as Record<string, unknown>),
+            report,
+            fullText: report.fullText,
+          }));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Analyze failed';
+          const isLlm =
+            err instanceof Error
+            && (err.name === 'VulnAnalysisLlmUnavailableError'
+              || /LLM is required/i.test(msg));
+          writeJson(res, isLlm ? 503 : 500, { error: msg });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/vuln-findings/') && url.endsWith('/validate') && method === 'POST') {
+        setCors();
+        const id = url.split('/').filter(Boolean)[2];
+        try {
+          const { validateFinding, onFindingValidated, proposeBlockFromFinding } = await import(
+            '../vuln-discovery/index.js'
+          );
+          const result = validateFinding(id, { llmConfirmation: true });
+          if (!result) {
+            writeJson(res, 404, { error: 'Finding not found' });
+            return;
+          }
+          if (result.promoted) {
+            await onFindingValidated(id);
+            // Auto propose block for human Accept (never auto-apply)
+            try {
+              await proposeBlockFromFinding(id, { tenantId: requestTenantId });
+            } catch {
+              /* non-fatal */
+            }
+          }
+          writeJson(res, 200, available({ ...result } as Record<string, unknown>));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Validate failed',
+          });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/vuln-findings/') && url.endsWith('/reject') && method === 'POST') {
+        setCors();
+        const id = url.split('/').filter(Boolean)[2];
+        try {
+          const body = await readBody(req).catch(() => ({} as Record<string, unknown>));
+          const { rejectFinding } = await import('../vuln-discovery/index.js');
+          const finding = rejectFinding(id, typeof body.reason === 'string' ? body.reason : undefined);
+          if (!finding) {
+            writeJson(res, 404, { error: 'Finding not found' });
+            return;
+          }
+          writeJson(res, 200, available({ finding }));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Reject failed',
+          });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/vuln-findings/') && url.endsWith('/analysis/approve') && method === 'POST') {
+        setCors();
+        const id = url.split('/').filter(Boolean)[2];
+        try {
+          const { approveAnalysisReport } = await import('../vuln-discovery/index.js');
+          const report = approveAnalysisReport(id);
+          if (!report) {
+            writeJson(res, 404, { error: 'Analysis not found — run Deep analysis first' });
+            return;
+          }
+          writeJson(res, 200, available({
+            ...(report as unknown as Record<string, unknown>),
+            report,
+            fullText: report.fullText,
+          }));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Approve analysis failed',
+          });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/vuln-findings/') && url.endsWith('/propose-block') && method === 'POST') {
+        setCors();
+        const id = url.split('/').filter(Boolean)[2];
+        try {
+          const { proposeBlockFromFinding } = await import('../vuln-discovery/index.js');
+          const result = await proposeBlockFromFinding(id, { tenantId: requestTenantId });
+          if (!result.ok) {
+            writeJson(res, 400, { error: result.reason || 'Propose block failed' });
+            return;
+          }
+          writeJson(res, 200, available({
+            candidateId: result.candidateId,
+            fingerprint: result.fingerprint,
+            candidate: result.candidate,
+          } as Record<string, unknown>));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Propose block failed',
+          });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/vuln-findings/') && url.endsWith('/disclose') && method === 'POST') {
+        setCors();
+        const id = url.split('/').filter(Boolean)[2];
+        try {
+          const { markDisclosed } = await import('../vuln-discovery/index.js');
+          const finding = markDisclosed(id);
+          if (!finding) {
+            writeJson(res, 404, { error: 'Finding not found' });
+            return;
+          }
+          writeJson(res, 200, available({ finding }));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Disclose failed';
+          writeJson(res, msg.includes('approved') ? 400 : 500, { error: msg });
         }
         return;
       }

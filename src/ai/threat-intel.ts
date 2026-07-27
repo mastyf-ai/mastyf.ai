@@ -395,7 +395,7 @@ export class ThreatIntel {
   private async pollGitHubFeed(): Promise<ThreatIntelEntry[]> {
     try {
       const response = await fetch(
-        'https://api.github.com/advisories?type=reviewed&per_page=10&ecosystem=npm',
+        'https://api.github.com/advisories?type=reviewed&per_page=30&ecosystem=npm',
         {
           headers: {
             'Accept': 'application/vnd.github+json',

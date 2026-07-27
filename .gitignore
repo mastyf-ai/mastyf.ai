@@ -57,6 +57,7 @@ reports/home/tenants/default/dashboard-access.jsonl
 *.tsbuildinfo
 apps/proxy-core/proxy-core
 benchmarks/results/
+.tmp/
 sca/*.md
 sca/*.png
 sca/ai-learning-metrics.json

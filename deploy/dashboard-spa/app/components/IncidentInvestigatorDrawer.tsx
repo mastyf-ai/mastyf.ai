@@ -4,11 +4,18 @@ import { useEffect, useState } from 'react';
 import { investigateIncident } from '@/lib/mastyf-ai-api';
 
 export type ThreatLabContext = {
+  /** Semantic audit / incident id — empty when source is vuln-finding */
   semanticAuditId: string;
   toolName: string;
   category: string;
   narrative?: string;
   incidentId?: string;
+  /** Vuln Discovery handoff */
+  source?: 'semantic-audit' | 'vuln-finding';
+  findingId?: string;
+  /** Threat Lab candidate id from propose-block */
+  candidateId?: string;
+  discoveryLane?: 'advisory' | 'novel-runtime' | 'other';
 };
 
 type IntentNode = {

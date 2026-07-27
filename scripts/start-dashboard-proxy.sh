@@ -60,6 +60,13 @@ export MASTYF_AI_THREAT_RESEARCH_AUTO="${MASTYF_AI_THREAT_RESEARCH_AUTO:-true}"
 export SWARM_THREAT_RESEARCH_AUTO="${SWARM_THREAT_RESEARCH_AUTO:-true}"
 export MASTYF_AI_THREAT_RESEARCH_REQUIRE_REPLAY="${MASTYF_AI_THREAT_RESEARCH_REQUIRE_REPLAY:-false}"
 export MASTYF_AI_HOME="${MASTYF_AI_HOME:-$PWD/reports/home}"
+# Shared vuln store for fleet children (findings / live-stats / disclosure packages)
+export MASTYF_AI_VULN_STORE_DIR="${MASTYF_AI_VULN_STORE_DIR:-$MASTYF_AI_HOME}"
+# When VDE is on, enable live novel tap unless explicitly disabled
+if [ "${MASTYF_AI_VULN_DISCOVERY_ENABLED:-}" = "true" ] \
+  && [ "${MASTYF_AI_VULN_LIVE_TAP:-}" != "false" ]; then
+  export MASTYF_AI_VULN_LIVE_TAP=true
+fi
 export METRICS_ENABLED="${METRICS_ENABLED:-true}"
 export DASHBOARD_PORT="${DASHBOARD_PORT:-4000}"
 export METRICS_PORT="${METRICS_PORT:-9090}"

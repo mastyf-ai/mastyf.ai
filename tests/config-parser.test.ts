@@ -51,14 +51,13 @@ describe('ConfigParser', () => {
     expect(servers[0].command).toBe('echo');
   });
 
-  it('parses flat config (no mcpServers/servers wrapper)', () => {
-    const configPath = path.join(tmpDir, 'flat.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      'my-server': { command: 'node', args: ['server.js'] },
-    }));
-    const servers = ConfigParser.parse(configPath);
-    expect(servers).toHaveLength(1);
-    expect(servers[0].name).toBe('my-server');
+  it('rejects JSON array configs that would become numeric server names', () => {
+    const configPath = path.join(tmpDir, 'array.json');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify([{ command: 'npx', args: ['-y', '@scope/pkg'] }]),
+    );
+    expect(() => ConfigParser.parse(configPath)).toThrow(/JSON array/);
   });
 
   it('handles missing optional fields with defaults', () => {

@@ -22,8 +22,8 @@ import { persistCallRecord } from '../utils/call-record-cost.js';
 import { TokenCounter } from '../utils/token-counter.js';
 import { resolveModelIdForServer } from '../config/llm-config.js';
 import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
-import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
+import { inspectToolResponse as sharedInspectToolResponse } from './response-inspection.js';
 import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import { parseJsonWithDepthLimit } from './http-proxy-security.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
@@ -241,7 +241,7 @@ export class StreamableHttpProxyServer {
     }
 
     if (msg.method === 'tools/call' && (upstream as { result?: unknown }).result != null) {
-      const params = msg.params as { name?: string } | undefined;
+      const params = msg.params as { name?: string; arguments?: Record<string, unknown> } | undefined;
       const toolName = params?.name || 'unknown';
       let tenantId = 'default';
       try {
@@ -251,27 +251,18 @@ export class StreamableHttpProxyServer {
       } catch {
         /* use default */
       }
-      const gated = await gateToolResponseText({
-        responseText: JSON.stringify((upstream as { result: unknown }).result),
+      const inspected = await sharedInspectToolResponse({
+        response: upstream as Record<string, unknown>,
         toolName,
         serverName: this.opts.serverName,
-        policy: this.opts.policy,
-        requestId: msg.id as string | number | undefined,
+        requestId: (msg.id as string | number) ?? 0,
         tenantId,
+        policyEngine: this.opts.policy,
+        transportLabel: 'streamable-http',
+        toolArguments: params?.arguments,
       });
-      if (gated.outcome.action === 'block') {
-        return {
-          jsonrpc: '2.0',
-          id: msg.id,
-          error: { code: -32002, message: gated.outcome.message },
-        };
-      }
-      if (gated.outcome.action === 'redact') {
-        try {
-          (upstream as { result: unknown }).result = JSON.parse(gated.outcome.body);
-        } catch {
-          /* keep */
-        }
+      if (inspected.blocked && inspected.blockResponse) {
+        return inspected.blockResponse;
       }
     }
 

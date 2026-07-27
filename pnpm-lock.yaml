@@ -46,6 +46,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: ^0.217.0
         version: 0.217.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.7.1
+        version: 2.7.1(@opentelemetry/api@1.9.1)
       argon2:
         specifier: ^0.41.1
         version: 0.41.1

@@ -12,7 +12,7 @@ export type WorkspaceId =
   | 'logs';
 
 export type ActivityView = 'realtime' | 'audit' | 'analytics' | 'infrastructure';
-export type SecurityView = 'overview' | 'threats' | 'intel' | 'swarm' | 'learning' | 'quarantine' | 'feeds';
+export type SecurityView = 'overview' | 'threats' | 'intel' | 'vulns' | 'swarm' | 'learning' | 'quarantine' | 'feeds';
 export type PolicyView = 'rules' | 'editor' | 'test' | 'history' | 'eval' | 'review';
 export type CostView = 'overview' | 'breakdown' | 'budgets';
 export type ServersView = 'overview' | 'health' | 'certifications' | 'registry';
@@ -51,6 +51,7 @@ export const WORKSPACE_CONFIG: Record<WorkspaceId, {
       { id: 'overview', label: 'Posture Overview' },
       { id: 'threats', label: 'Threat Detection' },
       { id: 'intel', label: 'Threat Intel' },
+      { id: 'vulns', label: 'Vuln Discovery' },
       { id: 'swarm', label: 'Swarm Analysis' },
       { id: 'learning', label: 'AI Learning' },
       { id: 'quarantine', label: 'Quarantine' },

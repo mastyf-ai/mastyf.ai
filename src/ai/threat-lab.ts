@@ -33,7 +33,12 @@ export interface ThreatLabDiscovery {
   confidence: number;
 }
 
-export type ThreatLabSource = 'bypass' | 'semantic-tp' | 'threat-intel' | 'corpus-proactive';
+export type ThreatLabSource =
+  | 'bypass'
+  | 'semantic-tp'
+  | 'threat-intel'
+  | 'corpus-proactive'
+  | 'vuln-discovery';
 
 export interface ThreatLabCandidateProvenance {
   source: ThreatLabSource;
@@ -603,3 +608,53 @@ export function threatLabMode(): 'reactive' | 'proactive' {
 export function threatLabSemanticEnabled(): boolean {
   return process.env.SWARM_THREAT_LAB_SEMANTIC !== 'false';
 }
+
+/**
+ * Discover attack probes / policy mitigations from a VulnFinding (unpublished vuln discovery).
+ */
+export async function discoverFromVulnFinding(
+  finding: {
+    id: string;
+    class: string;
+    severity: string;
+    title: string;
+    description: string;
+    target: { kind: string; name: string; version?: string };
+    evidence: { reproSteps: string[]; scanner: string };
+    analysisExecutiveSummary?: string;
+    exploitScenario?: string;
+  },
+  opts?: { llm?: LlmAssistant; seq?: number },
+): Promise<ThreatLabDiscovery | null> {
+  const ready = await ensureThreatLabLlmReady(opts?.llm);
+  if (!ready.ok) return null;
+
+  const toolName = finding.target.name.includes(':')
+    ? finding.target.name.split(':').pop()!
+    : 'search';
+
+  const contextNote = [
+    `VulnFinding ${finding.id} (${finding.severity}/${finding.class})`,
+    finding.description.slice(0, 300),
+    finding.analysisExecutiveSummary?.slice(0, 400) || '',
+    finding.exploitScenario?.slice(0, 400) || '',
+    `scanner=${finding.evidence.scanner}`,
+    ...finding.evidence.reproSteps.slice(0, 5),
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const bypass: BypassContext = {
+    fingerprint: finding.id,
+    toolName,
+    tool: toolName,
+    category: finding.class,
+    reason: finding.title,
+    block_reason: finding.title,
+    payload: contextNote.slice(0, 800),
+    arguments: { query: finding.evidence.reproSteps[0] || finding.title },
+  };
+
+  return discoverViaLlm(ready.llm, { bypass, seq: opts?.seq ?? 1 });
+}
+

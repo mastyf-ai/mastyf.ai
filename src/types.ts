@@ -31,6 +31,8 @@ export interface CveFinding {
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   summary: string;
   fixedVersion?: string;
+  /** Provenance — used to require OSV corroboration for NVD keyword hits */
+  source?: 'osv' | 'nvd';
 }
 
 export interface AuthStatus {

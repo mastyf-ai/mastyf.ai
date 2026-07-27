@@ -1,0 +1,20 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "%2e%2e%2f%2e%2e%2fetc%2fpasswd%00"
+  },
+  "expected": "block",
+  "category": "edge-cases",
+  "ruleHint": "mixed-encoding-escape",
+  "source": "auto-promoted",
+  "autoResearch": {
+    "advId": "adv-536",
+    "source": "corpus_proactive",
+    "attackClass": "boundary-evasion-escape",
+    "hypothesis": "An attacker can bypass path traversal defenses by combining URL-encoded and hex-escaped null characters in a single request.",
+    "confidence": 0.95,
+    "llmUsed": true,
+    "promotedAt": "2026-07-26T21:23:28.880Z",
+    "verifiedBlockedBy": "resource-null-byte"
+  }
+}

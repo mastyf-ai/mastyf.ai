@@ -24,7 +24,7 @@ describe('pickMastyfAiConfig', () => {
         mcpServers: { fs: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'] } },
       }),
     );
-    const hit = pickMastyfAiConfig({ searchRoots: [dir] });
+    const hit = pickMastyfAiConfig({ searchRoots: [dir], includeOnboard: false });
     expect(hit).toContain('one.json');
   });
 
@@ -40,6 +40,6 @@ describe('pickMastyfAiConfig', () => {
         },
       }),
     );
-    expect(pickMastyfAiConfig({ searchRoots: [dir] })).toBeNull();
+    expect(pickMastyfAiConfig({ searchRoots: [dir], includeOnboard: false })).toBeNull();
   });
 });

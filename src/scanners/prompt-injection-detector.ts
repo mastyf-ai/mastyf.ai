@@ -45,7 +45,7 @@ export const INJECTION_RULES: InjectionPattern[] = [
   { id: 'role-override', severity: 'critical', description: 'Role/persona override attempt',
     regex: '(?:you are now|you\'re now|act as|pretend (?:to be|you are)|your new (?:role|persona|identity|character) is)' },
   { id: 'role-override-v2', severity: 'critical', description: 'Role redefinition with character framing',
-    regex: '(?:imagine you(?:\'re| are)|from this point forward,? you (?:are|will be)|you have been (?:reprogrammed|reconfigured|updated) to)' },
+    regex: '(?:imagine you(?:\'re| are)|from this point forward,? you (?:are|will be)|you have been (?:reprogrammed|reconfigured|updated)(?:\s+to)?)' },
   { id: 'assistant-override', severity: 'critical', description: 'Assistant/helper persona redefinition',
     regex: '(?:you are (?:now )?(?:an? )?(?:unfiltered|unrestricted|uncensored|evil|malicious|dark|rogue|corrupt) (?:AI|assistant|bot|agent|model|chatbot))' },
 
@@ -106,6 +106,8 @@ export const INJECTION_RULES: InjectionPattern[] = [
     regex: '(?:turn off|disable|deactivate)\\s+(?:all\\s+)?(?:safety|content)\\s+(?:filters?|moderation|guardrails?|restrictions?)' },
   { id: 'safety-filters-off-v2', severity: 'critical', description: 'Safety filters disabled phrasing',
     regex: 'safety\\s+filters?\\s+(?:off|disabled)' },
+  { id: 'chatml-system-injection', severity: 'critical', description: 'ChatML/special-token system override in tool result',
+    regex: '(?:<\\|im_start\\|>\\s*system|<\\|system\\|>|\\[INST\\].{0,40}(?:system|override)|Override safety protocols)' },
   { id: 'inverse-instructions', severity: 'critical', description: 'Inverse/opposite instruction jailbreak',
     regex: '(?:inverse|opposite)\\s+(?:mode\\s*[:;]?\\s*)?(?:of\\s+)?(?:your\\s+)?instructions' },
 

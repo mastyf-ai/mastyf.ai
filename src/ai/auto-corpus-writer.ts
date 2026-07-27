@@ -11,7 +11,8 @@ import {
 } from 'fs';
 import { join } from 'path';
 import { mastyfAiHomeDir } from '../audit/tenant-audit-paths.js';
-import { resolveSwarmOutputDir } from '../tenant/swarm-tenant-paths.js';
+import { resolveSwarmOutputDir, resolveTenantSwarmDir } from '../tenant/swarm-tenant-paths.js';
+import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import type { ThreatLabDiscovery } from './threat-lab.js';
 
 export type AutoCorpusSource =
@@ -19,7 +20,9 @@ export type AutoCorpusSource =
   | 'block_repeat'
   | 'threat_intel'
   | 'bypass'
-  | 'corpus_proactive';
+  | 'corpus_proactive'
+  | 'dependency_anomaly'
+  | 'vuln_discovery';
 
 export interface AutoCorpusProvenance {
   source: AutoCorpusSource;
@@ -37,7 +40,6 @@ export interface AutoCorpusWriteResult {
 }
 
 const DEFAULT_CUSTOM = join(process.cwd(), 'adversarial-harness', 'fixtures', 'custom-attacks');
-const DEFAULT_MANIFEST = join(resolveSwarmOutputDir(), 'auto-corpus-manifest.json');
 
 export function candidateFingerprint(discovery: ThreatLabDiscovery): string {
   return createHash('sha256')
@@ -52,8 +54,16 @@ export function customAttacksDir(): string {
   return process.env.MASTYF_AI_AUTO_CORPUS_DIR || DEFAULT_CUSTOM;
 }
 
+/** Resolve at call time — swarm dir can change after module load (fleet/dashboard). */
 export function autoCorpusManifestPath(): string {
-  return process.env.MASTYF_AI_AUTO_CORPUS_MANIFEST || DEFAULT_MANIFEST;
+  const explicit = process.env.MASTYF_AI_AUTO_CORPUS_MANIFEST?.trim();
+  if (explicit) return explicit;
+  const swarmPath = join(resolveSwarmOutputDir(), 'auto-corpus-manifest.json');
+  if (existsSync(swarmPath)) return swarmPath;
+  // Fleet / tenant writers often land under reports/tenants/<id>/security-swarm
+  const tenantPath = join(resolveTenantSwarmDir(DEFAULT_TENANT_ID), 'auto-corpus-manifest.json');
+  if (existsSync(tenantPath)) return tenantPath;
+  return swarmPath;
 }
 
 export function threatResearchProcessedPath(): string {
@@ -110,24 +120,35 @@ type ManifestEntry = AutoCorpusWriteResult &
     timestamp: string;
     toolName: string;
     category: string;
+    /** Operator review status for dashboard Pending Review queue */
+    status?: 'pending' | 'approved' | 'rejected';
   };
 
-function appendManifest(entry: ManifestEntry): void {
+export type AutoCorpusManifestEntry = ManifestEntry;
+
+function loadManifestFile(): { timestamp: string; count: number; entries: ManifestEntry[] } {
+  const path = autoCorpusManifestPath();
+  if (!existsSync(path)) {
+    return { timestamp: new Date().toISOString(), count: 0, entries: [] };
+  }
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8')) as {
+      timestamp: string;
+      count: number;
+      entries: ManifestEntry[];
+    };
+  } catch {
+    return { timestamp: new Date().toISOString(), count: 0, entries: [] };
+  }
+}
+
+function saveManifestFile(manifest: {
+  timestamp: string;
+  count: number;
+  entries: ManifestEntry[];
+}): void {
   const path = autoCorpusManifestPath();
   mkdirSync(join(path, '..'), { recursive: true });
-  let manifest: { timestamp: string; count: number; entries: ManifestEntry[] } = {
-    timestamp: new Date().toISOString(),
-    count: 0,
-    entries: [],
-  };
-  if (existsSync(path)) {
-    try {
-      manifest = JSON.parse(readFileSync(path, 'utf-8')) as typeof manifest;
-    } catch {
-      /* reset */
-    }
-  }
-  manifest.entries.push(entry);
   manifest.count = manifest.entries.length;
   manifest.timestamp = new Date().toISOString();
   if (manifest.entries.length > 500) {
@@ -135,6 +156,43 @@ function appendManifest(entry: ManifestEntry): void {
     manifest.count = manifest.entries.length;
   }
   writeFileSync(path, JSON.stringify(manifest, null, 2));
+}
+
+function appendManifest(entry: ManifestEntry): void {
+  const manifest = loadManifestFile();
+  manifest.entries.push({ ...entry, status: entry.status || 'pending' });
+  saveManifestFile(manifest);
+}
+
+/** Set review status on a swarm auto-corpus manifest entry (dashboard Approve/Reject). */
+export function setAutoCorpusManifestStatus(
+  advId: string,
+  status: 'pending' | 'approved' | 'rejected',
+): { ok: boolean; error?: string; entry?: ManifestEntry } {
+  const id = advId.trim();
+  if (!id) return { ok: false, error: 'advId required' };
+  const manifest = loadManifestFile();
+  const entry = manifest.entries.find((e) => e.advId === id);
+  if (!entry) return { ok: false, error: 'Entry not found' };
+  entry.status = status;
+  saveManifestFile(manifest);
+  return { ok: true, entry };
+}
+
+/** Approve or reject all pending writer-manifest entries. */
+export function setAllPendingAutoCorpusStatus(
+  status: 'approved' | 'rejected',
+): { ok: boolean; count: number } {
+  const manifest = loadManifestFile();
+  let count = 0;
+  for (const entry of manifest.entries) {
+    if (!entry.status || entry.status === 'pending') {
+      entry.status = status;
+      count++;
+    }
+  }
+  if (count > 0) saveManifestFile(manifest);
+  return { ok: true, count };
 }
 
 export function writeAutoCorpusFixture(
@@ -187,11 +245,12 @@ export function readAutoCorpusManifest(): {
   const path = autoCorpusManifestPath();
   if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, 'utf-8')) as {
+    const data = JSON.parse(readFileSync(path, 'utf-8')) as {
       timestamp: string;
       count: number;
       entries: ManifestEntry[];
     };
+    return data;
   } catch {
     return null;
   }

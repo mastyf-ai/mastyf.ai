@@ -44,6 +44,20 @@ function findLinkedCandidate(
   candidates: ThreatLabCandidate[],
   ctx: ThreatLabContext,
 ): ThreatLabCandidate | null {
+  if (ctx.source === 'vuln-finding' && ctx.findingId) {
+    if (ctx.candidateId) {
+      const byId = candidates.find((c) => c.id === ctx.candidateId);
+      if (byId) return byId;
+    }
+    return (
+      candidates.find(
+        (c) =>
+          c.provenance?.inputFingerprint === ctx.findingId
+          || c.id === `vuln-block-${ctx.findingId}`
+          || (c.provenance?.source === 'vuln-discovery' && c.provenance?.inputFingerprint === ctx.findingId),
+      ) ?? null
+    );
+  }
   return (
     candidates.find(
       (c) =>
@@ -157,13 +171,24 @@ export function ThreatLabWorkbench({
 
   useEffect(() => {
     if (!preloadedContext) return;
-    setInvestigateId(preloadedContext.semanticAuditId);
+    // Vuln findings are not semantic audits — never open Incident Investigator for them
+    if (preloadedContext.source === 'vuln-finding') {
+      setInvestigateId(null);
+    } else if (preloadedContext.semanticAuditId) {
+      setInvestigateId(preloadedContext.semanticAuditId);
+    }
     const linked = findLinkedCandidate(candidates, preloadedContext);
     if (linked) setSelected(linked);
     requestAnimationFrame(() => {
       bannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
-  }, [preloadedContext?.semanticAuditId, candidates]);
+  }, [
+    preloadedContext?.semanticAuditId,
+    preloadedContext?.findingId,
+    preloadedContext?.candidateId,
+    preloadedContext?.source,
+    candidates,
+  ]);
 
   const investigateDrawer = investigateId ? (
     <IncidentInvestigatorDrawer
@@ -177,7 +202,11 @@ export function ThreatLabWorkbench({
       {preloadedContext ? (
         <div ref={bannerRef} style={{ marginBottom: 'var(--space-4)' }}>
           <Card
-            title="Incident context"
+            title={
+              preloadedContext.source === 'vuln-finding'
+                ? 'Vuln Discovery context'
+                : 'Incident context'
+            }
             subtitle={`${preloadedContext.category} · ${preloadedContext.toolName}`}
             actions={
               onClearContext ? (
@@ -188,14 +217,30 @@ export function ThreatLabWorkbench({
             }
           >
             <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-3)' }}>
-              Semantic audit <code className="text-xs">{preloadedContext.semanticAuditId}</code>
-              {preloadedContext.narrative ? ` — ${preloadedContext.narrative}` : null}
+              {preloadedContext.source === 'vuln-finding' ? (
+                <>
+                  Finding <code className="text-xs">{preloadedContext.findingId}</code>
+                  {preloadedContext.discoveryLane
+                    ? ` · lane ${preloadedContext.discoveryLane}`
+                    : null}
+                  {preloadedContext.candidateId
+                    ? <> · candidate <code className="text-xs">{preloadedContext.candidateId}</code></>
+                    : null}
+                  {preloadedContext.narrative ? ` — ${preloadedContext.narrative}` : null}
+                  . Accept the linked candidate below to apply the block rule; Reject leaves policy unchanged.
+                </>
+              ) : (
+                <>
+                  Semantic audit <code className="text-xs">{preloadedContext.semanticAuditId}</code>
+                  {preloadedContext.narrative ? ` — ${preloadedContext.narrative}` : null}
+                </>
+              )}
             </p>
             <div className="flex gap-2 flex-wrap">
               <Button variant="ghost" size="sm" onClick={() => void onRefresh?.()}>
                 Refresh candidates
               </Button>
-              {canRun ? (
+              {canRun && preloadedContext.source !== 'vuln-finding' ? (
                 <Button
                   variant="secondary"
                   size="sm"

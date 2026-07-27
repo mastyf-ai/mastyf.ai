@@ -21,6 +21,8 @@ export interface CertificationCheck {
 export interface CertifyManualInputs {
   trustScore: number; complianceScore: number; cveFree: boolean;
   authMethod: string; transport: string; trustedPublisher: boolean;
+  /** Protocol/tool fuzz critical failures — blocks certification when > 0 */
+  fuzzCriticalFailures?: number;
 }
 
 export class MCPCertifier {
@@ -79,6 +81,17 @@ export class MCPCertifier {
       { id: 'auth', name: 'Authentication Configured', passed: results.authMethod !== 'none', score: results.authMethod !== 'none' ? 100 : 0, maxScore: 100, details: `Auth: ${results.authMethod}` },
       { id: 'transport', name: 'Secure Transport', passed: results.transport !== 'http', score: results.transport === 'mTLS' ? 100 : results.transport === 'https' ? 70 : 30, maxScore: 100, details: `Transport: ${results.transport}` },
       { id: 'supply-chain', name: 'Trusted Publisher', passed: results.trustedPublisher, score: results.trustedPublisher ? 100 : 0, maxScore: 100, details: results.trustedPublisher ? 'Verified publisher' : 'Unknown publisher' },
+      {
+        id: 'fuzz-clean',
+        name: 'No Critical Fuzz Failures',
+        passed: (results.fuzzCriticalFailures ?? 0) === 0,
+        score: (results.fuzzCriticalFailures ?? 0) === 0 ? 100 : 0,
+        maxScore: 100,
+        details:
+          (results.fuzzCriticalFailures ?? 0) === 0
+            ? 'No critical protocol/tool fuzz failures'
+            : `${results.fuzzCriticalFailures} critical fuzz failure(s)`,
+      },
     ];
     const totalScore = Math.round(checks.reduce((s, c) => s + c.score, 0) / checks.length);
     let level: CertificationResult['level'] = totalScore >= 90 ? 'platinum' : totalScore >= 75 ? 'gold' : totalScore >= 60 ? 'silver' : 'bronze';

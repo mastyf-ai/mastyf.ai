@@ -457,6 +457,13 @@ if (process.env.SWARM_THREAT_LAB === 'true') {
   });
 }
 
+if (process.env.SWARM_VULN_DISCOVERY === 'true') {
+  run('node', ['security-swarm/agents/vuln-discovery.mjs'], {
+    label: 'vuln-discovery',
+    totalSteps: totalSteps + 1,
+  });
+}
+
 if (process.env.SWARM_THREAT_RESEARCH_AUTO === 'true') {
   run('node', ['security-swarm/agents/auto-threat-research.mjs'], {
     label: 'auto-threat-research',

@@ -23,10 +23,10 @@ import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement
 import { notifyToolBlock } from '../alerting/notify-tool-block.js';
 import { getCircuitBreaker } from '../utils/circuit-breaker-registry.js';
 import { scanForSecrets } from '../scanners/secret-scanner.js';
-import { findingsToMessages, isResponseScanSkipped, createStreamingInspectorState, type StreamingInspectorState } from '../utils/streaming-inspector.js';
+import { createStreamingInspectorState, type StreamingInspectorState } from '../utils/streaming-inspector.js';
 import { inspectCostStreamingChunk } from '../agentic/response-dlp/cost-streaming-inspector.js';
 import { withProxyRequestVault } from './proxy-request-context.js';
-import { gateToolResponseText } from '../utils/response-security-gate.js';
+import { inspectToolResponse as sharedInspectToolResponse } from './response-inspection.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { TokenCounter } from '../utils/token-counter.js';
 import { resolveModelIdForServer } from '../config/llm-config.js';
@@ -65,6 +65,7 @@ export class WebSocketProxyServer {
   private wss: WebSocketServer | null = null;
   private rugPullState: ToolFingerprintState = { fingerprint: null, blocked: false };
   private pendingToolCalls = new Map<string | number, string>();
+  private pendingToolArgs = new Map<string | number, Record<string, unknown>>();
   private pendingMcpMethods = new Map<string | number, string>();
   private pendingMcpSessions = new Map<string | number, string>();
   private pendingToolTenants = new Map<string | number, string>();
@@ -226,6 +227,7 @@ export class WebSocketProxyServer {
       }
 
       const toolName = this.pendingToolCalls.get(requestId) ?? 'unknown';
+      const toolArguments = this.pendingToolArgs.get(requestId);
       const tenantId = this.pendingToolTenants.get(requestId);
       const costState = this.pendingStreamingCost.get(requestId);
       if (costState) {
@@ -233,6 +235,7 @@ export class WebSocketProxyServer {
         this.pendingStreamingCost.delete(requestId);
         if (costCheck.terminateStream) {
           this.pendingToolCalls.delete(requestId);
+          this.pendingToolArgs.delete(requestId);
           this.pendingToolTenants.delete(requestId);
           if (clientWs.readyState === WebSocket.OPEN) {
             clientWs.send(JSON.stringify({
@@ -248,10 +251,20 @@ export class WebSocketProxyServer {
         }
       }
       this.pendingToolCalls.delete(requestId);
+      this.pendingToolArgs.delete(requestId);
       this.pendingToolTenants.delete(requestId);
-      const blocked = await this.inspectToolResponse(toolName, msg, requestId, tenantId);
-      if (blocked) {
-        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(blocked));
+      const inspected = await sharedInspectToolResponse({
+        response: msg,
+        toolName,
+        serverName: this.opts.serverName,
+        requestId,
+        tenantId,
+        policyEngine: this.opts.policy,
+        transportLabel: 'ws-proxy',
+        toolArguments,
+      });
+      if (inspected.blocked && inspected.blockResponse) {
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(inspected.blockResponse));
         return;
       }
       this.applyRotatedSessionToMessage(msg, requestId);
@@ -262,76 +275,6 @@ export class WebSocketProxyServer {
     }
 
     if (clientWs.readyState === WebSocket.OPEN) clientWs.send(raw);
-  }
-
-  private async inspectToolResponse(
-    toolName: string,
-    response: Record<string, unknown>,
-    requestId: string | number,
-    tenantId?: string,
-  ): Promise<Record<string, unknown> | null> {
-    const result = (response as { result?: unknown }).result;
-    if (result == null || isResponseScanSkipped()) return null;
-
-    const responseText = JSON.stringify(result);
-    const gate = await gateToolResponseText({
-      responseText,
-      toolName,
-      serverName: this.opts.serverName,
-      policy: this.opts.policy,
-      requestId,
-      tenantId,
-    });
-    const inspect = gate.inspect;
-    if (!inspect || inspect.clean) {
-      if (gate.outcome.action === 'redact' && gate.outcome.body) {
-        try {
-          (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
-        } catch {
-          /* keep upstream */
-        }
-      }
-      return null;
-    }
-
-    const hasCritical = inspect.hasCritical;
-    const hasHigh = inspect.hasHigh;
-    const allMessages = findingsToMessages(inspect.findings);
-    Logger.warn(
-      `[ws-proxy:${this.opts.serverName}] Suspicious response from '${toolName}': ${allMessages.slice(0, 5).join('; ')}`,
-    );
-    StructuredLogger.info({
-      event: 'response_flagged',
-      serverName: this.opts.serverName,
-      toolName,
-      detections: allMessages,
-      blocked: gate.outcome.action === 'block',
-    });
-    Metrics.injectionDetectedTotal?.inc({
-      server_name: this.opts.serverName,
-      severity: hasCritical ? 'critical' : 'high',
-    });
-
-    if (gate.outcome.action === 'redact') {
-      try {
-        (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
-      } catch {
-        /* keep upstream */
-      }
-      return null;
-    }
-
-    if (gate.outcome.action === 'block') {
-      return {
-        jsonrpc: '2.0',
-        id: requestId,
-        error: {
-          code: -32002,
-          message: gate.outcome.message,
-        },
-      };
-    }
-    return null;
   }
 
   private async interceptMessage(
@@ -406,6 +349,8 @@ export class WebSocketProxyServer {
         }
         if (params?.name) {
           this.pendingToolCalls.set(msg.id as string | number, params.name);
+          const args = (msg.params as { arguments?: Record<string, unknown> } | undefined)?.arguments;
+          if (args) this.pendingToolArgs.set(msg.id as string | number, args);
         }
       }
       if (this.rugPullState.blocked) {
@@ -428,6 +373,7 @@ export class WebSocketProxyServer {
       if (blocked) {
         if (msg.id != null) {
           this.pendingToolCalls.delete(msg.id as string | number);
+          this.pendingToolArgs.delete(msg.id as string | number);
         }
         clientWs.send(JSON.stringify(blocked));
         return;

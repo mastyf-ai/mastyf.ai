@@ -47,6 +47,16 @@ export interface ThreatResearchEvent {
   corpusSeed?: CorpusCandidate & { relPath?: string };
   blockRule?: string;
   toolName?: string;
+  /** Pre-advisory dependency / VDE finding context */
+  vulnFinding?: {
+    id: string;
+    class: string;
+    severity: string;
+    title: string;
+    description: string;
+    target: { kind: string; name: string; version?: string };
+    evidence: { reproSteps: string[]; scanner: string };
+  };
 }
 
 export interface ThreatResearchResult {
@@ -73,6 +83,8 @@ export function threatLabSourceToAutoCorpusSource(source: ThreatLabSource): Auto
       return 'threat_intel';
     case 'corpus-proactive':
       return 'corpus_proactive';
+    case 'vuln-discovery':
+      return 'vuln_discovery';
     case 'bypass':
     default:
       return 'bypass';
@@ -389,6 +401,15 @@ async function discoverForEvent(
     case 'corpus_proactive':
       if (!event.corpusSeed) return null;
       return discoverFromCorpusSeed(event.corpusSeed, { llm, seq });
+    case 'dependency_anomaly':
+    case 'vuln_discovery': {
+      if (!event.vulnFinding && !event.bypass) return null;
+      if (event.vulnFinding) {
+        const { discoverFromVulnFinding } = await import('./threat-lab.js');
+        return discoverFromVulnFinding(event.vulnFinding, { llm, seq });
+      }
+      return discoverFromBypass(event.bypass!, { llm, seq });
+    }
     default:
       return null;
   }
@@ -515,6 +536,43 @@ export function buildThreatIntelEvent(entry: ThreatIntelEntry): ThreatResearchEv
     type: 'threat_intel',
     fingerprint: `threat-intel:${entry.id}`,
     threatEntry: entry,
+  };
+}
+
+/** Pre-advisory npm audit / SBOM finding without a published CVE. */
+export function buildDependencyAnomalyEvent(finding: {
+  id: string;
+  class: string;
+  severity: string;
+  title: string;
+  description: string;
+  target: { kind: string; name: string; version?: string };
+  evidence: { reproSteps: string[]; scanner: string };
+  fingerprint?: string;
+}): ThreatResearchEvent {
+  return {
+    type: 'dependency_anomaly',
+    fingerprint: finding.fingerprint || `dep-anomaly:${finding.id}`,
+    confidence: finding.severity === 'CRITICAL' || finding.severity === 'HIGH' ? 0.9 : 0.7,
+    vulnFinding: finding,
+  };
+}
+
+export function buildVulnDiscoveryEvent(finding: {
+  id: string;
+  class: string;
+  severity: string;
+  title: string;
+  description: string;
+  target: { kind: string; name: string; version?: string };
+  evidence: { reproSteps: string[]; scanner: string };
+  fingerprint?: string;
+}): ThreatResearchEvent {
+  return {
+    type: 'vuln_discovery',
+    fingerprint: finding.fingerprint || `vuln:${finding.id}`,
+    confidence: 0.85,
+    vulnFinding: finding,
   };
 }
 

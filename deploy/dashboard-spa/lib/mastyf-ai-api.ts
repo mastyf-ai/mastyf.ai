@@ -2202,14 +2202,34 @@ export async function runThreatLab(
   return { ok: res.ok, error: body.error, jobId: body.jobId };
 }
 
-export async function runAutoThreatResearch(): Promise<{ ok: boolean; error?: string; jobId?: string }> {
+export async function runAutoThreatResearch(): Promise<{
+  ok: boolean;
+  error?: string;
+  jobId?: string;
+  status?: number;
+}> {
+  const headers = await buildMutatingHeaders();
   const res = await mastyfAiFetch('/api/threat-discovery/auto-research/run', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: '{}',
   });
-  const body = (await res.json()) as { error?: string; jobId?: string };
-  return { ok: res.ok, error: body.error, jobId: body.jobId };
+  const body = (await res.json().catch(() => ({}))) as { error?: string; jobId?: string };
+  // 202 accepted, or 409 already-running (still has jobId)
+  if (res.ok || res.status === 202 || (res.status === 409 && body.jobId)) {
+    return {
+      ok: true,
+      jobId: body.jobId,
+      error: body.error,
+      status: res.status,
+    };
+  }
+  return {
+    ok: false,
+    error: body.error || `Auto Research failed (HTTP ${res.status})`,
+    jobId: body.jobId,
+    status: res.status,
+  };
 }
 
 export async function fetchThreatLabCandidate(id: string): Promise<ThreatLabCandidate | null> {
@@ -2274,6 +2294,74 @@ export async function fetchAutoCorpusManifest(): Promise<AutoCorpusEntry[]> {
   if (!res.ok) return [];
   const body = (await res.json()) as { entries?: AutoCorpusEntry[] };
   return body.entries || [];
+}
+
+export type AutoCorpusReviewEntry = {
+  advId: string;
+  category: string;
+  confidence: number;
+  source: string;
+  createdAt?: string | null;
+  timestamp?: string;
+  status?: string;
+};
+
+export async function fetchAutoCorpusPendingReview(
+  limit = 50,
+): Promise<AutoCorpusReviewEntry[]> {
+  const res = await mastyfAiFetch(
+    `/api/ai/auto-corpus/manifest?status=pending&limit=${encodeURIComponent(String(limit))}`,
+  );
+  if (!res.ok) return [];
+  const body = (await res.json()) as { entries?: AutoCorpusReviewEntry[] };
+  return body.entries || [];
+}
+
+export async function postAutoCorpusApprove(
+  advId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders({ 'Content-Type': 'application/json' });
+  const res = await mastyfAiFetch('/api/ai/auto-corpus/approve', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ advId }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+  if (!res.ok) return { ok: false, error: body.error || `Approve failed (${res.status})` };
+  return { ok: body.ok !== false, error: body.error };
+}
+
+export async function postAutoCorpusReject(
+  advId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders({ 'Content-Type': 'application/json' });
+  const res = await mastyfAiFetch('/api/ai/auto-corpus/reject', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ advId }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+  if (!res.ok) return { ok: false, error: body.error || `Reject failed (${res.status})` };
+  return { ok: body.ok !== false, error: body.error };
+}
+
+export async function postAutoCorpusApproveAll(): Promise<{
+  ok: boolean;
+  count?: number;
+  error?: string;
+}> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/ai/auto-corpus/approve-bulk', {
+    method: 'POST',
+    headers,
+  });
+  const body = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    count?: number;
+    error?: string;
+  };
+  if (!res.ok) return { ok: false, error: body.error || `Approve all failed (${res.status})` };
+  return { ok: body.ok !== false, count: body.count, error: body.error };
 }
 
 export type LiveScenarioResult = {
@@ -3694,3 +3782,382 @@ export async function fetchWidgetAudit(): Promise<WidgetAuditResponse | null> {
   if (!res.ok) return null;
   return (await res.json()) as WidgetAuditResponse;
 }
+
+
+/* ── Vuln Discovery Engine ───────────────────────────────────── */
+
+export type VulnFindingSummary = {
+  id: string;
+  class: string;
+  severity: string;
+  status: string;
+  title: string;
+  description?: string;
+  target?: { kind: string; name: string; version?: string; url?: string };
+  hasAnalysisReport?: boolean;
+  analysisReportId?: string;
+  analysisStatus?: string;
+  discoveredAt?: string;
+  validatedAt?: string;
+  /** cve-checker / npm-audit / … */
+  scanner?: string;
+  /** advisory = package advisories; novel-runtime = live fuzz/response/SAST */
+  discoveryLane?: 'advisory' | 'novel-runtime' | 'other';
+};
+
+export type VulnAnalysisReport = {
+  id: string;
+  findingId: string;
+  generatedAt: string;
+  status: string;
+  provider?: string;
+  model?: string;
+  format?: string;
+  sections: {
+    executiveSummary: string;
+    technicalDeepDive: string;
+    exploitScenario: string;
+    impactAssessment: string;
+    affectedComponents: string;
+    evidenceAndRepro: string;
+    similarPublishedCves: string;
+    estimatedSeverity: string;
+    mitigations: string;
+    mastyfRecommendations: string;
+    disclosureGuidance: string;
+  };
+  fullText: string;
+  citations?: Array<{ id: string; kind: string; excerpt: string }>;
+  confidence?: number;
+  source?: 'llm' | 'template-fallback';
+};
+
+export type VulnApiError = {
+  ok: false;
+  status: number;
+  error: string;
+};
+
+function unwrapVulnReport(body: unknown): VulnAnalysisReport | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as Record<string, unknown>;
+  const nested = b.data && typeof b.data === 'object' ? (b.data as Record<string, unknown>) : null;
+  const candidate =
+    (b.report as VulnAnalysisReport | undefined)
+    || (nested?.report as VulnAnalysisReport | undefined)
+    || (nested && typeof nested.fullText === 'string' ? (nested as unknown as VulnAnalysisReport) : undefined)
+    || (typeof b.fullText === 'string' ? (b as unknown as VulnAnalysisReport) : undefined);
+  if (!candidate || typeof candidate.fullText !== 'string' || !candidate.fullText.trim()) return null;
+  return candidate;
+}
+
+export async function fetchVulnFindings(): Promise<{
+  enabled: boolean;
+  findings: VulnFindingSummary[];
+  total: number;
+  precision?: {
+    softDenySkip: number;
+    noiseReject: number;
+    findingEmit: number;
+    promoted: number;
+  };
+} | null> {
+  const res = await mastyfAiFetch('/api/vuln-findings');
+  if (!res.ok) return null;
+  const body = (await res.json()) as {
+    data?: {
+      enabled?: boolean;
+      findings?: VulnFindingSummary[];
+      total?: number;
+      precision?: {
+        softDenySkip: number;
+        noiseReject: number;
+        findingEmit: number;
+        promoted: number;
+      };
+    };
+    enabled?: boolean;
+    findings?: VulnFindingSummary[];
+    total?: number;
+    precision?: {
+      softDenySkip: number;
+      noiseReject: number;
+      findingEmit: number;
+      promoted: number;
+    };
+  };
+  const data = body.data ?? body;
+  return {
+    enabled: !!data.enabled,
+    findings: data.findings || [],
+    total: data.total ?? data.findings?.length ?? 0,
+    precision: data.precision,
+  };
+}
+
+export async function fetchVulnFindingAnalysis(id: string): Promise<VulnAnalysisReport | null> {
+  const res = await mastyfAiFetch(`/api/vuln-findings/${encodeURIComponent(id)}/analysis`);
+  if (!res.ok) return null;
+  return unwrapVulnReport(await res.json());
+}
+
+export async function postVulnAnalyze(
+  id: string,
+): Promise<VulnAnalysisReport | VulnApiError> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(`/api/vuln-findings/${encodeURIComponent(id)}/analyze`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      error:
+        (body as { error?: string }).error
+        || (res.status === 403 ? 'CSRF or auth rejected the request' : `Analyze failed (${res.status})`),
+    };
+  }
+  const report = unwrapVulnReport(body);
+  if (!report) {
+    return { ok: false, status: res.status, error: 'Analysis response missing fullText' };
+  }
+  return report;
+}
+
+export async function postVulnValidate(
+  id: string,
+): Promise<{ promoted?: boolean; reason?: string; signalCount?: number } | VulnApiError> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(`/api/vuln-findings/${encodeURIComponent(id)}/validate`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      error:
+        (body.error as string)
+        || (res.status === 403 ? 'CSRF or auth rejected the request' : `Validate failed (${res.status})`),
+    };
+  }
+  const data = (body.data as Record<string, unknown> | undefined) ?? body;
+  return {
+    promoted: !!data.promoted,
+    reason: typeof data.reason === 'string' ? data.reason : undefined,
+    signalCount: typeof data.signalCount === 'number' ? data.signalCount : undefined,
+  };
+}
+
+export async function postVulnDisclose(id: string): Promise<{ ok: true } | VulnApiError> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(`/api/vuln-findings/${encodeURIComponent(id)}/disclose`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return {
+      ok: false,
+      status: res.status,
+      error: body.error || (res.status === 403 ? 'CSRF or auth rejected the request' : `Disclose failed (${res.status})`),
+    };
+  }
+  return { ok: true };
+}
+
+export async function postVulnReject(
+  id: string,
+  reason?: string,
+): Promise<{ ok: true } | VulnApiError> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(`/api/vuln-findings/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ reason: reason || '' }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return {
+      ok: false,
+      status: res.status,
+      error: body.error || (res.status === 403 ? 'CSRF or auth rejected the request' : `Reject failed (${res.status})`),
+    };
+  }
+  return { ok: true };
+}
+
+export async function postVulnApproveAnalysis(
+  id: string,
+): Promise<VulnAnalysisReport | VulnApiError> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(`/api/vuln-findings/${encodeURIComponent(id)}/analysis/approve`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      error:
+        (body as { error?: string }).error
+        || (res.status === 403 ? 'CSRF or auth rejected the request' : `Approve analysis failed (${res.status})`),
+    };
+  }
+  const report = unwrapVulnReport(body);
+  if (!report) {
+    return { ok: false, status: res.status, error: 'Approve analysis response missing report' };
+  }
+  return report;
+}
+
+export async function postVulnProposeBlock(
+  id: string,
+): Promise<{ candidateId?: string; fingerprint?: string } | VulnApiError> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(`/api/vuln-findings/${encodeURIComponent(id)}/propose-block`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      error:
+        (body.error as string)
+        || (res.status === 403 ? 'CSRF or auth rejected the request' : `Propose block failed (${res.status})`),
+    };
+  }
+  const data = (body.data as Record<string, unknown> | undefined) ?? body;
+  return {
+    candidateId: typeof data.candidateId === 'string' ? data.candidateId : undefined,
+    fingerprint: typeof data.fingerprint === 'string' ? data.fingerprint : undefined,
+  };
+}
+
+export function isVulnApiError(v: unknown): v is VulnApiError {
+  return !!v && typeof v === 'object' && (v as VulnApiError).ok === false && 'error' in (v as object);
+}
+
+export type VulnLiveTrafficStat = {
+  key: string;
+  serverName: string;
+  toolName: string;
+  allowCount: number;
+  maliciousShapedCount: number;
+  softDenyCount: number;
+  lastSeenAt: string;
+};
+
+export async function getVulnLiveStats(): Promise<{
+  enabled: boolean;
+  stats: VulnLiveTrafficStat[];
+} | null> {
+  const res = await mastyfAiFetch('/api/vuln-live-stats');
+  if (!res.ok) return null;
+  const body = (await res.json()) as {
+    data?: { enabled?: boolean; stats?: VulnLiveTrafficStat[] };
+    enabled?: boolean;
+    stats?: VulnLiveTrafficStat[];
+  };
+  const data = body.data ?? body;
+  return {
+    enabled: !!data.enabled,
+    stats: data.stats || [],
+  };
+}
+
+export type VulnDisclosureMeta = {
+  findingId: string;
+  vendorReady: boolean;
+  preview: boolean;
+  cveStatus: 'none' | 'linked';
+  relatedCve?: string;
+  paths?: {
+    dir: string;
+    reportMd?: string;
+    reportJson?: string;
+    packageJson?: string;
+    readme?: string;
+    zip?: string;
+  };
+  builtAt?: string;
+  analysisStatus?: string;
+};
+
+export async function postVulnPrepareDisclosure(
+  id: string,
+  opts?: { force?: boolean },
+): Promise<VulnDisclosureMeta | VulnApiError> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(
+    `/api/vuln-findings/${encodeURIComponent(id)}/prepare-disclosure`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ force: !!opts?.force }),
+    },
+  );
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      error:
+        (body as { error?: string }).error
+        || `Prepare disclosure failed (${res.status})`,
+    };
+  }
+  const data = ((body as { data?: VulnDisclosureMeta }).data
+    ?? body) as VulnDisclosureMeta;
+  if (!data.findingId) {
+    return { ok: false, status: res.status, error: 'Invalid prepare-disclosure response' };
+  }
+  return data;
+}
+
+/** Download disclosure package (triggers browser save). */
+export async function downloadVulnDisclosurePackage(
+  id: string,
+  format: 'zip' | 'json' | 'md' = 'zip',
+): Promise<{ ok: true } | VulnApiError> {
+  const res = await mastyfAiFetch(
+    `/api/vuln-findings/${encodeURIComponent(id)}/export?format=${format}`,
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return {
+      ok: false,
+      status: res.status,
+      error: (body as { error?: string }).error || `Export failed (${res.status})`,
+    };
+  }
+  const blob = await res.blob();
+  const ext = format === 'json' ? 'json' : format === 'md' ? 'md' : 'zip';
+  const mime =
+    format === 'zip'
+      ? 'application/zip'
+      : format === 'json'
+        ? 'application/json'
+        : 'text/markdown';
+  const url = URL.createObjectURL(new Blob([blob], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${id}-disclosure.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return { ok: true };
+}
+

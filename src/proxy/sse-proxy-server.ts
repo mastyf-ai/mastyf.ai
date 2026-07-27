@@ -5,10 +5,10 @@ import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 import { URL } from 'url';
 import { PolicyEngine } from '../policy/policy-engine.js';
-import { findingsToMessages, isResponseScanSkipped, createStreamingInspectorState } from '../utils/streaming-inspector.js';
+import { createStreamingInspectorState } from '../utils/streaming-inspector.js';
 import { inspectCostStreamingChunk } from '../agentic/response-dlp/cost-streaming-inspector.js';
 import { withProxyRequestVault } from './proxy-request-context.js';
-import { gateToolResponseText } from '../utils/response-security-gate.js';
+import { inspectToolResponse as sharedInspectToolResponse } from './response-inspection.js';
 import { TokenCounter, extractModelFromPayload } from '../utils/token-counter.js';
 import { Logger } from '../utils/logger.js';
 import { requireUpstreamTlsAllowed } from '../utils/upstream-tls.js';
@@ -488,14 +488,22 @@ export class SseProxyServer extends EventEmitter {
     }
 
     if (isToolCall) {
-      const toolName = (jsonRpcRequest.params as { name?: string } | undefined)?.name ?? 'unknown';
-      const blockedResponse = await this.inspectToolResponse(
-        toolName,
+      const toolParams = jsonRpcRequest.params as {
+        name?: string;
+        arguments?: Record<string, unknown>;
+      } | undefined;
+      const toolName = toolParams?.name ?? 'unknown';
+      const inspected = await sharedInspectToolResponse({
         response,
-        jsonRpcRequest.id,
-        resolvedTenantId,
-      );
-      if (blockedResponse) return blockedResponse;
+        toolName,
+        serverName: this.opts.serverName,
+        requestId: (jsonRpcRequest.id as string | number) ?? 0,
+        tenantId: resolvedTenantId,
+        policyEngine: this.opts.policy,
+        transportLabel: 'sse-proxy',
+        toolArguments: toolParams?.arguments,
+      });
+      if (inspected.blocked && inspected.blockResponse) return inspected.blockResponse;
     }
 
     if (isToolCall) {
@@ -535,76 +543,6 @@ export class SseProxyServer extends EventEmitter {
     }
 
     return response;
-  }
-
-  private async inspectToolResponse(
-    toolName: string,
-    response: Record<string, unknown>,
-    requestId: unknown,
-    tenantId?: string,
-  ): Promise<Record<string, unknown> | null> {
-    const result = (response as { result?: unknown }).result;
-    if (result == null || isResponseScanSkipped()) return null;
-
-    const responseText = JSON.stringify(result);
-    const gate = await gateToolResponseText({
-      responseText,
-      toolName,
-      serverName: this.opts.serverName,
-      policy: this.opts.policy,
-      requestId: requestId as string | number | undefined,
-      tenantId,
-    });
-    const inspect = gate.inspect;
-    if (!inspect || inspect.clean) {
-      if (gate.outcome.action === 'redact' && gate.outcome.body) {
-        try {
-          (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
-        } catch {
-          /* keep upstream */
-        }
-      }
-      return null;
-    }
-
-    const hasCritical = inspect.hasCritical;
-    const hasHigh = inspect.hasHigh;
-    const allMessages = findingsToMessages(inspect.findings);
-    Logger.warn(
-      `[sse-proxy:${this.opts.serverName}] Suspicious response from '${toolName}': ${allMessages.slice(0, 5).join('; ')}`,
-    );
-    StructuredLogger.info({
-      event: 'response_flagged',
-      serverName: this.opts.serverName,
-      toolName,
-      detections: allMessages,
-      blocked: gate.outcome.action === 'block',
-    });
-    Metrics.injectionDetectedTotal?.inc({
-      server_name: this.opts.serverName,
-      severity: hasCritical ? 'critical' : 'high',
-    });
-
-    if (gate.outcome.action === 'redact') {
-      try {
-        (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
-      } catch {
-        /* keep upstream */
-      }
-      return null;
-    }
-
-    if (gate.outcome.action === 'block') {
-      return {
-        jsonrpc: '2.0',
-        id: requestId,
-        error: {
-          code: -32002,
-          message: gate.outcome.message,
-        },
-      };
-    }
-    return null;
   }
 
   private _forwardToUpstream(

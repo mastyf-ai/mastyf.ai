@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "leaky-dogfood": {
+      "command": "node",
+      "args": ["benchmarks/fixtures/leaky-dogfood-server.cjs"],
+      "transport": "stdio"
+    }
+  }
+}

@@ -99,4 +99,46 @@ describe('auto-corpus-writer', () => {
     const state = JSON.parse(readFileSync(statePath, 'utf-8')) as { fingerprints?: string[] };
     expect(state.fingerprints).toContain(fp);
   });
+
+  it('updates review status for approve/reject', async () => {
+    const { setAutoCorpusManifestStatus, setAllPendingAutoCorpusStatus } = await import(
+      '../../src/ai/auto-corpus-writer.js'
+    );
+    writeAutoCorpusFixture(discovery, {
+      source: 'bypass',
+      inputFingerprint: 'fp-status',
+      llmUsed: true,
+      attackClass: discovery.attackClass,
+      hypothesis: discovery.hypothesis,
+      confidence: discovery.confidence,
+    });
+    const ok = setAutoCorpusManifestStatus('adv-002', 'approved');
+    expect(ok.ok).toBe(true);
+    expect(readAutoCorpusManifest()?.entries[0].status).toBe('approved');
+
+    writeAutoCorpusFixture(
+      {
+        ...discovery,
+        corpusCandidate: {
+          ...discovery.corpusCandidate,
+          arguments: { query: 'different payload for second fixture' },
+        },
+      },
+      {
+        source: 'threat_intel',
+        inputFingerprint: 'fp-status-2',
+        llmUsed: false,
+        attackClass: discovery.attackClass,
+        hypothesis: discovery.hypothesis,
+        confidence: 0.8,
+      },
+    );
+    const bulk = setAllPendingAutoCorpusStatus('rejected');
+    expect(bulk.count).toBeGreaterThanOrEqual(1);
+    expect(
+      readAutoCorpusManifest()?.entries.every(
+        (e) => e.status === 'approved' || e.status === 'rejected',
+      ),
+    ).toBe(true);
+  });
 });

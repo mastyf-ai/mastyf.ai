@@ -296,6 +296,8 @@ export type ThreatLabCandidateRecord = {
   confidence: number;
   path?: string;
   branch?: string;
+  toolName?: string;
+  category?: string;
   reviewStatus?: 'pending' | 'accepted' | 'rejected';
   policyRule?: Record<string, unknown>;
   corpusCandidate?: Record<string, unknown>;
@@ -481,4 +483,55 @@ export function markThreatLabCandidate(
   } catch {
     return false;
   }
+}
+
+/**
+ * Upsert a Threat Lab candidate (used by Vuln Discovery propose-block).
+ * Creates the manifest file under the tenant swarm dir when missing.
+ */
+export function upsertThreatLabCandidate(
+  tenantId: string | undefined,
+  candidate: ThreatLabCandidateRecord,
+): ThreatLabCandidateRecord {
+  const tid = resolvedTenantId(tenantId);
+  const dir = resolveTenantSwarmDir(tid);
+  mkdirSync(dir, { recursive: true });
+  const p = join(dir, 'threat-lab-candidates.json');
+  let data: {
+    timestamp?: string;
+    count?: number;
+    mode?: string;
+    candidates: ThreatLabCandidateRecord[];
+  } = { candidates: [], mode: 'vuln-discovery', timestamp: new Date().toISOString() };
+  if (existsSync(p)) {
+    try {
+      const parsed = JSON.parse(readFileSync(p, 'utf-8')) as typeof data;
+      data = {
+        ...parsed,
+        candidates: Array.isArray(parsed.candidates) ? parsed.candidates : [],
+      };
+    } catch {
+      /* fresh file */
+    }
+  }
+  const idx = data.candidates.findIndex(
+    (c) =>
+      c.id === candidate.id
+      || (candidate.fingerprint && c.fingerprint === candidate.fingerprint)
+      || (candidate.provenance?.inputFingerprint
+        && c.provenance?.inputFingerprint === candidate.provenance.inputFingerprint),
+  );
+  if (idx >= 0) {
+    data.candidates[idx] = {
+      ...data.candidates[idx],
+      ...candidate,
+      reviewStatus: data.candidates[idx].reviewStatus || candidate.reviewStatus || 'pending',
+    };
+  } else {
+    data.candidates.push({ ...candidate, reviewStatus: candidate.reviewStatus || 'pending' });
+  }
+  data.count = data.candidates.length;
+  data.timestamp = new Date().toISOString();
+  writeFileSync(p, JSON.stringify(data, null, 2));
+  return idx >= 0 ? data.candidates[idx] : candidate;
 }

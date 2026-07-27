@@ -56,6 +56,20 @@ export function applyStartEnv(overrides?: Record<string, string>): void {
       process.env[key] = val;
     }
   }
+
+  // Shared vuln store root (fleet-wide findings / live-stats / disclosure)
+  if (process.env.MASTYF_AI_VULN_STORE_DIR === undefined) {
+    process.env.MASTYF_AI_VULN_STORE_DIR =
+      process.env.MASTYF_AI_HOME?.trim()
+      || join(home, '.mastyf-ai');
+  }
+  // When VDE is on, enable live novel tap unless explicitly false
+  if (
+    process.env.MASTYF_AI_VULN_DISCOVERY_ENABLED === 'true'
+    && process.env.MASTYF_AI_VULN_LIVE_TAP !== 'false'
+  ) {
+    process.env.MASTYF_AI_VULN_LIVE_TAP = 'true';
+  }
 }
 
 export function resolveStartPolicy(installRoot: string): string {
