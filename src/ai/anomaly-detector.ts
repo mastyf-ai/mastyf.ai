@@ -579,6 +579,20 @@ export class AnomalyDetector {
 
     const aboveThreshold = confidence >= this.cachedThreshold;
 
+    // Layer 4 (optional): autoencoder → VulnFinding class:behavioral (no auto-block)
+    if (process.env.MASTYF_AI_AUTOENCODER_ENABLED === 'true') {
+      try {
+        const { evaluateBehavioralAndRecord } = await import('../vuln-discovery/behavioral.js');
+        await evaluateBehavioralAndRecord({
+          toolName,
+          arguments: { criticalCount, warningCount, maxConfidence, categories },
+          serverName,
+        });
+      } catch {
+        /* non-fatal */
+      }
+    }
+
     if (confidence > 0.3) {
       StructuredLogger.info({
         event: 'anomaly_detected',

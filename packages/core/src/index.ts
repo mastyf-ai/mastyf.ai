@@ -55,3 +55,12 @@ export type {
   ToolScanResult, ServerScanResult, ToolManifestEntry,
   ManifestVerifyStatus, ManifestVerifyResult
 } from "./types.js";
+export {
+  detectAnomaly,
+  runAutoencoderScan,
+  getAutoencoderStats,
+  extractAutoencoderFeatures,
+  trainOnBenign,
+  type AutoencoderFeatureVector,
+  type AutoencoderResult,
+} from "./autoencoder-detector.js";

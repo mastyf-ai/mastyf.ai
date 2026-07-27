@@ -122,11 +122,13 @@ class ShellTokenizer:
             if spelled in DANGEROUS_COMMANDS or spelled in SPELLED_THREAT_WORDS:
                 return f"Whitespace-obfuscated token detected: {spelled}"
         compact = re.sub(r"\s+", "", input_str)
+        # Word boundaries match Node ShellTokenizer.detectWhitespaceObfuscatedShell
+        # (avoids FP on identifiers like base64_encoded_shell_cmd).
         if (
-            re.search(r"rm-?rf", compact, re.I)
-            or re.search(r"base64", compact, re.I)
-            or re.search(r"sh-c", compact, re.I)
-            or re.search(r"nc-?e", compact, re.I)
+            re.search(r"\brm-?rf\b", compact, re.I)
+            or re.search(r"\bbase64\b", compact, re.I)
+            or re.search(r"\bsh-c\b", compact, re.I)
+            or re.search(r"\bnc-?e\b", compact, re.I)
         ):
             return "Whitespace-obfuscated destructive shell pattern detected"
         return None

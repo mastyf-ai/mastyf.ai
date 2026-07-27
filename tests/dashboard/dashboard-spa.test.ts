@@ -74,10 +74,33 @@ describe('dashboard-spa', () => {
     const nav = readFileSync(join(SPA_ROOT, 'lib', 'workspace-nav.ts'), 'utf-8');
     expect(configHub).toContain('fetchSetupStatus');
     expect(security).toContain('fetchSecurityDashboard');
+    expect(security).toContain('VulnDiscoveryPanel');
     expect(nav).toContain("'security'");
+    expect(nav).toContain('Vuln Discovery');
     expect(api).toContain('/api/analytics/summary');
     expect(api).toContain('/api/security/dashboard');
     expect(api).toContain('/api/setup/status');
+    expect(api).toContain('/api/vuln-findings');
+    expect(api).toContain('buildMutatingHeaders');
+    expect(api).toContain('postVulnProposeBlock');
+    expect(api).toContain('postVulnApproveAnalysis');
+    expect(api).toContain('postVulnReject');
+    expect(api).toContain('unwrapVulnReport');
+    expect(api).toContain('getVulnLiveStats');
+    expect(api).toContain('postVulnPrepareDisclosure');
+    expect(api).toContain('downloadVulnDisclosurePackage');
+    expect(api).toContain('/api/vuln-live-stats');
+    const panel = readFileSync(
+      join(SPA_ROOT, 'app', 'components', 'operations', 'VulnDiscoveryPanel.tsx'),
+      'utf-8',
+    );
+    expect(panel).toContain("source: 'vuln-finding'");
+    expect(panel).toContain('setSelectedId');
+    expect(panel).toContain('Propose block');
+    expect(panel).toContain('Operator checklist');
+    expect(panel).toContain('Live tap coverage');
+    expect(panel).toContain('Prepare disclosure package');
+    expect(panel).toContain('Download zip');
   });
 
   it('loads dashboard client with ssr disabled', () => {

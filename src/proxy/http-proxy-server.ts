@@ -306,6 +306,7 @@ export class HttpProxyServer {
 
     let toolsCallId: string | number | undefined;
     let toolsCallName: string | undefined;
+    let toolsCallArgs: Record<string, unknown> | undefined;
     let mcpResourcePromptId: string | number | undefined;
     let mcpResourcePromptMethod: string | undefined;
     let mcpResourceSessionId: string | undefined;
@@ -345,6 +346,7 @@ export class HttpProxyServer {
           if (msg.id != null) {
             toolsCallId = msg.id as string | number;
             toolsCallName = toolName;
+            toolsCallArgs = msg.params?.arguments as Record<string, unknown> | undefined;
           }
           const inflight = acquireProxyInflight(this.serverName);
           if (!inflight.ok) {
@@ -433,6 +435,7 @@ export class HttpProxyServer {
 
           if (defense.arguments && msg.params) {
             msg.params.arguments = defense.arguments;
+            toolsCallArgs = defense.arguments;
           }
         }
       } catch {
@@ -651,6 +654,7 @@ export class HttpProxyServer {
                   tenantId: requestTenantId,
                   policyEngine: this.policyEngine,
                   transportLabel: 'http-proxy',
+                  toolArguments: toolsCallArgs,
                 });
                 if (inspected.blocked) {
                   if (!res.headersSent) {

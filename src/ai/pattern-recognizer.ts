@@ -181,4 +181,55 @@ export class PatternRecognizer {
 
     return relationships;
   }
+
+  /**
+   * Correlate package CVE posture with upstream API errors / auth flips for VDE.
+   */
+  correlateVulnStackSignals(input: {
+    packageCves: Array<{ packageName: string; cveId?: string; serverName: string }>;
+    upstreamEvents: Array<{
+      url: string;
+      statusFrom?: number;
+      statusTo?: number;
+      errorRate?: number;
+      relatedServer?: string;
+    }>;
+    toolWatchAdds?: Array<{ serverName: string; toolName: string }>;
+  }): CrossLayerInsight[] {
+    const insights: CrossLayerInsight[] = [];
+    for (const cve of input.packageCves) {
+      const related = input.upstreamEvents.filter(
+        (u) =>
+          u.relatedServer === cve.serverName ||
+          (u.errorRate != null && u.errorRate > 0.2),
+      );
+      if (related.length) {
+        insights.push({
+          type: 'cve-upstream-correlation',
+          severity: 'critical',
+          description: `Package ${cve.packageName} (${cve.cveId || 'pre-advisory'}) on ${cve.serverName} coincides with upstream instability (${related.map((r) => r.url).slice(0, 3).join(', ')}).`,
+          correlatedLayers: ['security', 'health'],
+          confidence: 0.75,
+        });
+      }
+    }
+    for (const add of input.toolWatchAdds || []) {
+      const authFlip = input.upstreamEvents.find(
+        (u) =>
+          u.relatedServer === add.serverName &&
+          u.statusFrom === 401 &&
+          u.statusTo === 200,
+      );
+      if (authFlip) {
+        insights.push({
+          type: 'toolwatch-auth-bypass-candidate',
+          severity: 'critical',
+          description: `New tool ${add.toolName} on ${add.serverName} coincides with upstream ${authFlip.url} flipping 401→200 — possible auth bypass.`,
+          correlatedLayers: ['security', 'health'],
+          confidence: 0.8,
+        });
+      }
+    }
+    return insights;
+  }
 }

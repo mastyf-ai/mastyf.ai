@@ -847,10 +847,13 @@ program
 
     const stdioServerCount = servers.filter((s) => s.command).length;
     if (!opts.gateway && !ingressMode && stdioServerCount > 1) {
+      const cfgLabel = paths[0] || '(no --config)';
       console.error(chalk.red(
         'Multiple stdio MCP servers in one proxy process are not supported.\n' +
-        `  Found ${stdioServerCount} servers with "command" in ${paths[0]}.\n` +
-        '  Use `mastyf-ai wrap` (one proxy per server) or pass a single-server config.\n' +
+        `  Found ${stdioServerCount} servers with "command" after merging ${cfgLabel}` +
+        ' with ~/.mastyf-ai/servers.json.\n' +
+        '  Use `mastyf-ai wrap` / Fleet Hub (`mastyf-ai start`), pass a single-server config,\n' +
+        '  or set MASTYF_AI_FLEET_CHILD=true to skip the UI servers merge.\n' +
         '  See docs/REAL_WORLD_INTEGRATION.md',
       ));
       process.exit(1);
@@ -1321,6 +1324,183 @@ program
       tenantId: opts.tenant,
       projectRoot: opts.projectRoot,
     });
+  });
+
+const vulnCmd = program
+  .command('vuln')
+  .description('Unpublished vulnerability discovery (VDE) — scan, validate, LLM analysis');
+
+vulnCmd
+  .command('run')
+  .description('Run supply-chain + SAST (+ optional upstream) discovery across MCP configs')
+  .option('-c, --config <path>', 'MCP config JSON')
+  .option('--urls <list>', 'Comma-separated upstream URLs to probe')
+  .option('--supply-chain-only', 'Skip SAST, upstream, and MCP tool fuzz (CI/scout advisory path)')
+  .option('--mcp-fuzz', 'Enable live MCP tool fuzz (novel/runtime discovery)')
+  .option('--via-proxy', 'Fuzz through server.url / proxy HTTP (sets blockedByProxy from policy)')
+  .action(async (opts: { config?: string; urls?: string; supplyChainOnly?: boolean; mcpFuzz?: boolean; viaProxy?: boolean }) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({
+      action: 'run',
+      config: opts.config,
+      urls: opts.urls,
+      supplyChainOnly: opts.supplyChainOnly,
+      mcpFuzz: opts.mcpFuzz,
+      viaProxy: opts.viaProxy,
+    });
+  });
+
+vulnCmd
+  .command('agentic-run')
+  .description('Agentic VDE loop: scout → validate → analyze → propose block (human Accept)')
+  .option('-c, --config <path>', 'MCP config JSON')
+  .option('--urls <list>', 'Comma-separated upstream URLs to probe')
+  .option('--supply-chain-only', 'Skip SAST, upstream, and MCP tool fuzz')
+  .option('--mcp-fuzz', 'Enable live MCP tool fuzz (novel/runtime discovery)')
+  .option('--via-proxy', 'Fuzz through server.url / proxy HTTP')
+  .action(async (opts: { config?: string; urls?: string; supplyChainOnly?: boolean; mcpFuzz?: boolean; viaProxy?: boolean }) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({
+      action: 'agentic-run',
+      config: opts.config,
+      urls: opts.urls,
+      supplyChainOnly: opts.supplyChainOnly,
+      mcpFuzz: opts.mcpFuzz,
+      viaProxy: opts.viaProxy,
+    });
+  });
+vulnCmd
+  .command('list')
+  .description('List vuln findings')
+  .option('--severity <level>', 'Minimum severity filter')
+  .option('-f, --format <format>', 'text or json', 'text')
+  .action(async (opts: { severity?: string; format?: string }) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({
+      action: 'list',
+      severity: opts.severity,
+      format: opts.format,
+    });
+  });
+
+vulnCmd
+  .command('show')
+  .description('Show a finding and its analysis report')
+  .argument('<id>', 'Finding id')
+  .action(async (id: string) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({ action: 'show', id });
+  });
+
+vulnCmd
+  .command('validate')
+  .description('Validate a finding (2-of-3 signals); optionally LLM-confirm with --force')
+  .argument('<id>', 'Finding id')
+  .option('--force', 'Count LLM confirmation signal', false)
+  .option('-f, --format <format>', 'text or json', 'text')
+  .action(async (id: string, opts: { force?: boolean; format?: string }) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({
+      action: 'validate',
+      id,
+      force: opts.force,
+      format: opts.format,
+    });
+  });
+
+vulnCmd
+  .command('reject')
+  .argument('<id>', 'Finding id')
+  .action(async (id: string) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({ action: 'reject', id });
+  });
+
+vulnCmd
+  .command('disclose')
+  .argument('<id>', 'Finding id')
+  .action(async (id: string) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({ action: 'disclose', id });
+  });
+
+vulnCmd
+  .command('approve-analysis')
+  .description('Mark analysis report as final (required before CRITICAL/HIGH disclose)')
+  .argument('<id>', 'Finding id')
+  .action(async (id: string) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({ action: 'approve-analysis', id });
+  });
+
+vulnCmd
+  .command('propose-block')
+  .description('Create Threat Lab candidate from finding (human Accept applies YAML)')
+  .argument('<id>', 'Finding id')
+  .action(async (id: string) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({ action: 'propose-block', id });
+  });
+
+vulnCmd
+  .command('analyze')
+  .description('LLM in-depth text analysis for a finding (or --all validated HIGH+)')
+  .argument('[id]', 'Finding id or "all"', 'all')
+  .option('--force', 'Regenerate even if cached', false)
+  .option('--severity <level>', 'Min severity for batch', 'HIGH')
+  .option('-f, --format <format>', 'md or json', 'md')
+  .action(async (id: string, opts: { force?: boolean; severity?: string; format?: string }) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({
+      action: 'analyze',
+      id,
+      force: opts.force,
+      severity: opts.severity,
+      format: opts.format,
+    });
+  });
+
+vulnCmd
+  .command('prepare-disclosure')
+  .description('Run 3-pass analysis (if needed) and build vendor disclosure package on disk')
+  .argument('<id>', 'Finding id')
+  .option('--force', 'Force re-analyze with 3 passes')
+  .action(async (id: string, opts: { force?: boolean }) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({
+      action: 'prepare-disclosure',
+      id,
+      force: opts.force,
+    });
+  });
+
+vulnCmd
+  .command('export')
+  .description('Export disclosure package as md|txt|json|zip')
+  .argument('<id>', 'Finding id')
+  .option('-f, --format <format>', 'md, txt, json, or zip', 'md')
+  .action(async (id: string, opts: { format?: string }) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({ action: 'export', id, format: opts.format });
+  });
+
+vulnCmd
+  .command('purge-noise')
+  .description(
+    'Reject numeric/ancient CVE noise findings and delete poisoned nvd_* disk caches under ~/.mastyf-ai/cve-cache',
+  )
+  .action(async () => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({ action: 'purge-noise' });
+  });
+
+vulnCmd
+  .command('probe')
+  .description('Probe allowlisted upstream API URLs')
+  .requiredOption('--urls <list>', 'Comma-separated URLs')
+  .action(async (opts: { urls: string }) => {
+    const { runVulnCli } = await import('./cli/vuln.js');
+    process.exitCode = await runVulnCli({ action: 'probe', urls: opts.urls });
   });
 
 program

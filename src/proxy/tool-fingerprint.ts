@@ -58,6 +58,8 @@ export function applyToolFingerprint(
     tenantId: string;
     logPrefix?: string;
     onMismatch?: RugPullMismatchHandler;
+    /** Skip Logger/metrics/persist noise (e.g. corpus simulation). */
+    quiet?: boolean;
   },
 ): boolean {
   if (!tools.length) return false;
@@ -66,7 +68,9 @@ export function applyToolFingerprint(
 
   if (!state.fingerprint) {
     state.fingerprint = hash;
-    Logger.debug(`${prefix} Tool fingerprint registered: ${hash} (${tools.length} tools)`);
+    if (!ctx.quiet) {
+      Logger.debug(`${prefix} Tool fingerprint registered: ${hash} (${tools.length} tools)`);
+    }
     return false;
   }
 
@@ -74,35 +78,37 @@ export function applyToolFingerprint(
 
   const prev = state.fingerprint;
   state.blocked = true;
-  const alert = `${prefix} 🚨 RUG-PULL DETECTED (OWASP MCP03): tool definitions changed mid-session. Previous: ${prev}, New: ${hash}`;
-  Logger.error(alert);
-  StructuredLogger.info({
-    event: 'rug_pull_detected' as const,
-    serverName: ctx.serverName,
-    previousFingerprint: prev,
-    currentFingerprint: hash,
-    toolCount: tools.length,
-  });
-  Metrics.rugpullDetectedTotal.inc(
-    Metrics.withTenantMetricLabels({ server_name: ctx.serverName }, ctx.tenantId),
-  );
-  Metrics.recordProxyBlock(
-    {
-      server_name: ctx.serverName,
-      block_reason: 'rug_pull',
-      rule: 'tool-fingerprint-mismatch',
-      tenant_id: ctx.tenantId,
-    },
-    'rug_pull',
-  );
+  if (!ctx.quiet) {
+    const alert = `${prefix} RUG-PULL DETECTED (OWASP MCP03): tool definitions changed mid-session. Previous: ${prev}, New: ${hash}`;
+    Logger.error(alert);
+    StructuredLogger.info({
+      event: 'rug_pull_detected' as const,
+      serverName: ctx.serverName,
+      previousFingerprint: prev,
+      currentFingerprint: hash,
+      toolCount: tools.length,
+    });
+    Metrics.rugpullDetectedTotal.inc(
+      Metrics.withTenantMetricLabels({ server_name: ctx.serverName }, ctx.tenantId),
+    );
+    Metrics.recordProxyBlock(
+      {
+        server_name: ctx.serverName,
+        block_reason: 'rug_pull',
+        rule: 'tool-fingerprint-mismatch',
+        tenant_id: ctx.tenantId,
+      },
+      'rug_pull',
+    );
+    persistRugPullEvent({
+      serverName: ctx.serverName,
+      tenantId: ctx.tenantId,
+      previousFingerprint: prev,
+      currentFingerprint: hash,
+      toolCount: tools.length,
+    });
+  }
   void ctx.onMismatch?.({
-    serverName: ctx.serverName,
-    tenantId: ctx.tenantId,
-    previousFingerprint: prev,
-    currentFingerprint: hash,
-    toolCount: tools.length,
-  });
-  persistRugPullEvent({
     serverName: ctx.serverName,
     tenantId: ctx.tenantId,
     previousFingerprint: prev,

@@ -416,6 +416,8 @@ export function buildHybridEnv(metricsPort, liveDbPath, liveHomeDir) {
     MASTYF_AI_SEMANTIC_STORE_CALIBRATION:
       process.env.MASTYF_AI_SEMANTIC_STORE_CALIBRATION
       ?? (process.env.SWARM_CALIBRATE_CAPTURE !== 'false' ? 'true' : 'false'),
+    // Single-server --config must not merge ~/.mastyf-ai/servers.json (multi-stdio).
+    MASTYF_AI_FLEET_CHILD: 'true',
   };
 }
 

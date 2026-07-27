@@ -37,6 +37,8 @@ export async function inspectToolResponse(params: {
   policyEngine: PolicyEngine | null | undefined;
   /** Label used in log lines, e.g. "http-proxy", "sse-proxy", "ws-proxy". */
   transportLabel: string;
+  /** Original tools/call arguments (for live exploit tap). */
+  toolArguments?: Record<string, unknown>;
 }): Promise<ResponseInspectionResult> {
   const { response, toolName, serverName, requestId, tenantId, policyEngine, transportLabel } =
     params;
@@ -47,6 +49,55 @@ export async function inspectToolResponse(params: {
   }
 
   const responseText = JSON.stringify(result);
+
+  // Vuln Discovery: record unpublished/injection findings from tool results
+  if (process.env.MASTYF_AI_VULN_DISCOVERY_ENABLED === 'true') {
+    try {
+      const { scanToolResponse } = await import('../vuln-discovery/response-scanner.js');
+      const vulnScan = scanToolResponse({
+        serverName,
+        toolName,
+        result,
+        createFindings: true,
+      });
+      if (vulnScan.shouldBlock) {
+        return {
+          blocked: true,
+          redacted: false,
+          blockResponse: {
+            jsonrpc: '2.0',
+            id: requestId,
+            error: {
+              code: -32002,
+              message: `Blocked by Mastyf AI vuln response scanner: ${vulnScan.hits.map((h) => h.patternId).join(', ')}`,
+            },
+          },
+        };
+      }
+    } catch (err) {
+      Logger.debug(
+        `[${transportLabel}] vuln response scan skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // Live traffic tap: malicious args + proven exploit effect on allowed calls
+    try {
+      const { tapAllowedToolCall } = await import('../vuln-discovery/live-traffic-tap.js');
+      tapAllowedToolCall({
+        serverName,
+        toolName,
+        args: params.toolArguments,
+        result,
+        blockedByProxy: false,
+        tenantId,
+      });
+    } catch (err) {
+      Logger.debug(
+        `[${transportLabel}] live traffic tap skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   const gate = await gateToolResponseText({
     responseText,
     toolName,

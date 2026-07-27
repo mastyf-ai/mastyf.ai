@@ -75,6 +75,7 @@ export class OsvClient {
           summary: String(v.summary ?? (v.details as string)?.substring(0, 200) ?? 'No description'),
           fixedVersion: (v.affected as Array<{ ranges?: Array<{ events?: Array<{ fixed?: string }> }> }>)?.[0]
             ?.ranges?.[0]?.events?.find((e) => e.fixed)?.fixed,
+          source: 'osv' as const,
         })),
       };
       writeCveDiskCache(cacheKey, result);
@@ -141,6 +142,7 @@ export class OsvClient {
           summary: String(v.summary ?? (v.details as string)?.substring(0, 200) ?? 'No description'),
           fixedVersion: (v.affected as Array<{ ranges?: Array<{ events?: Array<{ fixed?: string }> }> }>)?.[0]
             ?.ranges?.[0]?.events?.find((e) => e.fixed)?.fixed,
+          source: 'osv' as const,
         })),
       };
       writeCveDiskCache(cacheKey, result);

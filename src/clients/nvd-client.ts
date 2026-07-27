@@ -87,6 +87,7 @@ export class NvdClient {
             severity: this.mapCvssSeverity(metrics?.baseSeverity ?? 'MEDIUM'),
             summary: descriptions?.[0]?.value?.substring(0, 200) ?? 'No description',
             fixedVersion: undefined,
+            source: 'nvd' as const,
           };
         }),
       };

@@ -36,11 +36,16 @@ export interface PickMastyfAiConfigOptions {
   configPath?: string;
   /** Search roots (default: cwd) */
   searchRoots?: string[];
+  /**
+   * When true (default), also search the onboard configsDir before searchRoots.
+   * Tests / isolated callers should set false when passing explicit searchRoots.
+   */
+  includeOnboard?: boolean;
 }
 
 /**
  * Pick first valid single-stdio-server mastyf-ai config.
- * Priority: explicit path → onboard configsDir → mastyf-ai-configs under search roots.
+ * Priority: explicit path → onboard configsDir (optional) → mastyf-ai-configs under search roots.
  */
 export function pickMastyfAiConfig(opts: PickMastyfAiConfigOptions = {}): string | null {
   if (opts.configPath) {
@@ -48,11 +53,14 @@ export function pickMastyfAiConfig(opts: PickMastyfAiConfigOptions = {}): string
     return tryConfigPath(abs);
   }
 
-  const onboard = readOnboardArtifact();
-  if (onboard?.configsDir) {
-    for (const p of listJsonConfigs(onboard.configsDir)) {
-      const hit = tryConfigPath(p);
-      if (hit) return hit;
+  const includeOnboard = opts.includeOnboard !== false;
+  if (includeOnboard) {
+    const onboard = readOnboardArtifact();
+    if (onboard?.configsDir) {
+      for (const p of listJsonConfigs(onboard.configsDir)) {
+        const hit = tryConfigPath(p);
+        if (hit) return hit;
+      }
     }
   }
 

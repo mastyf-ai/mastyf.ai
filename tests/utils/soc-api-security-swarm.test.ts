@@ -18,6 +18,7 @@ async function startUpstream(handler: Parameters<typeof createServer>[0]): Promi
 
 async function startServerWithMocks(): Promise<SocApiServerHandle> {
   vi.resetModules();
+  process.env.MASTYF_AI_AUTH_DISABLED = 'true';
   vi.doMock('../../src/container.js', () => ({
     createContainer: vi.fn(async () => ({
       db: {
@@ -73,6 +74,7 @@ describe('soc-api security-swarm routes', () => {
     handle = null;
     upstream = null;
     delete process.env.SOC_SECURITY_SWARM_UPSTREAM;
+    delete process.env.MASTYF_AI_AUTH_DISABLED;
     vi.restoreAllMocks();
     vi.resetModules();
   });

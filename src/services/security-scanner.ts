@@ -84,6 +84,21 @@ export class SecurityScanner {
       cveLookupStatus,
       untrackedSse,
     );
+
+    // Optional: emit VulnFinding records from transitive CVE / npm audit / SBOM
+    if (process.env.MASTYF_AI_VULN_DISCOVERY_ENABLED === 'true') {
+      try {
+        const { scanServerSupplyChain } = await import('../vuln-discovery/supply-chain-scanner.js');
+        await scanServerSupplyChain(server, {
+          skipAudit: process.env.MASTYF_AI_VULN_SKIP_AUDIT === 'true',
+        });
+      } catch (err) {
+        Logger.debug(
+          `[Scanner:vuln] supply-chain skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     return {
       serverName: server.name,
       cves,

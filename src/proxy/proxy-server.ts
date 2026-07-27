@@ -29,9 +29,8 @@ import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
 import { RequestIdLock } from '../utils/request-id-lock.js';
 import { scanMultimodalContent } from '../scanners/multimodal-content-scanner.js';
 import type { TenantPolicyRegistry } from '../policy/tenant-policy-registry.js';
-import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
-import { gateToolResponseText } from '../utils/response-security-gate.js';
-import { injectRedactionMeta } from '../utils/redaction-meta.js';
+import { isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { inspectToolResponse as sharedInspectToolResponse } from './response-inspection.js';
 import {
   flowSessionKey,
 } from '../policy/session-flow-guard.js';
@@ -327,67 +326,35 @@ export class McpProxyServer {
           };
 
           if (msg?.result && !isResponseScanSkipped()) {
-            const responseText = JSON.stringify(msg.result);
-            const gate = await gateToolResponseText({
-              responseText,
+            const inspected = await sharedInspectToolResponse({
+              response: msg as Record<string, unknown>,
               toolName: reqCtx.requestToolName || 'unknown',
               serverName: this.serverName,
-              policy: this.policyEngine,
-              requestId: msg.id,
+              requestId: msg.id as string | number,
               tenantId: reqCtx.tenantId,
+              policyEngine: this.policyEngine,
+              transportLabel: 'stdio-proxy',
+              toolArguments: reqCtx.requestArguments,
             });
-            const inspect = gate.inspect;
             const policyMode = this.policyEngine?.getMode() ?? 'audit';
+            line = JSON.stringify(msg);
 
-            if (inspect && !inspect.clean) {
-              const allMessages = findingsToMessages(inspect.findings);
-              const hasCritical = inspect.hasCritical;
-              const hasHigh = inspect.hasHigh;
-              Logger.warn(
-                `[proxy:${this.serverName}] Suspicious response from '${reqCtx.requestToolName}': ${allMessages.slice(0, 5).join('; ')}` +
-                (allMessages.length > 5 ? `... (+${allMessages.length - 5} more)` : '')
+            if (inspected.redacted || inspected.blocked) {
+              recordSensitiveResponseAccess(
+                flowSessionKey({
+                  serverName: this.serverName,
+                  toolName: reqCtx.requestToolName || 'unknown',
+                  requestId: String(msg.id),
+                  requestTokens: reqCtx.requestTokens,
+                  timestamp: new Date().toISOString(),
+                  tenantId: reqCtx.tenantId,
+                  agentIdentity: reqCtx.agentIdentity,
+                } as CallContext),
+                reqCtx.requestToolName || 'unknown',
               );
-              StructuredLogger.info({
-                event: 'response_flagged',
-                serverName: this.serverName,
-                toolName: reqCtx.requestToolName,
-                detections: allMessages,
-                criticalCount: inspect.findings.filter((f) => f.severity === 'critical').length,
-                highCount: inspect.findings.filter((f) => f.severity === 'high').length,
-                blocked: gate.outcome.action === 'block',
-                requestId: msg.id,
-              });
-              Metrics.injectionDetectedTotal?.inc({
-                server_name: this.serverName,
-                severity: hasCritical ? 'critical' : 'high',
-              });
-              if (inspect.hasCritical || inspect.hasHigh) {
-                recordSensitiveResponseAccess(
-                  flowSessionKey({
-                    serverName: this.serverName,
-                    toolName: reqCtx.requestToolName || 'unknown',
-                    requestId: String(msg.id),
-                    requestTokens: reqCtx.requestTokens,
-                    timestamp: new Date().toISOString(),
-                    tenantId: reqCtx.tenantId,
-                    agentIdentity: reqCtx.agentIdentity,
-                  } as CallContext),
-                  reqCtx.requestToolName || 'unknown',
-                );
-              }
             }
 
-            if (gate.outcome.action === 'redact') {
-              try {
-                const parsed = JSON.parse(gate.outcome.body) as unknown;
-                msg.result = injectRedactionMeta(parsed, gate.outcome.redactionReasons);
-                line = JSON.stringify(msg);
-              } catch {
-                /* keep upstream */
-              }
-            }
-
-            if (gate.outcome.action === 'block' && policyMode === 'block') {
+            if (inspected.blocked && policyMode === 'block') {
               persistCallRecord(
                 this.db,
                 {
@@ -395,8 +362,10 @@ export class McpProxyServer {
                   responseTokens: 0,
                   totalTokens: record.requestTokens,
                   blocked: true,
-                  blockRule: gate.outcome.rule,
-                  blockReason: gate.outcome.message,
+                  blockRule: 'response-gate',
+                  blockReason:
+                    (inspected.blockResponse as { error?: { message?: string } } | undefined)?.error
+                      ?.message || 'Blocked by response gate',
                 },
                 reqMsg,
                 this.spawnEnv,
@@ -405,8 +374,8 @@ export class McpProxyServer {
               Metrics.recordProxyBlock(
                 {
                   server_name: this.serverName,
-                  block_reason: gate.outcome.rule,
-                  rule: gate.outcome.rule,
+                  block_reason: 'response-gate',
+                  rule: 'response-gate',
                   tenant_id: reqCtx.tenantId,
                 },
                 'response_gate',
@@ -417,7 +386,10 @@ export class McpProxyServer {
                   reqCtx.tenantId,
                 ),
               );
-              this.sendError(msg.id, -32002, gate.outcome.message);
+              const errMsg =
+                (inspected.blockResponse as { error?: { message?: string } } | undefined)?.error
+                  ?.message || 'Blocked by response gate';
+              this.sendError(msg.id, -32002, errMsg);
               this.requestContexts.delete(msg.id);
               this.currentRequestId = null;
               return;

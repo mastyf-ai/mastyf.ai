@@ -62,8 +62,9 @@ import { useDashboardWindow } from '../dashboard/DashboardWindowContext';
 import type { ThreatLabContext } from '../IncidentInvestigatorDrawer';
 import RugPullSection from '../RugPullSection';
 import AutoCorpusControlPanel from '../AutoCorpusControlPanel';
+import VulnDiscoveryPanel from './VulnDiscoveryPanel';
 
-type SecurityView = 'overview' | 'threats' | 'intel' | 'swarm' | 'learning' | 'quarantine' | 'feeds';
+type SecurityView = 'overview' | 'threats' | 'intel' | 'vulns' | 'swarm' | 'learning' | 'quarantine' | 'feeds';
 type ThreatDiscoverySubTab = 'overview' | 'threat-lab' | 'auto-research' | 'rug-pull' | 'auto-corpus';
 
 type Props = {
@@ -84,6 +85,7 @@ const VIEW_TABS = [
   { id: 'overview' as const, label: 'Posture Overview' },
   { id: 'threats' as const, label: 'Threat Detection' },
   { id: 'intel' as const, label: 'Threat Intel' },
+  { id: 'vulns' as const, label: 'Vuln Discovery' },
   { id: 'swarm' as const, label: 'Swarm Analysis' },
   { id: 'learning' as const, label: 'AI Learning' },
   { id: 'quarantine' as const, label: 'Quarantine' },
@@ -1146,6 +1148,13 @@ export function SecurityOperationsCenter({
         />
       )}
       {view === 'intel' && <IntelView roles={roles} refreshKey={refreshKey} onAction={onAction} />}
+      {view === 'vulns' && (
+        <VulnDiscoveryPanel
+          refreshKey={refreshKey}
+          onAction={onAction}
+          onOpenThreatLab={onOpenThreatLab}
+        />
+      )}
       {view === 'swarm' && (
         <SocSwarmAnalysisView roles={roles} refreshKey={refreshKey} onAction={onAction} />
       )}

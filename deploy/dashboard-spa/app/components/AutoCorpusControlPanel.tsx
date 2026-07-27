@@ -1,6 +1,14 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import {
+  mastyfAiFetch,
+  postAutoCorpusApprove,
+  postAutoCorpusReject,
+  postAutoCorpusApproveAll,
+  runAutoThreatResearch,
+  type AutoCorpusReviewEntry,
+} from '@/lib/mastyf-ai-api';
 
 interface AutoCorpusStatus {
   enablement: {
@@ -31,40 +39,47 @@ interface AutoCorpusStatus {
   };
 }
 
-interface ManifestEntry {
-  advId: string;
-  category: string;
-  confidence: number;
-  source: string;
-  createdAt: string;
-  status?: string;
+function formatEntryDate(value?: string | null): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString();
+}
+
+function formatDateTime(value?: string | null): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString();
 }
 
 export default function AutoCorpusControlPanel() {
   const [status, setStatus] = useState<AutoCorpusStatus | null>(null);
-  const [entries, setEntries] = useState<ManifestEntry[]>([]);
+  const [entries, setEntries] = useState<AutoCorpusReviewEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
   const [busy, setBusy] = useState('');
 
   const load = useCallback(async () => {
     try {
       const [statusRes, manifestRes] = await Promise.all([
-        fetch('/api/ai/auto-corpus/status'),
-        fetch('/api/ai/auto-corpus/manifest?status=pending&limit=50'),
+        mastyfAiFetch('/api/ai/auto-corpus/status'),
+        mastyfAiFetch('/api/ai/auto-corpus/manifest?status=pending&limit=50'),
       ]);
       if (statusRes.ok) {
-        const data = await statusRes.json();
+        const data = (await statusRes.json()) as AutoCorpusStatus;
         setStatus(data);
       }
       if (manifestRes.ok) {
-        const data = await manifestRes.json();
+        const data = (await manifestRes.json()) as { entries?: AutoCorpusReviewEntry[] };
         setEntries(data.entries || []);
       }
       setError(null);
     } catch (err) {
       if (err instanceof Error && !err.message.includes('abort')) {
-        setError(err instanceof Error ? err.message : 'Failed to load');
+        setError(err.message || 'Failed to load');
       }
     } finally {
       setLoading(false);
@@ -72,58 +87,61 @@ export default function AutoCorpusControlPanel() {
   }, []);
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 15000);
+    void load();
+    const interval = setInterval(() => {
+      void load();
+    }, 15000);
     return () => clearInterval(interval);
   }, [load]);
 
   const onApprove = async (advId: string) => {
     setBusy(`approve:${advId}`);
-    try {
-      const res = await fetch('/api/ai/auto-corpus/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ advId }),
-      });
-      if (res.ok) await load();
-    } catch { /* ignore */ }
+    setActionError('');
+    const res = await postAutoCorpusApprove(advId);
+    if (!res.ok) setActionError(res.error || 'Approve failed');
+    else await load();
     setBusy('');
   };
 
   const onReject = async (advId: string) => {
     setBusy(`reject:${advId}`);
-    try {
-      const res = await fetch('/api/ai/auto-corpus/reject', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ advId }),
-      });
-      if (res.ok) await load();
-    } catch { /* ignore */ }
+    setActionError('');
+    const res = await postAutoCorpusReject(advId);
+    if (!res.ok) setActionError(res.error || 'Reject failed');
+    else await load();
     setBusy('');
   };
 
   const onApproveAll = async () => {
     setBusy('approve-all');
-    try {
-      const res = await fetch('/api/ai/auto-corpus/approve-bulk', { method: 'POST' });
-      if (res.ok) await load();
-    } catch { /* ignore */ }
+    setActionError('');
+    const res = await postAutoCorpusApproveAll();
+    if (!res.ok) setActionError(res.error || 'Approve all failed');
+    else await load();
     setBusy('');
   };
 
   const onRunResearch = async () => {
     setBusy('research');
+    setActionError('');
+    setActionMessage('');
     try {
-      const res = await fetch('/api/threat-discovery/auto-research/run', { method: 'POST' });
-      const data = await res.json();
-      if (data.jobId) {
-        alert('Auto Research started -- job ' + data.jobId);
+      const res = await runAutoThreatResearch();
+      if (!res.ok) {
+        setActionError(res.error || 'Failed to start Auto Research');
+      } else if (res.status === 409 || res.error?.includes('already running')) {
+        setActionMessage(
+          `Auto Research already running${res.jobId ? ` (${res.jobId.slice(0, 8)}…)` : ''}. Check Threat Discovery job status.`,
+        );
       } else {
-        alert(data.error || 'Failed to start Auto Research');
+        setActionMessage(
+          `Auto Research started${res.jobId ? ` (${res.jobId.slice(0, 8)}…)` : ''}. Fixtures appear in Pending Review when the job finishes.`,
+        );
       }
       await load();
-    } catch { /* ignore */ }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to start Auto Research');
+    }
     setBusy('');
   };
 
@@ -150,7 +168,7 @@ export default function AutoCorpusControlPanel() {
   }
 
   const { enablement, corpusStats, threatResearch } = status;
-  const pending = entries.filter(e => !e.status || e.status === 'pending');
+  const pending = entries.filter((e) => !e.status || e.status === 'pending');
 
   const underrepresented = Object.entries(corpusStats.perCategory)
     .sort(([, a], [, b]) => a.total - b.total)
@@ -161,9 +179,21 @@ export default function AutoCorpusControlPanel() {
     <div className="panel" style={{ marginTop: 'var(--space-6)' }}>
       <div className="panel-header">
         <h2 className="panel-title">Autonomous Corpus Expansion</h2>
-        <p className="text-sm text-muted">Self-improving attack corpus powered by local LLM (Ollama). Every blocked tool call feeds into a continuous discovery, validation, and promotion pipeline.</p>
+        <p className="text-sm text-muted">
+          Self-improving attack corpus powered by local LLM (Ollama). Every blocked tool call feeds into a continuous discovery, validation, and promotion pipeline.
+        </p>
       </div>
       <div className="panel-body">
+        {actionError ? (
+          <div className="banner banner-warning" style={{ marginBottom: 'var(--space-3)' }}>
+            {actionError}
+          </div>
+        ) : null}
+        {actionMessage ? (
+          <div className="banner banner-success" style={{ marginBottom: 'var(--space-3)' }}>
+            {actionMessage}
+          </div>
+        ) : null}
         <div className="kpi-grid" style={{ marginBottom: 'var(--space-4)' }}>
           <div className="kpi-card">
             <div className="kpi-label">Total Fixtures</div>
@@ -173,16 +203,25 @@ export default function AutoCorpusControlPanel() {
           <div className="kpi-card">
             <div className="kpi-label">Promoted Today</div>
             <div className="kpi-value">{corpusStats.promotionsToday}</div>
-            <div className="kpi-secondary text-xs text-muted">quota: {enablement.promoteDailyQuota === 0 ? 'unlimited' : enablement.promoteDailyQuota}/day</div>
+            <div className="kpi-secondary text-xs text-muted">
+              quota: {enablement.promoteDailyQuota === 0 ? 'unlimited' : enablement.promoteDailyQuota}/day
+            </div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Pending Review</div>
-            <div className="kpi-value" style={{ color: pending.length > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>{pending.length}</div>
+            <div
+              className="kpi-value"
+              style={{ color: pending.length > 0 ? 'var(--warning)' : 'var(--text-muted)' }}
+            >
+              {pending.length}
+            </div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">LLM Confidence</div>
             <div className="kpi-value">{threatResearch.confidenceAvg || '--'}</div>
-            <div className="kpi-secondary text-xs text-muted">{threatResearch.discoveriesToday} discoveries today</div>
+            <div className="kpi-secondary text-xs text-muted">
+              {threatResearch.discoveriesToday} discoveries today
+            </div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Scheduler</div>
@@ -205,7 +244,7 @@ export default function AutoCorpusControlPanel() {
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    onClick={onRunResearch}
+                    onClick={() => void onRunResearch()}
                     disabled={busy === 'research'}
                   >
                     {busy === 'research' ? 'Starting...' : 'Run Auto Research'}
@@ -227,9 +266,11 @@ export default function AutoCorpusControlPanel() {
                 </div>
                 {corpusStats.lastPromotedAt && (
                   <p className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>
-                    Last promotion: {new Date(corpusStats.lastPromotedAt).toLocaleString()} |
-                    This week: {corpusStats.promotionsThisWeek}
-                    {threatResearch.lastRunAt && ` | Last discovery: ${new Date(threatResearch.lastRunAt).toLocaleString()}`}
+                    Last promotion: {formatDateTime(corpusStats.lastPromotedAt)} | This week:{' '}
+                    {corpusStats.promotionsThisWeek}
+                    {threatResearch.lastRunAt
+                      ? ` | Last discovery: ${formatDateTime(threatResearch.lastRunAt)}`
+                      : ''}
                   </p>
                 )}
               </div>
@@ -242,7 +283,7 @@ export default function AutoCorpusControlPanel() {
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    onClick={onApproveAll}
+                    onClick={() => void onApproveAll()}
                     disabled={busy === 'approve-all'}
                   >
                     {busy === 'approve-all' ? 'Approving...' : `Approve All (${pending.length})`}
@@ -254,8 +295,9 @@ export default function AutoCorpusControlPanel() {
                   <div className="empty-state" style={{ padding: 'var(--space-5)' }}>
                     <p className="empty-state-title">No entries awaiting review</p>
                     <p className="empty-state-desc">
-                      Auto-corpus entries will appear here as the LLM generates new attack payloads.
-                      Run Auto Research to kick off a discovery cycle, or wait for the scheduler to process blocked calls.
+                      Auto-corpus entries will appear here as the LLM generates new attack payloads. Run Auto
+                      Research to kick off a discovery cycle, or wait for the scheduler to process blocked
+                      calls.
                     </p>
                   </div>
                 ) : (
@@ -274,21 +316,33 @@ export default function AutoCorpusControlPanel() {
                       <tbody>
                         {entries.map((e) => (
                           <tr key={e.advId}>
-                            <td><code className="text-xs mono">{e.advId}</code></td>
+                            <td>
+                              <code className="text-xs mono">{e.advId}</code>
+                            </td>
                             <td className="text-sm">{e.category}</td>
                             <td>
-                              <span className={`badge ${e.confidence >= 0.9 ? 'badge-success' : e.confidence >= 0.8 ? 'badge-warning' : 'badge-danger'}`}>
-                                {e.confidence.toFixed(2)}
+                              <span
+                                className={`badge ${
+                                  e.confidence >= 0.9
+                                    ? 'badge-success'
+                                    : e.confidence >= 0.8
+                                      ? 'badge-warning'
+                                      : 'badge-danger'
+                                }`}
+                              >
+                                {Number.isFinite(e.confidence) ? e.confidence.toFixed(2) : '—'}
                               </span>
                             </td>
                             <td className="text-sm">{e.source}</td>
-                            <td className="text-sm">{new Date(e.createdAt).toLocaleDateString()}</td>
+                            <td className="text-sm">
+                              {formatEntryDate(e.createdAt || e.timestamp)}
+                            </td>
                             <td>
                               <div className="flex gap-2">
                                 <button
                                   type="button"
                                   className="btn btn-ghost btn-sm"
-                                  onClick={() => onApprove(e.advId)}
+                                  onClick={() => void onApprove(e.advId)}
                                   disabled={busy === `approve:${e.advId}`}
                                 >
                                   {busy === `approve:${e.advId}` ? '...' : 'Approve'}
@@ -296,7 +350,7 @@ export default function AutoCorpusControlPanel() {
                                 <button
                                   type="button"
                                   className="btn btn-ghost btn-sm"
-                                  onClick={() => onReject(e.advId)}
+                                  onClick={() => void onReject(e.advId)}
                                   disabled={busy === `reject:${e.advId}`}
                                 >
                                   {busy === `reject:${e.advId}` ? '...' : 'Reject'}
@@ -323,9 +377,16 @@ export default function AutoCorpusControlPanel() {
                   <p className="text-sm text-muted">All categories have sufficient coverage.</p>
                 ) : (
                   underrepresented.map(([cat, stats]) => (
-                    <div key={cat} className="flex justify-between items-center" style={{ padding: 'var(--space-1) 0', borderBottom: '1px solid var(--border)' }}>
+                    <div
+                      key={cat}
+                      className="flex justify-between items-center"
+                      style={{ padding: 'var(--space-1) 0', borderBottom: '1px solid var(--border)' }}
+                    >
                       <span className="text-sm">{cat}</span>
-                      <span className="text-xs mono" style={{ color: stats.total < 5 ? 'var(--danger)' : 'var(--warning)' }}>
+                      <span
+                        className="text-xs mono"
+                        style={{ color: stats.total < 5 ? 'var(--danger)' : 'var(--warning)' }}
+                      >
                         {stats.total} entries
                         {stats.autoGenerated > 0 && ` (+${stats.autoGenerated})`}
                       </span>

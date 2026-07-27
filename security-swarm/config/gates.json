@@ -11,5 +11,9 @@
     "maxFallbackCandidates": 0,
     "minReplayBlockRate": 1
   },
+  "vulnDiscovery": {
+    "maxValidatedCriticalWithoutMitigation": 0,
+    "maxOpenCandidatesPerServer": 50
+  },
   "vitest": { "maxFailures": 0 }
 }

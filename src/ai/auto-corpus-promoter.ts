@@ -27,6 +27,11 @@ import { homedir } from 'os';
 import { load } from 'js-yaml';
 import type { ThreatLabDiscovery } from './threat-lab.js';
 import type { AutoCorpusSource } from './auto-corpus-writer.js';
+import {
+  readAutoCorpusManifest,
+  setAutoCorpusManifestStatus,
+  setAllPendingAutoCorpusStatus,
+} from './auto-corpus-writer.js';
 import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 
@@ -311,6 +316,15 @@ export async function promoteToCorpus(
     };
   }
 
+  // Corpus gate uses bare PolicyEngine (no agentic container). Reject promotions
+  // that only fire under zero-trust/agentic so they do not become permanent FNs.
+  if (verifyResult.rule === 'zero-trust-score' || verifyResult.rule === 'default') {
+    return {
+      ok: false,
+      reason: `fixture blocked only by ${verifyResult.rule} — not durable for corpus-eval`,
+    };
+  }
+
   // Ensure category directory exists
   const categoryDir = join(CORPUS_ROOT, category);
   mkdirSync(categoryDir, { recursive: true });
@@ -433,10 +447,22 @@ export function listPendingPromotions(): Array<{
   source: string;
   createdAt: string;
 }> {
+  const writer = readAutoCorpusManifest();
+  if (writer?.entries?.length) {
+    return writer.entries
+      .filter((e) => !e.status || e.status === 'pending')
+      .map((e) => ({
+        advId: e.advId,
+        category: e.category,
+        confidence: e.confidence,
+        source: e.source,
+        createdAt: e.timestamp,
+      }));
+  }
   const manifest = loadPromotionManifest();
   return manifest.entries
-    .filter(e => !e.status || e.status === 'pending')
-    .map(e => ({
+    .filter((e) => !e.status || e.status === 'pending')
+    .map((e) => ({
       advId: e.advId,
       category: e.category,
       confidence: e.confidence,
@@ -447,9 +473,20 @@ export function listPendingPromotions(): Array<{
 
 /** Export: mark an entry as approved for promotion */
 export function approveAutoCorpusEntry(advId: string): { ok: boolean; error?: string } {
+  const writer = setAutoCorpusManifestStatus(advId, 'approved');
+  if (writer.ok) {
+    const manifest = loadPromotionManifest();
+    const entry = manifest.entries.find((e) => e.advId === advId);
+    if (entry) {
+      entry.status = 'approved';
+      savePromotionManifest(manifest);
+    }
+    return { ok: true };
+  }
+
   const manifest = loadPromotionManifest();
-  const entry = manifest.entries.find(e => e.advId === advId);
-  if (!entry) return { ok: false, error: 'Entry not found' };
+  const entry = manifest.entries.find((e) => e.advId === advId);
+  if (!entry) return { ok: false, error: writer.error || 'Entry not found' };
   entry.status = 'approved';
   savePromotionManifest(manifest);
   return { ok: true };
@@ -457,9 +494,20 @@ export function approveAutoCorpusEntry(advId: string): { ok: boolean; error?: st
 
 /** Export: mark an entry as rejected */
 export function rejectAutoCorpusEntry(advId: string): { ok: boolean; error?: string } {
+  const writer = setAutoCorpusManifestStatus(advId, 'rejected');
+  if (writer.ok) {
+    const manifest = loadPromotionManifest();
+    const entry = manifest.entries.find((e) => e.advId === advId);
+    if (entry) {
+      entry.status = 'rejected';
+      savePromotionManifest(manifest);
+    }
+    return { ok: true };
+  }
+
   const manifest = loadPromotionManifest();
-  const entry = manifest.entries.find(e => e.advId === advId);
-  if (!entry) return { ok: false, error: 'Entry not found' };
+  const entry = manifest.entries.find((e) => e.advId === advId);
+  if (!entry) return { ok: false, error: writer.error || 'Entry not found' };
   entry.status = 'rejected';
   savePromotionManifest(manifest);
   return { ok: true };
@@ -467,16 +515,17 @@ export function rejectAutoCorpusEntry(advId: string): { ok: boolean; error?: str
 
 /** Export: approve all pending entries */
 export function approveAllPending(): { ok: boolean; count: number } {
+  const writer = setAllPendingAutoCorpusStatus('approved');
   const manifest = loadPromotionManifest();
-  let count = 0;
+  let promoCount = 0;
   for (const entry of manifest.entries) {
     if (!entry.status || entry.status === 'pending') {
       entry.status = 'approved';
-      count++;
+      promoCount++;
     }
   }
-  savePromotionManifest(manifest);
-  return { ok: true, count };
+  if (promoCount > 0) savePromotionManifest(manifest);
+  return { ok: true, count: writer.count + promoCount };
 }
 
 /** Exported for test use */

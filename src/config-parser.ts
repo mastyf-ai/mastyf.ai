@@ -46,23 +46,34 @@ export class ConfigParser {
   static parse(filePath: string): McpServerConfig[] {
     const content = decodeConfigFile(fs.readFileSync(filePath));
     const ext = path.extname(filePath).toLowerCase();
-    let raw: Record<string, unknown>;
+    let raw: unknown;
 
     if (ext === '.yaml' || ext === '.yml') {
-      raw = (yaml.load(content) ?? {}) as Record<string, unknown>;
+      raw = yaml.load(content) ?? {};
     } else {
       raw = JSON.parse(content);
     }
 
+    if (Array.isArray(raw)) {
+      throw new Error(
+        `MCP config ${filePath} is a JSON array; expected an object with mcpServers/servers keys`,
+      );
+    }
+    if (!raw || typeof raw !== 'object') {
+      throw new Error(`MCP config ${filePath} is not a valid object`);
+    }
+
+    const rawObj = raw as Record<string, unknown>;
+
     // Normalize different schemas
     let servers: Record<string, unknown>;
-    if (raw.mcpServers && typeof raw.mcpServers === 'object') {
-      servers = raw.mcpServers as Record<string, unknown>;
-    } else if (raw.servers && typeof raw.servers === 'object') {
-      servers = raw.servers as Record<string, unknown>;
+    if (rawObj.mcpServers && typeof rawObj.mcpServers === 'object' && !Array.isArray(rawObj.mcpServers)) {
+      servers = rawObj.mcpServers as Record<string, unknown>;
+    } else if (rawObj.servers && typeof rawObj.servers === 'object' && !Array.isArray(rawObj.servers)) {
+      servers = rawObj.servers as Record<string, unknown>;
     } else {
       // Assume the file itself is a flat map of server name → config
-      servers = raw as Record<string, unknown>;
+      servers = rawObj;
     }
 
     return Object.entries(servers).map(([name, config]) => {

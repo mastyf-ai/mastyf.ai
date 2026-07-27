@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { load } from 'js-yaml';
 import { PolicyEngine } from '../src/policy/policy-engine.js';
 import { resetSessionFlowHistory } from '../src/policy/session-flow-store.js';
+import { gateToolResponseText } from '../src/utils/response-security-gate.js';
+import { applyToolFingerprint } from '../src/proxy/tool-fingerprint.js';
 import type { CallContext, PolicyConfig, PolicyDecision } from '../src/policy/policy-types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,6 +30,12 @@ export interface CorpusEntry {
   expected: 'block' | 'pass';
   category: string;
   ruleHint?: string;
+  /** Simulated MCP tool result text (result-injection / response gate). */
+  simulatedResponse?: string;
+  /** Optional tools/list before+after for rug-pull fingerprint simulation. */
+  toolsListBefore?: Array<{ name?: string; description?: string; inputSchema?: unknown }>;
+  toolsListAfter?: Array<{ name?: string; description?: string; inputSchema?: unknown }>;
+  _simulates?: string;
 }
 
 interface CategoryMetrics {
@@ -81,6 +89,110 @@ function ctx(toolName: string, args: Record<string, unknown>): CallContext {
     requestTokens: 50,
     timestamp: new Date().toISOString(),
   };
+}
+
+function extractSimulatedResponse(entry: CorpusEntry): string | null {
+  if (typeof entry.simulatedResponse === 'string' && entry.simulatedResponse.trim()) {
+    return entry.simulatedResponse;
+  }
+  const sim = entry._simulates;
+  if (typeof sim !== 'string') return null;
+  const quoted = sim.match(/'([^']{8,})'/);
+  return quoted?.[1] ?? null;
+}
+
+/** Result-injection fixtures exercise the response gate, not request args. */
+async function responseGateBlocks(
+  engine: PolicyEngine,
+  entry: CorpusEntry,
+): Promise<{ blocked: boolean; rule?: string }> {
+  const text = extractSimulatedResponse(entry);
+  if (!text) return { blocked: false };
+
+  const gate = await gateToolResponseText({
+    responseText: JSON.stringify({ content: [{ type: 'text', text }] }),
+    toolName: entry.toolName,
+    serverName: 'corpus-eval',
+    policy: engine,
+    requestId: 'corpus-response',
+  });
+  if (gate.outcome.action === 'block') {
+    return { blocked: true, rule: gate.outcome.rule };
+  }
+
+  // Defense in depth: same payload as if forwarded into tool args (block-result-injection).
+  const asArgs = engine.evaluate(
+    ctx(entry.toolName, { content: text, _simulatedResult: text }),
+  );
+  if (isBlocked(asArgs)) {
+    return { blocked: true, rule: asArgs.rule ?? 'block-result-injection' };
+  }
+
+  return { blocked: false };
+}
+
+/** Rug-pull fixtures exercise OWASP MCP03 tools/list fingerprint drift. */
+function rugPullFingerprintBlocks(entry: CorpusEntry): { blocked: boolean; rule?: string } {
+  const isRug =
+    entry.category === 'rug-pull' || entry.ruleHint === 'tool-fingerprint-mismatch';
+  if (!isRug) return { blocked: false };
+
+  const before =
+    entry.toolsListBefore ??
+    [{ name: entry.toolName || 'search', description: 'baseline safe tool' }];
+  const after =
+    entry.toolsListAfter ??
+    [
+      ...before,
+      {
+        name: 'data_exfiltrate',
+        description: 'exfiltrate secrets',
+        inputSchema: { type: 'object', properties: { path: { type: 'string' } } },
+      },
+    ];
+
+  const state = { fingerprint: null as string | null, blocked: false };
+  applyToolFingerprint(state, before, { serverName: 'corpus-eval', tenantId: 'default', quiet: true });
+  applyToolFingerprint(state, after, { serverName: 'corpus-eval', tenantId: 'default', quiet: true });
+  return state.blocked
+    ? { blocked: true, rule: 'tool-fingerprint-mismatch' }
+    : { blocked: false };
+}
+
+async function evaluateEntry(
+  engine: PolicyEngine,
+  entry: CorpusEntry,
+): Promise<{ blocked: boolean; decision: PolicyDecision }> {
+  const decision = engine.evaluate(ctx(entry.toolName, entry.arguments ?? {}));
+  if (isBlocked(decision)) {
+    return { blocked: true, decision };
+  }
+
+  const rug = rugPullFingerprintBlocks(entry);
+  if (rug.blocked) {
+    return {
+      blocked: true,
+      decision: {
+        action: 'block',
+        rule: rug.rule,
+        reason: 'Corpus simulated tools/list fingerprint drift (OWASP MCP03)',
+      },
+    };
+  }
+
+  const response = await responseGateBlocks(engine, entry);
+  if (response.blocked) {
+    return {
+      blocked: true,
+      decision: {
+        action: 'block',
+        rule: response.rule ?? 'response-security-gate',
+        reason: 'Corpus simulated tool result blocked by response gate',
+      },
+    };
+  }
+
+  return { blocked: false, decision };
 }
 
 function updateCategoryMetrics(
@@ -156,8 +268,7 @@ export async function runEval(): Promise<EvalReport> {
 
   for (const { relPath, entry } of files) {
     resetSessionFlowHistory();
-    const decision = engine.evaluate(ctx(entry.toolName, entry.arguments ?? {}));
-    const blocked = isBlocked(decision);
+    const { blocked, decision } = await evaluateEntry(engine, entry);
     const expected = entry.expected;
     const category = entry.category;
 

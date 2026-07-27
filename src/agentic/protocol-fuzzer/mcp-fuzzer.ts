@@ -100,6 +100,7 @@ export class McpProtocolFuzzer {
     });
 
     Logger.info(`[McpFuzzer] ${stats.total} payloads tested: ${stats.blocked} blocked, ${stats.crashed} crashed`);
+    void this.promoteProtocolFindings(serverName);
     return this.results;
   }
 
@@ -165,6 +166,7 @@ export class McpProtocolFuzzer {
       bypassesJson: JSON.stringify(this.results.filter(r => !r.blocked && !r.crashed)),
     });
     Logger.info(`[McpFuzzer] Live transport: ${stats.blocked}/${stats.total} blocked → ${target}`);
+    await this.promoteProtocolFindings(serverName);
     return this.results;
   }
 
@@ -223,5 +225,92 @@ export class McpProtocolFuzzer {
       crashed: r.filter(x => x.crashed).length,
       criticalBypasses: r.filter(x => !x.blocked && x.risk === 'critical').length,
     };
+  }
+
+  /** Promote crashes / critical bypasses into Vuln Discovery + threat research. */
+  private async promoteProtocolFindings(serverName: string): Promise<void> {
+    if (process.env.MASTYF_AI_VULN_DISCOVERY_ENABLED !== 'true') return;
+    try {
+      const { createFindingId, fingerprintFinding, upsertFinding, getFinding } = await import(
+        '../../vuln-discovery/store.js'
+      );
+      const { enqueueThreatResearch, buildBypassEvent, buildVulnDiscoveryEvent } = await import(
+        '../../ai/threat-research-pipeline.js'
+      );
+      for (const r of this.results) {
+        if (!r.crashed && !(r.risk === 'critical' && !r.blocked)) continue;
+        const title = r.crashed
+          ? `Protocol fuzz crash: ${r.payload?.id || r.payload?.category || 'payload'}`
+          : `Protocol fuzz bypass: ${r.payload?.id || r.payload?.category || 'payload'}`;
+        const partial = {
+          class: 'protocol' as const,
+          severity: (r.crashed || r.risk === 'critical' ? 'HIGH' : 'MEDIUM') as 'HIGH' | 'MEDIUM',
+          status: 'candidate' as const,
+          title,
+          description: `Response: ${String(r.response).slice(0, 300)}`,
+          target: { kind: 'mcp_server' as const, name: serverName },
+          evidence: {
+            scanner: 'mcp-protocol-fuzzer',
+            reproSteps: [
+              `Fuzz category ${r.payload?.category || 'unknown'}`,
+              r.crashed ? 'Upstream crash / transport error' : 'Payload not blocked by policy',
+              `Risk=${r.risk}`,
+            ],
+            payloads: [r.payload],
+            response: r.response,
+          },
+          exploitability: {
+            preAuth: true,
+            networkReachable: true,
+            userInteraction: false,
+          },
+        };
+        const fp = fingerprintFinding({
+          class: partial.class,
+          target: partial.target,
+          title: partial.title,
+          evidence: { scanner: partial.evidence.scanner, reproSteps: partial.evidence.reproSteps },
+        });
+        const id = createFindingId(fp);
+        const existing = getFinding(id);
+        const finding = upsertFinding({
+          ...partial,
+          id,
+          fingerprint: fp,
+          discoveredAt: existing?.discoveredAt || new Date().toISOString(),
+          status: existing?.status === 'validated' ? existing.status : 'candidate',
+          validatedAt: existing?.validatedAt,
+          analysisReportId: existing?.analysisReportId,
+        });
+        enqueueThreatResearch(
+          buildVulnDiscoveryEvent({
+            id: finding.id,
+            class: finding.class,
+            severity: finding.severity,
+            title: finding.title,
+            description: finding.description,
+            target: finding.target,
+            evidence: {
+              reproSteps: finding.evidence.reproSteps,
+              scanner: finding.evidence.scanner,
+            },
+            fingerprint: finding.fingerprint,
+          }),
+        );
+        if (!r.blocked) {
+          enqueueThreatResearch(
+            buildBypassEvent({
+              fingerprint: finding.id,
+              toolName: r.payload?.target || 'unknown',
+              category: r.payload?.category || 'protocol',
+              reason: title,
+              payload: String(r.payload?.payload || '').slice(0, 400),
+            }),
+          );
+        }
+      }
+    } catch {
+      /* non-fatal */
+    }
   }
 }

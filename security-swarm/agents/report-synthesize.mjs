@@ -165,6 +165,7 @@ function writeTextReport(latest, gates, bypasses, live) {
 export function synthesizeReport(input) {
   const { steps = [], mode = 'full', gates = {}, live = false } = input;
   const scout = load(join(OUT_DIR, 'scout.json'));
+  const vulnDiscovery = load(join(OUT_DIR, 'vuln-discovery.json'));
   const corpus = load(join(REPO, 'corpus-eval-report.json'));
   const parity = load(join(REPO, 'adversarial-harness', 'reports', 'parity-report.json'));
   const harness = load(join(REPO, 'adversarial-harness', 'reports', 'harness-summary.json'));
@@ -291,6 +292,23 @@ export function synthesizeReport(input) {
   const maxBypasses = gates.evasion?.maxBypasses ?? 0;
   const bypassGateOk = netNew.length <= maxBypasses;
 
+  const vdGates = gates.vulnDiscovery || {};
+  const vulnOk =
+    !vulnDiscovery ||
+    (vulnDiscovery.ok !== false &&
+      (vulnDiscovery.metrics?.validatedCriticalWithoutMitigation ?? 0) <=
+        (vdGates.maxValidatedCriticalWithoutMitigation ?? 0) &&
+      (vulnDiscovery.metrics?.maxOpenCandidatesPerServer ?? 0) <=
+        (vdGates.maxOpenCandidatesPerServer ?? 50));
+
+  if (vulnDiscovery && !vulnOk) {
+    findings.push({
+      severity: 'critical',
+      source: 'vuln-discovery',
+      summary: `VDE gate failed (criticalWithoutMitigation=${vulnDiscovery.metrics?.validatedCriticalWithoutMitigation ?? '?'} maxCandidates=${vulnDiscovery.metrics?.maxOpenCandidatesPerServer ?? '?'})`,
+    });
+  }
+
   const latest = {
     version: 1,
     mode,
@@ -305,7 +323,8 @@ export function synthesizeReport(input) {
       corpus: corpusOk,
       parity: parityOk,
       steps: stepsOk,
-      scout: scout?.audit?.ok ?? true,
+      scout: scout?.ok ?? scout?.audit?.ok ?? true,
+      vulnDiscovery: vulnOk,
       bypassCount: bypasses.length,
       netNewBypassCount: netNew.length,
       maxBypasses,
@@ -320,9 +339,15 @@ export function synthesizeReport(input) {
     performance: {
       tiers: proxyTierBenchmarks,
     },
-    overall: corpusOk && parityOk && stepsOk && bypassGateOk,
+    overall: corpusOk && parityOk && stepsOk && bypassGateOk && vulnOk,
     steps,
     scout,
+    vulnDiscovery: vulnDiscovery
+      ? {
+          ok: vulnDiscovery.ok,
+          metrics: vulnDiscovery.metrics,
+        }
+      : null,
     corpus: corpus
       ? {
           totalEntries: corpus.totalEntries,
