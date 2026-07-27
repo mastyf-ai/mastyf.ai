@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { writeFileSync, mkdirSync, readFileSync, existsSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { homedir } from 'node:os';
+import { resolveVulnFindingsPath } from '../lib/vuln-store.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..', '..');
@@ -53,7 +53,7 @@ const run = spawnSync(
   { cwd: REPO, encoding: 'utf-8', env, timeout: agentic ? 300_000 : 180_000 },
 );
 
-const findingsPath = join(homedir(), '.mastyf-ai', 'vuln-findings.jsonl');
+const findingsPath = resolveVulnFindingsPath();
 const findings = [];
 if (existsSync(findingsPath)) {
   for (const line of readFileSync(findingsPath, 'utf-8').split('\n')) {
@@ -98,7 +98,7 @@ const metrics = {
     Math.max(1, findings.filter((f) => f.status !== 'rejected').length),
 };
 
-const ok = gateCriticalOk && gateCandidatesOk && (run.status === 0 || findings.length >= 0);
+const ok = gateCriticalOk && gateCandidatesOk && run.status === 0;
 
 const out = {
   agent: 'vuln-discovery',

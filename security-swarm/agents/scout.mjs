@@ -8,6 +8,7 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { resolveVulnFindingsPath } from '../lib/vuln-store.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..', '..');
@@ -80,7 +81,7 @@ if (fleetEnabled) {
       if (run.status !== 0) {
         fleet.errors.push((run.stderr || run.stdout || 'vuln run failed').slice(0, 500));
       }
-      const findingsPath = join(homedir(), '.mastyf-ai', 'vuln-findings.jsonl');
+      const findingsPath = resolveVulnFindingsPath();
       if (existsSync(findingsPath)) {
         const lines = readFileSync(findingsPath, 'utf-8').split('\n').filter(Boolean);
         const findings = lines.map((l) => {

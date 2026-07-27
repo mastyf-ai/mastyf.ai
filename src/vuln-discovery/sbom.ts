@@ -1,7 +1,7 @@
 /**
  * SBOM helpers for MCP server package roots — locate lockfiles and emit CycloneDX-lite.
  */
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import type { McpServerConfig } from '../types.js';
