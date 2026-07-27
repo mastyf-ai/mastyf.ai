@@ -503,16 +503,14 @@ export function upsertThreatLabCandidate(
     mode?: string;
     candidates: ThreatLabCandidateRecord[];
   } = { candidates: [], mode: 'vuln-discovery', timestamp: new Date().toISOString() };
-  if (existsSync(p)) {
-    try {
-      const parsed = JSON.parse(readFileSync(p, 'utf-8')) as typeof data;
-      data = {
-        ...parsed,
-        candidates: Array.isArray(parsed.candidates) ? parsed.candidates : [],
-      };
-    } catch {
-      /* fresh file */
-    }
+  try {
+    const parsed = JSON.parse(readFileSync(p, 'utf-8')) as typeof data;
+    data = {
+      ...parsed,
+      candidates: Array.isArray(parsed.candidates) ? parsed.candidates : [],
+    };
+  } catch {
+    /* fresh file */
   }
   const idx = data.candidates.findIndex(
     (c) =>

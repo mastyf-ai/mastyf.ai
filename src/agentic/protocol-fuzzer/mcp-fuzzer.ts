@@ -282,31 +282,33 @@ export class McpProtocolFuzzer {
           validatedAt: existing?.validatedAt,
           analysisReportId: existing?.analysisReportId,
         });
-        enqueueThreatResearch(
-          buildVulnDiscoveryEvent({
-            id: finding.id,
-            class: finding.class,
-            severity: finding.severity,
-            title: finding.title,
-            description: finding.description,
-            target: finding.target,
-            evidence: {
-              reproSteps: finding.evidence.reproSteps,
-              scanner: finding.evidence.scanner,
-            },
-            fingerprint: finding.fingerprint,
-          }),
-        );
-        if (!r.blocked) {
+        if (!existing) {
           enqueueThreatResearch(
-            buildBypassEvent({
-              fingerprint: finding.id,
-              toolName: r.payload?.target || 'unknown',
-              category: r.payload?.category || 'protocol',
-              reason: title,
-              payload: String(r.payload?.payload || '').slice(0, 400),
+            buildVulnDiscoveryEvent({
+              id: finding.id,
+              class: finding.class,
+              severity: finding.severity,
+              title: finding.title,
+              description: finding.description,
+              target: finding.target,
+              evidence: {
+                reproSteps: finding.evidence.reproSteps,
+                scanner: finding.evidence.scanner,
+              },
+              fingerprint: finding.fingerprint,
             }),
           );
+          if (!r.blocked) {
+            enqueueThreatResearch(
+              buildBypassEvent({
+                fingerprint: finding.id,
+                toolName: r.payload?.target || 'unknown',
+                category: r.payload?.category || 'protocol',
+                reason: title,
+                payload: String(r.payload?.payload || '').slice(0, 400),
+              }),
+            );
+          }
         }
       }
     } catch {

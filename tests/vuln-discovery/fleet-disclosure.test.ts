@@ -2,7 +2,6 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
   existsSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';

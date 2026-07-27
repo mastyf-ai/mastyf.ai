@@ -439,15 +439,16 @@ export function resolveLiveProxyPaths() {
   return { liveDbPath, liveHomeDir, shared: false };
 }
 
-/** Start Mastyf AI proxy + official filesystem MCP; returns session handle for live calls. */
-export async function createLiveProxySession() {
+/** Start Mastyf AI proxy for an MCP config; returns session handle for live calls. */
+export async function createConfigProxySession(mcpConfigPath, opts = {}) {
+  const blockingMode = opts.blockingMode ?? 'block';
   if (!existsSync(CLI)) {
     throw new Error('dist/cli.js missing — run pnpm build first');
   }
 
   const metricsPort =
     process.env.METRICS_PORT || String(await pickFreeTcpPort());
-  const policyPath = resolveScenarioPolicyPath();
+  const policyPath = opts.policyPath ?? resolveScenarioPolicyPath();
   const { liveDbPath, liveHomeDir, shared } = resolveLiveProxyPaths();
   if (shared) {
     console.error(`[real-life] Using shared history DB: ${liveDbPath}`);
@@ -461,7 +462,16 @@ export async function createLiveProxySession() {
   await new Promise((resolveReady, reject) => {
     proc = spawn(
       'node',
-      [CLI, 'proxy', '--config', configPath, '--policy', policyPath, '--blocking-mode', 'block'],
+      [
+        CLI,
+        'proxy',
+        '--config',
+        mcpConfigPath,
+        '--policy',
+        policyPath,
+        '--blocking-mode',
+        blockingMode,
+      ],
       { stdio: ['pipe', 'pipe', 'pipe'], env: hybridEnv, cwd: ROOT },
     );
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
@@ -483,6 +493,8 @@ export async function createLiveProxySession() {
     toolNames,
     hybridEnv,
     policyPath,
+    configPath: mcpConfigPath,
+    blockingMode,
     getStderr: () => stderr,
     async drainAndKill() {
       const drainMs = parseInt(
@@ -494,6 +506,11 @@ export async function createLiveProxySession() {
       try { proc.kill(); } catch {}
     },
   };
+}
+
+/** Start Mastyf AI proxy + official filesystem MCP (block mode). */
+export async function createLiveProxySession() {
+  return createConfigProxySession(configPath, { blockingMode: 'block' });
 }
 
 export async function runOfficialFilesystemScenario(opts = {}) {

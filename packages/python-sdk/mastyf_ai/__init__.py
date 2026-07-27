@@ -15,5 +15,5 @@ from .middleware.openai_agents import MastyfOpenAIGuard
 from .middleware.langchain import MastyfLangChainGuard
 from .scanner import TrustScanner
 
-__version__ = "4.2.0"
+__version__ = "4.3.1"
 __all__ = ["MastyfProxy", "MastyfConfig", "MastyfOpenAIGuard", "MastyfLangChainGuard", "TrustScanner"]

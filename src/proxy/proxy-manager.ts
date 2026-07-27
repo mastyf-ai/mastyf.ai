@@ -28,10 +28,12 @@ function initBuiltinHooks(): void {
   try {
     globalHookRegistry.registerBefore(createRateLimitHook({ maxCallsPerMinute: 60, perUser: true }));
     globalHookRegistry.registerAfter(createPiiRedactionHook(['api_key', 'password', 'secret', 'token', 'access_token', 'private_key']));
-    globalHookRegistry.registerBefore(createSensitivePathGuard(
-      ['/home/*', '/tmp/*', '/workspace/*', '/app/*'],
-      ['/etc/shadow', '/etc/ssl/private/*', '*.pem', '*.key', '.env', '.aws/*', '.ssh/*'],
-    ));
+    if (process.env.MASTYF_AI_BUILTIN_PATH_GUARD_ENABLED !== 'false') {
+      globalHookRegistry.registerBefore(createSensitivePathGuard(
+        ['/home/*', '/tmp/*', '/workspace/*', '/app/*'],
+        ['/etc/shadow', '/etc/ssl/private/*', '*.pem', '*.key', '.env', '.aws/*', '.ssh/*'],
+      ));
+    }
     // Conditional hooks — activate when env vars are set
     const slackUrl = process.env.MASTYF_AI_SLACK_WEBHOOK || process.env.ALERT_SLACK_WEBHOOK;
     if (slackUrl) { globalHookRegistry.registerBefore(createSlackNotifierHook(slackUrl)); globalHookRegistry.registerAfter(createSlackNotifierHook(slackUrl) as any); }

@@ -448,27 +448,40 @@ export function listPendingPromotions(): Array<{
   createdAt: string;
 }> {
   const writer = readAutoCorpusManifest();
-  if (writer?.entries?.length) {
-    return writer.entries
-      .filter((e) => !e.status || e.status === 'pending')
-      .map((e) => ({
+  const promo = loadPromotionManifest();
+  const byAdvId = new Map<string, {
+    advId: string;
+    category: string;
+    confidence: number;
+    source: string;
+    createdAt: string;
+  }>();
+
+  for (const e of promo.entries) {
+    if (!e.status || e.status === 'pending') {
+      byAdvId.set(e.advId, {
         advId: e.advId,
         category: e.category,
         confidence: e.confidence,
         source: e.source,
-        createdAt: e.timestamp,
-      }));
+        createdAt: e.promotedAt,
+      });
+    }
   }
-  const manifest = loadPromotionManifest();
-  return manifest.entries
-    .filter((e) => !e.status || e.status === 'pending')
-    .map((e) => ({
-      advId: e.advId,
-      category: e.category,
-      confidence: e.confidence,
-      source: e.source,
-      createdAt: e.promotedAt,
-    }));
+  if (writer?.entries?.length) {
+    for (const e of writer.entries) {
+      if (!e.status || e.status === 'pending') {
+        byAdvId.set(e.advId, {
+          advId: e.advId,
+          category: e.category,
+          confidence: e.confidence,
+          source: e.source,
+          createdAt: e.timestamp,
+        });
+      }
+    }
+  }
+  return Array.from(byAdvId.values());
 }
 
 /** Export: mark an entry as approved for promotion */
@@ -515,17 +528,16 @@ export function rejectAutoCorpusEntry(advId: string): { ok: boolean; error?: str
 
 /** Export: approve all pending entries */
 export function approveAllPending(): { ok: boolean; count: number } {
-  const writer = setAllPendingAutoCorpusStatus('approved');
+  const pendingIds = new Set(listPendingPromotions().map((e) => e.advId));
+  setAllPendingAutoCorpusStatus('approved');
   const manifest = loadPromotionManifest();
-  let promoCount = 0;
   for (const entry of manifest.entries) {
-    if (!entry.status || entry.status === 'pending') {
+    if (pendingIds.has(entry.advId) && (!entry.status || entry.status === 'pending')) {
       entry.status = 'approved';
-      promoCount++;
     }
   }
-  if (promoCount > 0) savePromotionManifest(manifest);
-  return { ok: true, count: writer.count + promoCount };
+  if (pendingIds.size > 0) savePromotionManifest(manifest);
+  return { ok: true, count: pendingIds.size };
 }
 
 /** Exported for test use */

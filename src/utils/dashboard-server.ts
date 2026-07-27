@@ -4320,7 +4320,7 @@ export async function startDashboardServer(
         setCors();
         const id = url.split('/').filter(Boolean)[2];
         try {
-          const { analyzeFinding, VulnAnalysisLlmUnavailableError } = await import(
+          const { analyzeFinding } = await import(
             '../vuln-discovery/index.js'
           );
           const report = await analyzeFinding(id, { force: true });

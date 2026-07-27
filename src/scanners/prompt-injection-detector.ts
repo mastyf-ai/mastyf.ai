@@ -45,7 +45,7 @@ export const INJECTION_RULES: InjectionPattern[] = [
   { id: 'role-override', severity: 'critical', description: 'Role/persona override attempt',
     regex: '(?:you are now|you\'re now|act as|pretend (?:to be|you are)|your new (?:role|persona|identity|character) is)' },
   { id: 'role-override-v2', severity: 'critical', description: 'Role redefinition with character framing',
-    regex: '(?:imagine you(?:\'re| are)|from this point forward,? you (?:are|will be)|you have been (?:reprogrammed|reconfigured|updated)(?:\s+to)?)' },
+    regex: '(?:imagine you(?:\'re| are)|from this point forward,? you (?:are|will be)|you have been (?:reprogrammed|reconfigured|updated)(?: +to)?)' },
   { id: 'assistant-override', severity: 'critical', description: 'Assistant/helper persona redefinition',
     regex: '(?:you are (?:now )?(?:an? )?(?:unfiltered|unrestricted|uncensored|evil|malicious|dark|rogue|corrupt) (?:AI|assistant|bot|agent|model|chatbot))' },
 
