@@ -8,12 +8,16 @@ on:
       - 'src/proxy/**'
       - 'packages/core/**'
       - 'default-policy.yaml'
+      - 'deploy/Dockerfile'
+      - '.github/workflows/mcp-fuzzer-ci.yml'
   pull_request:
     paths:
       - 'src/policy/**'
       - 'src/proxy/**'
       - 'packages/core/**'
       - 'default-policy.yaml'
+      - 'deploy/Dockerfile'
+      - '.github/workflows/mcp-fuzzer-ci.yml'
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:
@@ -23,27 +27,15 @@ on:
         required: false
         default: 'http://localhost:4000/mcp'
 
+# Canonical GHCR image (must match .github/workflows/docker-publish.yml).
+# Fallback: Docker Hub rudraneel93/mastyfai, then local Dockerfile build.
+env:
+  GHCR_IMAGE: ghcr.io/mastyf-ai/mastyf-ai:latest
+  DOCKERHUB_IMAGE: docker.io/rudraneel93/mastyfai:latest
+
 jobs:
   fuzz-mcp-server:
     runs-on: ubuntu-latest
-
-    services:
-      mastyf:
-        image: ghcr.io/mastyf-ai/mastyf:latest
-        ports:
-          - 4000:4000
-        env:
-          DASHBOARD_ENABLED: 'true'
-          DASHBOARD_PORT: '4000'
-          DASHBOARD_AUTH_DISABLED: 'true'
-          METRICS_ENABLED: 'true'
-          METRICS_PORT: '9090'
-          MASTYF_AI_DB_PATH: /data/history.db
-        options: >-
-          --health-cmd "curl -f http://localhost:4000/ || exit 1"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
 
     steps:
       - uses: actions/checkout@v4
@@ -53,19 +45,52 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Wait for Mastyf AI to be ready
+      - name: Log in to GHCR (optional pull)
+        continue-on-error: true
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve Mastyf AI image
+        id: image
         run: |
-          for i in $(seq 1 30); do
+          set -euo pipefail
+          if docker pull "$GHCR_IMAGE"; then
+            echo "image=$GHCR_IMAGE" >> "$GITHUB_OUTPUT"
+            echo "Using $GHCR_IMAGE"
+          elif docker pull "$DOCKERHUB_IMAGE"; then
+            echo "image=$DOCKERHUB_IMAGE" >> "$GITHUB_OUTPUT"
+            echo "Using $DOCKERHUB_IMAGE (GHCR miss)"
+          else
+            echo "Prebuilt images unavailable — building from deploy/Dockerfile…"
+            docker build -f deploy/Dockerfile -t mastyf-ai:ci .
+            echo "image=mastyf-ai:ci" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Start Mastyf AI container
+        run: |
+          set -euo pipefail
+          docker run -d --name mastyf \
+            -p 4000:4000 \
+            -e DASHBOARD_ENABLED=true \
+            -e DASHBOARD_PORT=4000 \
+            -e DASHBOARD_AUTH_DISABLED=true \
+            -e METRICS_ENABLED=true \
+            -e METRICS_PORT=9090 \
+            -e MASTYF_AI_DB_PATH=/tmp/history.db \
+            "${{ steps.image.outputs.image }}"
+          for i in $(seq 1 60); do
             if curl -s -f http://localhost:4000/ > /dev/null 2>&1; then
               echo "Mastyf AI is ready"
-              break
-            fi
-            if [ "$i" -eq 30 ]; then
-              echo "Mastyf AI failed to start"
-              exit 1
+              exit 0
             fi
             sleep 2
           done
+          echo "Mastyf AI failed to start"
+          docker logs mastyf || true
+          exit 1
 
       - name: Run MCP Protocol Fuzzer
         uses: ./.github/actions/mcp-fuzzer
@@ -74,6 +99,14 @@ jobs:
           min_block_rate: '80'
           timeout_seconds: '10'
           fail_on_bypass: 'true'
+
+      - name: Dump container logs
+        if: failure()
+        run: docker logs mastyf || true
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f mastyf || true
 
       - name: Fuzz report artifact
         if: always()

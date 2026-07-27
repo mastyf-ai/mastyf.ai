@@ -31,6 +31,8 @@ jobs:
           tags: |
             ghcr.io/mastyf-ai/mastyf-ai:latest
             ghcr.io/mastyf-ai/mastyf-ai:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
       - name: Smoke test image as non-root user
         run: |
           docker run --rm --entrypoint sh ghcr.io/mastyf-ai/mastyf-ai:${{ github.ref_name }} -c \

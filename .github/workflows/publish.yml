@@ -30,6 +30,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
+            ghcr.io/mastyf-ai/mastyf-ai:latest
+            ghcr.io/mastyf-ai/mastyf-ai:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             docker.io/rudraneel93/mastyfai:latest

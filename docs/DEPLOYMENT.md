@@ -21,8 +21,10 @@ docker run --rm -d --name mastyf \
   -e OLLAMA_BASE_URL=http://host.docker.internal:11434 \
   -e MASTYF_AI_DB_PATH=/data/history.db \
   --add-host host.docker.internal:host-gateway \
-  ghcr.io/mastyf-ai/mastyf:latest
+  ghcr.io/mastyf-ai/mastyf-ai:latest
 ```
+
+> Also published as `ghcr.io/mastyf-ai/mastyf.ai:latest` and `rudraneel93/mastyfai:latest` (Docker Hub).
 
 ## Docker Compose
 
