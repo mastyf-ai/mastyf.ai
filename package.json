@@ -186,7 +186,7 @@
     "@mastyf_ai/plugin-sdk": "workspace:^4.1.7",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/auto-instrumentations-node": "^0.75.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.79.0",
     "@opentelemetry/core": "^2.7.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.217.0",
     "@opentelemetry/sdk-node": "^0.217.0",
