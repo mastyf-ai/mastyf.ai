@@ -28,6 +28,22 @@ adversarial-harness/python/
 deploy/dashboard-spa/node_modules/
 deploy/dashboard-spa/out/
 deploy/dashboard-spa/.next/
+deploy/dashboard-spa/public/docs/assets/
+
+# Promo / walkthrough media (1000+ frame PNGs — causes PushPlay vector DB timeouts)
+promo/
+docs/tutorials/videos/
+apps/cloud/public/tutorials/
+apps/cloud/public/assets/showcase/
+apps/cloud/.next/
+*.mp4
+*.webm
+*.aiff
+*.mp3
+
+# Non-UI source (keep deploy/dashboard-spa and apps/cloud/components for UI scanning)
+tests/
+scripts/
 
 # Pnpm
 pnpm-lock.yaml
