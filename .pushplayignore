@@ -1,3 +1,6 @@
+# PushPlay indexes UI components for demo videos. Exclude everything else to avoid
+# vector DB upsert timeouts on large monorepos (see pushplay.dev indexing limits).
+
 node_modules/
 dist/
 .turbo/
@@ -30,20 +33,65 @@ deploy/dashboard-spa/out/
 deploy/dashboard-spa/.next/
 deploy/dashboard-spa/public/docs/assets/
 
-# Promo / walkthrough media (1000+ frame PNGs — causes PushPlay vector DB timeouts)
+# Promo / media (1000+ frame PNGs)
 promo/
+docs/
 docs/tutorials/videos/
-apps/cloud/public/tutorials/
-apps/cloud/public/assets/showcase/
+apps/cloud/public/
 apps/cloud/.next/
 *.mp4
 *.webm
 *.aiff
 *.mp3
+*.png
+*.jpeg
+*.jpg
+*.gif
+*.webp
+*.svg
 
-# Non-UI source (keep deploy/dashboard-spa and apps/cloud/components for UI scanning)
+# Backend / monorepo (not UI)
+src/
+packages/
 tests/
 scripts/
+apps/proxy-core/
+apps/cloud/db/
+apps/cloud/docs/
+apps/cloud/tests/
+apps/cloud/scripts/
+
+# Deploy infra (keep deploy/dashboard-spa)
+deploy/grafana/
+deploy/helm/
+deploy/Dockerfile
+deploy/docker-compose*.yml
+deploy/docker-entrypoint.sh
+deploy/DEPLOYMENT.md
+
+# Config, CI, scenarios, policy
+.github/
+scenarios/
+policy-templates/
+mastyf-ai-configs/
+config/
+security/
+examples/
+*.sql
+default-policy.yaml
+policy-demo.yaml
+policy-schema.json
+vitest*.ts
+
+# Root docs / legal (not UI)
+setup.sh
+LICENSE
+CONTRIBUTING.md
+FEATURES.md
+SECURITY.md
+llms-install.md
+glama.json
+logo.jpeg
 
 # Pnpm
 pnpm-lock.yaml
