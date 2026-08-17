@@ -899,7 +899,7 @@ function buildScoreReport(
       category: 'Response Hygiene',
       action: 'Add a repository link to package.json.',
       expectedScoreIncrease: 2,
-      effort: '10 minutes',
+      effort: 'hours',
     });
   }
 
