@@ -249,7 +249,7 @@ export default async function CertifiedDirectoryPage() {
   let scores: Awaited<ReturnType<typeof listRecentPackageScores>> = [];
   let error: string | null = null;
   try {
-    scores = await listRecentPackageScores(7000);
+    scores = await listRecentPackageScores(200);
   } catch (e: unknown) {
     error = e instanceof Error ? e.message : 'Failed to load scores';
   }
