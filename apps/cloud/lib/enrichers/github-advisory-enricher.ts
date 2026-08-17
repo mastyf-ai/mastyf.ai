@@ -107,7 +107,7 @@ export async function enrichGitHubAdvisories(packageName: string): Promise<GitHu
           publishedAt: a.published_at,
           updatedAt: a.updated_at,
           withdrawnAt: a.withdrawn_at,
-          fixedVersion: patched?.version ?? null,
+          fixedVersion: patched ?? null,
           ecosystem: 'npm',
         };
       });
