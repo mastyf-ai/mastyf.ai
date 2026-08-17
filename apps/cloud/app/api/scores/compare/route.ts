@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { comparePackages } from '@/lib/score-compare';
+import { comparePackageScores } from '@/lib/score-compare';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await comparePackages(names);
+    const result = await comparePackageScores(names);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(
