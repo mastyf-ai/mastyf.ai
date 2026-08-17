@@ -72,6 +72,7 @@ function extractCheckData(checks: unknown[]): {
     if (typeof check !== 'object' || check === null) continue;
     const c = check as Record<string, unknown>;
 
+    // New worker format
     if (c.id === 'npm-metadata') {
       result.description = typeof c.description === 'string' ? c.description : '';
       result.downloads = typeof c.downloads === 'number' ? c.downloads : 0;
@@ -85,6 +86,16 @@ function extractCheckData(checks: unknown[]): {
       result.cveCritical = typeof c.critical === 'number' ? c.critical : 0;
       result.maxCvss = typeof c.maxCvss === 'number' ? c.maxCvss : 0;
     }
+    if (c.id === 'license' && typeof c.value === 'string') {
+      result.license = c.value;
+    }
+    if (c.id === 'maintainers' && typeof c.count === 'number') {
+      result.maintainerCount = c.count;
+    }
+    if (c.id === 'freshness') {
+      result.packageAgeDays = typeof c.packageAgeDays === 'number' ? c.packageAgeDays : result.packageAgeDays;
+      result.lastPublishedDays = typeof c.lastPublishedDays === 'number' ? c.lastPublishedDays : result.lastPublishedDays;
+    }
     if (c.id === 'supply-chain') {
       result.supplyChainScore = typeof c.score === 'number' ? c.score : 0;
       result.depConfusionDetected = c.depConfusionDetected === true;
@@ -95,6 +106,15 @@ function extractCheckData(checks: unknown[]): {
     }
     if (c.id === 'github-advisories') {
       result.githubAdvisoryCount = typeof c.count === 'number' ? c.count : 0;
+    }
+
+    // Old worker format (MCP-package scorer)
+    if (c.id === 'cve-free') {
+      result.cveTotal = 0;
+      result.cveCritical = 0;
+    }
+    if (c.id === 'trust-score' && typeof c.score === 'number') {
+      // old format has score here but we use the overall score from cache
     }
   }
 
@@ -110,6 +130,29 @@ function getPillarScores(scoreReport: {
   operationalTrust: number;
 } {
   const cats = scoreReport.categories ?? [];
+  const find = (names: string[]) => {
+    const found = cats.find((c) => names.some((n) => c.name.toLowerCase().includes(n.toLowerCase())));
+    return found?.score ?? 50;
+  };
+
+  return {
+    supplyChain: find(['supply chain', 'provenance', 'integrity']),
+    interfaceSecurity: find(['auth', 'transport', 'tool capability']),
+    runtimeBehavior: find(['attack', 'malware', 'egress', 'response']),
+    operationalTrust: find(['freshness', 'hygiene', 'cve']),
+  };
+}
+
+function getPillarScoresFromOldReport(scoreReport: {
+  categories?: Array<{ name: string; score: number }>;
+}): {
+  supplyChain: number;
+  interfaceSecurity: number;
+  runtimeBehavior: number;
+  operationalTrust: number;
+} | null {
+  const cats = scoreReport.categories ?? [];
+  if (cats.length === 0) return null;
   const find = (names: string[]) => {
     const found = cats.find((c) => names.some((n) => c.name.toLowerCase().includes(n.toLowerCase())));
     return found?.score ?? 50;
@@ -145,17 +188,23 @@ function riskLabel(score: number): { label: string; color: string } {
 }
 
 function confidenceMark(checks: unknown[]): 'verified' | 'estimated' {
+  let enrichedSources = 0;
   for (const check of checks) {
     if (typeof check !== 'object' || check === null) continue;
     const c = check as Record<string, unknown>;
-    if (c.id === 'supply-chain' && c.source === 'socket_api') return 'verified';
+    // Count enriched data sources
+    if (c.id === 'npm-metadata' && typeof c.downloads === 'number' && c.downloads > 0) enrichedSources++;
+    if (c.id === 'cve-scan' && typeof c.total === 'number') enrichedSources++;
+    if (c.id === 'supply-chain' && typeof c.depCount === 'number') enrichedSources++;
+    if (c.id === 'provenance' && c.verified === true) enrichedSources++;
+    if (c.id === 'github-advisories' && typeof c.count === 'number') enrichedSources++;
+    if (c.id === 'freshness' && typeof c.lastPublishedDays === 'number') enrichedSources++;
+    if (c.id === 'license' && typeof c.value === 'string' && c.value !== 'unknown') enrichedSources++;
+    // Old format
+    if (c.id === 'mastyf-ai-score-report' && typeof c.overallScore === 'number') enrichedSources += 2;
+    if (c.id === 'supply-chain' && c.source === 'socket_api') enrichedSources += 3;
   }
-  for (const check of checks) {
-    if (typeof check !== 'object' || check === null) continue;
-    const c = check as Record<string, unknown>;
-    if (c.id === 'cve-scan' && typeof c.total === 'number' && c.total > 0) return 'verified';
-  }
-  return 'estimated';
+  return enrichedSources >= 3 ? 'verified' : 'estimated';
 }
 
 function confidencePercent(checks: unknown[]): number {
@@ -163,20 +212,36 @@ function confidencePercent(checks: unknown[]): number {
   for (const check of checks) {
     if (typeof check !== 'object' || check === null) continue;
     const c = check as Record<string, unknown>;
-    if (c.source === 'socket_api' || (c.id === 'cve-scan' && typeof c.total === 'number' && c.total > 0)) {
-      sources++;
-    }
+    if (c.id === 'npm-metadata' && typeof c.downloads === 'number' && c.downloads > 0) sources++;
+    if (c.id === 'cve-scan' && typeof c.total === 'number') sources++;
+    if (c.id === 'supply-chain' && typeof c.depCount === 'number') sources++;
+    if (c.id === 'provenance' && c.verified === true) sources++;
+    if (c.id === 'freshness' && typeof c.lastPublishedDays === 'number') sources++;
+    if (c.id === 'license' && typeof c.value === 'string' && c.value !== 'unknown') sources++;
+    if (c.id === 'mastyf-ai-score-report' && typeof c.overallScore === 'number') sources += 2;
+    if (c.id === 'supply-chain' && c.source === 'socket_api') sources += 3;
   }
-  return Math.min(100, 40 + sources * 15);
+  return Math.min(100, 30 + sources * 10);
 }
 
 function formatMaxCvss(cves: unknown[]): string {
   const checks = cves.filter((c): c is Record<string, unknown> =>
     typeof c === 'object' && c !== null && (c as Record<string, unknown>).id === 'cve-scan'
   );
-  if (checks.length === 0) return '';
-  const maxCvss = checks[0].maxCvss;
-  return typeof maxCvss === 'number' && maxCvss > 0 ? maxCvss.toFixed(1) : '';
+  if (checks.length > 0) {
+    const maxCvss = checks[0].maxCvss;
+    return typeof maxCvss === 'number' && maxCvss > 0 ? maxCvss.toFixed(1) : '';
+  }
+  // Old format: check for 'cve-free' with details mentioning CVSS
+  for (const c of cves) {
+    if (typeof c !== 'object' || c === null) continue;
+    const obj = c as Record<string, unknown>;
+    if (obj.id === 'cve-free' && typeof obj.details === 'string' && obj.details.includes('CVSS')) {
+      const match = obj.details.match(/(\d+\.\d+)/);
+      if (match) return match[1];
+    }
+  }
+  return '';
 }
 
 export default async function CertifiedDirectoryPage() {
