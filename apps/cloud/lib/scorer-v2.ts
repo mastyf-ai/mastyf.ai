@@ -194,7 +194,7 @@ export async function scorePackageV2(name: string): Promise<ScoreResult> {
   let weightedSum = 0;
   for (const [dim, value] of Object.entries(allDimensions)) {
     let weight = COMBINED_WEIGHTS[dim] ?? 0.05;
-    const conf = allConfidence[dim];
+    const conf = allConfidence[dim as keyof typeof allConfidence];
     if (conf === 'assumed') weight *= 0.7;
     if (conf === 'missing') weight *= 0.3;
     weightedSum += value * weight;
