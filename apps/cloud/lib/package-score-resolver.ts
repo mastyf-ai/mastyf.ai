@@ -61,7 +61,7 @@ export class InvalidPackageNameError extends Error {
 }
 
 async function loadScorer() {
-  return await import('./package-scorer-stub');
+  return await import('./package-scorer');
 }
 
 function rowToResult(row: CacheRow, source: PackageScoreSource, id?: string): PackageScoreResult {
@@ -332,7 +332,7 @@ export async function resolvePackageScore(
 export async function listRecentPackageScores(limit = 200): Promise<PackageScoreResult[]> {
   try {
     const db = getDb();
-    const capped = Math.min(limit, 500);
+    const capped = Math.min(limit, 10000);
     const result = await db.execute(sql`
       SELECT package_name, version, scan_tier, score, level, grade,
              score_report, checks, computed_at, expires_at
