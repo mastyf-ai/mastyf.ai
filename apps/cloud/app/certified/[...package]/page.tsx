@@ -9,13 +9,12 @@ import {
   resolvePackageScoreWithStale,
 } from '@/lib/package-score-resolver';
 import { BadgeEmbedGallery } from '@/components/BadgeEmbedGallery';
-import { DeepScanButton } from '@/components/DeepScanButton';
 import { PackageNotFound } from '@/components/PackageNotFound';
 import { ScanTierBadge } from '@/components/ScanTierBadge';
 import { ScoreReportPanel } from '@/components/ScoreReportPanel';
 import { ScoreRing } from '@/components/ScoreRing';
 import { computeTrustGrade } from '@/lib/trust-badge-grade';
-import { certificationChecksOnly } from '@/lib/score-report';
+import { certificationChecksOnly, SCORE_REPORT_CHECK_ID } from '@/lib/score-report';
 import {
   packagePathFromSegments,
   renderTrustBadgeSvg,
@@ -34,6 +33,20 @@ async function resolveCloudBaseFromHeaders(): Promise<string> {
   const proto = h.get('x-forwarded-proto') || 'http';
   if (host) return `${proto}://${host}`;
   return resolveCloudBaseUrl();
+}
+
+function extractProbe(checks: unknown[]): Record<string, unknown> | undefined {
+  for (const c of checks) {
+    if (
+      typeof c === 'object'
+      && c !== null
+      && (c as { id?: string }).id === SCORE_REPORT_CHECK_ID
+      && (c as { probe?: unknown }).probe
+    ) {
+      return (c as { probe: Record<string, unknown> }).probe;
+    }
+  }
+  return undefined;
 }
 
 export default async function CertifiedPackagePage({ params }: Props) {
@@ -58,6 +71,7 @@ export default async function CertifiedPackagePage({ params }: Props) {
 
   const grade = computeTrustGrade(score.score);
   const scoreReport = score.scoreReport;
+  const probe = extractProbe(score.checks);
 
   let verification: Awaited<ReturnType<typeof verifyPublicCertification>> | null = null;
   if (score.source === 'attested') {
@@ -87,7 +101,7 @@ export default async function CertifiedPackagePage({ params }: Props) {
           color: '#f59e0b',
           fontSize: '0.9rem',
         }}>
-          This score data may be outdated. A fresh scan takes a few seconds.
+          This score data may be outdated.
         </div>
       )}
 
@@ -128,13 +142,6 @@ export default async function CertifiedPackagePage({ params }: Props) {
                 Attestation {verification.valid ? 'valid' : verification.expired ? 'expired' : 'invalid'}
               </p>
             ) : null}
-
-            <DeepScanButton
-              packageName={packageName}
-              enabled={isDeepScanEnabled()}
-              currentTier={score.scanTier}
-              source={score.source}
-            />
           </div>
         </div>
 
@@ -158,7 +165,7 @@ export default async function CertifiedPackagePage({ params }: Props) {
         </div>
       </section>
 
-      <ScoreReportPanel report={scoreReport} />
+      <ScoreReportPanel report={scoreReport} probe={probe as { error?: string; rejected?: number; attempted?: number; reflected?: number; secretLeaks?: number } | undefined} />
 
       <div className="score-page-grid">
         <section className="score-side-card card-elevated">
@@ -189,7 +196,7 @@ export default async function CertifiedPackagePage({ params }: Props) {
           <section className="score-side-card card-elevated">
             <h2 className="score-section-title">Improve this score</h2>
             <p className="score-section-lead">
-              Fix the issues above, then run a deep scan or publish from your mastyf.ai proxy for a
+              Fix the issues above, then publish from your mastyf.ai proxy for a
               maintainer-verified badge.
             </p>
             {certificationChecksOnly(score.checks).length > 0 ? (

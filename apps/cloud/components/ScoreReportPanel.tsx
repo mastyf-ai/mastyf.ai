@@ -1,7 +1,16 @@
 import type { ImprovementAction, PublishableIssue, PublishableScoreReport } from '@/lib/score-report';
 
+type ProbeData = {
+  error?: string;
+  rejected?: number;
+  attempted?: number;
+  reflected?: number;
+  secretLeaks?: number;
+};
+
 type Props = {
   report: PublishableScoreReport;
+  probe?: ProbeData;
 };
 
 const SEV_CLASS: Record<string, string> = {
@@ -25,7 +34,16 @@ function scoreClass(score: number): string {
   return 'bad';
 }
 
-export function ScoreReportPanel({ report }: Props) {
+function formatWeight(weight: number): string {
+  return `${Math.round(weight * 100)}%`;
+}
+
+function contributionPoints(cat: { score: number; weight: number; contributionPoints?: number }): number {
+  if (cat.contributionPoints != null) return cat.contributionPoints;
+  return Math.round(cat.score * cat.weight);
+}
+
+export function ScoreReportPanel({ report, probe }: Props) {
   const categories = report.categories ?? [];
   const issues = report.issues ?? [];
   const actions = report.improvementActions ?? [];
@@ -56,14 +74,53 @@ export function ScoreReportPanel({ report }: Props) {
                       {cat.score}/100
                     </span>
                   </td>
-                  <td>{cat.weightPercent ?? `${Math.round((cat.weight ?? 0) * 100)}%`}</td>
-                  <td className="score-points">+{cat.contributionPoints ?? Math.round(cat.score * (cat.weight ?? 0))}</td>
+                  <td>{cat.weightPercent ?? formatWeight(cat.weight)}</td>
+                  <td className="score-points">+{contributionPoints(cat)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
+
+      {probe ? (
+        <section className="score-report-card card-elevated">
+          <h2 className="score-section-title">Attack probe results</h2>
+          <p className="score-section-lead">
+            Live behavioral test — the scanner sent malicious payloads to the running server and measured what happened.
+          </p>
+          <div className="score-check-list">
+            <div className={`score-check-item ${probe.error ? 'fail' : 'pass'}`}>
+              <span className="score-check-icon" aria-hidden>{probe.error ? '✗' : '✓'}</span>
+              <div>
+                <strong>Handshake</strong>
+                <p>{probe.error ?? 'Completed successfully'}</p>
+              </div>
+            </div>
+            <div className={`score-check-item ${probe.rejected && probe.rejected > 0 ? 'pass' : 'fail'}`}>
+              <span className="score-check-icon" aria-hidden>{probe.rejected && probe.rejected > 0 ? '✓' : '✗'}</span>
+              <div>
+                <strong>Payloads rejected</strong>
+                <p>{probe.rejected ?? 0} of {probe.attempted ?? 0} malicious probe(s) blocked</p>
+              </div>
+            </div>
+            <div className={`score-check-item ${probe.reflected && probe.reflected > 0 ? 'fail' : 'pass'}`}>
+              <span className="score-check-icon" aria-hidden>{probe.reflected && probe.reflected > 0 ? '✗' : '✓'}</span>
+              <div>
+                <strong>Payloads reflected</strong>
+                <p>{probe.reflected ?? 0} malicious payload(s) reflected back unfiltered</p>
+              </div>
+            </div>
+            <div className={`score-check-item ${probe.secretLeaks && probe.secretLeaks > 0 ? 'fail' : 'pass'}`}>
+              <span className="score-check-icon" aria-hidden>{probe.secretLeaks && probe.secretLeaks > 0 ? '✗' : '✓'}</span>
+              <div>
+                <strong>Secret leaks</strong>
+                <p>{probe.secretLeaks ?? 0} environment variable(s) leaked via tool output</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="score-report-card">
         <h2 className="score-section-title">Category breakdown</h2>
