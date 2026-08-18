@@ -245,6 +245,79 @@ function normalizeCategory(raw: PublishableCategory | Record<string, unknown>): 
   };
 }
 
+/** Concrete evidence strings for a category, derived from the merged data. */
+export function evidenceForCategory(name: string, data: MergedPackageData): string[] {
+  const findings: string[] = [];
+  const lower = name.toLowerCase();
+
+  if (lower.includes('cve') || lower.includes('attack') || lower.includes('vulnerab') || lower.includes('history')) {
+    if (data.cves.total > 0) {
+      findings.push(
+        `${data.cves.total} known CVE${data.cves.total > 1 ? 's' : ''} on record (${data.cves.critical} critical, ${data.cves.high} high, ${data.cves.medium} medium, ${data.cves.low} low)`,
+      );
+      if (data.cves.maxCvss > 0) findings.push(`Highest CVSS severity rating: ${data.cves.maxCvss.toFixed(1)}`);
+    } else {
+      findings.push('No known CVEs found in the current scan');
+    }
+  }
+
+  if (lower.includes('license')) {
+    findings.push(data.license && data.license !== 'unknown'
+      ? `License detected: ${data.license}`
+      : 'License could not be detected from npm metadata');
+  }
+
+  if (lower.includes('download')) {
+    findings.push(data.downloads !== undefined && data.downloads > 0
+      ? `${formatDownloads(data.downloads)} weekly downloads on npm`
+      : 'Download data not available for this package');
+  }
+
+  if (lower.includes('fresh') || lower.includes('configuration')) {
+    if (data.lastPublishedDays !== undefined) {
+      findings.push(`Last published ${data.lastPublishedDays} day${data.lastPublishedDays !== 1 ? 's' : ''} ago`);
+    }
+    if (data.packageAgeDays !== undefined) {
+      findings.push(`Package has existed for ${data.packageAgeDays} day${data.packageAgeDays !== 1 ? 's' : ''}`);
+    }
+    if (data.lastPublishedDays === undefined && data.packageAgeDays === undefined) {
+      findings.push('Publication timeline data not available');
+    }
+  }
+
+  if (lower.includes('supply') || lower.includes('publisher') || lower.includes('integrity') || lower.includes('dependency') || lower.includes('hygiene')) {
+    if (data.depCount !== undefined) findings.push(`${data.depCount} direct dependenc${data.depCount !== 1 ? 'ies' : 'y'} declared`);
+    if (data.hasRepo !== undefined) findings.push(data.hasRepo ? 'Source repository present' : 'No source repository detected');
+    if (data.maintainers !== undefined) findings.push(`${data.maintainers} maintainer${data.maintainers !== 1 ? 's' : ''} on the package`);
+    if (data.cveFree !== undefined) findings.push(`CVE-free check: ${data.cveFree ? 'passed' : 'failed'}`);
+    if (data.trustedPublisher !== undefined) findings.push(`Trusted publisher verification: ${data.trustedPublisher ? 'passed' : 'not verified'}`);
+  }
+
+  if (lower.includes('response') || lower.includes('malware') || lower.includes('egress') || lower.includes('live')) {
+    if (data.probe) {
+      if (data.probe.error) findings.push(`Live probe handshake failed: ${data.probe.error}`);
+      if (data.probe.attempted !== undefined) {
+        findings.push(
+          `${data.probe.rejected ?? 0} of ${data.probe.attempted} malicious payload(s) blocked during live probe`,
+        );
+      }
+      if (data.probe.reflected !== undefined && data.probe.reflected > 0) {
+        findings.push(`${data.probe.reflected} malicious payload(s) reflected back unfiltered`);
+      }
+      if (data.probe.secretLeaks !== undefined && data.probe.secretLeaks > 0) {
+        findings.push(`${data.probe.secretLeaks} environment variable(s) leaked via tool output`);
+      }
+    }
+    if (findings.length === 0) findings.push('No live behavioral probe data recorded for this package');
+  }
+
+  if (lower.includes('auth') || lower.includes('transport') || lower.includes('tool') || lower.includes('ability') || lower.includes('protect')) {
+    findings.push('Assessed from static package metadata and repository signals');
+  }
+
+  return findings;
+}
+
 /** Build improvement actions from weak categories. */
 function actionsFromCategories(categories: PublishableCategory[]): ImprovementAction[] {
   return categories
@@ -298,7 +371,13 @@ export function mergePackageData(
   const rawCategories = Array.isArray(scoreReport?.categories)
     ? scoreReport.categories
     : [];
-  const categories = rawCategories.map(normalizeCategory);
+  const categories = rawCategories.map((raw) => {
+    const cat = normalizeCategory(raw);
+    if (cat.findings.length === 0) {
+      cat.findings = evidenceForCategory(cat.name, extracted);
+    }
+    return cat;
+  });
 
   const issues = Array.isArray(scoreReport?.issues) && scoreReport.issues.length > 0
     ? scoreReport.issues
@@ -347,4 +426,92 @@ export function formatDownloads(n?: number): string {
 export function formatDays(d?: number): string {
   if (d === undefined || d === null) return '—';
   return `${d}d`;
+}
+
+/** Human-readable pass/fail checks derived from the merged data, for the improve-this-score card. */
+export function checksFromMerged(data: MergedPackageData): Array<{
+  id: string;
+  name: string;
+  passed: boolean;
+  details: string;
+}> {
+  const checks: Array<{ id: string; name: string; passed: boolean; details: string }> = [];
+
+  if (data.cveFree !== undefined) {
+    checks.push({
+      id: 'cve-free',
+      name: 'CVE-free',
+      passed: data.cveFree,
+      details: data.cveFree
+        ? 'No known CVEs on record.'
+        : 'Known CVEs were found — update the package to a patched version.',
+    });
+  }
+
+  if (data.cves.total > 0) {
+    checks.push({
+      id: 'cve-scan',
+      name: 'CVE scan',
+      passed: false,
+      details: `${data.cves.total} known CVE(s): ${data.cves.critical} critical, ${data.cves.high} high, ${data.cves.medium} medium, ${data.cves.low} low (max CVSS ${data.cves.maxCvss || 0}).`,
+    });
+  } else if (data.cves.maxCvss !== undefined) {
+    checks.push({
+      id: 'cve-scan',
+      name: 'CVE scan',
+      passed: true,
+      details: 'No known CVEs and no critical severity exposure.',
+    });
+  }
+
+  if (data.hasRepo !== undefined) {
+    checks.push({
+      id: 'supply-chain',
+      name: 'Supply chain',
+      passed: data.hasRepo,
+      details: data.hasRepo
+        ? 'Source repository present; dependency graph available for review.'
+        : 'No source repository detected — provenance cannot be verified.',
+    });
+  }
+
+  if (data.maintainers !== undefined) {
+    checks.push({
+      id: 'maintainers',
+      name: 'Maintainers',
+      passed: data.maintainers > 1,
+      details: `${data.maintainers} maintainer(s) — ${data.maintainers > 1 ? 'healthy distribution' : 'single-maintainer risk'}.`,
+    });
+  }
+
+  if (data.license !== undefined) {
+    checks.push({
+      id: 'license',
+      name: 'License',
+      passed: data.license !== 'unknown' && data.license !== undefined,
+      details: data.license && data.license !== 'unknown'
+        ? `License detected: ${data.license}.`
+        : 'License could not be determined from npm metadata.',
+    });
+  }
+
+  if (data.depCount !== undefined) {
+    checks.push({
+      id: 'supply-chain',
+      name: 'Dependency count',
+      passed: data.depCount <= 30,
+      details: `${data.depCount} direct dependenc${data.depCount !== 1 ? 'ies' : 'y'} — ${data.depCount > 30 ? 'large surface area' : 'manageable attack surface'}.`,
+    });
+  }
+
+  if (data.lastPublishedDays !== undefined) {
+    checks.push({
+      id: 'freshness',
+      name: 'Maintenance freshness',
+      passed: data.lastPublishedDays <= 365,
+      details: `Last published ${data.lastPublishedDays} day${data.lastPublishedDays !== 1 ? 's' : ''} ago — ${data.lastPublishedDays > 365 ? 'stale, may be unmaintained' : 'actively maintained'}.`,
+    });
+  }
+
+  return checks;
 }

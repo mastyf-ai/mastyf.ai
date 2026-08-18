@@ -15,8 +15,7 @@ import { ScanTierBadge } from '@/components/ScanTierBadge';
 import { ScoreReportPanel } from '@/components/ScoreReportPanel';
 import { ScoreRing } from '@/components/ScoreRing';
 import { computeTrustGrade } from '@/lib/trust-badge-grade';
-import { certificationChecksOnly } from '@/lib/score-report';
-import { mergePackageData, formatDownloads, formatDays } from '@/lib/package-data-merge';
+import { mergePackageData, formatDownloads, formatDays, checksFromMerged } from '@/lib/package-data-merge';
 import {
   packagePathFromSegments,
   renderTrustBadgeSvg,
@@ -277,21 +276,17 @@ export default async function CertifiedPackagePage({ params }: Props) {
               Fix the issues above, then run a deep scan or publish from your mastyf.ai proxy for a
               maintainer-verified badge.
             </p>
-            {certificationChecksOnly(score.checks).length > 0 ? (
-              <ul className="score-check-list">
-                {certificationChecksOnly(score.checks).map((c) => (
-                  <li key={String(c.id ?? c.name)} className={c.passed ? 'pass' : 'fail'}>
-                    <span className="score-check-icon" aria-hidden>{c.passed ? '✓' : '✗'}</span>
-                    <div>
-                      <strong>{c.name}</strong>
-                      <p>{c.details}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="score-section-lead">No additional certification checks to display.</p>
-            )}
+            <ul className="score-check-list">
+              {checksFromMerged(data).map((c) => (
+                <li key={`${c.id}-${c.name}`} className={c.passed ? 'pass' : 'fail'}>
+                  <span className="score-check-icon" aria-hidden>{c.passed ? '✓' : '✗'}</span>
+                  <div>
+                    <strong>{c.name}</strong>
+                    <p>{c.details}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
       </div>
