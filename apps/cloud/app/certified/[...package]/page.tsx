@@ -6,7 +6,7 @@ import {
   InvalidPackageNameError,
   isDeepScanEnabled,
   PackageNotFoundError,
-  resolvePackageScore,
+  resolvePackageScoreWithStale,
 } from '@/lib/package-score-resolver';
 import { BadgeEmbedGallery } from '@/components/BadgeEmbedGallery';
 import { DeepScanButton } from '@/components/DeepScanButton';
@@ -43,9 +43,12 @@ export default async function CertifiedPackagePage({ params }: Props) {
 
   const cloudBase = await resolveCloudBaseFromHeaders();
 
-  let score: Awaited<ReturnType<typeof resolvePackageScore>>;
+  let score: Awaited<ReturnType<typeof resolvePackageScoreWithStale>>['score'];
+  let isStale = false;
   try {
-    score = await resolvePackageScore(packageName);
+    const result = await resolvePackageScoreWithStale(packageName);
+    score = result.score;
+    isStale = result.stale;
   } catch (err: unknown) {
     if (err instanceof PackageNotFoundError || err instanceof InvalidPackageNameError) {
       return <PackageNotFound packageName={packageName} />;
@@ -74,6 +77,20 @@ export default async function CertifiedPackagePage({ params }: Props) {
 
   return (
     <main className="score-page">
+      {isStale && (
+        <div style={{
+          background: 'rgba(245, 158, 11, 0.15)',
+          border: '1px solid rgba(245, 158, 11, 0.3)',
+          borderRadius: '8px',
+          padding: '0.75rem 1rem',
+          marginBottom: '1rem',
+          color: '#f59e0b',
+          fontSize: '0.9rem',
+        }}>
+          This score data may be outdated.
+        </div>
+      )}
+
       <nav className="score-breadcrumb" aria-label="Breadcrumb">
         <Link href="/">Home</Link>
         <span aria-hidden>/</span>

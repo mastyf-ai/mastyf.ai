@@ -4,7 +4,7 @@ type Props = {
   report: PublishableScoreReport;
 };
 
-const SEV_CLASS: Record<PublishableIssue['severity'], string> = {
+const SEV_CLASS: Record<string, string> = {
   critical: 'issue-critical',
   high: 'issue-high',
   medium: 'issue-medium',
@@ -12,7 +12,7 @@ const SEV_CLASS: Record<PublishableIssue['severity'], string> = {
   info: 'issue-info',
 };
 
-const PRIORITY_LABEL: Record<ImprovementAction['priority'], string> = {
+const PRIORITY_LABEL: Record<string, string> = {
   immediate: 'Fix now',
   high: 'High priority',
   medium: 'Recommended',
@@ -26,6 +26,10 @@ function scoreClass(score: number): string {
 }
 
 export function ScoreReportPanel({ report }: Props) {
+  const categories = report.categories ?? [];
+  const issues = report.issues ?? [];
+  const actions = report.improvementActions ?? [];
+
   return (
     <div className="score-report">
       <section className="score-report-card card-elevated">
@@ -44,7 +48,7 @@ export function ScoreReportPanel({ report }: Props) {
               </tr>
             </thead>
             <tbody>
-              {report.categories.map((cat) => (
+              {categories.map((cat) => (
                 <tr key={cat.name}>
                   <td>{cat.name}</td>
                   <td>
@@ -52,8 +56,8 @@ export function ScoreReportPanel({ report }: Props) {
                       {cat.score}/100
                     </span>
                   </td>
-                  <td>{cat.weightPercent}%</td>
-                  <td className="score-points">+{cat.contributionPoints}</td>
+                  <td>{cat.weightPercent ?? `${Math.round((cat.weight ?? 0) * 100)}%`}</td>
+                  <td className="score-points">+{cat.contributionPoints ?? Math.round(cat.score * (cat.weight ?? 0))}</td>
                 </tr>
               ))}
             </tbody>
@@ -64,7 +68,7 @@ export function ScoreReportPanel({ report }: Props) {
       <section className="score-report-card">
         <h2 className="score-section-title">Category breakdown</h2>
         <div className="score-category-grid">
-          {report.categories.map((cat) => (
+          {categories.map((cat) => (
             <article key={cat.name} className="score-category-card card-elevated">
               <div className="score-category-head">
                 <strong>{cat.name}</strong>
@@ -78,8 +82,10 @@ export function ScoreReportPanel({ report }: Props) {
                   style={{ width: `${cat.score}%` }}
                 />
               </div>
-              <p className="score-category-plain">{cat.plainEnglish}</p>
-              {cat.findings.length > 0 ? (
+              {cat.plainEnglish && (
+                <p className="score-category-plain">{cat.plainEnglish}</p>
+              )}
+              {cat.findings?.length > 0 ? (
                 <ul className="score-findings">
                   {cat.findings.map((f) => (
                     <li key={f}>{f}</li>
@@ -91,15 +97,15 @@ export function ScoreReportPanel({ report }: Props) {
         </div>
       </section>
 
-      {report.issues.length > 0 ? (
+      {issues.length > 0 ? (
         <section className="score-report-card">
           <h2 className="score-section-title">Issues found</h2>
           <p className="score-section-lead">
             Plain-language findings from the security scan — fix these to improve your score.
           </p>
           <ul className="score-issues">
-            {report.issues.map((issue, i) => (
-              <li key={`${issue.title}-${i}`} className={`score-issue-card card-elevated ${SEV_CLASS[issue.severity]}`}>
+            {issues.map((issue, i) => (
+              <li key={`${issue.title}-${i}`} className={`score-issue-card card-elevated ${SEV_CLASS[issue.severity] ?? ''}`}>
                 <div className="score-issue-head">
                   <span className="score-sev">{issue.severity}</span>
                   <strong>{issue.title}</strong>
@@ -114,16 +120,16 @@ export function ScoreReportPanel({ report }: Props) {
         </section>
       ) : null}
 
-      {report.improvementActions.length > 0 ? (
+      {actions.length > 0 ? (
         <section className="score-report-card">
           <h2 className="score-section-title">How to improve your score</h2>
           <ol className="score-actions">
-            {report.improvementActions.map((action, i) => (
+            {actions.map((action, i) => (
               <li key={`${action.category}-${i}`} className="score-action-card card-elevated">
                 <div className="score-action-top">
                   <span className="score-action-num">{i + 1}</span>
                   <span className={`score-priority priority-${action.priority}`}>
-                    {PRIORITY_LABEL[action.priority]}
+                    {PRIORITY_LABEL[action.priority] ?? action.priority}
                   </span>
                 </div>
                 <p className="score-action-text">{action.action}</p>
