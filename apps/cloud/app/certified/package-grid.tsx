@@ -265,54 +265,57 @@ function PackageCard({ pkg }: { pkg: Package }) {
 
 const PAGE_SIZE = 50;
 
+function pageNumbers(current: number, totalPages: number): number[] {
+  const pages = new Set<number>();
+  pages.add(1);
+  pages.add(totalPages);
+  for (let i = Math.max(2, current - 2); i <= Math.min(totalPages - 1, current + 2); i++) {
+    pages.add(i);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+
 export function PackageGrid() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState(1);
 
-  const fetchPackages = useCallback(async (off: number, q: string, append: boolean) => {
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const fetchPackages = useCallback(async (p: number, q: string) => {
     try {
-      const params = new URLSearchParams({ offset: String(off), limit: String(PAGE_SIZE) });
+      setLoading(true);
+      setError(null);
+      const params = new URLSearchParams({ offset: String((p - 1) * PAGE_SIZE), limit: String(PAGE_SIZE) });
       if (q) params.set('q', q);
       const res = await fetch(`/api/v1/scores/recent?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (append) {
-        setPackages((prev) => [...prev, ...data.packages]);
-      } else {
-        setPackages(data.packages);
-      }
-      setTotal(data.total);
-      setHasMore(data.hasMore);
+      setPackages(data.packages ?? []);
+      setTotal(data.total ?? 0);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    setOffset(0);
-    fetchPackages(0, debouncedSearch, false).finally(() => setLoading(false));
-  }, [debouncedSearch, fetchPackages]);
+    setPage(1);
+  }, [debouncedSearch]);
+
+  useEffect(() => {
+    fetchPackages(page, debouncedSearch);
+  }, [page, debouncedSearch, fetchPackages]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
-
-  const loadMore = async () => {
-    const nextOffset = offset + PAGE_SIZE;
-    setLoadingMore(true);
-    await fetchPackages(nextOffset, debouncedSearch, true);
-    setOffset(nextOffset);
-    setLoadingMore(false);
-  };
 
   return (
     <>
@@ -363,25 +366,35 @@ export function PackageGrid() {
               <PackageCard key={pkg.id} pkg={pkg} />
             ))}
           </div>
-          {hasMore && (
-            <div style={{ textAlign: 'center', padding: '1.5rem' }}>
+          {totalPages > 1 && (
+            <nav className="certified-pagination" aria-label="Pagination">
               <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                style={{
-                  padding: '0.75rem 2rem',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(255,255,255,0.08)',
-                  color: '#fff',
-                  fontSize: '0.95rem',
-                  cursor: loadingMore ? 'wait' : 'pointer',
-                  transition: 'background 0.2s',
-                }}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="certified-page-btn"
               >
-                {loadingMore ? 'Loading...' : `Load more (${packages.length} of ${total})`}
+                ‹ Prev
               </button>
-            </div>
+              {pageNumbers(page, totalPages).map((n, i, arr) => (
+                <span key={n} className="certified-page-group">
+                  {i > 0 && arr[i - 1] !== n - 1 ? <span className="certified-page-ellipsis">…</span> : null}
+                  <button
+                    onClick={() => setPage(n)}
+                    className={`certified-page-btn ${n === page ? 'certified-page-active' : ''}`}
+                    aria-current={n === page ? 'page' : undefined}
+                  >
+                    {n}
+                  </button>
+                </span>
+              ))}
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="certified-page-btn"
+              >
+                Next ›
+              </button>
+            </nav>
           )}
         </>
       )}

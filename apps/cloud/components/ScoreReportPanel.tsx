@@ -74,12 +74,12 @@ export function ScoreReportPanel({ report, probe }: Props) {
         </div>
       </section>
 
-      {probe ? (
-        <section className="score-report-card card-elevated">
-          <h2 className="score-section-title">Attack probe results</h2>
-          <p className="score-section-lead">
-            Live behavioral test — the scanner sent malicious payloads to the running server and measured what happened.
-          </p>
+      <section className="score-report-card card-elevated">
+        <h2 className="score-section-title">Attack probe results</h2>
+        <p className="score-section-lead">
+          Live behavioral test — the scanner sends malicious payloads to the running server and measures what happened.
+        </p>
+        {probe ? (
           <div className="score-check-list">
             <div className={`score-check-item ${probe.error ? 'fail' : 'pass'}`}>
               <span className="score-check-icon" aria-hidden>{probe.error ? '✗' : '✓'}</span>
@@ -110,8 +110,21 @@ export function ScoreReportPanel({ report, probe }: Props) {
               </div>
             </div>
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <div className="score-check-list">
+            <div className="score-check-item fail">
+              <span className="score-check-icon" aria-hidden>○</span>
+              <div>
+                <strong>No live probe data</strong>
+                <p>
+                  This package was scored with a static scan only — no live MCP server was probed.
+                  Run a deep scan to capture live attack probe results.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="score-report-card">
         <h2 className="score-section-title">Category breakdown</h2>
