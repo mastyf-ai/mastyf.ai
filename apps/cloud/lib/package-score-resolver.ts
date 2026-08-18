@@ -253,6 +253,21 @@ function pickLiveOrAttested(
   return attested;
 }
 
+export async function resolvePackageScoreCacheOnly(
+  packageName: string,
+): Promise<PackageScoreResult | null> {
+  const name = packageName.trim();
+  try {
+    const liveCached = await readCache(name, 'live');
+    if (liveCached) return rowToResult(liveCached, 'computed');
+    const cached = await readCache(name, undefined);
+    if (cached) return rowToResult(cached, 'computed');
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export async function resolvePackageScore(
   packageName: string,
   opts?: {

@@ -377,7 +377,7 @@ export function PackageGrid() {
   }, [search]);
 
   const loadMore = async () => {
-    const nextOffset = offset + PAGE_SIZE;
+    const nextOffset = packages.length;
     setLoadingMore(true);
     await fetchPackages(nextOffset, debouncedSearch, true);
     setOffset(nextOffset);
@@ -434,7 +434,7 @@ export function PackageGrid() {
             ))}
           </div>
           {hasMore && (
-            <div style={{ textAlign: 'center', padding: '1.5rem' }}>
+            <div style={{ textAlign: 'center', padding: '1.5rem', gridColumn: '1 / -1' }}>
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
@@ -442,11 +442,13 @@ export function PackageGrid() {
                   padding: '0.75rem 2rem',
                   borderRadius: '8px',
                   border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(255,255,255,0.08)',
+                  background: 'rgba(99,102,241,0.3)',
                   color: '#fff',
-                  fontSize: '0.95rem',
+                  fontSize: '1rem',
+                  fontWeight: 600,
                   cursor: loadingMore ? 'wait' : 'pointer',
                   transition: 'background 0.2s',
+                  minWidth: '200px',
                 }}
               >
                 {loadingMore ? 'Loading...' : `Load more (${packages.length} of ${total})`}
