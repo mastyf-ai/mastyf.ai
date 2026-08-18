@@ -61,7 +61,7 @@ export class InvalidPackageNameError extends Error {
 }
 
 async function loadScorer() {
-  return await import('./package-scorer');
+  return await import('./package-scorer-stub');
 }
 
 function rowToResult(row: CacheRow, source: PackageScoreSource, id?: string): PackageScoreResult {
@@ -121,8 +121,8 @@ export async function resolvePackageScoreWithStale(
   if (fresh) return { score: rowToResult(fresh, 'computed'), stale: false };
   const staleRow = await readStaleCache(packageName);
   if (staleRow) return { score: rowToResult(staleRow, 'computed'), stale: true };
-  // No cache at all — throw so the caller can handle it (don't score on server component)
-  throw new PackageNotFoundError(packageName);
+  const score = await resolvePackageScore(packageName);
+  return { score, stale: false };
 }
 
 async function readCache(
@@ -253,21 +253,6 @@ function pickLiveOrAttested(
   return attested;
 }
 
-export async function resolvePackageScoreCacheOnly(
-  packageName: string,
-): Promise<PackageScoreResult | null> {
-  const name = packageName.trim();
-  try {
-    const liveCached = await readCache(name, 'live');
-    if (liveCached) return rowToResult(liveCached, 'computed');
-    const cached = await readCache(name, undefined);
-    if (cached) return rowToResult(cached, 'computed');
-  } catch {
-    return null;
-  }
-  return null;
-}
-
 export async function resolvePackageScore(
   packageName: string,
   opts?: {
@@ -347,7 +332,7 @@ export async function resolvePackageScore(
 export async function listRecentPackageScores(limit = 200): Promise<PackageScoreResult[]> {
   try {
     const db = getDb();
-    const capped = Math.min(limit, 10000);
+    const capped = Math.min(limit, 500);
     const result = await db.execute(sql`
       SELECT package_name, version, scan_tier, score, level, grade,
              score_report, checks, computed_at, expires_at

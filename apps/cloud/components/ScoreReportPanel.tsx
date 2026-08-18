@@ -1,19 +1,10 @@
 import type { ImprovementAction, PublishableIssue, PublishableScoreReport } from '@/lib/score-report';
 
-type ProbeData = {
-  error?: string;
-  rejected?: number;
-  attempted?: number;
-  reflected?: number;
-  secretLeaks?: number;
-};
-
 type Props = {
   report: PublishableScoreReport;
-  probe?: ProbeData;
 };
 
-const SEV_CLASS: Record<string, string> = {
+const SEV_CLASS: Record<PublishableIssue['severity'], string> = {
   critical: 'issue-critical',
   high: 'issue-high',
   medium: 'issue-medium',
@@ -21,7 +12,7 @@ const SEV_CLASS: Record<string, string> = {
   info: 'issue-info',
 };
 
-const PRIORITY_LABEL: Record<string, string> = {
+const PRIORITY_LABEL: Record<ImprovementAction['priority'], string> = {
   immediate: 'Fix now',
   high: 'High priority',
   medium: 'Recommended',
@@ -34,20 +25,7 @@ function scoreClass(score: number): string {
   return 'bad';
 }
 
-function formatWeight(weight: number): string {
-  return `${Math.round(weight * 100)}%`;
-}
-
-function contributionPoints(cat: { score: number; weight: number; contributionPoints?: number }): number {
-  if (cat.contributionPoints != null) return cat.contributionPoints;
-  return Math.round(cat.score * cat.weight);
-}
-
-export function ScoreReportPanel({ report, probe }: Props) {
-  const categories = report.categories ?? [];
-  const issues = report.issues ?? [];
-  const actions = report.improvementActions ?? [];
-
+export function ScoreReportPanel({ report }: Props) {
   return (
     <div className="score-report">
       <section className="score-report-card card-elevated">
@@ -66,7 +44,7 @@ export function ScoreReportPanel({ report, probe }: Props) {
               </tr>
             </thead>
             <tbody>
-              {categories.map((cat) => (
+              {report.categories.map((cat) => (
                 <tr key={cat.name}>
                   <td>{cat.name}</td>
                   <td>
@@ -74,8 +52,8 @@ export function ScoreReportPanel({ report, probe }: Props) {
                       {cat.score}/100
                     </span>
                   </td>
-                  <td>{cat.weightPercent ?? formatWeight(cat.weight)}</td>
-                  <td className="score-points">+{contributionPoints(cat)}</td>
+                  <td>{cat.weightPercent}%</td>
+                  <td className="score-points">+{cat.contributionPoints}</td>
                 </tr>
               ))}
             </tbody>
@@ -83,49 +61,10 @@ export function ScoreReportPanel({ report, probe }: Props) {
         </div>
       </section>
 
-      {probe ? (
-        <section className="score-report-card card-elevated">
-          <h2 className="score-section-title">Attack probe results</h2>
-          <p className="score-section-lead">
-            Live behavioral test — the scanner sent malicious payloads to the running server and measured what happened.
-          </p>
-          <div className="score-check-list">
-            <div className={`score-check-item ${probe.error ? 'fail' : 'pass'}`}>
-              <span className="score-check-icon" aria-hidden>{probe.error ? '✗' : '✓'}</span>
-              <div>
-                <strong>Handshake</strong>
-                <p>{probe.error ?? 'Completed successfully'}</p>
-              </div>
-            </div>
-            <div className={`score-check-item ${probe.rejected && probe.rejected > 0 ? 'pass' : 'fail'}`}>
-              <span className="score-check-icon" aria-hidden>{probe.rejected && probe.rejected > 0 ? '✓' : '✗'}</span>
-              <div>
-                <strong>Payloads rejected</strong>
-                <p>{probe.rejected ?? 0} of {probe.attempted ?? 0} malicious probe(s) blocked</p>
-              </div>
-            </div>
-            <div className={`score-check-item ${probe.reflected && probe.reflected > 0 ? 'fail' : 'pass'}`}>
-              <span className="score-check-icon" aria-hidden>{probe.reflected && probe.reflected > 0 ? '✗' : '✓'}</span>
-              <div>
-                <strong>Payloads reflected</strong>
-                <p>{probe.reflected ?? 0} malicious payload(s) reflected back unfiltered</p>
-              </div>
-            </div>
-            <div className={`score-check-item ${probe.secretLeaks && probe.secretLeaks > 0 ? 'fail' : 'pass'}`}>
-              <span className="score-check-icon" aria-hidden>{probe.secretLeaks && probe.secretLeaks > 0 ? '✗' : '✓'}</span>
-              <div>
-                <strong>Secret leaks</strong>
-                <p>{probe.secretLeaks ?? 0} environment variable(s) leaked via tool output</p>
-              </div>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
       <section className="score-report-card">
         <h2 className="score-section-title">Category breakdown</h2>
         <div className="score-category-grid">
-          {categories.map((cat) => (
+          {report.categories.map((cat) => (
             <article key={cat.name} className="score-category-card card-elevated">
               <div className="score-category-head">
                 <strong>{cat.name}</strong>
@@ -139,10 +78,8 @@ export function ScoreReportPanel({ report, probe }: Props) {
                   style={{ width: `${cat.score}%` }}
                 />
               </div>
-              {cat.plainEnglish && (
-                <p className="score-category-plain">{cat.plainEnglish}</p>
-              )}
-              {cat.findings?.length > 0 ? (
+              <p className="score-category-plain">{cat.plainEnglish}</p>
+              {cat.findings.length > 0 ? (
                 <ul className="score-findings">
                   {cat.findings.map((f) => (
                     <li key={f}>{f}</li>
@@ -154,15 +91,15 @@ export function ScoreReportPanel({ report, probe }: Props) {
         </div>
       </section>
 
-      {issues.length > 0 ? (
+      {report.issues.length > 0 ? (
         <section className="score-report-card">
           <h2 className="score-section-title">Issues found</h2>
           <p className="score-section-lead">
             Plain-language findings from the security scan — fix these to improve your score.
           </p>
           <ul className="score-issues">
-            {issues.map((issue, i) => (
-              <li key={`${issue.title}-${i}`} className={`score-issue-card card-elevated ${SEV_CLASS[issue.severity] ?? ''}`}>
+            {report.issues.map((issue, i) => (
+              <li key={`${issue.title}-${i}`} className={`score-issue-card card-elevated ${SEV_CLASS[issue.severity]}`}>
                 <div className="score-issue-head">
                   <span className="score-sev">{issue.severity}</span>
                   <strong>{issue.title}</strong>
@@ -177,16 +114,16 @@ export function ScoreReportPanel({ report, probe }: Props) {
         </section>
       ) : null}
 
-      {actions.length > 0 ? (
+      {report.improvementActions.length > 0 ? (
         <section className="score-report-card">
           <h2 className="score-section-title">How to improve your score</h2>
           <ol className="score-actions">
-            {actions.map((action, i) => (
+            {report.improvementActions.map((action, i) => (
               <li key={`${action.category}-${i}`} className="score-action-card card-elevated">
                 <div className="score-action-top">
                   <span className="score-action-num">{i + 1}</span>
                   <span className={`score-priority priority-${action.priority}`}>
-                    {PRIORITY_LABEL[action.priority] ?? action.priority}
+                    {PRIORITY_LABEL[action.priority]}
                   </span>
                 </div>
                 <p className="score-action-text">{action.action}</p>
