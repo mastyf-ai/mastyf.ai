@@ -16,6 +16,7 @@ import { ScoreReportPanel } from '@/components/ScoreReportPanel';
 import { ScoreRing } from '@/components/ScoreRing';
 import { computeTrustGrade } from '@/lib/trust-badge-grade';
 import { certificationChecksOnly } from '@/lib/score-report';
+import { mergePackageData, formatDownloads, formatDays } from '@/lib/package-data-merge';
 import {
   packagePathFromSegments,
   renderTrustBadgeSvg,
@@ -57,7 +58,14 @@ export default async function CertifiedPackagePage({ params }: Props) {
   }
 
   const grade = computeTrustGrade(score.score);
-  const scoreReport = score.scoreReport;
+  const data = mergePackageData(
+    score.scoreReport,
+    score.checks,
+    score.score,
+    grade,
+    score.level,
+    score.version,
+  );
 
   let verification: Awaited<ReturnType<typeof verifyPublicCertification>> | null = null;
   if (score.source === 'attested') {
@@ -121,7 +129,7 @@ export default async function CertifiedPackagePage({ params }: Props) {
               dangerouslySetInnerHTML={{ __html: badgeSvg }}
             />
 
-            <p className="score-hero-summary">{scoreReport.summaryPlainEnglish}</p>
+            <p className="score-hero-summary">{data.summary}</p>
 
             {verification ? (
               <p className={`score-attestation score-attestation-${verification.valid ? 'valid' : 'invalid'}`}>
@@ -158,7 +166,84 @@ export default async function CertifiedPackagePage({ params }: Props) {
         </div>
       </section>
 
-      <ScoreReportPanel report={scoreReport} />
+      <section className="score-report-card card-elevated signal-summary">
+        <h2 className="score-section-title">Package signals</h2>
+        <div className="score-stat-grid">
+          {data.license ? (
+            <div className="score-stat-tile">
+              <span className="score-stat-label">License</span>
+              <strong>{data.license}</strong>
+            </div>
+          ) : null}
+          {data.downloads !== undefined ? (
+            <div className="score-stat-tile">
+              <span className="score-stat-label">Downloads / week</span>
+              <strong>{formatDownloads(data.downloads)}</strong>
+            </div>
+          ) : null}
+          {data.maintainers !== undefined ? (
+            <div className="score-stat-tile">
+              <span className="score-stat-label">Maintainers</span>
+              <strong>{data.maintainers}</strong>
+            </div>
+          ) : null}
+          {data.packageAgeDays !== undefined ? (
+            <div className="score-stat-tile">
+              <span className="score-stat-label">Package age</span>
+              <strong>{formatDays(data.packageAgeDays)}</strong>
+            </div>
+          ) : null}
+          {data.lastPublishedDays !== undefined ? (
+            <div className="score-stat-tile">
+              <span className="score-stat-label">Last published</span>
+              <strong>{formatDays(data.lastPublishedDays)} ago</strong>
+            </div>
+          ) : null}
+          {data.depCount !== undefined ? (
+            <div className="score-stat-tile">
+              <span className="score-stat-label">Direct deps</span>
+              <strong>{data.depCount}</strong>
+            </div>
+          ) : null}
+          <div className="score-stat-tile">
+            <span className="score-stat-label">CVEs known</span>
+            <strong className={data.cves.total > 0 ? 'signal-cve-bad' : 'signal-cve-clean'}>
+              {data.cves.total} (max {data.cves.maxCvss || 0} CVSS)
+            </strong>
+          </div>
+          {data.hasRepo !== undefined ? (
+            <div className="score-stat-tile">
+              <span className="score-stat-label">Source repo</span>
+              <strong>{data.hasRepo ? 'Yes' : 'No'}</strong>
+            </div>
+          ) : null}
+          {data.cveFree !== undefined ? (
+            <div className="score-stat-tile">
+              <span className="score-stat-label">CVE-free check</span>
+              <strong className={data.cveFree ? 'signal-cve-clean' : 'signal-cve-bad'}>
+                {data.cveFree ? 'Passed' : 'Failed'}
+              </strong>
+            </div>
+          ) : null}
+        </div>
+        {data.description ? (
+          <p className="score-section-lead" style={{ marginTop: '0.75rem' }}>
+            {data.description}
+          </p>
+        ) : null}
+      </section>
+
+      <ScoreReportPanel
+        report={{
+          overallScore: data.score,
+          grade: data.grade,
+          summaryPlainEnglish: data.summary,
+          categories: data.categories,
+          improvementActions: data.improvementActions,
+          issues: data.issues,
+        }}
+        probe={data.probe ?? undefined}
+      />
 
       <div className="score-page-grid">
         <section className="score-side-card card-elevated">

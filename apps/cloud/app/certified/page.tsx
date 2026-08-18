@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { listRecentPackageScores } from '@/lib/package-score-resolver';
+import { mergePackageData, formatDownloads, formatDays } from '@/lib/package-data-merge';
 import { computeTrustGrade, trustGradeColor } from '@/lib/trust-badge-grade';
 import { resolveCloudBaseUrl } from '@/lib/trust-badge-svg';
 import { BadgeLookupWidget } from '@/components/BadgeLookupWidget';
@@ -71,6 +72,14 @@ export default async function CertifiedDirectoryPage() {
           <div className="certified-package-grid">
             {scores.map((c) => {
               const grade = computeTrustGrade(c.score);
+              const data = mergePackageData(
+                c.scoreReport,
+                c.checks,
+                c.score,
+                grade,
+                c.level,
+                c.version,
+              );
               return (
                 <Link
                   key={c.id}
@@ -85,6 +94,51 @@ export default async function CertifiedDirectoryPage() {
                     <span>·</span>
                     <span>v{c.version}</span>
                   </div>
+
+                  {data.description ? (
+                    <p className="certified-package-desc">{data.description}</p>
+                  ) : null}
+
+                  <div className="certified-package-stats">
+                    {data.license ? (
+                      <span className="certified-stat-chip" title={`License: ${data.license}`}>
+                        {data.license}
+                      </span>
+                    ) : null}
+                    {data.cves.total > 0 ? (
+                      <span
+                        className="certified-stat-chip certified-stat-cve"
+                        title={`${data.cves.total} CVEs (${data.cves.critical} critical, ${data.cves.high} high)`}
+                      >
+                        {data.cves.total} CVE
+                      </span>
+                    ) : (
+                      <span className="certified-stat-chip certified-stat-clean" title="No known CVEs">
+                        0 CVE
+                      </span>
+                    )}
+                    {data.downloads !== undefined ? (
+                      <span className="certified-stat-chip" title={`${data.downloads} weekly downloads`}>
+                        {formatDownloads(data.downloads)}/wk
+                      </span>
+                    ) : null}
+                    {data.maintainers !== undefined ? (
+                      <span className="certified-stat-chip" title={`${data.maintainers} maintainer(s)`}>
+                        {data.maintainers} maint
+                      </span>
+                    ) : null}
+                    {data.lastPublishedDays !== undefined ? (
+                      <span className="certified-stat-chip" title={`Last published ${data.lastPublishedDays} days ago`}>
+                        {formatDays(data.lastPublishedDays)} ago
+                      </span>
+                    ) : null}
+                    {data.depCount !== undefined ? (
+                      <span className="certified-stat-chip" title={`${data.depCount} direct dependencies`}>
+                        {data.depCount} deps
+                      </span>
+                    ) : null}
+                  </div>
+
                   <div className="certified-package-footer">
                     <span
                       className="socket-score-pill"
