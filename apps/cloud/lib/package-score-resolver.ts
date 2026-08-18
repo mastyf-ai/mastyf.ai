@@ -121,8 +121,8 @@ export async function resolvePackageScoreWithStale(
   if (fresh) return { score: rowToResult(fresh, 'computed'), stale: false };
   const staleRow = await readStaleCache(packageName);
   if (staleRow) return { score: rowToResult(staleRow, 'computed'), stale: true };
-  const score = await resolvePackageScore(packageName);
-  return { score, stale: false };
+  // No cache at all — throw so the caller can handle it (don't score on server component)
+  throw new PackageNotFoundError(packageName);
 }
 
 async function readCache(

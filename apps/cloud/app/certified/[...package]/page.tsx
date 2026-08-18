@@ -6,8 +6,7 @@ import {
   InvalidPackageNameError,
   isDeepScanEnabled,
   PackageNotFoundError,
-  resolvePackageScore,
-  resolvePackageScoreCacheOnly,
+  resolvePackageScoreWithStale,
 } from '@/lib/package-score-resolver';
 import { BadgeEmbedGallery } from '@/components/BadgeEmbedGallery';
 import { DeepScanButton } from '@/components/DeepScanButton';
@@ -44,19 +43,12 @@ export default async function CertifiedPackagePage({ params }: Props) {
 
   const cloudBase = await resolveCloudBaseFromHeaders();
 
-  let score: Awaited<ReturnType<typeof resolvePackageScore>>;
+  let score: Awaited<ReturnType<typeof resolvePackageScoreWithStale>>['score'];
   let isStale = false;
   try {
-    // Try cache-only first to avoid Vercel serverless timeout on re-scoring
-    const cached = await resolvePackageScoreCacheOnly(packageName);
-    if (cached) {
-      score = cached;
-      const expiresAt = new Date(score.expiresAt).getTime();
-      isStale = expiresAt < Date.now();
-    } else {
-      // No cache at all — fall back to full scoring (may timeout)
-      score = await resolvePackageScore(packageName);
-    }
+    const result = await resolvePackageScoreWithStale(packageName);
+    score = result.score;
+    isStale = result.stale;
   } catch (err: unknown) {
     if (err instanceof PackageNotFoundError || err instanceof InvalidPackageNameError) {
       return <PackageNotFound packageName={packageName} />;
