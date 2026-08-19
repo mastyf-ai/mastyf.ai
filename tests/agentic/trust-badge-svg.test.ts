@@ -24,8 +24,8 @@ describe('trust-badge-grade', () => {
     expect(computeTrustGrade(95)).toBe('A+');
     expect(computeTrustGrade(82)).toBe('A');
     expect(computeTrustGrade(70)).toBe('B');
-    expect(computeTrustGrade(45)).toBe('C');
-    expect(computeTrustGrade(25)).toBe('D');
+    expect(computeTrustGrade(55)).toBe('C');
+    expect(computeTrustGrade(35)).toBe('D');
     expect(computeTrustGrade(10)).toBe('F');
   });
 
