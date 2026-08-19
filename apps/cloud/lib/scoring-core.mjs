@@ -94,8 +94,8 @@ function downloadPopularityModifier(downloads30d) {
   if (downloads30d >= 10000) return 5;
   if (downloads30d >= 1000) return 0;
   if (downloads30d >= 100) return -5;
-  if (downloads30d >= 10) return -10;
-  return -15;
+  if (downloads30d >= 10) return -5;
+  return -5;
 }
 
 function downloadVelocityModifier(npm) {
@@ -158,10 +158,10 @@ function computeCvePosture(cves) {
   }
 
   // v3: absence of bad news is capped. Verified-clean (query succeeded, zero
-  // findings) caps at 85; unverified-clean caps at 70.
+  // findings) caps at 95; unverified-clean caps at 85.
   if (cves.cveCount === 0) {
     const verifiedClean = cves.status === 'ok';
-    score = Math.min(score, verifiedClean ? 85 : 70);
+    score = Math.min(score, verifiedClean ? 95 : 85);
   }
 
   const confidence = cves.status === 'ok' ? 'verified' : 'assumed';
@@ -191,10 +191,10 @@ function computeAuthStrength(npm, socket) {
   const kw = (npm.keywords || []).map((k) => String(k).toLowerCase());
   const hasAuth = (npm.description || '').toLowerCase().includes('auth') ||
     kw.some((k) => ['auth', 'oauth', 'jwt', 'api-key'].includes(k));
-  let score = 40;
-  if (hasAuth) score += 20;
+  let score = 60;
+  if (hasAuth) score += 15;
   if (socket?.source === 'socket_api') {
-    score = socket.socketSupplyChainScore > 70 ? 70 : 40;
+    score = socket.socketSupplyChainScore > 70 ? 80 : 60;
     return { score, confidence: 'verified' };
   }
   return { score, confidence: 'assumed' };
@@ -203,9 +203,9 @@ function computeAuthStrength(npm, socket) {
 function computeTransportSecurity(npm) {
   const kw = (npm.keywords || []).map((k) => String(k).toLowerCase());
   const isStdio = kw.some((k) => ['stdio', 'local', 'cli'].includes(k));
-  let score = 50;
-  if (isStdio) score = 80;
-  if (isHttpPackage(npm)) score = 40;
+  let score = 70;
+  if (isStdio) score = 85;
+  if (isHttpPackage(npm)) score = 55;
   return { score, confidence: 'assumed' };
 }
 
@@ -225,7 +225,7 @@ function computeAttackHistory(cves, github) {
   // v3: verified-clean cap, same as CVE posture
   if (advisories === 0) {
     const verifiedClean = cves?.status === 'ok' || github?.status === 'ok';
-    score = Math.min(score, verifiedClean ? 85 : 70);
+    score = Math.min(score, verifiedClean ? 95 : 85);
   }
 
   const confidence = (cves?.status === 'ok' || github?.status === 'ok') ? 'verified' : 'assumed';
@@ -239,17 +239,17 @@ function computeResponseHygiene(npm) {
     npm.homepage ? 1 : 0,
     npm.repository ? 1 : 0,
     npm.maintainers.length > 0 ? 1 : 0,
-    npm.maintainers.length >= 3 ? 1 : 0,
   ];
-  const score = Math.round((signals.reduce((a, b) => a + b, 0) / signals.length) * 100);
-  return { score, confidence: 'verified' };
+  const pct = signals.filter(Boolean).length / signals.length;
+  const score = Math.round(40 + pct * 50);
+  return { score: clamp(score), confidence: 'verified' };
 }
 
 function computeFreshness(npm) {
   if (isFinishedPackage(npm)) {
-    return { score: finishedPackageFreshness(npm), confidence: 'verified' };
+    return { score: Math.max(70, finishedPackageFreshness(npm)), confidence: 'verified' };
   }
-  return { score: freshnessScore(npm.lastPublishedDays), confidence: 'verified' };
+  return { score: Math.max(50, freshnessScore(npm.lastPublishedDays)), confidence: 'verified' };
 }
 
 function computeToolRiskSurface(socket, npm) {
@@ -279,7 +279,7 @@ function licenseRiskScore(license) {
 }
 
 function computeDownloadHealth(npm, trend) {
-  let score = 50;
+  let score = 60;
   score += downloadPopularityModifier(npm.downloadsLast30Days);
   score += downloadVelocityModifier(npm);
 
