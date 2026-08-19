@@ -173,6 +173,48 @@ export function extractInsightsFromChecks(checks: unknown[]): MergedPackageData 
       case 'cve-free':
         cveFree = bool(c.passed) ?? cveFree;
         break;
+      case 'behavioral-probe': {
+        const status = str(c.status);
+        const findings = Array.isArray(c.findings) ? c.findings : [];
+        if (status === 'ok') {
+          const reflected = findings.filter(
+            (f: Record<string, unknown>) => str(f.category) === 'suspicious-egress' || str(f.category) === 'dangerous-exec',
+          ).length;
+          const secretLeaks = findings.filter(
+            (f: Record<string, unknown>) => str(f.category) === 'secret-leak',
+          ).length;
+          probe = {
+            attempted: num(c.filesScanned) ?? 0,
+            rejected: Math.max(0, (num(c.filesScanned) ?? 0) - reflected - secretLeaks),
+            reflected,
+            secretLeaks,
+          };
+        } else if (findings.length > 0) {
+          // Probe failed but had partial findings before failure
+          const reflected = findings.filter(
+            (f: Record<string, unknown>) => str(f.category) === 'suspicious-egress' || str(f.category) === 'dangerous-exec',
+          ).length;
+          const secretLeaks = findings.filter(
+            (f: Record<string, unknown>) => str(f.category) === 'secret-leak',
+          ).length;
+          probe = {
+            error: str(c.reason) ?? 'Partial probe completed',
+            attempted: num(c.filesScanned) ?? 0,
+            rejected: 0,
+            reflected,
+            secretLeaks,
+          };
+        } else {
+          probe = {
+            error: str(c.reason) ?? 'Probe could not run',
+            attempted: 0,
+            rejected: 0,
+            reflected: 0,
+            secretLeaks: 0,
+          };
+        }
+        break;
+      }
       case 'mastyf-ai-score-report': {
         report = c as unknown as PublishableScoreReport;
         if (c.probe) {
