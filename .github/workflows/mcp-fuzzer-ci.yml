@@ -29,7 +29,7 @@ jobs:
 
     services:
       mastyf:
-        image: ghcr.io/mastyf-ai/mastyf:latest
+        image: ghcr.io/mastyf-ai/mastyf-ai:latest
         ports:
           - 4000:4000
         env:
