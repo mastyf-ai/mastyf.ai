@@ -1059,12 +1059,12 @@ program
     if (process.env['DASHBOARD_ENABLED'] === 'true') {
       const dashboardServerP = startDashboardServer(dashboardPort, policyWatcher);
       dashboardServerP
-        .then(async ({ server: httpServer }) => {
+        .then(async ({ server: httpServer, auth: dashboardAuth }) => {
           void rewireDashboardWs();
           if (httpServer && manager) {
             try {
               const { mountMcpEndpoint } = await import('./utils/mcp-http-bridge.js');
-              mountMcpEndpoint(httpServer, '/mcp', manager);
+              mountMcpEndpoint(httpServer, '/mcp', manager, dashboardAuth);
             } catch (errMcp: unknown) {
               console.error(chalk.yellow(`MCP endpoint mount warning: ${errMcp instanceof Error ? errMcp.message : String(errMcp)}`));
             }

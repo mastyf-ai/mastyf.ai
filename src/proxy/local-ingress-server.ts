@@ -6,6 +6,7 @@ import { createServer, type Server } from 'http';
 import type { ProxyManager } from './proxy-manager.js';
 import { Logger } from '../utils/logger.js';
 import { relayMcpHttpRequest } from '../utils/mcp-http-relay.js';
+import { validateHostHeader, applySafeCorsHeaders } from './http-proxy-security.js';
 
 export interface LocalIngressOptions {
   listenPort: number;
@@ -26,6 +27,16 @@ export class LocalIngressServer {
   async start(): Promise<number> {
     if (this.httpServer) return this.boundPort;
     this.httpServer = createServer((req, res) => {
+      const hostError = validateHostHeader(req.headers.host);
+      if (hostError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: hostError }));
+        return;
+      }
+
+      const safeHeaders: Record<string, string | string[] | undefined> = {};
+      applySafeCorsHeaders(req.headers, safeHeaders);
+
       const path = (req.url || '/').split('?')[0];
       if (req.method === 'POST' && path === '/mcp') {
         void relayMcpHttpRequest(req, res, this.opts.proxyManager);
