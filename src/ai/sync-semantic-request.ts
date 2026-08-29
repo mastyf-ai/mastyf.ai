@@ -160,20 +160,27 @@ export async function evaluateSyncSemanticRequest(
 Respond ONLY with JSON: {"suspicious":boolean,"confidence":0-1,"categories":string[],"reasoning":"one sentence"}`;
   const userPrompt = `Server: ${input.context.serverName}\nTool: ${input.context.toolName}\nPolicy: ${input.policyDecision.rule} (${input.policyDecision.action})\nArguments:\n${preview}`;
 
-  // L2 vector cache check before LLM — best-effort, never blocks on failure
+  // L2 vector cache: >0.94 hard hit, 0.88-0.94 soft -> distilled
   try {
-    const { getEmbeddingCache, isEmbeddingCacheEnabled } = await import('./embedding-cache.js');
+    const { getEmbeddingCache, isEmbeddingCacheEnabled, getEmbeddingThreshold } = await import('./embedding-cache.js');
     if (isEmbeddingCacheEnabled()) {
       const hit = await getEmbeddingCache().findNearest(input.context.serverName, input.context.toolName, input.context.arguments as Record<string, unknown>);
-      if (hit && hit.verdict.confidence >= MIN_CONFIDENCE) {
-        const block = hit.verdict.suspicious && hit.verdict.confidence >= MIN_CONFIDENCE;
-        if (block) {
-          Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_hit');
-          return { block: true, result: hit.verdict, source: 'llm', rule: 'semantic-sync-request', reason: hit.verdict.reasoning || `embedding hit sim=${hit.similarity.toFixed(2)}` };
-        }
-        if (!hit.verdict.suspicious) {
-          Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_hit_clean');
-          return { block: false, result: hit.verdict, source: 'llm', rule: 'semantic-sync-request', reason: hit.verdict.reasoning || 'embedding clean' };
+      if (hit) {
+        const hardTh = getEmbeddingThreshold();
+        const softTh = parseFloat(process.env.MASTYF_AI_EMBEDDING_SOFT_THRESHOLD || '0.88');
+        if (hit.similarity >= hardTh && hit.verdict.confidence >= MIN_CONFIDENCE) {
+          const block = hit.verdict.suspicious && hit.verdict.confidence >= MIN_CONFIDENCE;
+          if (block) {
+            Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_hit');
+            return { block: true, result: hit.verdict, source: 'llm', rule: 'semantic-sync-request', reason: hit.verdict.reasoning || `embedding hit sim=${hit.similarity.toFixed(2)}` };
+          }
+          if (!hit.verdict.suspicious) {
+            Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_hit_clean');
+            return { block: false, result: hit.verdict, source: 'llm', rule: 'semantic-sync-request', reason: hit.verdict.reasoning || 'embedding clean' };
+          }
+        } else if (hit.similarity >= softTh && hit.similarity < hardTh) {
+          // soft hit -> try distilled fast gate before full 8B
+          Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_soft');
         }
       }
     }

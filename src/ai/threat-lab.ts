@@ -490,6 +490,39 @@ async function discoverViaLlm(
   return enrichPolicyRuleFromLlm(llm, parsed, availableTools);
 }
 
+/** Batched variant — one LLM call returns N candidates (array JSON), validated individually. */
+export async function discoverBatchViaLlm(
+  llm: LlmAssistant,
+  ctx: DiscoverContext,
+  count: number,
+): Promise<ThreatLabDiscovery[]> {
+  const n = Math.max(1, Math.min(count, 10));
+  const single = await discoverViaLlm(llm, ctx);
+  if (n === 1) return single ? [single] : [];
+  // Try batched prompt
+  try {
+    const userPrompt = JSON.stringify({
+      context: 'Batched discovery — return array',
+      count: n,
+      bypass: ctx.bypass ? redactBypassContext(ctx.bypass) : undefined,
+      corpusSeed: ctx.corpusSeed ? { toolName: ctx.corpusSeed.toolName, category: ctx.corpusSeed.category } : undefined,
+    });
+    const systemBatched = DISCOVERY_SYSTEM_PROMPT + `\nReturn ONLY a JSON array of ${n} objects with the same schema as the single discovery (attackClass, hypothesis, corpusCandidate, policyRule, confidence). No surrounding object.`;
+    const result = await llm.generate(systemBatched, userPrompt);
+    if (!result?.text) return single ? [single] : [];
+    const arr = JSON.parse(result.text.match(/\[[\s\S]*\]/)?.[0] || '[]') as unknown[];
+    const out: ThreatLabDiscovery[] = [];
+    for (let i = 0; i < arr.length && out.length < n; i++) {
+      const parsed = parseDiscoveryJson(JSON.stringify(arr[i]));
+      if (!parsed) continue;
+      if (!parsed.corpusCandidate.id) parsed.corpusCandidate.id = `threat-lab-${String((ctx.seq ?? 1) + i).padStart(3, '0')}`;
+      out.push(await enrichPolicyRuleFromLlm(llm, parsed, []));
+    }
+    if (out.length) return out;
+  } catch { /* fallback to single */ }
+  return single ? [single] : [];
+}
+
 export async function discoverFromBypass(
   bypass: BypassContext,
   opts?: { llm?: LlmAssistant; seq?: number },

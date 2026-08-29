@@ -132,6 +132,7 @@ export class EmbeddingCache {
     args?: Record<string, unknown>,
     threshold?: number,
   ): Promise<EmbeddingCacheHit | null> {
+    if (this.lru.size === 0) await this.warmFromStore().catch(() => undefined);
     const text = normalizeForEmbedding(serverName, toolName, args);
     const embedding = await this.getEmbedding(text);
     if (!embedding) return null;
@@ -198,4 +199,26 @@ export class EmbeddingCache {
   clear(): void {
     this.lru.clear();
   }
+
+  /** Best-effort warm from persisted semantic audit store (last 200 records). */
+  async warmFromStore(): Promise<void> {
+    if (this.lru.size > 0) return;
+    try {
+      const { loadSemanticAuditRecordsAsync } = await import('./semantic-audit-store.js');
+      const records = await loadSemanticAuditRecordsAsync({ limit: 200, sinceMs: 7 * 24 * 60 * 60 * 1000 });
+      for (const r of records.slice(0, 50)) {
+        try {
+          await this.store(r.serverName, r.toolName, r.argumentsSnapshot as Record<string, unknown>, r.semanticAudit, r.model || 'warm');
+        } catch { /* per-record best-effort */ }
+      }
+      if (records.length) Logger.info(`[embedding-cache] warmed ${Math.min(records.length, 50)} records from semantic store`);
+    } catch { /* store may not exist yet */ }
+  }
+}
+
+let warmingStarted = false;
+export function warmEmbeddingCache(): void {
+  if (warmingStarted) return;
+  warmingStarted = true;
+  void getEmbeddingCache().warmFromStore().catch(() => undefined);
 }

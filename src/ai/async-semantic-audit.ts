@@ -405,7 +405,6 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
     };
     recordSemanticLlmSuccess(job.tenantId);
   } else if (embeddingHit) {
-    // L2 vector hit — synthesize LLM-like response from cached verdict
     response = {
       text: JSON.stringify(embeddingHit.verdict),
       model: `${embeddingHit.model}+embedding`,
@@ -414,6 +413,31 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
     };
     recordSemanticLlmSuccess(job.tenantId);
   } else {
+    // Distilled fast gate — category-routed 0.6b, before full 8B
+    try {
+      const { classifyDistilled, shouldBlockFromDistilled, isDistilledEnabled } = await import('./distilled-classifier.js');
+      if (isDistilledEnabled()) {
+        const argsText = JSON.stringify(job.arguments ?? {});
+        const distilled = await classifyDistilled(job.serverName, job.toolName, argsText);
+        if (distilled && distilled.source === 'distilled') {
+          const decision = shouldBlockFromDistilled(distilled.verdict);
+          if (decision !== null) {
+            response = {
+              text: JSON.stringify(distilled.verdict),
+              model: distilled.model,
+              tokensUsed: 0,
+              durationMs: 0,
+            };
+            recordSemanticLlmSuccess(job.tenantId);
+            // Fall through to result parsing below without LLM call
+          }
+        }
+      }
+    } catch { /* distilled optional */ }
+    if (response) {
+      // distilled already filled response — skip LLM fetch, go to parsing
+    } else {
+  
     const auditStart = Date.now();
     try {
       response = await withSemanticTimeout(
@@ -444,6 +468,7 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
       Metrics.recordSemanticScanDuration('async_audit', Date.now() - auditStart, 'error');
       recordSemanticLlmFailure(err, job.tenantId);
       response = null;
+    }
     }
   }
   stats.processed++;

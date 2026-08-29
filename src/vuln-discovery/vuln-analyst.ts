@@ -295,6 +295,7 @@ async function requireLlmAssistant(): Promise<LlmAssistant> {
   }
   const model =
     process.env.MASTYF_AI_VULN_ANALYSIS_MODEL
+    || process.env.MASTYF_AI_SAST_MODEL
     || process.env.MASTYF_AI_LLM_MODEL
     || 'qwen3:8b';
   const llm = new LlmAssistant({

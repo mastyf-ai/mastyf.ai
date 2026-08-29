@@ -105,6 +105,35 @@ function walkSourceFiles(root: string, maxFiles = 200): string[] {
   return out;
 }
 
+/** Optional LLM code review pass — when MASTYF_AI_SAST_MODEL is set (e.g. qwen3-coder:480b-cloud). */
+async function runLlmSastIfConfigured(root: string, serverName: string): Promise<VulnFinding[]> {
+  const model = process.env.MASTYF_AI_SAST_MODEL || process.env.MASTYF_AI_VULN_ANALYSIS_MODEL;
+  if (!model || process.env.MASTYF_AI_SAST_LLM === 'false') return [];
+  try {
+    const { LlmAssistant } = await import('../ai/llm-assistant.js');
+    const llm = new LlmAssistant({ model, hotPath: false, maxTokens: 512, timeoutMs: 30000 });
+    if (!llm.isAvailable()) return [];
+    const files = walkSourceFiles(root).slice(0, 20);
+    const snippets = files.map((f) => { try { return `${f}:\n${readFileSync(f, 'utf-8').slice(0, 4000)}`; } catch { return ''; } }).filter(Boolean).join('\n\n---\n\n').slice(0, 12000);
+    if (!snippets.trim()) return [];
+    const res = await llm.generate(
+      'You are a senior AppSec reviewer. Analyze MCP server source for OWASP/SAST issues. Output ONLY JSON: {"findings":[{"title":string,"severity":"CRITICAL"|"HIGH"|"MEDIUM","description":string}]}. Never invent CVE IDs.',
+      `Server: ${serverName}\nSources:\n${snippets}`,
+    );
+    if (!res?.text) return [];
+    const m = res.text.match(/\{[\s\S]*\}/);
+    if (!m) return [];
+    const parsed = JSON.parse(m[0]) as { findings?: Array<{ title: string; severity: string; description: string }> };
+    return (parsed.findings || []).slice(0, 5).map((f) => upsertFindingLocal({
+      class: 'implementation', severity: (f.severity as VulnFinding['severity']) || 'MEDIUM', status: 'candidate',
+      title: `LLM SAST: ${f.title} in ${serverName}`, description: f.description || f.title,
+      target: { kind: 'mcp_server', name: serverName },
+      evidence: { scanner: 'sast-llm', reproSteps: [`LLM model ${model}`], stackTrace: f.description?.slice(0, 500) || '' },
+      exploitability: { preAuth: true, networkReachable: true, userInteraction: false },
+    }));
+  } catch { return []; }
+}
+
 function runHeuristicSast(root: string, serverName: string): VulnFinding[] {
   const findings: VulnFinding[] = [];
   for (const file of walkSourceFiles(root)) {
@@ -215,5 +244,8 @@ export async function scanServerSast(server: McpServerConfig): Promise<VulnFindi
     const sem = runSemgrep(root, server.name);
     if (sem !== null) return sem;
   }
-  return runHeuristicSast(root, server.name);
+  const heuristic = runHeuristicSast(root, server.name);
+  // Optional LLM deep pass (best-effort, no-op if model not configured)
+  const llmFindings = await runLlmSastIfConfigured(root, server.name);
+  return [...heuristic, ...llmFindings];
 }

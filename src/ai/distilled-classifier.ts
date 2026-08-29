@@ -21,8 +21,10 @@ export function getDistilledModel(): string {
 export function isDistilledEnabled(): boolean {
   if (process.env.MASTYF_AI_SEMANTIC_DISTILLED === 'false') return false;
   if (process.env.MASTYF_AI_DISTILLED_MODEL) return true;
-  // Auto-enable when sync LLM is configured and provider is ollama
-  return process.env.MASTYF_AI_SEMANTIC_DISTILLED === 'true';
+  if (process.env.MASTYF_AI_SEMANTIC_DISTILLED === 'true') return true;
+  // Auto-enable when nomic embedding is available (Phase B installed)
+  if (process.env.MASTYF_AI_EMBEDDING_MODEL) return true;
+  return false;
 }
 
 function categoryHint(toolName: string, argsText: string): string {
