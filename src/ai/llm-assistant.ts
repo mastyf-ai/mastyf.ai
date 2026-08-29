@@ -169,13 +169,16 @@ export class LlmAssistant {
           this.config.hotPath === false
             ? this.config.timeoutMs
             : Math.min(this.config.timeoutMs, getSemanticTimeoutMs());
+        const isAuditJson = /Respond ONLY with JSON/i.test(systemPrompt);
         const body: Record<string, unknown> = {
           model: this.config.model,
           prompt: `${systemPrompt}\n\n${userPrompt}`,
           stream: false,
+          keep_alive: '30m',
           options: {
             temperature: this.config.temperature,
-            num_predict: this.config.maxTokens,
+            num_predict: isAuditJson ? 64 : this.config.maxTokens,
+            num_ctx: isAuditJson ? 1024 : 4096,
           },
         };
         if (!ollamaThinkEnabled(this.config.model)) {

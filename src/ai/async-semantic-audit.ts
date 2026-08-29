@@ -270,9 +270,11 @@ async function drainQueue(): Promise<void> {
   processing = true;
   const batch = queue.splice(0, queue.length);
   semanticAuditQueueDepth.set(queue.length);
+  const concurrency = Math.max(1, parseInt(process.env.MASTYF_AI_SEMANTIC_CONCURRENCY || '4', 10));
   try {
-    for (const job of batch) {
-      await runAudit(job);
+    for (let i = 0; i < batch.length; i += concurrency) {
+      const chunk = batch.slice(i, i + concurrency);
+      await Promise.all(chunk.map((job) => runAudit(job)));
     }
   } finally {
     processing = false;
@@ -338,7 +340,7 @@ async function runLocalSemanticAudit(job: SemanticAuditJob): Promise<void> {
 
 async function runAudit(job: SemanticAuditJob): Promise<void> {
   try {
-  const allowed = await allowSemanticLlmCall(job.tenantId);
+  const allowed = await allowSemanticLlmCall(job.tenantId, { async: true });
   if (!allowed) {
     reportSemanticAuditSkipped('rate_limited', job.tenantId);
     if (isLocalSemanticEnabled(job.tenantId)) {
@@ -378,12 +380,35 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
     systemPrompt,
     userPrompt,
   );
+  // L1: exact SHA256 cache
   const cachedText = await cache.get(cacheKey);
+  // L2: vector embedding cache (nomic-embed-text)
+  let embeddingHit: import('./embedding-cache.js').EmbeddingCacheHit | null = null;
+  if (!cachedText) {
+    try {
+      const { getEmbeddingCache, isEmbeddingCacheEnabled } = await import('./embedding-cache.js');
+      if (isEmbeddingCacheEnabled()) {
+        embeddingHit = await getEmbeddingCache().findNearest(job.serverName, job.toolName, job.arguments as Record<string, unknown>);
+        if (embeddingHit) {
+          Metrics.recordSemanticScanDuration('async_audit', 0, 'embedding_hit');
+        }
+      }
+    } catch { /* embedding optional */ }
+  }
   let response: Awaited<ReturnType<LlmAssistant['generate']>> = null;
   if (cachedText) {
     response = {
       text: cachedText,
       model: llmCfg.model,
+      tokensUsed: 0,
+      durationMs: 0,
+    };
+    recordSemanticLlmSuccess(job.tenantId);
+  } else if (embeddingHit) {
+    // L2 vector hit — synthesize LLM-like response from cached verdict
+    response = {
+      text: JSON.stringify(embeddingHit.verdict),
+      model: `${embeddingHit.model}+embedding`,
       tokensUsed: 0,
       durationMs: 0,
     };
@@ -404,6 +429,14 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
       if (response?.text) {
         recordSemanticLlmSuccess(job.tenantId);
         await cache.set(cacheKey, response.text);
+        // L2 vector store — best-effort, parse verdict for reuse
+        try {
+          const parsed = JSON.parse(response.text) as { suspicious?: boolean; confidence?: number; categories?: string[]; reasoning?: string };
+          const { getEmbeddingCache, isEmbeddingCacheEnabled } = await import('./embedding-cache.js');
+          if (isEmbeddingCacheEnabled() && typeof parsed.suspicious === 'boolean') {
+            await getEmbeddingCache().store(job.serverName, job.toolName, job.arguments as Record<string, unknown>, { suspicious: Boolean(parsed.suspicious), confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0, categories: Array.isArray(parsed.categories) ? parsed.categories as string[] : [], reasoning: String(parsed.reasoning || '') }, response.model);
+          }
+        } catch { /* embedding store optional */ }
       } else {
         recordSemanticLlmFailure(undefined, job.tenantId);
       }

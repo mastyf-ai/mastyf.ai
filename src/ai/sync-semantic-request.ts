@@ -114,6 +114,22 @@ export async function evaluateSyncSemanticRequest(
     };
   }
 
+  // Distilled fast gate (qwen3:0.6b) — category-routed, 80ms, before full 8B
+  try {
+    const { classifyDistilled, shouldBlockFromDistilled, isDistilledEnabled } = await import('./distilled-classifier.js');
+    if (isDistilledEnabled()) {
+      const distilled = await classifyDistilled(input.context.serverName, input.context.toolName, argsText);
+      if (distilled && distilled.source === 'distilled') {
+        const decision = shouldBlockFromDistilled(distilled.verdict);
+        if (decision !== null) {
+          Metrics.recordSemanticScanDuration('sync_request', 0, decision ? 'distilled_block' : 'distilled_allow');
+          return { block: decision, result: distilled.verdict, source: 'llm', rule: 'semantic-sync-request', reason: distilled.verdict.reasoning || `distilled ${distilled.model}` };
+        }
+        // null = uncertain 0.45-0.65 -> fall through to full LLM
+      }
+    }
+  } catch { /* distilled optional */ }
+
   const llm = new LlmAssistant();
   if (!llm.isAvailable()) {
     reportSemanticAuditSkipped('llm_failed', tenantId);
@@ -144,6 +160,25 @@ export async function evaluateSyncSemanticRequest(
 Respond ONLY with JSON: {"suspicious":boolean,"confidence":0-1,"categories":string[],"reasoning":"one sentence"}`;
   const userPrompt = `Server: ${input.context.serverName}\nTool: ${input.context.toolName}\nPolicy: ${input.policyDecision.rule} (${input.policyDecision.action})\nArguments:\n${preview}`;
 
+  // L2 vector cache check before LLM — best-effort, never blocks on failure
+  try {
+    const { getEmbeddingCache, isEmbeddingCacheEnabled } = await import('./embedding-cache.js');
+    if (isEmbeddingCacheEnabled()) {
+      const hit = await getEmbeddingCache().findNearest(input.context.serverName, input.context.toolName, input.context.arguments as Record<string, unknown>);
+      if (hit && hit.verdict.confidence >= MIN_CONFIDENCE) {
+        const block = hit.verdict.suspicious && hit.verdict.confidence >= MIN_CONFIDENCE;
+        if (block) {
+          Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_hit');
+          return { block: true, result: hit.verdict, source: 'llm', rule: 'semantic-sync-request', reason: hit.verdict.reasoning || `embedding hit sim=${hit.similarity.toFixed(2)}` };
+        }
+        if (!hit.verdict.suspicious) {
+          Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_hit_clean');
+          return { block: false, result: hit.verdict, source: 'llm', rule: 'semantic-sync-request', reason: hit.verdict.reasoning || 'embedding clean' };
+        }
+      }
+    }
+  } catch { /* embedding optional */ }
+
   const llmAllowed = await allowSemanticLlmCall(tenantId);
   if (!llmAllowed) {
     reportSemanticAuditSkipped('rate_limited', tenantId);
@@ -170,7 +205,7 @@ Respond ONLY with JSON: {"suspicious":boolean,"confidence":0-1,"categories":stri
     'sync_semantic_request',
     () => llm.generate(systemPrompt, userPrompt),
     null,
-    parseInt(process.env['MASTYF_AI_SEMANTIC_SYNC_REQUEST_TIMEOUT_MS'] || '2500', 10),
+    parseInt(process.env['MASTYF_AI_SEMANTIC_SYNC_REQUEST_TIMEOUT_MS'] || '800', 10),
   );
   Metrics.recordSemanticScanDuration(
     'sync_request',
@@ -214,6 +249,10 @@ Respond ONLY with JSON: {"suspicious":boolean,"confidence":0-1,"categories":stri
         ),
       );
     }
+    // Store embedding for L2 vector cache reuse
+    void import('./embedding-cache.js').then(({ getEmbeddingCache, isEmbeddingCacheEnabled }) => {
+      if (isEmbeddingCacheEnabled()) void getEmbeddingCache().store(input.context.serverName, input.context.toolName, input.context.arguments as Record<string, unknown>, result, response.model);
+    }).catch(() => undefined);
     return {
       block,
       result,
