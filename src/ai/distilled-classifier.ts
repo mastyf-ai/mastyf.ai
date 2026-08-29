@@ -27,9 +27,10 @@ export function isDistilledEnabled(): boolean {
   return false;
 }
 
-function categoryHint(toolName: string, argsText: string): string {
+function categoryHint(toolName: string, argsText: string | Record<string, unknown>): string {
   const t = toolName.toLowerCase();
-  const a = argsText.toLowerCase();
+  const raw = typeof argsText === 'string' ? argsText : JSON.stringify(argsText ?? {});
+  const a = raw.toLowerCase();
   if (/admin|privilege|superuser|bypass_auth|escalate|sudo|role/i.test(t + a)) return 'privilege_escalation';
   if (/repeat|max_iterations|exhaust|infinite|while.*true/i.test(a)) return 'resource_exhaustion';
   if (/ignore.*instruction|jailbreak|dan |hypothetical.*bypass/i.test(a)) return 'jailbreak';
@@ -47,11 +48,12 @@ export interface DistilledResult {
 export async function classifyDistilled(
   serverName: string,
   toolName: string,
-  argsText: string,
+  argsText: string | Record<string, unknown>,
 ): Promise<DistilledResult | null> {
   if (!isDistilledEnabled()) return null;
   const hint = categoryHint(toolName, argsText);
-  const preview = argsText.slice(0, 800);
+  const raw = typeof argsText === 'string' ? argsText : JSON.stringify(argsText ?? {});
+  const preview = raw.slice(0, 800);
   const systemPrompt = `You are an MCP security analyst. Focus ONLY on ${hint}. Classify whether this tool call is malicious.\nRespond ONLY with JSON: {"suspicious":boolean,"confidence":0-1,"categories":string[],"reasoning":"one sentence"}`;
   const userPrompt = `Server: ${serverName}\nTool: ${toolName}\nCategory hint: ${hint}\nArguments:\n${preview}`;
 
@@ -59,7 +61,7 @@ export async function classifyDistilled(
   const llm = new LlmAssistant({ model, maxTokens: 32, hotPath: true });
   if (!llm.isAvailable()) return null;
 
-  const timeoutMs = parseInt(process.env.MASTYF_AI_DISTILLED_TIMEOUT_MS || '600', 10);
+  const timeoutMs = parseInt(process.env.MASTYF_AI_DISTILLED_TIMEOUT_MS || '1000', 10);
   const response = await withSemanticTimeout(
     'distilled_classifier',
     () => llm.generate(systemPrompt, userPrompt),
