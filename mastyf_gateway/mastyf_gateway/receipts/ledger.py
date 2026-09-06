@@ -427,6 +427,9 @@ class ExecutionReceiptLedger:
                     writer = csv.DictWriter(f, fieldnames=fields)
                     writer.writeheader()
                     writer.writerows(receipts)
+        else:
+            raise ValueError(f"Unsupported export format: {format} (expected json, jsonl, or csv)")
+
         return len(receipts)
 
     def read_all_receipts(self) -> List[ExecutionReceipt]:
