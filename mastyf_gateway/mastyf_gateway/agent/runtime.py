@@ -238,10 +238,32 @@ def detect_local_runtime(timeout: float = 0.5) -> DetectedRuntime:
             req = urllib.request.Request(probe_url, headers={"User-Agent": "Mastyf-Probe/1.0"})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 if resp.status in (200, 204):
+                    actual_model = default_model
+                    try:
+                        raw = resp.read().decode("utf-8")
+                        if raw:
+                            data = json.loads(raw)
+                            if "models" in data:
+                                model_list = data.get("models", [])
+                                if not model_list:
+                                    continue
+                                local_names = [m.get("name") or m.get("model") for m in model_list if (m.get("name") or m.get("model"))]
+                                mastyf_matches = [n for n in local_names if "mastyf" in n.lower()]
+                                if mastyf_matches:
+                                    actual_model = mastyf_matches[0]
+                                elif name == "Ollama":
+                                    local_only = [n for n in local_names if "cloud" not in n.lower()]
+                                    if local_only:
+                                        actual_model = local_only[0]
+                                    else:
+                                        continue
+                    except Exception:
+                        pass
+
                     return DetectedRuntime(
                         name=name,
                         base_url=base_url,
-                        model=default_model,
+                        model=actual_model,
                         is_live=True,
                         status_detail=f"Connected to {name} at {base_url}",
                     )
