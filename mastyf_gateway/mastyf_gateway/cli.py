@@ -787,15 +787,15 @@ def main():
 
     # mastyf audit status
     audit_st_p = audit_sub.add_parser("status", help="Display operational status of execution receipt ledger")
-    audit_st_p.add_argument("--file", "-f", help="Path to receipts.jsonl file (default: ~/.mastyf/receipts.jsonl)")
+    audit_st_p.add_argument("--file", "-f", "--ledger", dest="file", help="Path to receipts.jsonl file (default: ~/.mastyf/receipts.jsonl)")
 
     # mastyf audit verify
     audit_ver_p = audit_sub.add_parser("verify", help="Verify cryptographic hash chain and zero-execution invariants")
-    audit_ver_p.add_argument("--file", "-f", help="Path to receipts.jsonl file (default: ~/.mastyf/receipts.jsonl)")
+    audit_ver_p.add_argument("--file", "-f", "--ledger", dest="file", help="Path to receipts.jsonl file (default: ~/.mastyf/receipts.jsonl)")
 
     # mastyf audit export
     audit_exp_p = audit_sub.add_parser("export", help="Export execution receipts to JSON, JSONL, or CSV")
-    audit_exp_p.add_argument("--file", "-f", help="Path to receipts.jsonl file (default: ~/.mastyf/receipts.jsonl)")
+    audit_exp_p.add_argument("--file", "-f", "--ledger", dest="file", help="Path to receipts.jsonl file (default: ~/.mastyf/receipts.jsonl)")
     audit_exp_p.add_argument("--output", "-o", default="mastyf-audit-export.json", help="Output destination file")
     audit_exp_p.add_argument("--format", choices=["json", "jsonl", "csv"], default="json", help="Export format (default: json)")
 
