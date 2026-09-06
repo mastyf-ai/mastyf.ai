@@ -7,11 +7,13 @@ from .session import AgentSession, ChatMessage, SecurityHUDEvent, ToolCallPropos
 from .tools import ToolDefinition, ToolRegistry, create_demo_tools
 from .runtime import BaseLLMClient, MockLLMClient, OpenAICompatibleLLMClient, ModelOutput
 from .agent_loop import AgentLoop
+from .hud import SecurityHUDProjection
 
 __all__ = [
     "AgentSession",
     "ChatMessage",
     "SecurityHUDEvent",
+    "SecurityHUDProjection",
     "ToolCallProposal",
     "ToolDefinition",
     "ToolRegistry",

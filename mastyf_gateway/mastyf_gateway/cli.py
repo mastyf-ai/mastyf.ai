@@ -714,7 +714,14 @@ def cmd_chat(args):
     from .auditor.aia import MockAIAAuditor
     from .policy.schemas import PolicyDocument
     from .policy.loader import validate_policy, compile_policy
-    from .agent import AgentLoop, AgentSession, MockLLMClient, OpenAICompatibleLLMClient, create_demo_tools
+    from .agent import (
+        AgentLoop,
+        AgentSession,
+        MockLLMClient,
+        OpenAICompatibleLLMClient,
+        create_demo_tools,
+        SecurityHUDProjection,
+    )
     from .receipts import ExecutionReceiptLedger
 
     home = get_mastyf_home()
@@ -771,14 +778,10 @@ def cmd_chat(args):
     )
 
     def on_hud(evt):
-        if evt.decision == "ALLOW":
-            print(f"  ✓ {evt.tool_name} ALLOW (Dispatched: {evt.bytes_dispatched}B | Receipt: #{evt.sequence_id})")
-        else:
-            print(f"  🛑 {evt.tool_name} BLOCKED by Gateway")
-            print(f"     Reason: {evt.reason_code}")
-            if evt.rule_violated:
-                print(f"     Rule:   {evt.rule_violated}")
-            print(f"     Backend: 0 bytes dispatched (Execution Certainty: {evt.execution_certainty})")
+        card = SecurityHUDProjection.render_card(evt, ledger=ledger)
+        for line in card.splitlines():
+            print(f"  {line}")
+        print()
 
     loop = AgentLoop(
         gateway=gateway,

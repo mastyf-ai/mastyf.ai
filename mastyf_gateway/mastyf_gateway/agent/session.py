@@ -54,6 +54,13 @@ class SecurityHUDEvent:
     receipt_hash: Optional[str] = None
     sequence_id: Optional[int] = None
     execution_certainty: str = "NOT_SENT"  # "RESPONSE_RECEIVED", "NOT_SENT", "UNKNOWN"
+    capability_status: str = "allowed"
+    data_flow_status: str = "clean"
+    workflow_status: str = "valid"
+    execution_count: int = 0
+    tamper_detected: bool = False
+    session_id: Optional[str] = None
+    request_id: Optional[str] = None
 
 
 class AgentSession:

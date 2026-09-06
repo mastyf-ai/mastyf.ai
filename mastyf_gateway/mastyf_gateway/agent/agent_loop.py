@@ -20,6 +20,7 @@ from ..receipts.models import ExecutionObservation
 from .runtime import BaseLLMClient
 from .session import AgentSession, SecurityHUDEvent
 from .tools import ToolRegistry
+from .hud import SecurityHUDProjection
 
 
 class AgentLoop:
@@ -152,18 +153,15 @@ class AgentLoop:
                     # Record taint propagation
                     self.gateway.difc.record_tool_result(session.session_id, call.name)
 
-                    # Emit HUD Event
-                    event = SecurityHUDEvent(
-                        timestamp=time.time(),
-                        tool_name=call.name,
-                        tool_args=call.args,
-                        decision="ALLOW",
-                        reason_code=decision.reason_code,
+                    # Emit HUD Event strictly derived from authoritative receipt
+                    event = SecurityHUDProjection.project_from_receipt(
+                        receipt=receipt,
+                        ledger=self.ledger,
                         bytes_dispatched=bytes_count,
-                        receipt_hash=receipt_hash,
-                        sequence_id=seq_id,
-                        execution_certainty=observation.value,
+                        rule_violated=None,
+                        tool_args=call.args,
                     )
+                    event.timestamp = time.time()
                     session.add_hud_event(event)
                     if self.on_hud_event:
                         self.on_hud_event(event)
@@ -218,19 +216,15 @@ class AgentLoop:
                         "Exactly zero bytes were delivered to the tool backend.",
                     }
 
-                    # Emit HUD Event
-                    event = SecurityHUDEvent(
-                        timestamp=time.time(),
-                        tool_name=call.name,
-                        tool_args=call.args,
-                        decision=decision.final_decision,
-                        reason_code=decision.reason_code,
-                        rule_violated=decision.invariant_violation,
+                    # Emit HUD Event strictly derived from authoritative receipt
+                    event = SecurityHUDProjection.project_from_receipt(
+                        receipt=receipt,
+                        ledger=self.ledger,
                         bytes_dispatched=0,  # Strict Zero-Byte Invariant
-                        receipt_hash=receipt_hash,
-                        sequence_id=seq_id,
-                        execution_certainty=observation.value,
+                        rule_violated=decision.invariant_violation,
+                        tool_args=call.args,
                     )
+                    event.timestamp = time.time()
                     session.add_hud_event(event)
                     if self.on_hud_event:
                         self.on_hud_event(event)
