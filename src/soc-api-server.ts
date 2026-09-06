@@ -30,6 +30,8 @@ import { buildAuditHeatmapBundle } from './utils/audit-heatmap.js';
 import { DEFAULT_TENANT_ID, validateTenantId } from './tenant/resolve-tenant.js';
 import { registerAuthRoutes } from './auth/auth-routes.js';
 import { attachAuthContext, requireAuth } from './auth/auth-middleware.js';
+import { globalServerMetricsAggregator } from './services/server-metrics-aggregator.js';
+import { HELP_TOOLTIPS, getHelpTooltip } from './dashboard/help-tooltips.js';
 
 // ── Types for API responses (matching mastyf-ai-api.ts in dashboard-spa) ─────
 
@@ -1175,6 +1177,123 @@ export async function startSocApiServer(port = 4040): Promise<SocApiServerHandle
     } catch (err) {
       res.status(500).json({ available: false, error: String(err) });
     }
+  });
+
+  // ── GET /api/servers — Individual MCP Server Observability Fleet ─────────
+  app.get('/api/servers', async (_req: Request, res: Response) => {
+    try {
+      const configuredServers = await loadServers();
+      const aggregatorServers = globalServerMetricsAggregator.getAllServers();
+
+      // Merge configured servers with live aggregator telemetry
+      const servers = configuredServers.map((s) => {
+        const live = globalServerMetricsAggregator.getServerSummary(s.name);
+        if (live) return live;
+        return {
+          name: s.name,
+          status: 'healthy' as const,
+          transport: (s.transport || 'stdio') as 'stdio' | 'http' | 'sse' | 'ws',
+          threatScore: {
+            serverName: s.name,
+            score: 100,
+            tier: 'safe' as const,
+            deductions: { blockRateDeduction: 0, severityDeduction: 0, toolRiskDeduction: 0, recencyDeduction: 0 },
+          },
+          totalCalls: 0,
+          blockedCalls: 0,
+          allowedCalls: 0,
+          flaggedCalls: 0,
+          toolCount: 0,
+          highRiskToolCount: 0,
+          recentThreats: [],
+          tools: [],
+        };
+      });
+
+      res.json({
+        available: true,
+        count: servers.length,
+        servers,
+      });
+    } catch (err) {
+      res.status(500).json({ available: false, error: String(err) });
+    }
+  });
+
+  // ── GET /api/servers/:name — Individual MCP Server Inspector Drilldown ────
+  app.get('/api/servers/:name', async (req: Request, res: Response) => {
+    const serverName = String(req.params['name'] || '');
+    if (!serverName) {
+      res.status(400).json({ error: 'Server name required' });
+      return;
+    }
+    const summary = globalServerMetricsAggregator.getServerSummary(serverName);
+    if (!summary) {
+      // Check if it exists in config
+      const configured = (await loadServers()).find((s) => s.name === serverName);
+      if (configured) {
+        res.json({
+          name: configured.name,
+          status: 'healthy',
+          transport: configured.transport || 'stdio',
+          threatScore: { serverName, score: 100, tier: 'safe', deductions: {} },
+          totalCalls: 0,
+          blockedCalls: 0,
+          allowedCalls: 0,
+          flaggedCalls: 0,
+          toolCount: 0,
+          highRiskToolCount: 0,
+          recentThreats: [],
+          tools: [],
+        });
+        return;
+      }
+      res.status(404).json({ error: `Server '${serverName}' not found` });
+      return;
+    }
+    res.json(summary);
+  });
+
+  // ── GET /api/servers/:name/threats — Specific Server Threats ──────────────
+  app.get('/api/servers/:name/threats', (req: Request, res: Response) => {
+    const serverName = String(req.params['name'] || '');
+    if (!serverName) {
+      res.status(400).json({ error: 'Server name required' });
+      return;
+    }
+    const summary = globalServerMetricsAggregator.getServerSummary(serverName);
+    res.json({
+      serverName,
+      threats: summary?.recentThreats || [],
+    });
+  });
+
+  // ── GET /api/servers/:name/tools — Specific Server Tool Inventory ─────────
+  app.get('/api/servers/:name/tools', (req: Request, res: Response) => {
+    const serverName = String(req.params['name'] || '');
+    if (!serverName) {
+      res.status(400).json({ error: 'Server name required' });
+      return;
+    }
+    const summary = globalServerMetricsAggregator.getServerSummary(serverName);
+    res.json({
+      serverName,
+      tools: summary?.tools || [],
+    });
+  });
+
+  // ── GET /api/help/tooltips — Contextual Help Registry ─────────────────────
+  app.get('/api/help/tooltips', (_req: Request, res: Response) => {
+    res.json({
+      available: true,
+      tooltips: HELP_TOOLTIPS,
+    });
+  });
+
+  // ── GET /api/help/tooltips/:id — Single Tooltip by ID ────────────────────
+  app.get('/api/help/tooltips/:id', (req: Request, res: Response) => {
+    const id = String(req.params['id'] || '');
+    res.json(getHelpTooltip(id));
   });
 
   // ── GET /api/admin/tenant ─────────────────────────────────────────────────

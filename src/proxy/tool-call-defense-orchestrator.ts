@@ -28,6 +28,8 @@ import { ToolCallHookRegistry } from '../policy/tool-call-hooks.js';
 import { getPersistenceStore } from '../utils/persistence-store.js';
 import { learningMode } from '../policy/learning-mode.js';
 import type { HookContext } from '../policy/tool-call-hooks.js';
+import { recursiveUnwrap } from '../scanners/recursive-arg-unwrap.js';
+import { globalSessionTaintTracker } from '../policy/difc/index.js';
 
 export interface ToolCallDefenseInput {
   serverName: string;
@@ -186,11 +188,57 @@ export async function evaluateToolCallDefense(
     };
   }
   const effectiveArgs = hookResult.args ?? requestArguments;
+  const unwrapInfo = recursiveUnwrap(effectiveArgs);
+  // Merge flattened keys so policy engine can match nested attributes like arguments.payload or inner paths
+  const enrichedArgs = {
+    ...(effectiveArgs ?? {}),
+    ...unwrapInfo.flattenedArgs,
+  };
+
+  // --- Phase 2.5: Decentralized Information Flow Control (DIFC) Gate ----------
+  const sessionKey = `${input.tenantId || 'default'}:${input.serverName}`;
+  const difcResult = globalSessionTaintTracker.evaluateDIFC({
+    sessionKey,
+    toolName: input.toolName,
+    args: effectiveArgs,
+  });
+
+  if (!difcResult.allowed) {
+    const violationReason =
+      difcResult.violation?.reason ??
+      'Blocked by Decentralized Information Flow Control (DIFC): unauthorized data flow to egress sink';
+
+    if (emitTelemetry) {
+      StructuredLogger.logBlocked({
+        event: 'tool_blocked',
+        requestId: input.requestId,
+        serverName: input.serverName,
+        toolName: input.toolName,
+        reason: violationReason,
+        rule: 'difc-exfiltration-prevented',
+      });
+      Metrics.recordProxyBlock({
+        server_name: input.serverName,
+        block_reason: 'difc_exfiltration',
+        rule: 'difc-exfiltration-prevented',
+        tenant_id: input.tenantId,
+      });
+    }
+
+    return {
+      allowed: false,
+      phase: 'policy',
+      code: -32001,
+      rule: 'difc-exfiltration-prevented',
+      reason: violationReason,
+      httpStatus: 403,
+    };
+  }
 
   const context: CallContext = applyGeoToCallContext({
     serverName: input.serverName,
     toolName: input.toolName,
-    arguments: effectiveArgs,
+    arguments: enrichedArgs,
     requestId: input.requestId,
     requestTokens: input.requestTokens,
     timestamp,

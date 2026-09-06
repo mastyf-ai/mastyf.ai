@@ -1,0 +1,2 @@
+[console_scripts]
+mastyf = mastyf_gateway.cli:main

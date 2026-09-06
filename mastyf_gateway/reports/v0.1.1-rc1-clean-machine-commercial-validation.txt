@@ -1,0 +1,52 @@
+========================================================================
+    MASTYF GUARD PRO v0.1.1-RC1 CLEAN-MACHINE COMMERCIAL VALIDATION
+========================================================================
+Timestamp          : 2026-09-06T03:21:48Z
+Isolated Test Home : /var/folders/8k/zjxbk9cj4q369h37ybgy6r7c0000gn/T/mastyf_customer_clean_6k7gz318
+Package Root       : /Users/rudraneeldas/Projects/mastyf-full/mastyf_gateway
+Python Runtime     : 3.13.1
+Platform           : darwin (arm64)
+========================================================================
+
+>>> STEP 1: INITIAL SYSTEM DIAGNOSTIC (mastyf doctor - Unlicensed State)
+  [+] Clean state license status: UNLICENSED
+  [✓] Pre-activation unlicensing invariant: CONFIRMED
+
+>>> STEP 2: COMMERCIAL ACTIVATION (mastyf activate)
+  [+] Entitlement installed to: None
+  [✓] License activation token stored: CONFIRMED
+
+>>> STEP 3: LICENSE STATUS INSPECTION (mastyf license status)
+  [+] Verified Status : ACTIVE
+  [+] Bound Instance  : inst_customer_node_01
+  [+] Active Until    : 2026-10-06T03:21:49.182049+00:00
+  [+] Offline Grace   : 2026-10-13T03:21:49.182049+00:00
+  [✓] Active entitlement posture: CONFIRMED
+
+>>> STEP 4: MODEL CHECKPOINT PINNING (mastyf model install v6)
+  [+] Pinned Model    : Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened
+  [+] Pinned Revision : d59a6aa01f9139dff106146addb04109afa69c03
+  [✓] Model pinning to frozen revision: CONFIRMED
+
+>>> STEP 5: GATEWAY INTEGRITY VERIFICATION (mastyf verify)
+  [+] Integrity check result: PASS
+  [✓] Software & manifest integrity: CONFIRMED
+
+>>> STEP 6: COMMERCIAL HEALTH & SECURITY SELF-TEST (mastyf self-test --commercial)
+  [+] Self-test result: PASS
+  [✓] Full commercial self-test 8/8 invariants: CONFIRMED
+
+>>> STEP 7: AUTOMATIC LICENSE RENEWAL PATH
+  [+] Post-renewal status: ACTIVE
+  [+] New Expiration Date: 2026-11-05T03:21:49.182049+00:00
+  [✓] Renewal path validation: CONFIRMED
+
+>>> STEP 8: EXPIRATION & CANCELLATION FAILURE PATH
+  [+] Expired Status : EXPIRED
+  [+] Detail         : License expired on 2026-07-28 and grace period elapsed on 2026-08-04
+  [+] Commercial self-test on expired license: FAIL (Expected)
+  [✓] Fail-closed enforcement on expired commercial license: CONFIRMED
+
+========================================================================
+ALL 8 CLEAN-MACHINE VALIDATION STAGES COMPLETED SUCCESSFULLY (100% PASS).
+========================================================================

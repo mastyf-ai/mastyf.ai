@@ -8,6 +8,8 @@ import { PlatformShowcase } from '@/components/landing/PlatformShowcase';
 import { DifferentiationSection } from '@/components/landing/DifferentiationSection';
 import { InteractiveArchitectureSection } from '@/components/landing/InteractiveArchitectureSection';
 import { TrustEvidenceSection } from '@/components/landing/TrustEvidenceSection';
+import { PaperSection } from '@/components/landing/PaperSection';
+import { PricingSection } from '@/components/landing/PricingSection';
 import { CloudCtaSection, CtaSection } from '@/components/landing/CtaSection';
 import { FaqSection } from '@/components/landing/FaqSection';
 import './landing.css';
@@ -28,6 +30,8 @@ export default async function HomePage() {
         <DifferentiationSection />
         <InteractiveArchitectureSection />
         <TrustEvidenceSection />
+        <PaperSection />
+        <PricingSection />
         <CloudCtaSection session={!!session} />
         <FaqSection />
         <CtaSection session={!!session} />

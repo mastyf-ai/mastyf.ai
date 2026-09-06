@@ -74,3 +74,8 @@ deploy/dashboard-spa/app/data/
 # Runtime logs
 data/tenants/default/logs/*.jsonl
 mastyf-ai-docker.tar
+/.docdex/
+/.docdex-state/
+__pycache__/
+*.pyc
+.pytest_cache/

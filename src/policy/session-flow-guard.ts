@@ -12,6 +12,7 @@ import {
 } from './session-flow-store.js';
 import { snapshotAuditArguments } from '../utils/audit-args-snapshot.js';
 import { fingerprintArguments } from './loop-anomaly-detector.js';
+import { globalSessionTaintTracker } from './difc/index.js';
 
 export { recordSensitiveResponseAccess, resetSessionFlowStore as resetSessionFlowHistory };
 export { evaluateLoopAnomalyGuard } from './loop-anomaly-detector.js';
@@ -110,14 +111,31 @@ export function recordSessionToolCall(ctx: CallContext): void {
 }
 
 /**
- * Block when a prior sensitive read or response DLP hit is followed by an exfil-capable tool call.
+ * Block when a prior sensitive read or response DLP hit is followed by an exfil-capable tool call,
+ * or when DIFC dynamic taint tracking detects cross-tool data propagation to an egress sink.
  */
 export function evaluateSessionFlowGuard(ctx: CallContext): PolicyDecision | null {
+  const key = flowSessionKey(ctx);
+
+  // 1. Precise DIFC dynamic taint evaluation
+  const difcResult = globalSessionTaintTracker.evaluateDIFC({
+    sessionKey: key,
+    toolName: ctx.toolName,
+    args: ctx.arguments,
+  });
+  if (!difcResult.allowed && difcResult.violation) {
+    return {
+      action: 'block',
+      rule: 'difc-exfiltration-prevented',
+      reason: difcResult.violation.reason,
+    };
+  }
+
+  // 2. Heuristic multi-call sequence fallback
   if (!isExfilTool(ctx.toolName, ctx.arguments)) {
     return null;
   }
 
-  const key = flowSessionKey(ctx);
   const history = getFlowHistorySync(key);
   const prior = history.find((e) => e.sensitiveRead || e.dataAccess);
   if (!prior) return null;

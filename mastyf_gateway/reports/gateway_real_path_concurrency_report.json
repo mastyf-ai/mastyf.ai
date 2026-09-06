@@ -1,0 +1,133 @@
+{
+  "deterministic_fast_path": {
+    "concurrency_1": {
+      "p50_ms": 0.0175,
+      "p95_ms": 0.0175,
+      "p99_ms": 0.0175,
+      "throughput_req_sec": 10000.0
+    },
+    "concurrency_5": {
+      "p50_ms": 0.0037,
+      "p95_ms": 0.0147,
+      "p99_ms": 0.0164,
+      "throughput_req_sec": 50000.0
+    },
+    "concurrency_10": {
+      "p50_ms": 0.003,
+      "p95_ms": 0.0051,
+      "p99_ms": 0.0062,
+      "throughput_req_sec": 100000.0
+    },
+    "concurrency_25": {
+      "p50_ms": 0.003,
+      "p95_ms": 0.0033,
+      "p99_ms": 0.0047,
+      "throughput_req_sec": 250000.0
+    },
+    "concurrency_50": {
+      "p50_ms": 0.003,
+      "p95_ms": 0.0151,
+      "p99_ms": 0.0393,
+      "throughput_req_sec": 199169.8
+    },
+    "concurrency_100": {
+      "p50_ms": 0.0029,
+      "p95_ms": 0.0031,
+      "p99_ms": 0.0034,
+      "throughput_req_sec": 331675.0
+    },
+    "concurrency_250": {
+      "p50_ms": 0.0028,
+      "p95_ms": 0.003,
+      "p99_ms": 0.0035,
+      "throughput_req_sec": 340889.7
+    },
+    "concurrency_500": {
+      "p50_ms": 0.0029,
+      "p95_ms": 0.003,
+      "p99_ms": 0.003,
+      "throughput_req_sec": 343053.2
+    },
+    "concurrency_1000": {
+      "p50_ms": 0.0029,
+      "p95_ms": 0.003,
+      "p99_ms": 0.0035,
+      "throughput_req_sec": 335031.7
+    }
+  },
+  "semantic_aia_path": {
+    "concurrency_1": {
+      "p50_ms": 1.921,
+      "p95_ms": 1.921,
+      "p99_ms": 1.921,
+      "throughput_req_sec": 498.2
+    },
+    "concurrency_5": {
+      "p50_ms": 1.887,
+      "p95_ms": 1.953,
+      "p99_ms": 1.959,
+      "throughput_req_sec": 2420.8
+    },
+    "concurrency_10": {
+      "p50_ms": 2.09,
+      "p95_ms": 2.236,
+      "p99_ms": 2.249,
+      "throughput_req_sec": 4190.8
+    },
+    "concurrency_25": {
+      "p50_ms": 2.17,
+      "p95_ms": 2.746,
+      "p99_ms": 2.781,
+      "throughput_req_sec": 8217.8
+    },
+    "concurrency_50": {
+      "p50_ms": 2.626,
+      "p95_ms": 3.39,
+      "p99_ms": 3.447,
+      "throughput_req_sec": 12854.3
+    },
+    "concurrency_100": {
+      "p50_ms": 3.471,
+      "p95_ms": 5.018,
+      "p99_ms": 5.156,
+      "throughput_req_sec": 16509.6
+    },
+    "concurrency_250": {
+      "p50_ms": 5.959,
+      "p95_ms": 9.779,
+      "p99_ms": 10.117,
+      "throughput_req_sec": 20457.7
+    },
+    "concurrency_500": {
+      "p50_ms": 12.365,
+      "p95_ms": 20.201,
+      "p99_ms": 20.849,
+      "throughput_req_sec": 19888.7
+    },
+    "concurrency_1000": {
+      "p50_ms": 24.251,
+      "p95_ms": 39.259,
+      "p99_ms": 40.547,
+      "throughput_req_sec": 20196.4
+    }
+  },
+  "gateway_overhead_decomposition": {},
+  "summary": {},
+  "provenance_audit": {
+    "framework_benchmark_type": "In-process Python gateway concurrency under 1.5ms simulated neural fast-weights",
+    "real_v6_model_revision": "d59a6aa01f9139dff106146addb04109afa69c03",
+    "real_v6_serving_parameters": {
+      "model": "Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened",
+      "empirical_injecagent_p50_ms": 267.7,
+      "empirical_injecagent_p95_ms": 331.0,
+      "empirical_agentdojo_p50_ms": 951.5,
+      "empirical_agentdojo_p95_ms": 2259.8,
+      "serving_engine": "vLLM / Transformers CausalLM (float16)"
+    },
+    "deterministic_fast_path_latency_ms": 0.003,
+    "tamper_evident_sha256_telemetry_overhead_ms": 0.145,
+    "deterministic_filtering_rate": "67.0% (Structural & taint violations stopped before neural layer)",
+    "effective_amortized_production_latency_ms": 88.39,
+    "architectural_speedup_vs_universal_neural_gate": "3.0x lower amortized latency and 67% GPU cost reduction"
+  }
+}

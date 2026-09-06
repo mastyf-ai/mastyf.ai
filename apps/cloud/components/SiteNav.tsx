@@ -64,7 +64,8 @@ export function SiteNav({ session }: Props) {
             <>
               <a href="#product">Product</a>
               <Link href="/certified">Trust scores</Link>
-              <a href="#why">Why mastyf</a>
+              <a href="#paper">Paper</a>
+              <a href="#pricing">Pricing</a>
               <a href="#architecture">Architecture</a>
               <a href="#trust">Trust</a>
             </>
@@ -72,6 +73,7 @@ export function SiteNav({ session }: Props) {
             <>
               <Link href="/">Home</Link>
               <Link href="/certified">Trust scores</Link>
+              <Link href="/#paper">Paper</Link>
               <Link href="/dashboard">Console</Link>
             </>
           )}

@@ -1,47 +1,219 @@
 {
   "mcpServers": {
+    "../../../../etc/passwd": {
+      "url": "http://127.0.0.1:9110/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9110",
+        "MASTYF_AI_SSE_PROXY_PORT": "9110"
+      }
+    },
+    "agent-browser": {
+      "url": "http://127.0.0.1:9111/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9111",
+        "MASTYF_AI_SSE_PROXY_PORT": "9111"
+      }
+    },
+    "anysite": {
+      "url": "http://127.0.0.1:9112/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9112",
+        "MASTYF_AI_SSE_PROXY_PORT": "9112"
+      }
+    },
+    "apiverve": {
+      "url": "http://127.0.0.1:9113/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9113",
+        "MASTYF_AI_SSE_PROXY_PORT": "9113"
+      }
+    },
+    "atlas": {
+      "url": "http://127.0.0.1:9114/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9114",
+        "MASTYF_AI_SSE_PROXY_PORT": "9114"
+      }
+    },
+    "claude-session-visualizer": {
+      "url": "http://127.0.0.1:9115/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9115",
+        "MASTYF_AI_SSE_PROXY_PORT": "9115"
+      }
+    },
+    "cls": {
+      "url": "http://127.0.0.1:9116/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9116",
+        "MASTYF_AI_SSE_PROXY_PORT": "9116"
+      }
+    },
+    "crank": {
+      "url": "http://127.0.0.1:9117/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9117",
+        "MASTYF_AI_SSE_PROXY_PORT": "9117"
+      }
+    },
+    "docdex": {
+      "url": "http://127.0.0.1:9118/sse",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9118",
+        "MASTYF_AI_SSE_PROXY_PORT": "9118"
+      }
+    },
+    "entroly": {
+      "url": "http://127.0.0.1:9119/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9119",
+        "MASTYF_AI_SSE_PROXY_PORT": "9119"
+      }
+    },
     "filesystem-proxy": {
       "url": "http://127.0.0.1:9109/sse",
       "transport": "sse",
       "env": {
-        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9109",
-        "MASTYF_AI_SSE_PROXY_PORT": "9109"
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9120",
+        "MASTYF_AI_SSE_PROXY_PORT": "9120"
       }
     },
     "fixture_echo": {
       "url": "http://127.0.0.1:9110/mcp",
+      "transport": "sse",
       "env": {
-        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9110",
-        "MASTYF_AI_SSE_PROXY_PORT": "9110"
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9121",
+        "MASTYF_AI_SSE_PROXY_PORT": "9121"
       }
     },
     "github-proxy": {
       "url": "http://127.0.0.1:9111/sse",
       "transport": "sse",
       "env": {
-        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9111",
-        "MASTYF_AI_SSE_PROXY_PORT": "9111"
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9122",
+        "MASTYF_AI_SSE_PROXY_PORT": "9122"
+      }
+    },
+    "godd-a": {
+      "url": "http://127.0.0.1:9123/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9123",
+        "MASTYF_AI_SSE_PROXY_PORT": "9123"
+      }
+    },
+    "id; echo MASTYF_PROBE_7f2a": {
+      "url": "http://127.0.0.1:9124/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9124",
+        "MASTYF_AI_SSE_PROXY_PORT": "9124"
+      }
+    },
+    "kahin": {
+      "url": "http://127.0.0.1:9125/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9125",
+        "MASTYF_AI_SSE_PROXY_PORT": "9125"
+      }
+    },
+    "lean-ctx": {
+      "url": "http://127.0.0.1:9126/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9126",
+        "MASTYF_AI_SSE_PROXY_PORT": "9126"
+      }
+    },
+    "llm-interceptor": {
+      "url": "http://127.0.0.1:9127/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9127",
+        "MASTYF_AI_SSE_PROXY_PORT": "9127"
       }
     },
     "mcp-guardian": {
       "url": "http://127.0.0.1:9112/mcp",
+      "transport": "sse",
       "env": {
-        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9112",
-        "MASTYF_AI_SSE_PROXY_PORT": "9112"
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9128",
+        "MASTYF_AI_SSE_PROXY_PORT": "9128"
       }
     },
     "my-filesystem": {
       "url": "http://127.0.0.1:9113/mcp",
+      "transport": "sse",
       "env": {
-        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9113",
-        "MASTYF_AI_SSE_PROXY_PORT": "9113"
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9129",
+        "MASTYF_AI_SSE_PROXY_PORT": "9129"
       }
     },
     "remote-api": {
       "url": "http://127.0.0.1:9114/mcp",
+      "transport": "sse",
       "env": {
-        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9114",
-        "MASTYF_AI_SSE_PROXY_PORT": "9114"
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9130",
+        "MASTYF_AI_SSE_PROXY_PORT": "9130"
+      }
+    },
+    "seatbelt": {
+      "url": "http://127.0.0.1:9131/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9131",
+        "MASTYF_AI_SSE_PROXY_PORT": "9131"
+      }
+    },
+    "signaliz": {
+      "url": "http://127.0.0.1:9132/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9132",
+        "MASTYF_AI_SSE_PROXY_PORT": "9132"
+      }
+    },
+    "solapi": {
+      "url": "http://127.0.0.1:9133/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9133",
+        "MASTYF_AI_SSE_PROXY_PORT": "9133"
+      }
+    },
+    "supercompress": {
+      "url": "http://127.0.0.1:9134/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9134",
+        "MASTYF_AI_SSE_PROXY_PORT": "9134"
+      }
+    },
+    "Warden": {
+      "url": "http://127.0.0.1:9135/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9135",
+        "MASTYF_AI_SSE_PROXY_PORT": "9135"
+      }
+    },
+    "warp": {
+      "url": "http://127.0.0.1:9136/mcp",
+      "transport": "stdio",
+      "env": {
+        "MASTYF_AI_STREAMABLE_HTTP_PORT": "9136",
+        "MASTYF_AI_SSE_PROXY_PORT": "9136"
       }
     }
   }

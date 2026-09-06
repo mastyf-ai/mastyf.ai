@@ -50,6 +50,39 @@ export async function inspectToolResponse(params: {
 
   const responseText = JSON.stringify(result);
 
+  // Scan tool result for prompt-injection / instruction-override payloads
+  try {
+    const { scanToolResult } = await import('../scanners/result-injection-scanner.js');
+    const scan = scanToolResult(result);
+    if (scan.injected && scan.confidence >= 0.85) {
+      Logger.warn(
+        `[${transportLabel}:${serverName}] Blocked prompt injection in tool result from '${toolName}': ${scan.threatCategory ?? 'injection'}`,
+      );
+      StructuredLogger.logBlocked({
+        event: 'tool_blocked',
+        serverName,
+        toolName,
+        reason: `Prompt injection detected in tool result (${scan.threatCategory})`,
+        rule: 'result-prompt-injection',
+        requestId: String(requestId),
+      });
+      return {
+        blocked: true,
+        redacted: false,
+        blockResponse: {
+          jsonrpc: '2.0',
+          id: requestId,
+          error: {
+            code: -32002,
+            message: `Blocked by Mastyf AI: Prompt injection detected in tool result (${scan.threatCategory})`,
+          },
+        },
+      };
+    }
+  } catch (err) {
+    Logger.debug(`[${transportLabel}] result-injection scanner error: ${String(err)}`);
+  }
+
   // Vuln Discovery: record unpublished/injection findings from tool results
   if (process.env.MASTYF_AI_VULN_DISCOVERY_ENABLED === 'true') {
     try {
@@ -156,6 +189,19 @@ export async function inspectToolResponse(params: {
         },
       },
     };
+  }
+
+  // --- Ingest tool response into DIFC Session Taint Tracker ------------------
+  try {
+    const { globalSessionTaintTracker } = await import('../policy/difc/taint-tracker.js');
+    const sessionKey = `${tenantId || 'default'}:${serverName}`;
+    globalSessionTaintTracker.ingestToolResponse({
+      sessionKey,
+      toolName,
+      output: result,
+    });
+  } catch (err) {
+    Logger.debug(`[${transportLabel}] DIFC taint ingest error: ${String(err)}`);
   }
 
   return { blocked: false, redacted: false };

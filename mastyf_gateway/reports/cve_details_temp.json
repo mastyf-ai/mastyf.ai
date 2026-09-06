@@ -1,0 +1,610 @@
+[
+  {
+    "cve": "CVE-2026-18374",
+    "pkg": "libc-bin",
+    "installed_version": "2.39-0ubuntu8.8",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "glibc: glibc: Heap buffer overflow via attacker-controlled fopen mode string",
+    "cvss": {
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 4.9
+      }
+    },
+    "description": "Passing an effectively empty string to the `,ccs=` syntax extension of the mode argument in the `fopen` function in the GNU C Library version 2.45 or earlier may result in a heap buffer overflow when "
+  },
+  {
+    "cve": "CVE-2026-18374",
+    "pkg": "libc6",
+    "installed_version": "2.39-0ubuntu8.8",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "glibc: glibc: Heap buffer overflow via attacker-controlled fopen mode string",
+    "cvss": {
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 4.9
+      }
+    },
+    "description": "Passing an effectively empty string to the `,ccs=` syntax extension of the mode argument in the `fopen` function in the GNU C Library version 2.45 or earlier may result in a heap buffer overflow when "
+  },
+  {
+    "cve": "CVE-2025-59375",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "firefox: thunderbird: expat: libexpat in Expat allows attackers to trigger large dynamic memory allocations via a small document that is submitted for parsing",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 7.5
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
+        "V3Score": 5.3
+      }
+    },
+    "description": "libexpat in Expat before 2.7.2 allows attackers to trigger large dynamic memory allocations via a small document that is submitted for parsing."
+  },
+  {
+    "cve": "CVE-2025-66382",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Denial of service via crafted file processing",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H",
+        "V3Score": 5.5
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H",
+        "V3Score": 5.5
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L",
+        "V3Score": 2.9
+      }
+    },
+    "description": "In libexpat through 2.7.3, a crafted file with an approximate size of 2 MiB can lead to dozens of seconds of processing time."
+  },
+  {
+    "cve": "CVE-2026-32776",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Denial of Service due to NULL pointer dereference",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 5.5
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 5.5
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 6.2
+      }
+    },
+    "description": "libexpat before 2.7.5 allows a NULL pointer dereference with empty external parameter entity content."
+  },
+  {
+    "cve": "CVE-2026-32777",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Denial of Service via infinite loop in DTD content parsing",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 5.5
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 5.5
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
+        "V3Score": 4
+      }
+    },
+    "description": "libexpat before 2.7.5 allows an infinite loop while parsing DTD content."
+  },
+  {
+    "cve": "CVE-2026-32778",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Denial of Service via NULL pointer dereference after out-of-memory condition",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 5.5
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 5.5
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 5.1
+      }
+    },
+    "description": "libexpat before 2.7.5 allows a NULL pointer dereference in the function setContext on retry after an earlier ouf-of-memory condition."
+  },
+  {
+    "cve": "CVE-2026-41080",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: expat: libexpat: Denial of Service via hash flooding with crafted XML",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L",
+        "V3Score": 2.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L",
+        "V3Score": 3.7
+      }
+    },
+    "description": "libexpat before 2.8.0 uses insufficient entropy, and thus hash flooding can occur via a crafted XML document."
+  },
+  {
+    "cve": "CVE-2026-45186",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: denial of service via crafted XML input",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 7.5
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 7.5
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 7.5
+      }
+    },
+    "description": "In libexpat before 2.8.1, the computational complexity of attribute name collision checks allows a denial of service via moderately sized crafted XML input."
+  },
+  {
+    "cve": "CVE-2026-50219",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "expat: libexpat: Use-after-free vulnerability due to improper handler call depth tracking",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 5.9
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 5.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 4.9
+      }
+    },
+    "description": "libexpat before 2.8.2 lacks handler call depth tracking for calls to XML_GetBuffer, XML_Parse, XML_ParseBuffer, XML_ParserFree, or XML_ParserReset from within handlers in cases of a policy violation. "
+  },
+  {
+    "cve": "CVE-2026-56131",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Use-after-free vulnerability due to insufficient handler call depth tracking",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 4.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L",
+        "V3Score": 4.5
+      }
+    },
+    "description": "libexpat before 2.8.2 lacks handler call depth tracking for calls to XML_ResumeParser from within handlers in cases of a policy violation. Thus, a use-after-free can occur (similar to the CVE-2026-502"
+  },
+  {
+    "cve": "CVE-2026-56132",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "expat: libexpat: Arbitrary Code Execution via Heap-based Buffer Overflow",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      }
+    },
+    "description": "In libexpat before 2.8.2, there is a heap-based buffer overflow in doProlog in xmlparse.c because scaffold backing array reallocation is mishandled when there is data-structure sharing across parsers."
+  },
+  {
+    "cve": "CVE-2026-56403",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Arbitrary code execution due to integer overflow in storeAtts",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      }
+    },
+    "description": "libexpat before 2.8.2 has an integer overflow in storeAtts."
+  },
+  {
+    "cve": "CVE-2026-56404",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Arbitrary Code Execution via integer overflow in addBinding",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      }
+    },
+    "description": "libexpat before 2.8.2 has an integer overflow in addBinding."
+  },
+  {
+    "cve": "CVE-2026-56405",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Information disclosure and arbitrary code execution via integer overflow",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 4.9
+      }
+    },
+    "description": "libexpat before 2.8.2 has an integer overflow in getAttributeId."
+  },
+  {
+    "cve": "CVE-2026-56406",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Arbitrary code execution via integer overflow in XML_ParseBuffer",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      }
+    },
+    "description": "libexpat before 2.8.2 has an integer overflow in XML_ParseBuffer because it lacked a check that was present in XML_Parse."
+  },
+  {
+    "cve": "CVE-2026-56407",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Arbitrary code execution due to integer overflow",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      }
+    },
+    "description": "libexpat before 2.8.2 has an integer overflow in doProlog that is related to storeEntityValue and entity textLen."
+  },
+  {
+    "cve": "CVE-2026-56408",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat before 2.8.2 has an integer overflow in copyString.",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      }
+    },
+    "description": "libexpat before 2.8.2 has an integer overflow in copyString."
+  },
+  {
+    "cve": "CVE-2026-56409",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "xmlwf in libexpat before 2.8.2 has an integer overflow for the output  ...",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:L",
+        "V3Score": 6.5
+      }
+    },
+    "description": "xmlwf in libexpat before 2.8.2 has an integer overflow for the output filename when -d outputDir is used."
+  },
+  {
+    "cve": "CVE-2026-56410",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Integer overflow in xmlwf can lead to information disclosure and arbitrary code execution.",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      }
+    },
+    "description": "xmlwf in libexpat before 2.8.2 has an integer overflow in resolveSystemId."
+  },
+  {
+    "cve": "CVE-2026-56411",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "expat: libexpat: Integer Overflow Vulnerability Leading to Information Disclosure or Code Execution",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:L",
+        "V3Score": 6.9
+      }
+    },
+    "description": "xmlwf in libexpat before 2.8.2 has an integer overflow in endDoctypeDecl via NOTATION declarations."
+  },
+  {
+    "cve": "CVE-2026-56412",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Use-after-free vulnerability due to improper handling of XML CDATA sections",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 5.9
+      },
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 5.9
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 4.9
+      }
+    },
+    "description": "libexpat before 2.8.2 does not consider XML_TOK_DATA_CHARS in doCdataSection and thus lacks handler call depth tracking for various calls from within handlers in cases of a policy violation. Thus, a u"
+  },
+  {
+    "cve": "CVE-2026-66046",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "Expat through 2.8.3 contains a denial of service vulnerability caused  ...",
+    "cvss": {},
+    "description": "Expat through 2.8.3 contains a denial of service vulnerability caused by quadratic algorithmic complexity in the storeAtts() function in xmlparse.c, where processing N specified attributes with non-no"
+  },
+  {
+    "cve": "CVE-2026-72522",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "expat: libexpat: Denial of Service due to incorrect Unicode surrogate handling",
+    "cvss": {
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        "V3Score": 6.2
+      }
+    },
+    "description": "libexpat before 2.8.3 has an out-of-bounds read and resultant infinite loop because low surrogates are treated the same as high surrogates during Unicode processing in the *_toUtf16 functions."
+  },
+  {
+    "cve": "CVE-2026-76641",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "CVE-2026-76641 affecting package expat for versions less than 2.8.3-2",
+    "cvss": {},
+    "description": "Expat through 2.8.3 contains an out-of-bounds read vulnerability that allows attackers to trigger memory corruption by processing XML with external entity parsers created via XML_ExternalEntityParserC"
+  },
+  {
+    "cve": "CVE-2026-76957",
+    "pkg": "libexpat1",
+    "installed_version": "2.6.1-2ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "libexpat: libexpat: Memory corruption vulnerability allows arbitrary code execution or denial of service",
+    "cvss": {
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L",
+        "V3Score": 4.9
+      }
+    },
+    "description": "libexpat before 2.8.4 lacks handler call depth tracking with custom encoding callbacks. Thus, a use-after-free can occur. NOTE: this is similar to CVE-2026-50219, CVE-2026-56131 and CVE-2026-56412."
+  },
+  {
+    "cve": "CVE-2026-39113",
+    "pkg": "libsqlite3-0",
+    "installed_version": "3.45.1-1ubuntu2.7",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "Buffer Overflow vulnerability in SQLite affected version source snapsh ...",
+    "cvss": {},
+    "description": "Buffer Overflow vulnerability in SQLite affected version source snapshots/builds containing Fossil check-in 8bdc0d485e3ad0c7a1e818da66f106951d496b05cbe61d12c2c448f2f24b6d5d (Git mirror 169f68ed88b34cb"
+  },
+  {
+    "cve": "CVE-2026-40228",
+    "pkg": "libsystemd0",
+    "installed_version": "255.4-1ubuntu8.17",
+    "fixed_version": "None",
+    "severity": "LOW",
+    "title": "systemd: systemd-journald: Unintended output to user terminals via logger command",
+    "cvss": {
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N",
+        "V3Score": 3.3
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N",
+        "V3Score": 2.9
+      }
+    },
+    "description": "In systemd 259, systemd-journald can send ANSI escape sequences to the terminals of arbitrary users when a \"logger -p emerg\" command is executed, if ForwardToWall=yes is set."
+  },
+  {
+    "cve": "CVE-2026-40228",
+    "pkg": "libudev1",
+    "installed_version": "255.4-1ubuntu8.17",
+    "fixed_version": "None",
+    "severity": "LOW",
+    "title": "systemd: systemd-journald: Unintended output to user terminals via logger command",
+    "cvss": {
+      "nvd": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N",
+        "V3Score": 3.3
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N",
+        "V3Score": 2.9
+      }
+    },
+    "description": "In systemd 259, systemd-journald can send ANSI escape sequences to the terminals of arbitrary users when a \"logger -p emerg\" command is executed, if ForwardToWall=yes is set."
+  },
+  {
+    "cve": "CVE-2024-56433",
+    "pkg": "login",
+    "installed_version": "1:4.13+dfsg1-4ubuntu3.2",
+    "fixed_version": "None",
+    "severity": "LOW",
+    "title": "shadow-utils: Default subordinate ID configuration in /etc/login.defs could lead to compromise",
+    "cvss": {
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:L/I:L/A:N",
+        "V3Score": 3.6
+      }
+    },
+    "description": "shadow-utils (aka shadow) 4.4 through 4.17.0 establishes a default /etc/subuid behavior (e.g., uid 100000 through 165535 for the first user account) that can realistically conflict with the uids of us"
+  },
+  {
+    "cve": "CVE-2024-56433",
+    "pkg": "passwd",
+    "installed_version": "1:4.13+dfsg1-4ubuntu3.2",
+    "fixed_version": "None",
+    "severity": "LOW",
+    "title": "shadow-utils: Default subordinate ID configuration in /etc/login.defs could lead to compromise",
+    "cvss": {
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:L/I:L/A:N",
+        "V3Score": 3.6
+      }
+    },
+    "description": "shadow-utils (aka shadow) 4.4 through 4.17.0 establishes a default /etc/subuid behavior (e.g., uid 100000 through 165535 for the first user account) that can realistically conflict with the uids of us"
+  },
+  {
+    "cve": "CVE-2026-18477",
+    "pkg": "tar",
+    "installed_version": "1.35+dfsg-3ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "tar: tar: TOCTOU in incremental dumpdir 'X' rename handling allows restore path escape",
+    "cvss": {
+      "julia": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:N/I:H/A:N",
+        "V3Score": 4.4
+      },
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:N/I:H/A:N",
+        "V3Score": 4.4
+      }
+    },
+    "description": "A TOCTOU (Time-of-Check Time-of-Use) vulnerability in GNU tar's incremental dumpdir 'X' rename handling allows a local attacker with write access to a directory being backed up to influence the restor"
+  },
+  {
+    "cve": "CVE-2026-18508",
+    "pkg": "tar",
+    "installed_version": "1.35+dfsg-3ubuntu0.4",
+    "fixed_version": "None",
+    "severity": "MEDIUM",
+    "title": "tar: tar: --one-top-level hardlink targets not confined to top-level directory enabling arbitrary file overwrite",
+    "cvss": {
+      "redhat": {
+        "V3Vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
+        "V3Score": 4.4
+      }
+    },
+    "description": "A flaw was found in GNU tar. When extracting an archive with the --one-top-level option, hardlink targets are not confined to the designated top-level directory and may resolve relative to the extract"
+  }
+]

@@ -18,3 +18,16 @@ export const CLI_NAME = 'mastyf-ai';
 export const NPM_INSTALL_CMD = `npm install -g @mcp-guardian/server`;
 export const CLI_ONBOARD_CMD = `mastyf-ai onboard --apply`;
 export const CLI_START_CMD = `mastyf-ai start`;
+
+/** Research & distribution */
+export const HF_MODEL_URL = 'https://huggingface.co/Rudraneel93/mastyf-guard-1.5b';
+export const HF_MODEL_ID = 'Rudraneel93/mastyf-guard-1.5b';
+export const ZENODO_URL = 'https://zenodo.org/records/22206627';
+export const ZENODO_DOI = '10.5281/zenodo.22206627';
+export const ZENODO_CONCEPT_DOI = '10.5281/zenodo.22179415';
+export const PAPER_TITLE =
+  'Capability-Mediated Perimeters for Secure AI Agent Tool Execution';
+export const PAPER_PDF_URL = 'https://zenodo.org/api/records/22206627/files/mastyf-guard.pdf/content';
+export const HF_CHECKOUT_URL =
+  'https://mastyfai.lemonsqueezy.com/checkout/buy/49323daa-90ef-4157-90b9-8706acd13fe6';
+export const CONTACT_EMAIL = 'mastyf.support@gmail.com';

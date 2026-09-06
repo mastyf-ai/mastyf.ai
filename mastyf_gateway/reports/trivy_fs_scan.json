@@ -1,0 +1,10 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.74.0"
+  },
+  "ReportID": "01a073ab-70b9-767c-9749-defc9054b6cc",
+  "CreatedAt": "2026-09-06T03:53:30.489427+05:30",
+  "ArtifactName": "mastyf_gateway",
+  "ArtifactType": "filesystem"
+}

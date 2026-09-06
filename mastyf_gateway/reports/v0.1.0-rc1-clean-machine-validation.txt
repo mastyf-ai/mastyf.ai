@@ -1,0 +1,126 @@
+======================================================================
+       MASTYF SECURITY GATEWAY v0.1.0-RC1 CLEAN-MACHINE VALIDATION
+======================================================================
+Timestamp          : 2026-09-05T16:29:27Z
+Isolated Test Home : /var/folders/8k/zjxbk9cj4q369h37ybgy6r7c0000gn/T/mastyf_clean_test_8t0v7x_s
+Package Root       : /Users/rudraneeldas/Projects/mastyf-full/mastyf_gateway
+Python Runtime     : 3.13.1
+Platform           : darwin (arm64)
+======================================================================
+
+>>> STEP 1: RELEASE MANIFEST & ED25519 SIGNATURE VERIFICATION
+  [+] Release ID          : mastyf-gateway-v0.1.0-rc1
+  [+] Gateway Source Git  : 4331fa92305bf9c4d25785089e52e46b9a896d8e
+  [+] V6 HF Revision      : d59a6aa01f9139dff106146addb04109afa69c03
+  [+] Signature Algorithm : Ed25519 / SHA256-SigChain
+  [+] Signer Identity     : mastyf-release-authority@mastyf.ai
+  [✓] Release Manifest Signature Status: VALID (PASS)
+
+>>> STEP 2: RUNNING 'mastyf init' IN ISOLATED ENVIRONMENT
+  [✓] Scaffolding created in isolated environment.
+
+>>> STEP 3: RUNNING 'mastyf model install v6'
+  [✓] V6 Model Manifest registered.
+
+>>> STEP 4: RUNNING 'mastyf doctor'
+>>> STEP 5: RUNNING 'mastyf verify'
+>>> STEP 6: RUNNING 'mastyf status'
+>>> STEP 7: RUNNING 'mastyf self-test' (LIVE 4-PATH CANARY)
+  [+] 1. Safe Call (read_balance)                      -> ALLOW    [1 executions] (PASS)
+  [+] 2. Malicious Capability (CBAC Domain Violation)  -> BLOCK    [0 executions] (PASS)
+  [+] 3. Tainted Exfiltration (DIFC Lattice Violation) -> BLOCK    [0 executions] (PASS)
+  [+] 4. Ambiguous Intent (AIA Escalation)             -> ESCALATE [0 executions] (PASS)
+  Invariant Result: PASS
+  Backend Invocations on Deny/Escalate: 0 (Strictly 0)
+
+>>> STEP 8: RUNNING 'mastyf test --security' (38-TEST SUITE)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.1, pytest-9.0.3, pluggy-1.5.0 -- /opt/miniconda3/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/rudraneeldas/Projects/mastyf-full/mastyf_gateway
+configfile: pyproject.toml
+collecting ... collected 38 items
+
+mastyf_gateway/tests/chaos/test_gateway_chaos.py::test_chaos_auditor_timeout_escalation PASSED [  2%]
+mastyf_gateway/tests/chaos/test_gateway_chaos.py::test_chaos_auditor_malformed_output PASSED [  5%]
+mastyf_gateway/tests/chaos/test_gateway_chaos.py::test_chaos_concurrent_stress_load PASSED [  7%]
+mastyf_gateway/tests/integration/test_mcp_pipeline.py::test_mcp_clean_invocation_pipeline PASSED [ 10%]
+mastyf_gateway/tests/integration/test_mcp_pipeline.py::test_mcp_unauthorized_cbac_blocked_before_server PASSED [ 13%]
+mastyf_gateway/tests/integration/test_mcp_pipeline.py::test_mcp_tainted_difc_blocked_before_server PASSED [ 15%]
+mastyf_gateway/tests/integration/test_sustained_concurrency.py::test_sustained_concurrent_load_and_p99 PASSED [ 18%]
+mastyf_gateway/tests/invariants/test_authority_monotonicity.py::test_exhaustive_authority_monotonicity PASSED [ 21%]
+mastyf_gateway/tests/invariants/test_decision_matrix.py::test_canonical_decision_matrix[False-True-ALLOW-False-False-BLOCK-False] PASSED [ 23%]
+mastyf_gateway/tests/invariants/test_decision_matrix.py::test_canonical_decision_matrix[False-False-ALLOW-False-False-BLOCK-False] PASSED [ 26%]
+mastyf_gateway/tests/invariants/test_decision_matrix.py::test_canonical_decision_matrix[True-False-ALLOW-False-False-BLOCK-False] PASSED [ 28%]
+mastyf_gateway/tests/invariants/test_decision_matrix.py::test_canonical_decision_matrix[True-True-BLOCK-False-False-BLOCK-False] PASSED [ 31%]
+mastyf_gateway/tests/invariants/test_decision_matrix.py::test_canonical_decision_matrix[True-True-ESCALATE-False-False-ESCALATE-False] PASSED [ 34%]
+mastyf_gateway/tests/invariants/test_decision_matrix.py::test_canonical_decision_matrix[True-True-ALLOW-False-False-ALLOW-True] PASSED [ 36%]
+mastyf_gateway/tests/invariants/test_decision_matrix.py::test_canonical_decision_matrix[True-True-ALLOW-True-False-ESCALATE-False] PASSED [ 39%]
+mastyf_gateway/tests/invariants/test_decision_matrix.py::test_canonical_decision_matrix[True-True-ALLOW-False-True-ESCALATE-False] PASSED [ 42%]
+mastyf_gateway/tests/invariants/test_fail_closed.py::test_cbac_missing_policy PASSED [ 44%]
+mastyf_gateway/tests/invariants/test_fail_closed.py::test_cbac_unknown_tool PASSED [ 47%]
+mastyf_gateway/tests/invariants/test_fail_closed.py::test_cbac_unauthorized_principal PASSED [ 50%]
+mastyf_gateway/tests/invariants/test_fail_closed.py::test_cbac_missing_argument PASSED [ 52%]
+mastyf_gateway/tests/invariants/test_fail_closed.py::test_cbac_domain_constraint_violation PASSED [ 55%]
+mastyf_gateway/tests/invariants/test_fail_closed.py::test_difc_untrusted_exfiltration_blocked PASSED [ 57%]
+mastyf_gateway/tests/invariants/test_fail_closed.py::test_arbiter_fail_closed_on_aia_timeout PASSED [ 60%]
+mastyf_gateway/tests/invariants/test_fail_closed.py::test_arbiter_fail_closed_on_aia_malformed PASSED [ 63%]
+mastyf_gateway/tests/invariants/test_release_trust_chain.py::test_release_metadata_binding PASSED [ 65%]
+mastyf_gateway/tests/invariants/test_release_trust_chain.py::test_verify_trust_chain_structure PASSED [ 68%]
+mastyf_gateway/tests/security/test_escalation_lifecycle.py::test_gateway_execute_async_rejects_escalate PASSED [ 71%]
+mastyf_gateway/tests/security/test_escalation_lifecycle.py::test_mcp_adapter_rejects_escalate PASSED [ 73%]
+mastyf_gateway/tests/security/test_fuzzing.py::test_argument_fuzzing_fail_closed PASSED [ 76%]
+mastyf_gateway/tests/security/test_fuzzing.py::test_aia_output_decoder_fuzzing PASSED [ 78%]
+mastyf_gateway/tests/security/test_fuzzing.py::test_mcp_protocol_fuzzing PASSED [ 81%]
+mastyf_gateway/tests/security/test_mcp_attack_invariants.py::test_mcp_zero_backend_invocations_under_concurrent_attacks PASSED [ 84%]
+mastyf_gateway/tests/security/test_security_scenarios.py::test_legitimate_internal_email PASSED [ 86%]
+mastyf_gateway/tests/security/test_security_scenarios.py::test_injection_exfiltration_blocked_by_difc PASSED [ 89%]
+mastyf_gateway/tests/security/test_security_scenarios.py::test_neural_auditor_detects_semantic_injection PASSED [ 92%]
+mastyf_gateway/tests/security/test_self_test_canary.py::test_self_test_canary_invariants PASSED [ 94%]
+mastyf_gateway/tests/security/test_session_isolation.py::test_cross_session_taint_isolation PASSED [ 97%]
+mastyf_gateway/tests/security/test_session_isolation.py::test_concurrent_interleaved_session_isolation PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../../opt/miniconda3/lib/python3.13/site-packages/_pytest/config/__init__.py:1434
+  /opt/miniconda3/lib/python3.13/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 38 passed, 1 warning in 7.16s =========================
+
+  [✓] 38/38 Security Invariant & Regression Tests PASSED (100% Green)
+
+>>> STEP 9: RUNNING 'mastyf test --load' (CONCURRENCY & LATENCY BENCHMARK)
+=== 1. Benchmarking Deterministic Fast-Path Concurrency ===
+  Concurrency   1: P50=0.0143ms, P99=0.0143ms, Throughput=10000.0 req/s
+  Concurrency   5: P50=0.0036ms, P99=0.0148ms, Throughput=50000.0 req/s
+  Concurrency  10: P50=0.0030ms, P99=0.0061ms, Throughput=100000.0 req/s
+  Concurrency  25: P50=0.0029ms, P99=0.0043ms, Throughput=250000.0 req/s
+  Concurrency  50: P50=0.0028ms, P99=0.0041ms, Throughput=336605.2 req/s
+  Concurrency 100: P50=0.0029ms, P99=0.0044ms, Throughput=334402.3 req/s
+  Concurrency 250: P50=0.0028ms, P99=0.0060ms, Throughput=337952.0 req/s
+  Concurrency 500: P50=0.0028ms, P99=0.0060ms, Throughput=336832.6 req/s
+
+=== 2. Benchmarking Semantic AIA Path Concurrency ===
+  Concurrency   1: P50=1.925ms, P99=1.925ms, Throughput=497.4 req/s
+  Concurrency   5: P50=1.918ms, P99=1.989ms, Throughput=2378.1 req/s
+  Concurrency  10: P50=1.932ms, P99=2.082ms, Throughput=4507.9 req/s
+  Concurrency  25: P50=2.274ms, P99=2.671ms, Throughput=8568.4 req/s
+  Concurrency  50: P50=2.607ms, P99=3.404ms, Throughput=12788.0 req/s
+  Concurrency 100: P50=3.518ms, P99=4.379ms, Throughput=15572.6 req/s
+  Concurrency 250: P50=6.015ms, P99=10.319ms, Throughput=20152.1 req/s
+  Concurrency 500: P50=11.761ms, P99=19.725ms, Throughput=20859.8 req/s
+
+Report successfully generated with provenance metadata at: /Users/rudraneeldas/Projects/mastyf-full/mastyf_gateway/reports/gateway_real_path_concurrency_report.json
+
+  [✓] Concurrency & Latency Saturation Sweep Complete.
+
+>>> STEP 10: FORMAL INVARIANT CLOSURE SUMMARY
+  Invariant 1 (Authority Monotonicity) : Final <= CBAC ∩ DIFC [VERIFIED]
+  Invariant 2 (Zero-Leak Execution)    : Decision in {BLOCK, ESCALATE} => BackendInvocations == 0 [VERIFIED]
+  Invariant 3 (Fail-Closed Safety)     : Faults/Timeouts => Safe ESCALATE/BLOCK [VERIFIED]
+  Invariant 4 (State Isolation)        : Multi-session / multi-tenant zero taint leakage [VERIFIED]
+======================================================================
+STATUS: v0.1.0-RC1 CLEAN-MACHINE VALIDATION PASSED (ALL 5 GATES GREEN)
+======================================================================

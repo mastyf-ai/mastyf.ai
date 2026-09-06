@@ -1,14 +1,20 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { GITHUB_REPO_URL } from '@/lib/github-links';
-import { SITE_NAME } from '@/lib/product-links';
+import {
+  HF_MODEL_URL,
+  PAPER_PDF_URL,
+  SITE_NAME,
+  ZENODO_DOI,
+  ZENODO_URL,
+} from '@/lib/product-links';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '@/lib/support';
 
 const TRUST_BADGES = [
-  { label: '228/228 corpus gates', detail: '0 bypasses' },
-  { label: 'Open source', detail: 'MIT licensed' },
-  { label: 'Defense Fabric', detail: '6-phase protection' },
-  { label: 'Evidence packs', detail: 'Enterprise ready' },
+  { label: '97.50% hybrid coverage', detail: '0% FPR · 3k enterprise' },
+  { label: `DOI ${ZENODO_DOI}`, detail: 'v2.0 · CC-BY 4.0' },
+  { label: '1.5B Guard', detail: '1.1GB CPU · 17.3µs' },
+  { label: 'Gated on HF', detail: 'Manual review · Lemon Squeezy' },
 ] as const;
 
 export function SiteFooter() {
@@ -85,8 +91,23 @@ export function SiteFooter() {
         </div>
 
         <div className="site-footer-col">
-          <h4>Company</h4>
+          <h4>Research</h4>
           <ul>
+            <li>
+              <a href={ZENODO_URL} target="_blank" rel="noopener noreferrer">
+                Zenodo · {ZENODO_DOI}
+              </a>
+            </li>
+            <li>
+              <a href={PAPER_PDF_URL} target="_blank" rel="noopener noreferrer">
+                Paper PDF
+              </a>
+            </li>
+            <li>
+              <a href={HF_MODEL_URL} target="_blank" rel="noopener noreferrer">
+                HF: mastyf-guard-1.5b
+              </a>
+            </li>
             <li>
               <a href={SUPPORT_MAILTO}>Contact us</a>
             </li>

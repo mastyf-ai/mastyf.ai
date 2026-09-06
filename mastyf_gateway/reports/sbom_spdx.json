@@ -1,0 +1,98 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "mastyf-gateway-0.1.1-sbom",
+  "documentNamespace": "https://mastyf.ai/spdxdocs/mastyf-gateway-0.1.1-4331fa46",
+  "creationInfo": {
+    "creators": [
+      "Tool: mastyf-sbom-generator-1.0.0",
+      "Organization: Mastyf AI"
+    ],
+    "created": "2026-09-05T22:39:08.406754+00:00"
+  },
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-mastyf-gateway",
+      "name": "mastyf-gateway",
+      "versionInfo": "0.1.1",
+      "downloadLocation": "https://github.com/Rudraneel93/mastyf-gateway",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "Copyright 2026 Mastyf AI Team",
+      "description": "Deterministic-First Capability-Based Security Gateway & Neural Auditor for AI Agents"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-pydantic",
+      "name": "pydantic",
+      "versionInfo": "2.13.4",
+      "downloadLocation": "https://pypi.org/project/pydantic/",
+      "licenseConcluded": "Unknown",
+      "licenseDeclared": "Unknown",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-fastapi",
+      "name": "fastapi",
+      "versionInfo": "0.135.2",
+      "downloadLocation": "https://pypi.org/project/fastapi/",
+      "licenseConcluded": "Unknown",
+      "licenseDeclared": "Unknown",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-uvicorn",
+      "name": "uvicorn",
+      "versionInfo": "0.42.0",
+      "downloadLocation": "https://pypi.org/project/uvicorn/",
+      "licenseConcluded": "Unknown",
+      "licenseDeclared": "Unknown",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-httpx",
+      "name": "httpx",
+      "versionInfo": "0.28.1",
+      "downloadLocation": "https://pypi.org/project/httpx/",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-torch",
+      "name": "torch",
+      "versionInfo": "2.13.0",
+      "downloadLocation": "https://pypi.org/project/torch/",
+      "licenseConcluded": "Unknown",
+      "licenseDeclared": "Unknown",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-transformers",
+      "name": "transformers",
+      "versionInfo": "5.16.1",
+      "downloadLocation": "https://pypi.org/project/transformers/",
+      "licenseConcluded": "Apache 2.0 License",
+      "licenseDeclared": "Apache 2.0 License",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-peft",
+      "name": "peft",
+      "versionInfo": "0.12.0",
+      "downloadLocation": "https://pypi.org/project/peft/",
+      "licenseConcluded": "Apache",
+      "licenseDeclared": "Apache",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-numpy",
+      "name": "numpy",
+      "versionInfo": "2.3.3",
+      "downloadLocation": "https://pypi.org/project/numpy/",
+      "licenseConcluded": "Copyright (c) 2005-2025, NumPy Developers.\n All rights reser",
+      "licenseDeclared": "Copyright (c) 2005-2025, NumPy Developers.\n All rights reser",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

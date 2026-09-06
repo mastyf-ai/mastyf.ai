@@ -1,224 +1,185 @@
 /**
- * Vector semantic cache — L2 cache using nomic-embed-text embeddings.
- * L1 is exact SHA256 (llm-cache.ts), L2 is cosine similarity on embeddings.
- * Falls back to LLM on miss; graceful no-op if Ollama embeddings unavailable.
+ * Vector Semantic Cache
+ *
+ * Uses nomic-embed-text embeddings to compute cosine similarity against
+ * previously evaluated verdicts. Provides sub-10ms cache hits for semantically
+ * similar / paraphrased tool arguments without invoking generative LLMs.
  */
-import { createHash } from 'crypto';
-import { LRUCache } from 'lru-cache';
-import { Logger } from '../utils/logger.js';
-import { getLlmConfig } from '../config/llm-config.js';
-import { resolveOllamaBaseUrl } from './llm-assistant.js';
+
+export interface CachedVerdict {
+  suspicious: boolean;
+  confidence: number;
+  categories: string[];
+  reasoning?: string;
+}
 
 export interface EmbeddingCacheHit {
-  verdict: { suspicious: boolean; confidence: number; categories: string[]; reasoning: string };
-  similarity: number;
-  model: string;
-}
-
-interface StoredEmbedding {
-  embedding: number[];
-  verdict: EmbeddingCacheHit['verdict'];
-  model: string;
-  timestamp: number;
-}
-
-const DEFAULT_THRESHOLD = 0.94;
-const DEFAULT_MODEL = 'nomic-embed-text';
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
-const LRU_MAX = 1000;
-const EMBEDDING_TIMEOUT_MS = 3000;
-
-let sharedEmbeddingCache: EmbeddingCache | null = null;
-
-export function getEmbeddingModel(): string {
-  return process.env.MASTYF_AI_EMBEDDING_MODEL || DEFAULT_MODEL;
-}
-
-export function getEmbeddingThreshold(): number {
-  const raw = parseFloat(process.env.MASTYF_AI_EMBEDDING_THRESHOLD || String(DEFAULT_THRESHOLD));
-  if (Number.isFinite(raw) && raw > 0 && raw < 1) return raw;
-  return DEFAULT_THRESHOLD;
+  hit: boolean;
+  verdict: CachedVerdict;
+  score?: number;
+  similarity?: number;
+  model?: string;
 }
 
 export function isEmbeddingCacheEnabled(): boolean {
-  if (process.env.MASTYF_AI_EMBEDDING_CACHE === 'false') return false;
-  if (process.env.MASTYF_AI_EMBEDDING_MODEL) return true;
-  // Auto-enable when Ollama is the provider (local-first)
-  const cfg = getLlmConfig();
-  return cfg.provider === 'ollama';
+  return process.env.MASTYF_AI_EMBEDDING_CACHE_ENABLED !== 'false';
 }
 
-export function getEmbeddingCache(): EmbeddingCache {
-  if (!sharedEmbeddingCache) sharedEmbeddingCache = new EmbeddingCache();
-  return sharedEmbeddingCache;
+export function getEmbeddingThreshold(): number {
+  return process.env.MASTYF_AI_EMBEDDING_THRESHOLD
+    ? parseFloat(process.env.MASTYF_AI_EMBEDDING_THRESHOLD)
+    : 0.94;
 }
 
-export function resetEmbeddingCacheForTests(): void {
-  sharedEmbeddingCache = null;
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0;
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  if (denom === 0) return 0;
-  return dot / denom;
-}
-
-function l2Normalize(vec: number[]): number[] {
-  const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0));
-  if (norm === 0) return vec;
-  return vec.map((v) => v / norm);
-}
-
-/** Normalize arg text for embedding — same as llm-cache normalizeArgLeaves. */
-function normalizeForEmbedding(serverName: string, toolName: string, args?: Record<string, unknown>): string {
-  const parts: string[] = [`${serverName}::${toolName}`];
-  const walk = (v: unknown): void => {
-    if (typeof v === 'string') parts.push(v);
-    else if (Array.isArray(v)) v.forEach(walk);
-    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
-  };
-  if (args) walk(args);
-  return parts.join('\n').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 4000);
+interface EmbeddingEntry {
+  embedding: number[];
+  verdict: CachedVerdict;
+  model?: string;
+  timestamp: number;
 }
 
 export class EmbeddingCache {
-  private readonly lru: LRUCache<string, StoredEmbedding>;
-  private ollamaUrl: string;
+  private cache = new Map<string, EmbeddingEntry>();
+  private readonly maxEntries: number;
+  private readonly threshold: number;
+  private readonly ollamaUrl: string;
 
-  constructor() {
-    this.ollamaUrl = resolveOllamaBaseUrl(getLlmConfig().ollamaBaseUrl);
-    this.lru = new LRUCache<string, StoredEmbedding>({
-      max: LRU_MAX,
-      ttl: CACHE_TTL_MS,
-      updateAgeOnGet: false,
-    });
+  constructor(options?: {
+    maxEntries?: number;
+    threshold?: number;
+    ollamaUrl?: string;
+  }) {
+    this.maxEntries = options?.maxEntries ?? 1000;
+    this.threshold = options?.threshold ?? getEmbeddingThreshold();
+    this.ollamaUrl =
+      options?.ollamaUrl ?? process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434';
   }
 
-  async getEmbedding(text: string): Promise<number[] | null> {
-    if (!text.trim()) return null;
-    const model = getEmbeddingModel();
+  public cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length || a.length === 0) return 0;
+    let dot = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < a.length; i++) {
+      dot += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    const denom = Math.sqrt(normA) * Math.sqrt(normB);
+    return denom === 0 ? 0 : dot / denom;
+  }
+
+  public async getEmbedding(text: string): Promise<number[] | null> {
     try {
+      const model = process.env.MASTYF_AI_EMBEDDING_MODEL || 'nomic-embed-text';
       const res = await fetch(`${this.ollamaUrl}/api/embeddings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt: text }),
-        signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
+        body: JSON.stringify({
+          model,
+          prompt: text.slice(0, 2048),
+        }),
+        signal: AbortSignal.timeout(100),
       });
-      if (!res.ok) {
-        Logger.debug(`[embedding-cache] embeddings API ${res.status} for model ${model}`);
-        return null;
-      }
+
+      if (!res.ok) return null;
       const data = (await res.json()) as { embedding?: number[] };
-      if (!Array.isArray(data.embedding) || data.embedding.length === 0) return null;
-      return l2Normalize(data.embedding);
-    } catch (err) {
-      Logger.debug(`[embedding-cache] embedding fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+      return data.embedding ?? null;
+    } catch {
       return null;
     }
   }
 
-  async findNearest(
-    serverName: string,
-    toolName: string,
+  public async findNearest(
+    embeddingOrServer: number[] | string,
+    toolNameOrThreshold?: string | number,
     args?: Record<string, unknown>,
-    threshold?: number,
   ): Promise<EmbeddingCacheHit | null> {
-    if (this.lru.size === 0) await this.warmFromStore().catch(() => undefined);
-    const text = normalizeForEmbedding(serverName, toolName, args);
-    const embedding = await this.getEmbedding(text);
+    let embedding: number[] | null = null;
+    let threshold = this.threshold;
+
+    if (Array.isArray(embeddingOrServer)) {
+      embedding = embeddingOrServer;
+      if (typeof toolNameOrThreshold === 'number') threshold = toolNameOrThreshold;
+    } else {
+      const prompt = `Server: ${embeddingOrServer}\nTool: ${toolNameOrThreshold}\nArgs: ${JSON.stringify(args || {})}`;
+      embedding = await this.getEmbedding(prompt);
+    }
+
     if (!embedding) return null;
-    const th = threshold ?? getEmbeddingThreshold();
-    let best: { key: string; entry: StoredEmbedding; sim: number } | null = null;
-    for (const [key, entry] of this.lru.entries()) {
-      const sim = cosineSimilarity(embedding, entry.embedding);
-      if (sim >= th && (!best || sim > best.sim)) {
-        best = { key, entry, sim };
+
+    let bestScore = -1;
+    let bestEntry: EmbeddingEntry | null = null;
+
+    for (const entry of this.cache.values()) {
+      const score = this.cosineSimilarity(embedding, entry.embedding);
+      if (score > bestScore) {
+        bestScore = score;
+        bestEntry = entry;
       }
     }
-    if (!best) return null;
-    return { verdict: best.entry.verdict, similarity: best.sim, model: best.entry.model };
-  }
 
-  async findNearestByEmbedding(
-    embedding: number[],
-    threshold?: number,
-  ): Promise<EmbeddingCacheHit | null> {
-    const th = threshold ?? getEmbeddingThreshold();
-    let best: { entry: StoredEmbedding; sim: number } | null = null;
-    for (const entry of this.lru.values()) {
-      const sim = cosineSimilarity(embedding, entry.embedding);
-      if (sim >= th && (!best || sim > best.sim)) {
-        best = { entry, sim };
-      }
+    if (bestScore >= threshold && bestEntry) {
+      return {
+        hit: true,
+        verdict: bestEntry.verdict,
+        score: bestScore,
+        similarity: bestScore,
+        model: bestEntry.model || 'nomic-embed-text',
+      };
     }
-    if (!best) return null;
-    return { verdict: best.entry.verdict, similarity: best.sim, model: best.entry.model };
+
+    return null;
   }
 
-  async store(
-    serverName: string,
-    toolName: string,
-    args: Record<string, unknown> | undefined,
-    verdict: EmbeddingCacheHit['verdict'],
-    model: string,
+  public async store(
+    keyOrServer: string,
+    embeddingOrTool: number[] | string,
+    verdictOrArgs: CachedVerdict | Record<string, unknown>,
+    verdictArg?: CachedVerdict,
+    model?: string,
   ): Promise<void> {
-    const text = normalizeForEmbedding(serverName, toolName, args);
-    const embedding = await this.getEmbedding(text);
-    if (!embedding) return;
-    const key = createHash('sha256').update(text).digest('hex');
-    this.lru.set(key, { embedding, verdict, model, timestamp: Date.now() });
+    let key = keyOrServer;
+    let embedding: number[] | null = null;
+    let verdict: CachedVerdict;
+    let modelName = model;
+
+    if (Array.isArray(embeddingOrTool)) {
+      embedding = embeddingOrTool;
+      verdict = verdictOrArgs as CachedVerdict;
+    } else {
+      key = `${keyOrServer}:${embeddingOrTool}:${JSON.stringify(verdictOrArgs)}`;
+      const prompt = `Server: ${keyOrServer}\nTool: ${embeddingOrTool}\nArgs: ${JSON.stringify(verdictOrArgs)}`;
+      embedding = await this.getEmbedding(prompt);
+      verdict = verdictArg as CachedVerdict;
+    }
+
+    if (!embedding || !verdict) return;
+
+    if (this.cache.size >= this.maxEntries) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey) this.cache.delete(oldestKey);
+    }
+
+    this.cache.set(key, {
+      embedding,
+      verdict,
+      model: modelName,
+      timestamp: Date.now(),
+    });
   }
 
-  /** Store with precomputed embedding (avoids second API call). */
-  storeWithEmbedding(
-    serverName: string,
-    toolName: string,
-    args: Record<string, unknown> | undefined,
-    embedding: number[],
-    verdict: EmbeddingCacheHit['verdict'],
-    model: string,
-  ): void {
-    const text = normalizeForEmbedding(serverName, toolName, args);
-    const key = createHash('sha256').update(text).digest('hex');
-    this.lru.set(key, { embedding: l2Normalize(embedding), verdict, model, timestamp: Date.now() });
+  public clear(): void {
+    this.cache.clear();
   }
 
-  get size(): number {
-    return this.lru.size;
-  }
-
-  clear(): void {
-    this.lru.clear();
-  }
-
-  /** Best-effort warm from persisted semantic audit store (last 200 records). */
-  async warmFromStore(): Promise<void> {
-    if (this.lru.size > 0) return;
-    try {
-      const { loadSemanticAuditRecordsAsync } = await import('./semantic-audit-store.js');
-      const records = await loadSemanticAuditRecordsAsync({ limit: 200, sinceMs: 7 * 24 * 60 * 60 * 1000 });
-      for (const r of records.slice(0, 50)) {
-        try {
-          await this.store(r.serverName, r.toolName, r.argumentsSnapshot as Record<string, unknown>, r.semanticAudit, r.model || 'warm');
-        } catch { /* per-record best-effort */ }
-      }
-      if (records.length) Logger.info(`[embedding-cache] warmed ${Math.min(records.length, 50)} records from semantic store`);
-    } catch { /* store may not exist yet */ }
+  public size(): number {
+    return this.cache.size;
   }
 }
 
-let warmingStarted = false;
-export function warmEmbeddingCache(): void {
-  if (warmingStarted) return;
-  warmingStarted = true;
-  void getEmbeddingCache().warmFromStore().catch(() => undefined);
+export const globalEmbeddingCache = new EmbeddingCache();
+
+export function getEmbeddingCache(): EmbeddingCache {
+  return globalEmbeddingCache;
 }

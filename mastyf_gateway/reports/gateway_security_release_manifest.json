@@ -1,0 +1,364 @@
+{
+  "manifest_schema": "mastyf-security-release-manifest-v1.1",
+  "release_identity": {
+    "gateway_name": "mastyf-gateway",
+    "version": "0.1.1",
+    "release_tag": "v0.1.1-rc1",
+    "source_git_sha": "4331fa468f70a7887a9e41cad92e8a12d4b48f80",
+    "creation_timestamp": "2026-09-05T23:20:47.002591+00:00",
+    "product_positioning": "Production-oriented security gateway; production-pilot candidate pending static analysis, dependency/SBOM review, container scanning, real MCP deployment testing, and independent security assessment.",
+    "status": "PRODUCTION_PILOT_CANDIDATE"
+  },
+  "container_specification": {
+    "docker_image_id": "sha256:e045c788f0fd63f52cbd65839904dae2b7065ce93ee057883ede298f89683f6c",
+    "docker_image_tag": "mastyf-gateway:0.1.1-rc1",
+    "published_registry_url": "ghcr.io/mastyf-ai/mastyf-gateway:0.1.1-rc1",
+    "published_immutable_digest": "ghcr.io/mastyf-ai/mastyf-gateway@sha256:e045c788f0fd63f52cbd65839904dae2b7065ce93ee057883ede298f89683f6c",
+    "dockerfile_sha256": "15245b7bcdd9e247801d08ea28104cb1a7e11ca6c78665871ff75cad22520b8d",
+    "base_image": "ubuntu:24.04 (Noble Numbat)",
+    "base_image_digest": "docker.io/library/ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
+    "rootfs_layers": [
+      "sha256:646eea22414270d74b0c9e9d6d3b9550701ae62e658a099825d4d15045a3630b",
+      "sha256:d600c6d478cc56be83d65f4469b3a56fb75cb171539804102db4df07f79f0fe5",
+      "sha256:a611371bff346eea4350e19bcdc894694dcc27bda908deb032c5648f258196a4",
+      "sha256:3dba17fce9bc5bf28b815c823e868d7299a2866fe4dc9baf3f3c43a1e61c1594",
+      "sha256:f9cafea3b345257811929ddffa8796f772f8b784feb65a6b66c3f83bd21a20c5",
+      "sha256:6fb8804a2e1db0e8436d3246200cc429a382d2994f47b1ab4dfb87146b2524ae",
+      "sha256:9fbfc48d217a1af5ea577a08bad8cb005a4f83775d6f57485516ab95e790fa3f"
+    ],
+    "reproducibility_notes": "The released container image ID sha256:d76cfdcd5d5f07f6fd0a0c5151272b0959567ccd9602952a2f34d23a16238c71 is immutable and content-addressed. The Dockerfile builds from tag ubuntu:24.04; docker.io/library/ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517 records the exact resolved base image used for this release build rather than a Dockerfile digest pin.",
+    "exposed_ports": [
+      8000,
+      9090
+    ],
+    "healthcheck_endpoint": "http://localhost:8000/healthz",
+    "runtime_user": "mastyf (UID 10001)"
+  },
+  "sbom_provenance": {
+    "cyclonedx_1_5_json": {
+      "file": "reports/sbom_cyclonedx.json",
+      "sha256": "835110c1d93af0e8f244bceb66b8a3b7c28e0d36708ae60d4accce0efd09b29b"
+    },
+    "spdx_2_3_json": {
+      "file": "reports/sbom_spdx.json",
+      "sha256": "0300b6216e9e7dc9fe62568ad15af7a88dd57c8514e08e7bcc286cc2d68f0351"
+    }
+  },
+  "security_audits": {
+    "ast_static_analysis": {
+      "tool": "bandit-1.9.4",
+      "report_file": "reports/bandit_scan.json",
+      "report_sha256": "d823915850d0ae898f62a4991b1ab61b7b2897bd29a6e7cf4a5569c47ae0691e",
+      "loc_analyzed": 2162,
+      "summary": {
+        "SEVERITY_HIGH": 0,
+        "SEVERITY_MEDIUM": 1,
+        "SEVERITY_LOW": 6
+      },
+      "dispositions": [
+        {
+          "id": "B104",
+          "severity": "MEDIUM",
+          "target": "mastyf_gateway/config.py:46 (host: str = '0.0.0.0')",
+          "disposition": "ACCEPTED_CONFIGURATION",
+          "rationale": "The gateway defaults to 0.0.0.0 for container/network accessibility in standard reverse-proxy topologies. Binding is configurable through the MASTYF_HOST environment variable; deployment environments should explicitly restrict ingress at the network, container, or orchestrator perimeter."
+        },
+        {
+          "id": "B404/B603",
+          "severity": "LOW",
+          "target": "mastyf_gateway/cli.py:210,219,225 (subprocess imports & calls)",
+          "disposition": "DEVELOPER_TEST_TOOLING",
+          "rationale": "Subprocess calls are strictly isolated to developer test commands ('mastyf test --security' / 'mastyf test --load') running local pytest suites. Subprocess is not imported or reachable on any production tool evaluation or proxy request path."
+        },
+        {
+          "id": "B110",
+          "severity": "LOW",
+          "target": "mastyf_gateway/telemetry/audit.py:44, cli.py:292 (try...except...pass)",
+          "disposition": "NON_CRITICAL_RESILIENCE",
+          "rationale": "Defensive exception handling for non-critical fallback: ensures optional user config file reading and secondary audit log appending failures fail gracefully without disrupting fail-closed tool arbitration."
+        }
+      ]
+    },
+    "dependency_cve_audit": {
+      "tool": "pip-audit-2.10.1 (PyPI Advisory DB)",
+      "report_file": "reports/dependency_cve_scan.json",
+      "report_sha256": "76a9acd9dc862b915c03bef2b5a9f152d9f45f1b4c5fa39bf25ad50791f4245c",
+      "total_dependencies_evaluated": 42,
+      "known_vulnerabilities": 0,
+      "claim_scope": "No known vulnerabilities were identified by pip-audit against the declared dependency set and advisory database at scan time."
+    },
+    "semgrep_static_audit": {
+      "tool": "semgrep-1.176.1",
+      "architectural_scan": {
+        "rule_file": "rules/mastyf_arbiter_dominance.yml",
+        "report_file": "reports/semgrep_architectural_scan.json",
+        "report_sha256": "e552ed46d8cc9cd4bc74ccbd0c286717a5d359695cc7ea843b574fb280e05824",
+        "rules_run": 4,
+        "findings": 0,
+        "invariants_checked": [
+          "Arbiter dominance over downstream tool execution",
+          "No dynamic code evaluation (eval/exec)",
+          "No shell execution (os.system/os.popen)",
+          "No unsafe deserialization (pickle)"
+        ]
+      },
+      "community_security_audit": {
+        "ruleset": "p/security-audit",
+        "report_file": "reports/semgrep_security_audit_scan.json",
+        "report_sha256": "f11675b4a7b12b0222aea2570c5e48ad3f506640919ba2182445ba385fbe2bc7",
+        "rules_run": 80,
+        "targets_scanned": 54,
+        "findings": 0
+      }
+    },
+    "trivy_security_audit": {
+      "tool": "trivy-0.74.0",
+      "filesystem_scan": {
+        "report_file": "reports/trivy_fs_scan.json",
+        "report_sha256": "e9f98aa456e40328212b16cc06bac946ca7302a5c04ddedf9706802aa22dd86a",
+        "vulnerabilities": 0,
+        "secrets": 0
+      },
+      "config_scan": {
+        "report_file": "reports/trivy_config_scan.json",
+        "report_sha256": "1669219b998d23fa3596ee41728a1ab34d5691654e34432527670e07e7436c5a",
+        "checks_passed": 27,
+        "checks_failed": 0,
+        "remediations_applied": [
+          "Multi-stage build separating builder from runtime",
+          "Removal of pip, setuptools, wheel build artifacts",
+          "Added non-root user 'mastyf' (UID 10001) in Dockerfile per Trivy DS-0002"
+        ]
+      },
+      "container_image_scan": {
+        "report_file": "reports/trivy_image_scan_remediated_v0.1.1.json",
+        "report_sha256": "4ea6ae25bafa0e50a812a45376294e6e03a402c3da4611e7ecddc8bdd76a7ed8",
+        "dispositions_file": "reports/trivy_residual_risk_dispositions.md",
+        "dispositions_sha256": "5c4ac8cb84dbff3b60465187a787edf0d96972b2edc2f5b3deb483a84b154031",
+        "summary": {
+          "CRITICAL": 0,
+          "HIGH": 0,
+          "MEDIUM": 29,
+          "LOW": 4,
+          "UNKNOWN": 0,
+          "SECRETS": 0,
+          "TOTAL": 33
+        },
+        "reduction_vs_baseline": "87.5% (263 -> 33; Critical: 3 -> 0; High: 62 -> 0)",
+        "gate_statement": "Container vulnerability gate: PASS subject to documented residual-risk dispositions \u2014 0 Critical, 0 High, 29 Medium, 4 Low."
+      }
+    },
+    "containerized_dominance_probe": {
+      "test_file": "tests/integration/test_containerized_dominance_probe.py",
+      "test_sha256": "bd0554a7f97f52d99a5dddc1f73ffe2749189b254469f98c4993e7c57e082bb5",
+      "status": "PASS",
+      "execution_target": "Live hardened container (mastyf-gateway:0.1.1-rc1) via HTTP REST",
+      "verified_invariant": "BackendExecution > 0 ==> Decision == ALLOW",
+      "cumulative_execution_statement": "Cumulative backend execution count remained 1 after all four probes; only the authorized baseline request executed.",
+      "rows_evaluated": 4,
+      "rows_passed": 4,
+      "matrix": [
+        {
+          "scenario": "Authorized clean",
+          "decision": "ALLOW",
+          "delta_backend_executions": 1,
+          "cumulative_executions": 1,
+          "status": "PASS"
+        },
+        {
+          "scenario": "Unauthorized principal",
+          "decision": "BLOCK",
+          "delta_backend_executions": 0,
+          "cumulative_executions": 1,
+          "status": "PASS"
+        },
+        {
+          "scenario": "Tainted exfiltration",
+          "decision": "BLOCK",
+          "delta_backend_executions": 0,
+          "cumulative_executions": 1,
+          "status": "PASS"
+        },
+        {
+          "scenario": "AIA fallback / unknown",
+          "decision": "BLOCK/ESCALATE",
+          "delta_backend_executions": 0,
+          "cumulative_executions": 1,
+          "status": "PASS"
+        }
+      ]
+    },
+    "pending_pilot_gates": [
+      "live multi-client MCP server production deployment testing",
+      "independent third-party security assessment"
+    ]
+  },
+  "security_gate_status_matrix": [
+    {
+      "gate": "40/40 security/integration tests",
+      "status": "PASS",
+      "evidence": "pytest-9.0.3 execution in 9.54s"
+    },
+    {
+      "gate": "Arbiter dominance",
+      "status": "PASS",
+      "evidence": "test_arbiter_dominance_bypass.py (monotonic counter unchanged on deny/escalate)"
+    },
+    {
+      "gate": "Fail-closed behavior",
+      "status": "PASS",
+      "evidence": "test_fail_closed.py (0 backend invocations on non-ALLOW)"
+    },
+    {
+      "gate": "Authority isolation",
+      "status": "PASS",
+      "evidence": "Zero authority crossover across 50 concurrent interleaved sessions"
+    },
+    {
+      "gate": "Bandit AST static analysis",
+      "status": "PASS",
+      "evidence": "0 High, 1 accepted Medium (B104), 6 Low"
+    },
+    {
+      "gate": "pip-audit dependency CVEs",
+      "status": "PASS",
+      "evidence": "0 known vulnerabilities against PyPI advisory DB at scan time across 42 packages"
+    },
+    {
+      "gate": "CycloneDX 1.5 SBOM",
+      "status": "PASS",
+      "evidence": "reports/sbom_cyclonedx.json (SHA-256 bound)"
+    },
+    {
+      "gate": "SPDX 2.3 SBOM",
+      "status": "PASS",
+      "evidence": "reports/sbom_spdx.json (SHA-256 bound)"
+    },
+    {
+      "gate": "Semgrep security rules",
+      "status": "PASS",
+      "evidence": "0 findings across 84 rules (targeted arbiter dominance + p/security-audit)"
+    },
+    {
+      "gate": "Trivy filesystem scan",
+      "status": "PASS",
+      "evidence": "0 vulnerabilities and 0 secrets found (reports/trivy_fs_scan.json)"
+    },
+    {
+      "gate": "Trivy Dockerfile config scan",
+      "status": "PASS",
+      "evidence": "27/27 security checks passed; non-root user and multi-stage remediation applied"
+    },
+    {
+      "gate": "Trivy container image scan",
+      "status": "PASS",
+      "evidence": "Container vulnerability gate: PASS subject to documented residual-risk dispositions \u2014 0 Critical, 0 High, 29 Medium, 4 Low (reports/trivy_image_scan_remediated_v0.1.1.json)"
+    },
+    {
+      "gate": "Containerized dominance probe",
+      "status": "PASS",
+      "evidence": "4/4 live container HTTP REST probe rows verified; BackendExecution > 0 ==> Decision == ALLOW (tests/integration/test_containerized_dominance_probe.py)"
+    },
+    {
+      "gate": "Real multi-client MCP deployment",
+      "status": "PENDING",
+      "evidence": "In-process MCP adapter verified; physical multi-client deployment pending"
+    },
+    {
+      "gate": "Independent security assessment",
+      "status": "PENDING",
+      "evidence": "External third-party audit pending pilot phase"
+    }
+  ],
+  "verification_suite": {
+    "test_framework": "pytest-9.0.3 / python-3.13",
+    "total_tests_passed": 40,
+    "total_tests_failed": 0,
+    "test_suites": [
+      "tests/chaos/test_gateway_chaos.py (3 tests)",
+      "tests/integration/test_mcp_pipeline.py (3 tests)",
+      "tests/integration/test_sustained_concurrency.py (1 test)",
+      "tests/invariants/test_authority_monotonicity.py (1 test)",
+      "tests/invariants/test_decision_matrix.py (8 tests)",
+      "tests/invariants/test_fail_closed.py (8 tests)",
+      "tests/invariants/test_release_trust_chain.py (2 tests)",
+      "tests/security/test_arbiter_dominance_bypass.py (2 tests)",
+      "tests/security/test_escalation_lifecycle.py (2 tests)",
+      "tests/security/test_fuzzing.py (3 tests)",
+      "tests/security/test_mcp_attack_invariants.py (1 test)",
+      "tests/security/test_security_scenarios.py (3 tests)",
+      "tests/security/test_self_test_canary.py (1 test)",
+      "tests/security/test_session_isolation.py (2 tests)"
+    ],
+    "invariants_verified": [
+      "Arbiter Dominance: Tool execution strictly dominated by Decision == ALLOW",
+      "Fail-Closed: Decision in {BLOCK, ESCALATE} => Backend Invocations == 0",
+      "Authority Isolation: Zero authority crossover across concurrent interleaved sessions",
+      "Authority Monotonicity: Session taints strictly accumulate and never silently clear",
+      "Live Container Dominance: Four-row HTTP REST probe against running container preserves dominance invariant"
+    ]
+  },
+  "benchmarking_evidence": {
+    "report_file": "reports/gateway_real_path_concurrency_report.json",
+    "report_sha256": "644f8d74848d4605214979190c5834541ff3585a363296cdfceaae19de2a2231",
+    "deterministic_fast_path": {
+      "concurrency_sweep": [
+        1,
+        5,
+        10,
+        25,
+        50,
+        100,
+        250,
+        500,
+        1000
+      ],
+      "p50_latency_us": 2.9,
+      "throughput_req_sec": 335032.0,
+      "scope": "In-process Python benchmark harness (CBAC + DIFC)"
+    },
+    "semantic_aia_path": {
+      "concurrency_sweep": [
+        1,
+        5,
+        10,
+        25,
+        50,
+        100,
+        250,
+        500,
+        1000
+      ],
+      "p50_latency_ms_at_1000": 24.25,
+      "throughput_req_sec": 20196.4,
+      "scope": "In-process Python benchmark under 1.5ms simulated neural fast-weights"
+    }
+  },
+  "neural_auditor_binding": {
+    "model_repository": "Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened",
+    "frozen_revision": "d59a6aa01f9139dff106146addb04109afa69c03",
+    "derived_gguf_artifact": "deployment/mastyf-guard-v6-q4_k_m.gguf",
+    "derived_gguf_sha256": "513bd5d0d5a460476a8b7afac45a4c6d865eeff8e140ba0ec2c82abaacce0ecf",
+    "deployment_canary_pass": "50/50 (100.0%)",
+    "security_downgrades": 0
+  },
+  "commercial_architecture": {
+    "edition": "Mastyf Guard Pro",
+    "subscription_price_inr": 2500,
+    "billing_provider": "Lemon Squeezy",
+    "license_model": "Instance-backed subscription license (2 instances/subscription)",
+    "gated_model_repo": "Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened",
+    "gated_model_revision": "d59a6aa01f9139dff106146addb04109afa69c03",
+    "entitlement_cryptography": "Ed25519 Asymmetric Verification (Server Private / Gateway Public)",
+    "active_signing_key_id": "mastyf-prod-2026-01",
+    "key_rotation_keyring": [
+      "mastyf-prod-2026-01",
+      "mastyf-prod-2025-04"
+    ],
+    "offline_grace_period_days": 7,
+    "database_schema_version": "014_commercial_licensing.sql",
+    "zero_pii_in_local_entitlement": true,
+    "decoupled_distribution": true,
+    "container_contains_weights": false
+  }
+}

@@ -119,11 +119,17 @@ export async function evaluateSyncSemanticRequest(
     const { classifyDistilled, shouldBlockFromDistilled, isDistilledEnabled } = await import('./distilled-classifier.js');
     if (isDistilledEnabled()) {
       const distilled = await classifyDistilled(input.context.serverName, input.context.toolName, argsText);
-      if (distilled && distilled.source === 'distilled') {
+      if (distilled && distilled.source === 'distilled' && distilled.verdict) {
         const decision = shouldBlockFromDistilled(distilled.verdict);
         if (decision !== null) {
           Metrics.recordSemanticScanDuration('sync_request', 0, decision ? 'distilled_block' : 'distilled_allow');
-          return { block: decision, result: distilled.verdict, source: 'llm', rule: 'semantic-sync-request', reason: distilled.verdict.reasoning || `distilled ${distilled.model}` };
+          const auditResult = {
+            suspicious: distilled.verdict.suspicious,
+            confidence: distilled.verdict.confidence,
+            categories: distilled.verdict.categories || [distilled.verdict.category],
+            reasoning: distilled.verdict.reasoning || `distilled ${distilled.model}`,
+          };
+          return { block: decision, result: auditResult, source: 'llm', rule: 'semantic-sync-request', reason: auditResult.reasoning };
         }
         // null = uncertain 0.45-0.65 -> fall through to full LLM
       }
@@ -168,17 +174,24 @@ Respond ONLY with JSON: {"suspicious":boolean,"confidence":0-1,"categories":stri
       if (hit) {
         const hardTh = getEmbeddingThreshold();
         const softTh = parseFloat(process.env.MASTYF_AI_EMBEDDING_SOFT_THRESHOLD || '0.88');
-        if (hit.similarity >= hardTh && hit.verdict.confidence >= MIN_CONFIDENCE) {
+        const sim = hit.similarity ?? hit.score ?? 1.0;
+        if (sim >= hardTh && hit.verdict.confidence >= MIN_CONFIDENCE) {
+          const auditRes = {
+            suspicious: hit.verdict.suspicious,
+            confidence: hit.verdict.confidence,
+            categories: hit.verdict.categories,
+            reasoning: hit.verdict.reasoning || 'embedding hit',
+          };
           const block = hit.verdict.suspicious && hit.verdict.confidence >= MIN_CONFIDENCE;
           if (block) {
             Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_hit');
-            return { block: true, result: hit.verdict, source: 'llm', rule: 'semantic-sync-request', reason: hit.verdict.reasoning || `embedding hit sim=${hit.similarity.toFixed(2)}` };
+            return { block: true, result: auditRes, source: 'llm', rule: 'semantic-sync-request', reason: auditRes.reasoning };
           }
           if (!hit.verdict.suspicious) {
             Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_hit_clean');
-            return { block: false, result: hit.verdict, source: 'llm', rule: 'semantic-sync-request', reason: hit.verdict.reasoning || 'embedding clean' };
+            return { block: false, result: auditRes, source: 'llm', rule: 'semantic-sync-request', reason: auditRes.reasoning };
           }
-        } else if (hit.similarity >= softTh && hit.similarity < hardTh) {
+        } else if (sim >= softTh && sim < hardTh) {
           // soft hit -> try distilled fast gate before full 8B
           Metrics.recordSemanticScanDuration('sync_request', 0, 'embedding_soft');
         }

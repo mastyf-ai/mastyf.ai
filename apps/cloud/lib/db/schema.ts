@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   pgTable,
   primaryKey,
@@ -123,3 +124,76 @@ export const licenseExchangeTokens = pgTable('license_exchange_tokens', {
   usedAt: timestamp('used_at', { mode: 'date', withTimezone: true }),
   createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Mastyf Guard Commercial Access & Entitlement Projections ---
+
+export const commercialCustomers = pgTable('commercial_customers', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  lemonCustomerId: text('lemon_customer_id').unique(),
+  createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+});
+
+export const commercialSubscriptions = pgTable('commercial_subscriptions', {
+  id: text('id').primaryKey(),
+  customerId: text('customer_id')
+    .notNull()
+    .references(() => commercialCustomers.id, { onDelete: 'cascade' }),
+  lemonSubscriptionId: text('lemon_subscription_id').notNull().unique(),
+  status: text('status').notNull(), // on_trial, active, paused, past_due, unpaid, cancelled, expired
+  productId: text('product_id'),
+  variantId: text('variant_id'),
+  currentPeriodStart: timestamp('current_period_start', { mode: 'date', withTimezone: true }),
+  currentPeriodEnd: timestamp('current_period_end', { mode: 'date', withTimezone: true }),
+  endsAt: timestamp('ends_at', { mode: 'date', withTimezone: true }),
+  cancelledAt: timestamp('cancelled_at', { mode: 'date', withTimezone: true }),
+  lemonUpdatedAt: timestamp('lemon_updated_at', { mode: 'date', withTimezone: true }),
+  createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+});
+
+export const commercialEntitlements = pgTable('commercial_entitlements', {
+  id: text('id').primaryKey(),
+  customerId: text('customer_id')
+    .notNull()
+    .references(() => commercialCustomers.id, { onDelete: 'cascade' }),
+  subscriptionId: text('subscription_id')
+    .references(() => commercialSubscriptions.id, { onDelete: 'set null' }),
+  product: text('product').notNull().default('mastyf-guard-pro'),
+  licenseKeyHash: text('license_key_hash').notNull().unique(),
+  licenseKeyPreview: text('license_key_preview'),
+  lemonLicenseId: text('lemon_license_id').unique(),
+  lemonInstanceId: text('lemon_instance_id'),
+  status: text('status').notNull().default('active'), // active, grace_period, expired, disabled
+  activationLimit: integer('activation_limit').notNull().default(2),
+  instancesCount: integer('instances_count').notNull().default(0),
+  lastValidatedAt: timestamp('last_validated_at', { mode: 'date', withTimezone: true }),
+  createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+});
+
+export const hfEntitlements = pgTable('hf_entitlements', {
+  id: text('id').primaryKey(),
+  customerId: text('customer_id')
+    .notNull()
+    .references(() => commercialCustomers.id, { onDelete: 'cascade' }),
+  hfUsername: text('hf_username').notNull().unique(),
+  repoId: text('repo_id').notNull().default('Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened'),
+  status: text('status').notNull().default('pending_request'), // pending_request, granted, revoked, sync_error
+  lastSyncedAt: timestamp('last_synced_at', { mode: 'date', withTimezone: true }),
+  errorMessage: text('error_message'),
+  isPermanentlyBound: boolean('is_permanently_bound').notNull().default(true),
+  createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+});
+
+export const webhookEventLogs = pgTable('webhook_event_logs', {
+  id: text('id').primaryKey(),
+  eventName: text('event_name').notNull(),
+  eventTimestamp: timestamp('event_timestamp', { mode: 'date', withTimezone: true }),
+  payloadHash: text('payload_hash').notNull(),
+  status: text('status').notNull().default('processed'), // processed, ignored, failed
+  processedAt: timestamp('processed_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+});
+

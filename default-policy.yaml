@@ -324,3 +324,65 @@ policy:
         - You have been reprogrammed
         - Ignore your system prompt
         - Override safety protocols
+    - name: block-graphql-injection
+      description: Block GraphQL introspection, schema extraction, and depth explosion attacks
+      action: block
+      argPatterns:
+        - field: query
+          patterns:
+            - __schema\s*\{
+            - __type\s*\(
+            - introspectionQuery
+            - fragment\s+\w+\s+on\s+__
+            - '\{[^{}]*\{[^{}]*\{[^{}]*\{[^{}]*\{'
+        - field: operationName
+          patterns:
+            - IntrospectionQuery
+            - Introspect
+        - field: variables
+          patterns:
+            - __schema
+            - __type
+        - field: '*'
+          patterns:
+            - __schema\s*\{
+            - __type\s*\(
+    - name: block-privilege-escalation
+      description: Block tool calls requesting privilege escalation or role manipulation
+      action: block
+      argPatterns:
+        - field: '*'
+          patterns:
+            - (?:make|set|grant|assign|elevate|promote)\s+(?:me|user|this|current)\s+(?:an?\s+)?(?:admin|root|superuser|owner|manager|god)
+            - role\s*[=:]\s*["']?(?:admin|root|superuser|owner|god|system)["']?
+            - is_admin\s*[=:]\s*(?:true|1|yes)
+            - permissions?\s*[=:]\s*["']?\*["']?
+            - sudo\s+(?:su|chmod|chown|usermod|visudo)
+            - NOPASSWD:\s*ALL
+    - name: block-resource-exhaustion
+      description: Block tool calls with unbounded limits or denial-of-service parameters
+      action: block
+      argPatterns:
+        - field: '*'
+          patterns:
+            - limit\s*[=:]\s*(?:[1-9]\d{6,}|unlimited|infinity|-1)
+            - timeout\s*[=:]\s*(?:0|unlimited|infinity|-1|none)
+            - max_tokens?\s*[=:]\s*[1-9]\d{6,}
+            - batch_size\s*[=:]\s*[1-9]\d{4,}
+            - while\s*\(\s*(?:true|1)\s*\)
+            - for\s*\(\s*;\s*;\s*\)
+    - name: block-credential-patterns-expanded
+      description: Expanded detection for cloud API keys, tokens, and private keys
+      action: block
+      argPatterns:
+        - field: '*'
+          patterns:
+            - (?:AKIA|ASIA)[0-9A-Z]{16}
+            - sk-[a-zA-Z0-9]{20,}
+            - ghp_[a-zA-Z0-9]{36}
+            - glpat-[a-zA-Z0-9\-]{20,}
+            - xox[bspar]-[a-zA-Z0-9\-]+
+            - eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}
+            - -----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----
+            - Bearer\s+[a-zA-Z0-9._\-]{25,}
+

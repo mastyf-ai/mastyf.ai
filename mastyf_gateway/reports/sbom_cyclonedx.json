@@ -1,0 +1,171 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:mastyf-gateway-0.1.1-4331fa46",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-05T22:39:08.406099+00:00",
+    "tools": [
+      {
+        "vendor": "Mastyf AI",
+        "name": "mastyf-sbom-generator",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/mastyf-gateway@0.1.1",
+      "name": "mastyf-gateway",
+      "version": "0.1.1",
+      "description": "Deterministic-First Capability-Based Security Gateway & Neural Auditor for AI Agents",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:generic/mastyf-gateway@0.1.1",
+      "properties": [
+        {
+          "name": "mastyf:source_git_sha",
+          "value": "4331fa468f70a7887a9e41cad92e8a12d4b48f80"
+        },
+        {
+          "name": "mastyf:base_image",
+          "value": "ubuntu:24.04 (Noble Numbat)"
+        },
+        {
+          "name": "mastyf:python_runtime",
+          "value": "3.13.1"
+        },
+        {
+          "name": "mastyf:neural_auditor_revision",
+          "value": "d59a6aa01f9139dff106146addb04109afa69c03"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic@2.13.4",
+      "name": "pydantic",
+      "version": "2.13.4",
+      "licenses": [
+        {
+          "license": {
+            "name": "Unknown"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/pydantic@2.13.4",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/fastapi@0.135.2",
+      "name": "fastapi",
+      "version": "0.135.2",
+      "licenses": [
+        {
+          "license": {
+            "name": "Unknown"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/fastapi@0.135.2",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/uvicorn@0.42.0",
+      "name": "uvicorn",
+      "version": "0.42.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "Unknown"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/uvicorn@0.42.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/httpx@0.28.1",
+      "name": "httpx",
+      "version": "0.28.1",
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/httpx@0.28.1",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/torch@2.13.0",
+      "name": "torch",
+      "version": "2.13.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "Unknown"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/torch@2.13.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/transformers@5.16.1",
+      "name": "transformers",
+      "version": "5.16.1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache 2.0 License"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/transformers@5.16.1",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/peft@0.12.0",
+      "name": "peft",
+      "version": "0.12.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/peft@0.12.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/numpy@2.3.3",
+      "name": "numpy",
+      "version": "2.3.3",
+      "licenses": [
+        {
+          "license": {
+            "name": "Copyright (c) 2005-2025, NumPy Developers.\n All rights reser"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/numpy@2.3.3",
+      "scope": "required"
+    }
+  ]
+}

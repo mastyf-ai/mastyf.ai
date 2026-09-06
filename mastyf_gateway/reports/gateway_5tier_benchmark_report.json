@@ -1,0 +1,57 @@
+{
+  "1. Unprotected Baseline": {
+    "p50_ms": 0.131,
+    "p95_ms": 0.138,
+    "p99_ms": 0.144,
+    "throughput_req_sec": 7561.4,
+    "clean_utility_rate": "100.00%",
+    "attack_defense_rate": "0.00%",
+    "false_blocks": 0,
+    "false_allows": 200,
+    "escalations": 0
+  },
+  "2. CBAC Only": {
+    "p50_ms": 0.002,
+    "p95_ms": 0.003,
+    "p99_ms": 0.004,
+    "throughput_req_sec": 400000.0,
+    "clean_utility_rate": "100.00%",
+    "attack_defense_rate": "33.50%",
+    "false_blocks": 0,
+    "false_allows": 133,
+    "escalations": 0
+  },
+  "3. CBAC + DIFC": {
+    "p50_ms": 0.003,
+    "p95_ms": 0.005,
+    "p99_ms": 0.006,
+    "throughput_req_sec": 305236.8,
+    "clean_utility_rate": "100.00%",
+    "attack_defense_rate": "67.00%",
+    "false_blocks": 0,
+    "false_allows": 66,
+    "escalations": 0
+  },
+  "4. CBAC + DIFC + AIA": {
+    "p50_ms": 1.725,
+    "p95_ms": 1.803,
+    "p99_ms": 1.849,
+    "throughput_req_sec": 850.0,
+    "clean_utility_rate": "100.00%",
+    "attack_defense_rate": "100.00%",
+    "false_blocks": 0,
+    "false_allows": 0,
+    "escalations": 0
+  },
+  "5. Full Gateway (AIA + Decoding + Telemetry)": {
+    "p50_ms": 1.87,
+    "p95_ms": 2.087,
+    "p99_ms": 2.251,
+    "throughput_req_sec": 734.6,
+    "clean_utility_rate": "100.00%",
+    "attack_defense_rate": "100.00%",
+    "false_blocks": 0,
+    "false_allows": 0,
+    "escalations": 0
+  }
+}

@@ -1,0 +1,67 @@
+rules:
+  - id: mastyf-tool-execution-arbiter-dominance
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Architectural Invariant Violation: Downstream MCP/backend tool execution
+      must be strictly dominated by an Arbiter decision check (decision.execution_permitted).
+    patterns:
+      - pattern-either:
+          - pattern: await $EXECUTOR(...)
+          - pattern: $EXECUTOR(...)
+      - metavariable-regex:
+          metavariable: $EXECUTOR
+          regex: ".*(tool_executor|execute_tool|dispatch_tool).*"
+      - pattern-not-inside: |
+          if not $DECISION.execution_permitted:
+              ...
+          ...
+      - pattern-not-inside: |
+          if $DECISION.execution_permitted:
+              ...
+    metadata:
+      cwe: "CWE-862: Missing Authorization"
+      confidence: HIGH
+      category: security
+      mastyf_invariant: "Arbiter Dominance"
+
+  - id: mastyf-no-eval-or-exec
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Security Violation: Dynamic code evaluation (eval/exec) is strictly forbidden in gateway runtime.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+    metadata:
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      confidence: HIGH
+      category: security
+
+  - id: mastyf-no-shell-execution-in-core
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Security Violation: Direct shell execution (os.system/os.popen) is strictly forbidden in gateway runtime.
+    pattern-either:
+      - pattern: os.system(...)
+      - pattern: os.popen(...)
+    metadata:
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      confidence: HIGH
+      category: security
+
+  - id: mastyf-no-pickle-deserialization
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Security Violation: Unsafe pickle deserialization is strictly forbidden in gateway runtime.
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: _pickle.loads(...)
+      - pattern: _pickle.load(...)
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      confidence: HIGH
+      category: security

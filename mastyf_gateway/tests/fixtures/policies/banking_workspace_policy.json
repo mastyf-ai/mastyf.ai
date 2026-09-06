@@ -1,0 +1,76 @@
+{
+  "policy_id": "corp-banking-workspace-v1",
+  "version": "1.0",
+  "description": "Production capability policy for banking and workspace tools",
+  "capabilities": [
+    {
+      "capability_name": "send_email_internal",
+      "tool_name": "send_email",
+      "allowed_principals": ["*"],
+      "argument_constraints": {
+        "recipient": {
+          "required": true,
+          "expected_type": "string",
+          "allowed_domains": ["@company.internal", "@mastyf.ai"]
+        },
+        "subject": {
+          "required": true,
+          "expected_type": "string",
+          "max_length": 128
+        },
+        "body": {
+          "required": true,
+          "expected_type": "string"
+        }
+      },
+      "deny_patterns": {
+        "body": ["(?i)confidential.*password", "(?i)exfiltrat"]
+      }
+    },
+    {
+      "capability_name": "transfer_funds_restricted",
+      "tool_name": "transfer_funds",
+      "allowed_principals": ["finance_agent_01", "admin_user"],
+      "argument_constraints": {
+        "amount": {
+          "required": true,
+          "expected_type": "float",
+          "min_value": 0.01,
+          "max_value": 10000.0
+        },
+        "recipient_account": {
+          "required": true,
+          "expected_type": "string",
+          "pattern": "^ACC-[0-9]{4,8}$"
+        }
+      }
+    },
+    {
+      "capability_name": "search_web_public",
+      "tool_name": "search_web",
+      "allowed_principals": ["*"],
+      "argument_constraints": {
+        "query": {
+          "required": true,
+          "expected_type": "string",
+          "max_length": 256
+        }
+      }
+    },
+    {
+      "capability_name": "read_file_safe",
+      "tool_name": "read_file",
+      "allowed_principals": ["*"],
+      "argument_constraints": {
+        "path": {
+          "required": true,
+          "expected_type": "string",
+          "allowed_paths": ["/workspace/", "/home/user/docs/"]
+        }
+      },
+      "deny_patterns": {
+        "path": ["\\.\\.", "/etc/passwd", "/\\.ssh/"]
+      }
+    }
+  ]
+}

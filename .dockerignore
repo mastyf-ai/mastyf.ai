@@ -17,3 +17,10 @@ scenarios
 .env.*
 .cursor
 packages/*/tests
+output
+output/**
+external-benchmarks
+external-benchmarks/**
+scratch
+scratch/**
+distribution/*.zip

@@ -1,0 +1,108 @@
+Metadata-Version: 2.4
+Name: mastyf-gateway
+Version: 0.1.0
+Summary: Deterministic-First Capability-Based Security Gateway & Neural Auditor for AI Agents
+Author-email: Mastyf AI Team <security@mastyf.ai>
+License: Apache-2.0
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.5.0
+Requires-Dist: fastapi>=0.110.0
+Requires-Dist: uvicorn>=0.29.0
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: torch>=2.2.0
+Requires-Dist: transformers>=4.40.0
+Requires-Dist: peft>=0.10.0
+Requires-Dist: numpy>=1.26.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+
+# Mastyf Security Gateway v0.1
+
+[![Security: Reference Monitor](https://img.shields.io/badge/Security-Reference%20Monitor-green.svg)](https://mastyf.ai)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Model Revision](https://img.shields.io/badge/V6%20Revision-d59a6aa-purple.svg)](https://huggingface.co/Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened)
+
+**Mastyf Security Gateway v0.1** is a high-assurance, deterministic-first capability reference monitor and active intent auditor for AI agents and Model Context Protocol (MCP) clients.
+
+---
+
+## Architectural Overview
+
+```text
+Agent / MCP Client
+        │
+        ▼
+┌──────────────────────────────────────────────┐
+│           Mastyf Security Gateway            │
+│                                              │
+│  1. Request Normalization                    │
+│  2. Deterministic CBAC (Capability Checks)   │
+│  3. Deterministic DIFC (Session Taint Flow)  │
+│  4. Active Intent Auditor (AIA V6 Fallback)  │
+│  5. Formal Decision Arbiter                  │
+│  6. Tamper-Evident SHA-256 Audit Telemetry   │
+└──────────────────────┬───────────────────────┘
+                       │
+             ALLOW / BLOCK / ESCALATE
+                       │
+                       ▼
+             Target Tool Runtime
+```
+
+### Core Security Invariant
+
+$$\text{Authority}(\text{Final}) \subseteq \text{Authority}(\text{CBAC}) \cap \text{Authority}(\text{DIFC})$$
+$$\text{Final} = \text{ALLOW} \implies \text{CBAC} = \text{ALLOW} \land \text{DIFC} = \text{ALLOW}$$
+
+* **Authority Monotonicity**: Active Intent Auditor ($V_6$) can recommend `BLOCK`, `ALLOW`, or `ESCALATE`, but it can **never expand authority** beyond deterministic CBAC and DIFC bounds.
+* **MCP Enforcement Invariant**: $\text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{BackendToolInvocations} = 0$.
+* **Fast-Path Target SLO**: Sub-millisecond ($<50\text{ ms}$) evaluation on deterministic routes; separate supervised deadline budgets for semantic neural auditing.
+* **Estimated Amortized Audit Latency**: Under workloads where $67\%$ of attacks are caught by deterministic policies, effective audit latency is modeled at $\sim 88.4\text{ ms}$ ($\sim 3\times$ theoretical reduction in neural load relative to universal interception).
+
+---
+
+## Reference-Monitor Decision Matrix
+
+| CBAC | DIFC | AIA | Final Decision | Tool Execution |
+| :--- | :--- | :--- | :--- | :--- |
+| `DENY` | *any* | *any (bypassed)* | `BLOCK` | ❌ No |
+| *any* | `DENY` | *any (bypassed)* | `BLOCK` | ❌ No |
+| `ALLOW` | `ALLOW` | `BLOCK` | `BLOCK` | ❌ No |
+| `ALLOW` | `ALLOW` | `ESCALATE` | `ESCALATE` | ❌ No |
+| `ALLOW` | `ALLOW` | `ALLOW` | `ALLOW` | ✅ **Yes** |
+| `ALLOW` | `ALLOW` | `TIMEOUT` | `ESCALATE` | ❌ No |
+| `ALLOW` | `ALLOW` | `MALFORMED` | `ESCALATE` | ❌ No |
+
+---
+
+## Quickstart
+
+### 1. Installation
+```bash
+cd mastyf_gateway
+pip install -e .
+```
+
+### 2. Run Test Suites
+```bash
+# Invariant & Monotonicity Verification Suite
+PYTHONPATH=mastyf_gateway PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/invariants/ -v
+
+# Security Scenarios Suite
+PYTHONPATH=mastyf_gateway PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/security/ -v
+
+# Chaos & Fail-Closed Suite
+PYTHONPATH=mastyf_gateway PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/chaos/ -v
+```
+
+### 3. Run 5-Configuration Systems Benchmark
+```bash
+PYTHONPATH=mastyf_gateway python3 benchmarks/benchmark_gateway.py
+```
+
+### 4. Run Gateway REST Server
+```bash
+uvicorn mastyf_gateway.adapters.rest:create_rest_app --factory --port 8000
+```

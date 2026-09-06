@@ -419,7 +419,7 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
       if (isDistilledEnabled()) {
         const argsText = JSON.stringify(job.arguments ?? {});
         const distilled = await classifyDistilled(job.serverName, job.toolName, argsText);
-        if (distilled && distilled.source === 'distilled') {
+        if (distilled && distilled.source === 'distilled' && distilled.verdict) {
           const decision = shouldBlockFromDistilled(distilled.verdict);
           if (decision !== null) {
             response = {

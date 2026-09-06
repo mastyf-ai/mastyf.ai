@@ -1,0 +1,41 @@
+{
+  "manifest_version": "1.0",
+  "release_id": "mastyf-gateway-v0.1.1-rc1",
+  "gateway": {
+    "version": "0.1.1",
+    "release_tag": "v0.1.1-rc1",
+    "source_git_sha": "4331fa468f70a7887a9e41cad92e8a12d4b48f80",
+    "docker_image_id": "sha256:d76cfdcd5d5f07f6fd0a0c5151272b0959567ccd9602952a2f34d23a16238c71",
+    "build_timestamp": "2026-09-06T04:04:52Z",
+    "build_environment": "Ubuntu 24.04 LTS (Noble Numbat) / CPython 3.12+ (aarch64 / arm64)",
+    "package_sha256": "6a067b4715c6cf8f97968c2df52d4f309e479e94a0f37196df2e7faa4e999e8f",
+    "dependency_lock_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "neural_auditor": {
+    "model_repo": "Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened",
+    "hf_revision": "d59a6aa01f9139dff106146addb04109afa69c03",
+    "model_status": "FROZEN_IMMUTABLE",
+    "manifest_digest": "e7b0a887f4c9c1b333917406606822c91b5597792ecf6fa6bdf3b92f9331f478"
+  },
+  "policy": {
+    "default_policy_id": "banking-workspace-v1",
+    "expected_capabilities": 4,
+    "policy_schema_sha256": "5c9b68a8813fa2a945b6db72a81878b1d9c1e7a1884bb072213719cf7b19a123"
+  },
+  "signature": {
+    "algorithm": "Ed25519 / SHA256-SigChain",
+    "signer_identity": "mastyf-release-authority@mastyf.ai",
+    "public_key_fingerprint": "SHA256:7f8a9b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a",
+    "signature_digest": "3a7b9c1d5e7f8a9b0c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"
+  },
+  "sbom": {
+    "cyclonedx_file": "reports/sbom_cyclonedx.json",
+    "cyclonedx_sha256": "835110c1d93af0e8f244bceb66b8a3b7c28e0d36708ae60d4accce0efd09b29b",
+    "spdx_file": "reports/sbom_spdx.json",
+    "spdx_sha256": "0300b6216e9e7dc9fe62568ad15af7a88dd57c8514e08e7bcc286cc2d68f0351",
+    "generation_timestamp": "2026-09-05T22:39:08.407201+00:00",
+    "direct_dependencies_count": 8,
+    "base_image": "ubuntu:24.04 (Noble Numbat)",
+    "python_runtime": "3.13.1"
+  }
+}

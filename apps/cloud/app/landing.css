@@ -2554,6 +2554,182 @@
   }
 }
 
+/* ── Paper visuals ── */
+.lp-paper-equations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.lp-paper-equation {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.25rem;
+}
+.lp-paper-figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  max-width: var(--lp-max);
+  margin: 2rem auto 0;
+}
+.lp-paper-figure {
+  overflow: hidden;
+}
+.lp-paper-figure figcaption {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 0.5rem 0.75rem 0.75rem;
+  line-height: 1.4;
+}
+.lp-references {
+  max-width: 760px;
+  margin: 0 auto;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.lp-ref-n {
+  font-weight: 700;
+  color: var(--text);
+}
+@media (max-width: 960px) {
+  .lp-paper-figures {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Paper + Pricing ── */
+.lp-paper-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  max-width: var(--lp-max);
+  margin: 0 auto;
+}
+.lp-paper-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+.lp-paper-theorems {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.lp-paper-theorems li {
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--accent-gold);
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 8px;
+}
+.lp-paper-theorems strong {
+  display: block;
+  font-size: 0.85rem;
+}
+.lp-paper-theorems span {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.lp-paper-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.lp-paper-metrics div {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.lp-paper-metrics strong {
+  display: block;
+  font-size: 1.25rem;
+  color: var(--accent-gold);
+}
+.lp-paper-metrics span {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.lp-paper-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 2rem;
+}
+.lp-paper-cite {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 1rem;
+}
+.lp-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  max-width: var(--lp-max);
+  margin: 0 auto;
+}
+.lp-pricing-card {
+  padding: 1.75rem;
+  position: relative;
+}
+.lp-pricing-card h3 {
+  margin: 0 0 0.35rem;
+}
+.lp-pricing-featured {
+  border-color: var(--accent-gold) !important;
+  box-shadow: var(--shadow-md);
+}
+.lp-pricing-badge {
+  position: absolute;
+  top: -0.6rem;
+  right: 1rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--accent-gold);
+  color: #fff;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+}
+.lp-pricing-features {
+  list-style: none;
+  margin: 1rem 0 1.25rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.lp-pricing-features li {
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding-left: 1rem;
+  position: relative;
+}
+.lp-pricing-features li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: var(--accent-gold);
+  font-weight: 700;
+}
+@media (max-width: 960px) {
+  .lp-paper-grid,
+  .lp-pricing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lp-dynamic-mesh,
   .arch-edge-animated,

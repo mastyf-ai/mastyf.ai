@@ -27,9 +27,9 @@ export const HERO_VALUE_PILLARS = [
 ] as const;
 
 export const HERO_TRUST_ITEMS = [
-  { label: 'Open source', href: 'https://github.com/mastyf-ai/mastyf.ai' },
-  { label: '228/228 corpus gates', href: 'https://github.com/mastyf-ai/mastyf.ai#security-swarm' },
-  { label: 'Security Swarm', href: '#architecture' },
+  { label: 'Paper DOI 10.5281/zenodo.22206627', href: 'https://zenodo.org/records/22206627' },
+  { label: 'Model Rudraneel93/mastyf-guard-1.5b', href: 'https://huggingface.co/Rudraneel93/mastyf-guard-1.5b' },
+  { label: '97.5% hybrid coverage · 0% FPR', href: '#paper' },
   { label: 'Public trust badges', href: '/certified' },
 ] as const;
 
@@ -226,10 +226,10 @@ export const PROBLEM_CARDS = [
 ] as const;
 
 export const HERO_STATS = [
-  { value: '228/228', label: 'Corpus gates', detail: '0 bypasses · 100% parity' },
-  { value: '3-layer', label: 'Detection', detail: 'Regex · schema · semantic LLM' },
-  { value: '0–100', label: 'Trust scores', detail: 'Instant npm MCP lookup' },
-  { value: 'Free', label: 'Cloud console', detail: 'Policy · keys · fleet' },
+  { value: '97.50%', label: 'Hybrid coverage', detail: '75% deterministic + 95% neural · 3,000 enterprise' },
+  { value: '0.00%', label: 'False positives', detail: 'Wilson 95% [0.00,0.19%] · 2,000 benign' },
+  { value: '17.3µs', label: 'Fast path', detail: 'P50 · 1.1GB CPU · zero GPU' },
+  { value: '10.5281', label: 'Zenodo DOI', detail: 'Research preprint v2.0 · CC-BY 4.0' },
 ] as const;
 
 export const SWARM_AGENTS = [

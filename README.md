@@ -17,12 +17,16 @@
 </p>
 
 <p align="center">
-<a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL3.0-E11D48?style=for-the-badge" alt="License"></a>
-<a href="https://github.com/mastyf-ai/mastyf.ai/actions"><img src="https://img.shields.io/badge/CI-passing-22C55E?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI"></a>
-<img src="https://img.shields.io/badge/version-4.1.7-2563EB?style=for-the-badge" alt="Version">
-<img src="https://img.shields.io/badge/TypeScript-5.x-7C3AED?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
-<img src="https://img.shields.io/npm/v/@mastyf_ai/server?style=for-the-badge&logo=npm&label=npm&color=CB3837" alt="npm">
+  <a href="https://doi.org/10.5281/zenodo.22179415"><img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22173129-0284C7?style=for-the-badge&logo=doi&logoColor=white" alt="Zenodo DOI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL3.0-E11D48?style=for-the-badge" alt="License"></a>
+  <a href="https://github.com/mastyf-ai/mastyf.ai/actions"><img src="https://img.shields.io/badge/CI-passing-22C55E?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI"></a>
+  <img src="https://img.shields.io/badge/version-4.1.7-2563EB?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/TypeScript-5.x-7C3AED?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/npm/v/@mastyf_ai/server?style=for-the-badge&logo=npm&label=npm&color=CB3837" alt="npm">
 </p>
+
+> [!IMPORTANT]
+> **Security Qualification Status:** Levels 0–2 passed; Level 4 initial physical-chaos pilot passed. Enterprise validation is not claimed until completion of Levels 3–5. See [`reports/enterprise_security_qualification_report.json`](reports/enterprise_security_qualification_report.json).
 
 ---
 
@@ -348,5 +352,27 @@ Before installing any MCP server from npm, check its trust score at [https://www
 - [Security Swarm and CI red teaming](security-swarm/README.md)
 - [Real-world MCP integration examples](docs/REAL_WORLD_INTEGRATION.md)
 - [Core detection engine](packages/core/README.md)
+
+---
+
+## Academic Research Paper & Citation
+
+If you use Mastyf Guard, its benchmark methodology, or the Cognitive Harvard Architecture in your research or production systems, please cite our open-access publication:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22179415.svg)](https://doi.org/10.5281/zenodo.22179415)
+
+> **Das, R. (2026).** *Cognitive Harvard Architectures for AI Agent Perimeter Defense: Resolving the Confused Deputy Problem in Model Context Protocol via Capability-Based Access Control.* **Zenodo**. doi: [10.5281/zenodo.22179415](https://doi.org/10.5281/zenodo.22179415).
+
+```bibtex
+@article{das2026cognitive,
+  title={Cognitive Harvard Architectures for AI Agent Perimeter Defense: Resolving the Confused Deputy Problem in Model Context Protocol via Capability-Based Access Control},
+  author={Das, Rudraneel},
+  journal={Zenodo},
+  year={2026},
+  doi={10.5281/zenodo.22179415},
+  url={https://doi.org/10.5281/zenodo.22179415}
+}
+```
+
 
 
