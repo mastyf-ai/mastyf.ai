@@ -20,7 +20,8 @@ dependencies = [
     "peft>=0.10.0",
     "numpy>=1.26.0",
     "cryptography>=42.0.0",
-    "huggingface-hub>=0.20.0"
+    "huggingface-hub>=0.20.0",
+    "pyyaml>=6.0.0"
 ]
 
 [project.scripts]

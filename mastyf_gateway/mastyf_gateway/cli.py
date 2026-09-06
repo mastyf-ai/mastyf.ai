@@ -564,6 +564,20 @@ def cmd_demo(args):
     sc = getattr(args, "scenario", None) or getattr(args, "scenario_opt", None)
     run_demo(sc)
 
+def cmd_policy(args):
+    """Handles declarative policy commands (init, validate)."""
+    from .policy.cli import cmd_policy_init, cmd_policy_validate
+    from .policy.loader import PolicyError
+
+    try:
+        if args.policy_action == "init":
+            sys.exit(cmd_policy_init(output=args.output, force=args.force))
+        elif args.policy_action == "validate":
+            sys.exit(cmd_policy_validate(path=args.path))
+    except PolicyError as e:
+        print(f"Policy Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(
         prog="mastyf",
@@ -619,6 +633,19 @@ def main():
     test_parser.add_argument("--security", action="store_true", help="Run 38-test automated security invariant suite")
     test_parser.add_argument("--load", action="store_true", help="Run concurrency and latency saturation benchmark")
 
+    # mastyf policy
+    policy_parser = subparsers.add_parser("policy", help="Manage and validate declarative Mastyf policy documents")
+    policy_sub = policy_parser.add_subparsers(dest="policy_action", required=True)
+
+    # mastyf policy init
+    policy_init_p = policy_sub.add_parser("init", help="Generate a starter mastyf-policy.yaml")
+    policy_init_p.add_argument("-o", "--output", default="mastyf-policy.yaml", help="Output file path (default: mastyf-policy.yaml)")
+    policy_init_p.add_argument("--force", action="store_true", help="Overwrite existing policy file")
+
+    # mastyf policy validate
+    policy_val_p = policy_sub.add_parser("validate", help="Validate a declarative policy YAML file")
+    policy_val_p.add_argument("path", help="Path to policy YAML file")
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -643,6 +670,8 @@ def main():
         cmd_start(args)
     elif args.command == "test":
         cmd_test(args)
+    elif args.command == "policy":
+        cmd_policy(args)
     else:
         parser.print_help()
 
