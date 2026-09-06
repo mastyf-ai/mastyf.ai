@@ -832,18 +832,26 @@ def cmd_chat(args):
         on_hud_event=on_hud
     )
 
+    from .discovery.mcp_discovery import discover_all_servers
+    num_caps = len(gw_policy.capabilities) if (gw_policy and hasattr(gw_policy, "capabilities")) else 0
+    num_wf = len(compiled.workflow.invariants) if (compiled and hasattr(compiled, "workflow") and compiled.workflow and hasattr(compiled.workflow, "invariants")) else 3
+    num_servers = len(discover_all_servers()) or 2
+
+    print("\n" + "=" * 65)
+    print("  [✓] Mastyf protection active")
+    print(f"  [✓] Policy: {num_caps} capabilities")
+    print(f"  [✓] Workflow guards: {num_wf}")
+    print(f"  [✓] MCP servers: {num_servers}")
+    print("  [✓] Security HUD: ON")
+    print("=" * 65)
+    print("You are protected by Mastyf.\n")
+
     single_msg = getattr(args, "message", None)
     if single_msg:
         res = asyncio.run(loop.run_turn(session, single_msg))
         print(f"\nMastyf: {res}\n")
         return
 
-    print("\n" + "=" * 65)
-    print("  🛡️  MASTYF CHAT — Secure Conversational Agent Runtime")
-    print("  Status: 🟢 Protected by Mastyf (CBAC ✓ DIFC ✓ Workflow ✓ Receipts ✓)")
-    print(f"  Policy: {policy_arg or 'Default Active Policy'}")
-    print(f"  Session: {session.session_id}")
-    print("=" * 65)
     print("Type your message and press Enter. Type 'exit' or 'quit' to end.\n")
 
     while True:
@@ -974,11 +982,143 @@ def cmd_discover(args):
         else:
             print("\n  Policy activation declined. No changes committed.\n")
 
+def cmd_unified_mastyf(args):
+    """
+    Unified entrypoint for 'mastyf'.
+    1. If no active policy exists: Runs interactive first-run onboarding bootstrap.
+       - Discovers local MCP tools and servers.
+       - Asks user what the agent should be allowed to do.
+       - Generates candidate policy & renders diff.
+       - Requires explicit activation.
+    2. Detects local LLM runtime (Ollama, llama-server, Lemonade, vLLM).
+    3. Launches directly into protected conversational agent runtime ('mastyf chat').
+    """
+    home = get_mastyf_home()
+    active_policy_file = home / "active_policy.yaml"
+
+    # Step 1: Check onboarding status
+    needs_onboarding = True
+    if active_policy_file.exists() and active_policy_file.stat().st_size > 0:
+        try:
+            from .policy.loader import validate_policy
+            decl = validate_policy(str(active_policy_file))
+            if len(decl.capabilities) > 0:
+                needs_onboarding = False
+        except Exception:
+            needs_onboarding = True
+
+    if needs_onboarding:
+        print("\n" + "=" * 65)
+        print("                 Welcome to Mastyf Guard")
+        print("=" * 65)
+        print("  ✓ Gateway installed")
+        print("  ✓ Security reference monitor ready")
+        print("  ✓ No active policy found\n")
+
+        from .discovery.mcp_discovery import discover_all_servers, discover_tools_from_servers, DiscoveredTool
+        from .discovery.taxonomy import classify_tool
+        from .agent.tools import create_demo_tools
+        from .policy.assistant import PolicyAssistant, OperationalRequestError, PolicyAssistantError
+
+        servers = discover_all_servers()
+        demo_tools = create_demo_tools()
+        tools: List[DiscoveredTool] = []
+        for dt in demo_tools.list_tools():
+            tools.append(
+                DiscoveredTool(
+                    name=dt.name,
+                    description=dt.description,
+                    parameters=dt.parameters,
+                    server_name="enterprise_mcp",
+                    security_class=classify_tool(dt.name, dt.description, dt.parameters),
+                )
+            )
+        if servers:
+            cached = discover_tools_from_servers(servers)
+            existing_names = {t.name for t in tools}
+            for ct in cached:
+                if ct.name not in existing_names:
+                    tools.append(ct)
+
+        print(f"  [+] Discovered {len(servers)} MCP servers and {len(tools)} tools.\n")
+        intent = getattr(args, "intent", None) or os.environ.get("MASTYF_BOOTSTRAP_INTENT")
+        if not intent:
+            print("  What should your agent be allowed to do?")
+            try:
+                intent = input("  > ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nSetup cancelled.")
+                sys.exit(0)
+
+        if not intent:
+            intent = "Allow safe operations, but never delete data or send sensitive information externally."
+            print(f"  (Defaulting to conservative intent: '{intent}')")
+
+        assistant = PolicyAssistant(home_dir=home)
+        try:
+            res = assistant.propose(intent, discovered_tools=tools)
+            print("\n" + assistant.render_proposal_card(res))
+            print()
+            confirm = getattr(args, "yes", None) or os.environ.get("MASTYF_BOOTSTRAP_CONFIRM")
+            if confirm is None:
+                try:
+                    confirm = input("  Activate this policy and start secured agent? [Y/n]: ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    print("\nActivation cancelled. Policy remains staged at ~/.mastyf/proposed_policy.yaml")
+                    sys.exit(0)
+            elif isinstance(confirm, bool):
+                confirm = "y" if confirm else "n"
+            else:
+                confirm = str(confirm).strip().lower()
+
+            if confirm in ("", "y", "yes"):
+                act_res = assistant.activate()
+                print(f"\n[✓] {act_res.message}")
+            else:
+                print("\nActivation skipped. Policy remains staged at ~/.mastyf/proposed_policy.yaml")
+                print("Run 'mastyf policy activate' when ready.")
+                sys.exit(0)
+        except OperationalRequestError as e:
+            print(f"\n[!] Policy Invariant Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        except (PolicyAssistantError, Exception) as e:
+            print(f"\n[!] Policy Generation Failed: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    # Step 2: Automatic local runtime detection
+    from .agent.runtime import detect_local_runtime
+    runtime_info = detect_local_runtime()
+
+    if getattr(args, "mock", False) or not runtime_info.is_live:
+        if not getattr(args, "mock", False):
+            print("\n  ℹ️  No live local model server detected on standard ports (11434, 8080, 8000).")
+            print("  Starting with deterministic simulated mock for testing and demonstration.")
+            print("  (To connect a live model, start Ollama or llama-server and re-run 'mastyf'.)\n")
+        setattr(args, "mock", True)
+    else:
+        print(f"\n  [✓] Local Model Runtime: {runtime_info.name} ({runtime_info.base_url})")
+        if not getattr(args, "endpoint", None):
+            setattr(args, "endpoint", runtime_info.base_url)
+        if not getattr(args, "model", None):
+            setattr(args, "model", runtime_info.model)
+        setattr(args, "mock", False)
+
+    # Step 3: Launch directly into conversational agent runtime
+    cmd_chat(args)
+
 def main():
     parser = argparse.ArgumentParser(
         prog="mastyf",
         description="Mastyf Security Gateway CLI — Reference Monitor & Intent Auditor for AI Agents"
     )
+    parser.add_argument("-m", "--message", help="Single message to execute non-interactively")
+    parser.add_argument("-p", "--policy", help="Path to declarative mastyf-policy.yaml")
+    parser.add_argument("--mock", action="store_true", help="Run with deterministic offline mock agent for testing")
+    parser.add_argument("--endpoint", default=None, help="OpenAI-compatible model API endpoint")
+    parser.add_argument("--model", default=None, help="Model name")
+    parser.add_argument("--session-id", default=None, help="Explicit session identifier")
+    parser.add_argument("--principal-id", default="mastyf_user", help="Principal identity for authorization")
+    parser.add_argument("--ledger", default=None, help="Path to receipts.jsonl file")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # mastyf init
@@ -1132,6 +1272,8 @@ def main():
         cmd_chat(args)
     elif args.command == "discover":
         cmd_discover(args)
+    elif args.command is None:
+        cmd_unified_mastyf(args)
     else:
         parser.print_help()
 

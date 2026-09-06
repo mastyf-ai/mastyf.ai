@@ -141,8 +141,7 @@ class PolicyAssistant:
                 )
 
         # Gate 3: Tool discovery
-        tools = discovered_tools
-        if tools is None:
+        if discovered_tools is None:
             servers = discover_all_servers()
             demo_tools = create_demo_tools()
             tools = []
@@ -162,6 +161,27 @@ class PolicyAssistant:
                 for ct in cached:
                     if ct.name not in existing:
                         tools.append(ct)
+        else:
+            tools = []
+            for t in discovered_tools:
+                if isinstance(t, DiscoveredTool):
+                    tools.append(t)
+                else:
+                    sec_class = getattr(t, "security_class", "UNKNOWN")
+                    if isinstance(sec_class, str):
+                        try:
+                            sec_class = ToolSecurityClass(sec_class)
+                        except Exception:
+                            sec_class = classify_tool(t.name, getattr(t, "description", ""), getattr(t, "parameters", {}))
+                    tools.append(
+                        DiscoveredTool(
+                            name=t.name,
+                            description=getattr(t, "description", ""),
+                            parameters=getattr(t, "parameters", {}),
+                            server_name="enterprise_mcp",
+                            security_class=sec_class,
+                        )
+                    )
 
         # Gate 4: Model-assisted conservative synthesis
         candidate = self.synthesizer.synthesize(tools, cleaned_intent)
@@ -257,7 +277,7 @@ class PolicyAssistant:
         # Check newly added tools
         for tool_name in proposed_allowed:
             t_obj = tool_map.get(tool_name)
-            s_class = t_obj.security_class.value if t_obj else "UNKNOWN"
+            s_class = getattr(t_obj.security_class, "value", str(t_obj.security_class)) if t_obj else "UNKNOWN"
             if tool_name not in active_tools:
                 diffs.append(
                     PolicyDiffEntry(
@@ -281,7 +301,7 @@ class PolicyAssistant:
         for tool_name in active_tools:
             if tool_name not in proposed_allowed:
                 t_obj = tool_map.get(tool_name)
-                s_class = t_obj.security_class.value if t_obj else "UNKNOWN"
+                s_class = getattr(t_obj.security_class, "value", str(t_obj.security_class)) if t_obj else "UNKNOWN"
                 diffs.append(
                     PolicyDiffEntry(
                         tool=tool_name,
@@ -293,11 +313,12 @@ class PolicyAssistant:
 
         for t in tools:
             if t.name not in proposed_allowed and t.name not in active_tools:
+                s_class = getattr(t.security_class, "value", str(t.security_class))
                 diffs.append(
                     PolicyDiffEntry(
                         tool=t.name,
                         action="BLOCK",
-                        security_class=t.security_class.value,
+                        security_class=s_class,
                         details="Explicitly restricted (0 bytes dispatch)",
                     )
                 )
