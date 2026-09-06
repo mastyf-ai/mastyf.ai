@@ -578,6 +578,70 @@ def cmd_policy(args):
         print(f"Policy Error: {e}", file=sys.stderr)
         sys.exit(1)
 
+def cmd_proxy(args):
+    """Runs Mastyf as a transparent stdio reverse proxy for MCP tool execution."""
+    from .adapters.mcp_stdio_proxy import MCPStdioProxy
+    from .gateway import MastyfGateway
+    from .auditor.aia import MockAIAAuditor
+    from .policy.schemas import PolicyDocument
+    from .policy.loader import validate_policy, compile_policy
+    import asyncio
+    from pathlib import Path
+
+    raw_cmd = list(args.server_command or [])
+    # Strip leading '--' if present in remainder args
+    if raw_cmd and raw_cmd[0] == "--":
+        raw_cmd = raw_cmd[1:]
+
+    if not raw_cmd:
+        print("Error: No target MCP server command specified. Usage: mastyf proxy [options] -- <command> [args...]", file=sys.stderr)
+        sys.exit(1)
+
+    # Resolve Policy
+    policy_path = args.policy
+    if not policy_path:
+        cwd_policy = Path("mastyf-policy.yaml")
+        if cwd_policy.exists():
+            policy_path = str(cwd_policy)
+        else:
+            home_policy = get_mastyf_home() / "policies" / "default_policy.json"
+            if home_policy.exists():
+                policy_path = str(home_policy)
+
+    if not policy_path or not Path(policy_path).exists():
+        print("Error: Policy file not found. Create one with 'mastyf policy init' or pass -p <path>.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        if str(policy_path).endswith((".yaml", ".yml")):
+            decl_policy = validate_policy(policy_path)
+            compiled = compile_policy(decl_policy)
+            gw_policy = compiled.to_gateway_policy()
+        else:
+            with open(policy_path) as f:
+                gw_policy = PolicyDocument(**json.load(f))
+    except Exception as exc:
+        print(f"Error loading policy from {policy_path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    auditor = MockAIAAuditor(simulated_latency_ms=0.5)
+    gateway = MastyfGateway(policy=gw_policy, auditor=auditor)
+
+    proxy = MCPStdioProxy(
+        gateway=gateway,
+        child_cmd=raw_cmd,
+        session_id=args.session_id,
+        principal_id=args.principal_id or "mcp_client"
+    )
+
+    try:
+        asyncio.run(proxy.run())
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
+    except Exception as e:
+        print(f"Proxy error: {e}", file=sys.stderr)
+        sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(
         prog="mastyf",
@@ -646,6 +710,13 @@ def main():
     policy_val_p = policy_sub.add_parser("validate", help="Validate a declarative policy YAML file")
     policy_val_p.add_argument("path", help="Path to policy YAML file")
 
+    # mastyf proxy
+    proxy_parser = subparsers.add_parser("proxy", help="Run Mastyf as a transparent stdio reverse proxy for MCP servers")
+    proxy_parser.add_argument("-p", "--policy", help="Path to declarative mastyf-policy.yaml (or legacy default)")
+    proxy_parser.add_argument("--session-id", default=None, help="Explicit session identifier")
+    proxy_parser.add_argument("--principal-id", default="mcp_client", help="Principal identity for authorization")
+    proxy_parser.add_argument("server_command", nargs=argparse.REMAINDER, help="Target MCP server command (use after --)")
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -672,6 +743,8 @@ def main():
         cmd_test(args)
     elif args.command == "policy":
         cmd_policy(args)
+    elif args.command == "proxy":
+        cmd_proxy(args)
     else:
         parser.print_help()
 
