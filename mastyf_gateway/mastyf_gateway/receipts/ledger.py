@@ -427,7 +427,24 @@ class ExecutionReceiptLedger:
                     writer = csv.DictWriter(f, fieldnames=fields)
                     writer.writeheader()
                     writer.writerows(receipts)
-        else:
-            raise ValueError(f"Unsupported export format: {format} (expected json, jsonl, or csv)")
-
         return len(receipts)
+
+    def read_all_receipts(self) -> List[ExecutionReceipt]:
+        """Reads and parses all receipts stored in the ledger."""
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            return []
+        receipts = []
+        with open(self.path, "r", encoding="utf-8") as f:
+            for line in f:
+                line_str = line.strip()
+                if line_str:
+                    receipts.append(ExecutionReceipt.from_dict(json.loads(line_str)))
+        return receipts
+
+    def get_receipt(self, sequence_id: int) -> Optional[ExecutionReceipt]:
+        """Fetches a specific execution receipt by sequence ID."""
+        for r in self.read_all_receipts():
+            if r.sequence_id == sequence_id:
+                return r
+        return None
+

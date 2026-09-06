@@ -706,6 +706,118 @@ def cmd_audit(args):
             print(f"Export Error: {exc}", file=sys.stderr)
             sys.exit(2)
 
+def cmd_chat(args):
+    """Runs interactive conversational agent protected by Mastyf Gateway."""
+    import asyncio
+    from pathlib import Path
+    from .gateway import MastyfGateway
+    from .auditor.aia import MockAIAAuditor
+    from .policy.schemas import PolicyDocument
+    from .policy.loader import validate_policy, compile_policy
+    from .agent import AgentLoop, AgentSession, MockLLMClient, OpenAICompatibleLLMClient, create_demo_tools
+    from .receipts import ExecutionReceiptLedger
+
+    home = get_mastyf_home()
+    policy_arg = getattr(args, "policy", None)
+
+    compiled = None
+    gw_policy = None
+
+    if policy_arg:
+        p_path = Path(policy_arg)
+        if not p_path.exists():
+            print(f"Error: Specified policy file '{policy_arg}' does not exist.", file=sys.stderr)
+            sys.exit(1)
+        decl = validate_policy(str(p_path))
+        compiled = compile_policy(decl)
+        gw_policy = compiled.to_gateway_policy()
+    else:
+        active_p = home / "active_policy.yaml"
+        if active_p.exists():
+            decl = validate_policy(str(active_p))
+            compiled = compile_policy(decl)
+            gw_policy = compiled.to_gateway_policy()
+        else:
+            default_p = home / "policies" / "default_policy.json"
+            if default_p.exists():
+                try:
+                    with open(default_p, "r", encoding="utf-8") as f:
+                        gw_policy = PolicyDocument(**json.load(f))
+                except Exception:
+                    gw_policy = PolicyDocument(policy_id="default-safe-v1", version="1.0", capabilities=[])
+            else:
+                gw_policy = PolicyDocument(policy_id="default-safe-v1", version="1.0", capabilities=[])
+
+    gateway = MastyfGateway(
+        policy=gw_policy,
+        compiled_policy=compiled,
+        auditor=MockAIAAuditor(),
+    )
+
+    ledger_file = getattr(args, "ledger", None) or str(home / "receipts.jsonl")
+    ledger = ExecutionReceiptLedger(ledger_path=ledger_file)
+    tools = create_demo_tools()
+
+    if getattr(args, "mock", False):
+        llm = MockLLMClient()
+    else:
+        endpoint = getattr(args, "endpoint", None) or "http://localhost:11434/v1"
+        model = getattr(args, "model", None) or "mastyf-guard-1.5b-v2-boundary-sharpened"
+        llm = OpenAICompatibleLLMClient(base_url=endpoint, model=model)
+
+    session = AgentSession(
+        session_id=getattr(args, "session_id", None),
+        principal_id=getattr(args, "principal_id", "mastyf_user")
+    )
+
+    def on_hud(evt):
+        if evt.decision == "ALLOW":
+            print(f"  ✓ {evt.tool_name} ALLOW (Dispatched: {evt.bytes_dispatched}B | Receipt: #{evt.sequence_id})")
+        else:
+            print(f"  🛑 {evt.tool_name} BLOCKED by Gateway")
+            print(f"     Reason: {evt.reason_code}")
+            if evt.rule_violated:
+                print(f"     Rule:   {evt.rule_violated}")
+            print(f"     Backend: 0 bytes dispatched (Execution Certainty: {evt.execution_certainty})")
+
+    loop = AgentLoop(
+        gateway=gateway,
+        tools=tools,
+        llm=llm,
+        ledger=ledger,
+        on_hud_event=on_hud
+    )
+
+    single_msg = getattr(args, "message", None)
+    if single_msg:
+        res = asyncio.run(loop.run_turn(session, single_msg))
+        print(f"\nMastyf: {res}\n")
+        return
+
+    print("\n" + "=" * 65)
+    print("  🛡️  MASTYF CHAT — Secure Conversational Agent Runtime")
+    print("  Status: 🟢 Protected by Mastyf (CBAC ✓ DIFC ✓ Workflow ✓ Receipts ✓)")
+    print(f"  Policy: {policy_arg or 'Default Active Policy'}")
+    print(f"  Session: {session.session_id}")
+    print("=" * 65)
+    print("Type your message and press Enter. Type 'exit' or 'quit' to end.\n")
+
+    while True:
+        try:
+            user_input = input("You: ").strip()
+            if not user_input:
+                continue
+            if user_input.lower() in ("exit", "quit"):
+                print("Ending session. All receipts committed to ledger.")
+                break
+
+            print("Mastyf: [Working...]")
+            res = asyncio.run(loop.run_turn(session, user_input))
+            print(f"Mastyf: {res}\n")
+        except (KeyboardInterrupt, EOFError):
+            print("\nSession terminated.")
+            break
+
 def main():
     parser = argparse.ArgumentParser(
         prog="mastyf",
@@ -799,6 +911,17 @@ def main():
     audit_exp_p.add_argument("--output", "-o", default="mastyf-audit-export.json", help="Output destination file")
     audit_exp_p.add_argument("--format", choices=["json", "jsonl", "csv"], default="json", help="Export format (default: json)")
 
+    # mastyf chat
+    chat_parser = subparsers.add_parser("chat", help="Start an interactive conversational agent session protected by Mastyf Gateway")
+    chat_parser.add_argument("-m", "--message", help="Single message to execute non-interactively")
+    chat_parser.add_argument("-p", "--policy", help="Path to declarative mastyf-policy.yaml")
+    chat_parser.add_argument("--model", default="mastyf-guard-1.5b-v2-boundary-sharpened", help="Model name (default: mastyf-guard-1.5b-v2-boundary-sharpened)")
+    chat_parser.add_argument("--endpoint", default="http://localhost:11434/v1", help="OpenAI-compatible model API endpoint (default: http://localhost:11434/v1)")
+    chat_parser.add_argument("--session-id", default=None, help="Explicit session identifier")
+    chat_parser.add_argument("--principal-id", default="mastyf_user", help="Principal identity for authorization")
+    chat_parser.add_argument("--ledger", default=None, help="Path to receipts.jsonl file")
+    chat_parser.add_argument("--mock", action="store_true", help="Run with deterministic offline mock agent for testing")
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -829,6 +952,8 @@ def main():
         cmd_proxy(args)
     elif args.command == "audit":
         cmd_audit(args)
+    elif args.command == "chat":
+        cmd_chat(args)
     else:
         parser.print_help()
 
