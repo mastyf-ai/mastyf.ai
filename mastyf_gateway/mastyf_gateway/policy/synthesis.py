@@ -28,17 +28,19 @@ POLICY_INDICATOR_PATTERNS = [
 ]
 
 OPERATIONAL_PATTERNS = [
-    r"^(find|search|lookup|get|fetch|send|post|create|delete|update|wipe|check|run|do)\b",
-    r"\b(unpaid invoices?|this customer|to slack|an email to|the database)\b",
+    r"^(find|search|lookup|get|fetch|send|post|create|delete|update|wipe|check|run|do|make)\b",
+    r"\b(unpaid invoices?|this customer|to slack|an email to|the database|this request)\b",
 ]
 
 # Prompt injection signatures attempting to rewrite policy
 PROMPT_INJECTION_POLICY_PATTERNS = [
     r"ignor\w*\s+previous\s+instructions",
-    r"update\s+(the\s+)?policy",
+    r"update\s+(the\s+)?(security\s+)?policy",
     r"change\s+(the\s+)?(security\s+)?policy",
     r"system\s+override",
     r"new\s+instruction",
+    r"grant\s+all\s+permissions",
+    r"allow\s+all\s+tools",
 ]
 
 
@@ -111,9 +113,17 @@ class PolicySynthesizer:
         capabilities: List[Dict[str, Any]] = []
         workflows: List[Dict[str, Any]] = []
 
+        # Helper to check if a term or tool is explicitly negated in user intent
+        def _is_negated(term: str) -> bool:
+            patterns = [
+                rf"\b(never|don't|do not|cannot|can't|no|prevent|block|stop|without)\b[^.?!;]*\b{term}\b",
+                rf"\b{term}\b[^.?!;]*\b(is blocked|forbidden|prohibited|not allowed|disabled)\b",
+            ]
+            return any(re.search(p, intent_lower) for p in patterns)
+
         # Parse user intent boundaries
-        allow_delete = "delete" in intent_lower and "never delete" not in intent_lower and "can't delete" not in intent_lower and "cannot delete" not in intent_lower
-        prevent_exfil = "never send" in intent_lower or "outside" in intent_lower or "exfiltrat" in intent_lower or "external" in intent_lower or "cannot send" in intent_lower or "can't send" in intent_lower
+        allow_delete = "delete" in intent_lower and not _is_negated("delete")
+        prevent_exfil = _is_negated("send") or _is_negated("exfil") or "outside" in intent_lower or "external" in intent_lower or "never send" in intent_lower
 
         sensitive_tools: List[str] = []
         external_sinks: List[str] = []
@@ -133,25 +143,32 @@ class PolicySynthesizer:
                 capabilities.append({"tool": name, "actions": ["read"]})
                 sensitive_tools.append(name)
 
-            # 3. EXTERNAL SINK: Tracked for workflow constraint
+            # 3. EXTERNAL SINK: Strictly opt-in; tracked for workflow exfiltration constraint
             elif t_class == ToolSecurityClass.EXTERNAL_SINK:
-                # Check if this specific sink is permitted (e.g. internal slack vs generic external)
-                if "slack" in name and "slack" in intent_lower:
-                    capabilities.append({"tool": name, "actions": ["write"]})
-                    external_sinks.append(name)
-                elif "http" in name and not prevent_exfil:
-                    capabilities.append({"tool": name, "actions": ["write"]})
-                    external_sinks.append(name)
-                elif "email" in name and "email" in intent_lower:
-                    capabilities.append({"tool": name, "actions": ["write"]})
-                    external_sinks.append(name)
-                else:
-                    # Generic / unapproved external sink: do not grant CBAC authority
-                    pass
+                tool_stem = name.split(".")[-1]
+                tool_ns = name.split(".")[0]
+                negated = _is_negated(name) or _is_negated(tool_stem) or _is_negated(tool_ns) or prevent_exfil
+                
+                # Sinks must be explicitly requested and NOT negated
+                if not negated:
+                    if "slack" in name and "slack" in intent_lower and not _is_negated("slack"):
+                        capabilities.append({"tool": name, "actions": ["write"]})
+                        external_sinks.append(name)
+                    elif "http" in name and "http" in intent_lower and not _is_negated("http"):
+                        capabilities.append({"tool": name, "actions": ["write"]})
+                        external_sinks.append(name)
+                    elif "email" in name and "email" in intent_lower and not _is_negated("email"):
+                        capabilities.append({"tool": name, "actions": ["write"]})
+                        external_sinks.append(name)
+                # Unapproved or negated external sinks receive 0 capabilities (default BLOCK)
 
-            # 4. READ / WRITE: Standard business operations
+            # 4. READ / WRITE: Standard business operations (blocked if explicitly negated)
             elif t_class in (ToolSecurityClass.READ, ToolSecurityClass.WRITE):
-                capabilities.append({"tool": name, "actions": ["read" if t_class == ToolSecurityClass.READ else "write"]})
+                tool_stem = name.split(".")[-1]
+                tool_ns = name.split(".")[0]
+                negated = _is_negated(name) or _is_negated(tool_stem) or _is_negated(tool_ns)
+                if not negated:
+                    capabilities.append({"tool": name, "actions": ["read" if t_class == ToolSecurityClass.READ else "write"]})
 
             # 5. UNKNOWN: NEVER SILENTLY ALLOWED (Omitted from capabilities -> Fails closed)
             elif t_class == ToolSecurityClass.UNKNOWN:

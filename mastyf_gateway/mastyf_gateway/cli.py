@@ -565,17 +565,58 @@ def cmd_demo(args):
     run_demo(sc)
 
 def cmd_policy(args):
-    """Handles declarative policy commands (init, validate)."""
+    """Handles declarative policy commands (init, validate, propose, activate, status)."""
     from .policy.cli import cmd_policy_init, cmd_policy_validate
     from .policy.loader import PolicyError
+    from .policy.assistant import PolicyAssistant, OperationalRequestError, PolicyAssistantError
+
+    action = getattr(args, "policy_action", None)
+    intent = getattr(args, "intent", None) or getattr(args, "intent_fallback", None)
 
     try:
-        if args.policy_action == "init":
+        if action == "init":
             sys.exit(cmd_policy_init(output=args.output, force=args.force))
-        elif args.policy_action == "validate":
+        elif action == "validate":
             sys.exit(cmd_policy_validate(path=args.path))
-    except PolicyError as e:
-        print(f"Policy Error: {e}", file=sys.stderr)
+        elif action == "activate":
+            assistant = PolicyAssistant()
+            res = assistant.activate()
+            print(f"\n[✓] {res.message}")
+            print(f"    Active policy: {res.active_path}\n")
+        elif action == "status":
+            home = get_mastyf_home()
+            active_p = home / "active_policy.yaml"
+            proposed_p = home / "proposed_policy.yaml"
+            print("\n" + "=" * 65)
+            print("       Mastyf Policy Status")
+            print("=" * 65)
+            if active_p.exists():
+                print(f"  [Active Policy]   {active_p} (In effect)")
+            else:
+                print("  [Active Policy]   None (Default safe mode active)")
+            if proposed_p.exists():
+                print(f"  [Proposed Policy] {proposed_p} (Pending activation)")
+                print("    Run 'mastyf policy activate' to apply.")
+            else:
+                print("  [Proposed Policy] None")
+            print("=" * 65 + "\n")
+        elif action == "propose" or intent:
+            if not intent:
+                print("Error: Plain-English intent string is required to propose a policy.", file=sys.stderr)
+                sys.exit(1)
+            assistant = PolicyAssistant()
+            res = assistant.propose(intent)
+            print()
+            print(assistant.render_proposal_card(res))
+            print()
+        else:
+            print("Usage: mastyf policy [\"<intent>\" | activate | status | validate <file> | init]", file=sys.stderr)
+            sys.exit(1)
+    except OperationalRequestError as e:
+        print(f"\n[!] Policy Invariant Error: {e}\n", file=sys.stderr)
+        sys.exit(1)
+    except (PolicyAssistantError, PolicyError) as e:
+        print(f"\n[!] Policy Error: {e}\n", file=sys.stderr)
         sys.exit(1)
 
 def cmd_proxy(args):
@@ -989,8 +1030,18 @@ def main():
     test_parser.add_argument("--load", action="store_true", help="Run concurrency and latency saturation benchmark")
 
     # mastyf policy
-    policy_parser = subparsers.add_parser("policy", help="Manage and validate declarative Mastyf policy documents")
-    policy_sub = policy_parser.add_subparsers(dest="policy_action", required=True)
+    policy_parser = subparsers.add_parser("policy", help="Plain-English assistant and declarative policy management")
+    policy_sub = policy_parser.add_subparsers(dest="policy_action", required=False)
+
+    # mastyf policy propose
+    policy_prop_p = policy_sub.add_parser("propose", help="Propose a candidate policy from plain-English intent")
+    policy_prop_p.add_argument("intent", help="Plain-English requirements")
+
+    # mastyf policy activate
+    policy_act_p = policy_sub.add_parser("activate", help="Explicitly activate the currently proposed policy")
+
+    # mastyf policy status
+    policy_stat_p = policy_sub.add_parser("status", help="Show active and proposed policy status")
 
     # mastyf policy init
     policy_init_p = policy_sub.add_parser("init", help="Generate a starter mastyf-policy.yaml")
@@ -1042,7 +1093,10 @@ def main():
     discover_parser.add_argument("--onboard", action="store_true", help="Interactive first-run onboarding prompt")
     discover_parser.add_argument("--intent", "-i", help="Plain-English policy requirements string")
     discover_parser.add_argument("-y", "--yes", action="store_true", help="Automatically activate synthesized policy without prompting")
-    discover_parser.add_argument("--write-policy", help="Custom destination path for synthesized policy YAML")
+    # Shorthand: mastyf policy "..." -> mastyf policy propose "..."
+    if len(sys.argv) > 2 and sys.argv[1] == "policy":
+        if sys.argv[2] not in ("propose", "activate", "status", "init", "validate", "-h", "--help"):
+            sys.argv.insert(2, "propose")
 
     args = parser.parse_args()
 
