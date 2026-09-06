@@ -818,6 +818,118 @@ def cmd_chat(args):
             print("\nSession terminated.")
             break
 
+def cmd_discover(args):
+    """Discovers local MCP servers, inspects tool schemas, and runs model-assisted policy synthesis."""
+    from pathlib import Path
+    from .discovery.mcp_discovery import discover_all_servers, discover_tools_from_servers, DiscoveredTool
+    from .discovery.taxonomy import ToolSecurityClass, classify_tool
+    from .policy.synthesis import PolicySynthesizer, PolicyReviewer, DeterministicPolicyCompiler, is_operational_request
+    from .agent.tools import create_demo_tools
+
+    home = get_mastyf_home()
+    servers = discover_all_servers()
+
+    # Discover tools or fallback to registered enterprise demo tools
+    demo_tools = create_demo_tools()
+    tools: List[DiscoveredTool] = []
+    for dt in demo_tools.list_tools():
+        tools.append(DiscoveredTool(
+            name=dt.name,
+            description=dt.description,
+            parameters=dt.parameters,
+            server_name="enterprise_mcp",
+            security_class=classify_tool(dt.name, dt.description, dt.parameters),
+        ))
+
+    print("\n" + "=" * 65)
+    print("       Mastyf MCP Discovery & Capability Introspection")
+    print("=" * 65)
+    print(f"  Discovered MCP Servers: {len(servers)}")
+    for s in servers:
+        print(f"    - {s.name} ({s.source}) -> {s.command} {' '.join(s.args)}")
+
+    print(f"\n  Introspected Tools: {len(tools)}")
+    for t in tools:
+        print(f"    - {t.name:<25} [{t.security_class.value}]")
+    print("=" * 65 + "\n")
+
+    user_intent = getattr(args, "intent", None)
+    if not user_intent and getattr(args, "onboard", False):
+        print("  What should your agent be allowed to do?")
+        try:
+            user_intent = input("  > ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nDiscovery cancelled.")
+            return
+
+    if user_intent:
+        if is_operational_request(user_intent):
+            print("\n  [!] Warning: Stated input appears to be an operational action request ('Do this once')")
+            print("      rather than an authorization policy ('Permit this class of operation').")
+            print("      Operational requests cannot directly mutate permanent security policy.")
+            print("      Policy synthesis aborted.")
+            return
+
+        print("\n  [+] Synthesizing model-assisted security policy...")
+        synthesizer = PolicySynthesizer()
+        candidate = synthesizer.synthesize(tools, user_intent)
+
+        print("  [+] Reviewing candidate policy for containment and privilege monotonicity...")
+        reviewer = PolicyReviewer()
+        review = reviewer.review(candidate, user_intent, tools)
+
+        if not review.approved:
+            print("\n  [🛑] Policy Review FAILED:")
+            for f in review.findings:
+                print(f"       - {f}")
+            print("  Policy activation rejected.\n")
+            return
+
+        print("  [+] Compiling through deterministic reference monitor schema...")
+        compiler = DeterministicPolicyCompiler()
+        valid, summary, err = compiler.compile_and_explain(candidate, tools, user_intent)
+
+        if not valid:
+            print(f"\n  [🛑] Policy Compilation Error: {err}")
+            return
+
+        print("\n" + "=" * 65)
+        print("       Your Proposed Mastyf Security Policy")
+        print("=" * 65)
+        print("  ✓ Allowed Operations:")
+        for op in summary.allowed_operations:
+            print(f"    + {op}")
+
+        print("\n  ✗ Blocked / Restricted Operations:")
+        for op in summary.blocked_operations:
+            print(f"    - {op} (0 bytes backend dispatch)")
+
+        if summary.data_flow_guards:
+            print("\n  🛡️  Workflow Exfiltration Guards:")
+            for g in summary.data_flow_guards:
+                print(f"    • {g}")
+        print("=" * 65)
+
+        auto_activate = getattr(args, "yes", False)
+        activate = False
+        if auto_activate:
+            activate = True
+        else:
+            try:
+                ans = input("\n  Activate this policy? [Y/n]: ").strip().lower()
+                activate = ans in ("", "y", "yes")
+            except (KeyboardInterrupt, EOFError):
+                activate = False
+
+        if activate:
+            target_path = Path(getattr(args, "write_policy", None) or (home / "active_policy.yaml"))
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(candidate.raw_yaml, encoding="utf-8")
+            print(f"\n  [✓] Policy activated and saved to: {target_path}")
+            print("      Run 'mastyf chat' to interact with your secured agent.\n")
+        else:
+            print("\n  Policy activation declined. No changes committed.\n")
+
 def main():
     parser = argparse.ArgumentParser(
         prog="mastyf",
@@ -922,6 +1034,13 @@ def main():
     chat_parser.add_argument("--ledger", default=None, help="Path to receipts.jsonl file")
     chat_parser.add_argument("--mock", action="store_true", help="Run with deterministic offline mock agent for testing")
 
+    # mastyf discover
+    discover_parser = subparsers.add_parser("discover", help="Discover local MCP servers and synthesize model-assisted security policy")
+    discover_parser.add_argument("--onboard", action="store_true", help="Interactive first-run onboarding prompt")
+    discover_parser.add_argument("--intent", "-i", help="Plain-English policy requirements string")
+    discover_parser.add_argument("-y", "--yes", action="store_true", help="Automatically activate synthesized policy without prompting")
+    discover_parser.add_argument("--write-policy", help="Custom destination path for synthesized policy YAML")
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -954,6 +1073,8 @@ def main():
         cmd_audit(args)
     elif args.command == "chat":
         cmd_chat(args)
+    elif args.command == "discover":
+        cmd_discover(args)
     else:
         parser.print_help()
 
