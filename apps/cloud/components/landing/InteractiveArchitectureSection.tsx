@@ -72,7 +72,7 @@ export function InteractiveArchitectureSection() {
     <RevealOnScroll mode="architecture">
       <section className="lp-section lp-arch-section" id="architecture">
         <div className="lp-section-header">
-          <h2>Interactive architecture</h2>
+          <h2>{DEFENSE_FABRIC_COPY.headline}</h2>
           <p>{DEFENSE_FABRIC_COPY.body}</p>
         </div>
 

@@ -1,28 +1,28 @@
 import { SITE_NAME } from '@/lib/product-links';
 
 export const HERO_HEADLINE = {
-  line1: 'Perimeter security',
-  line2: 'for your AI.',
+  line1: 'Secure the Action Boundary,',
+  line2: 'Not Just the Prompt.',
 } as const;
 
 export const HERO_LEAD =
-  'Runtime enforcement, policy control, and trust scores for every MCP tool call. mastyf.ai intercepts agent actions, blocks violations before they execute, and scores npm packages so teams ship without guessing.';
+  'Mastyf Guard is a local security gateway for AI agents and MCP. Your LLM can propose actions. Mastyf decides whether those actions reach the real world. Every tool call passes through deterministic capability authorization and information-flow controls before execution. The LLM is an untrusted principal. The gateway is the reference monitor.';
 
 export const HERO_VALUE_PILLARS = [
   {
-    id: 'runtime',
-    title: 'Runtime enforcement',
-    body: 'BlockGuard intercepts every tools/call before it reaches your infrastructure — fail-closed by default.',
+    id: 'cbac',
+    title: 'Unauthorized capability → BLOCK',
+    body: "A model cannot invoke a capability outside the agent's declared authorization policy.",
   },
   {
-    id: 'trust',
-    title: 'Package trust scores',
-    body: 'Instant 0–100 scores and public badges for any npm MCP package — no account required.',
+    id: 'difc',
+    title: 'Tainted data → BLOCK',
+    body: 'Sensitive information cannot be routed to an unauthorized egress according to configured information-flow policy.',
   },
   {
-    id: 'control',
-    title: 'Cloud control plane',
-    body: 'Policy, fleet, keys, and evidence from one console — open source and self-hostable.',
+    id: 'arbiter',
+    title: 'Non-ALLOW → no backend execution',
+    body: 'The reference monitor mediates the transition from model-proposed action to actual tool execution.',
   },
 ] as const;
 
@@ -145,8 +145,8 @@ export const REPO_STORIES = [
 ] as const;
 
 export const DEFENSE_FABRIC_COPY = {
-  headline: 'Defense Fabric — six phases on every tool call',
-  body: 'Holistic MCP protection across ingress, economics, policy, intelligence, upstream, and egress. Every tools/call on all transports flows through the defense orchestrator.',
+  headline: 'Your agent can reason. Mastyf controls execution.',
+  body: 'Mastyf does not try to make the LLM trustworthy. It assumes the model may be manipulated, confused, hallucinating, or operating on hostile content—and puts a security boundary between what the model proposes and what your infrastructure executes.',
 } as const;
 
 /** Four capability pillars — Arcade-style grid. */

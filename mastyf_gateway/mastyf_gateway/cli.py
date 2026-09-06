@@ -558,10 +558,15 @@ def cmd_self_test(args):
     if not success:
         sys.exit(1)
 
+def cmd_demo(args):
+    """Executes live, reproducible demonstrations of the 5 canonical ways an agent can lose control of an action boundary."""
+    from .demo import run_demo
+    run_demo(getattr(args, "scenario", None))
+
 def main():
     parser = argparse.ArgumentParser(
         prog="mastyf",
-        description="Mastyf Security Gateway CLI — Deterministic Reference Monitor & Intent Auditor for AI Agents"
+        description="Mastyf Security Gateway CLI — Reference Monitor & Intent Auditor for AI Agents"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -580,6 +585,10 @@ def main():
     # mastyf self-test
     self_test_parser = subparsers.add_parser("self-test", help="Run end-to-end local canary verifying authorization & zero-execution invariants")
     self_test_parser.add_argument("--commercial", action="store_true", help="Run full commercial installation health, entitlement, and security check")
+
+    # mastyf demo
+    demo_parser = subparsers.add_parser("demo", help="Demonstrate action boundary enforcement across 5 canonical agent security scenarios")
+    demo_parser.add_argument("--scenario", "-s", help="Scenario number (1-5) or 'all'")
 
     # mastyf model
     model_parser = subparsers.add_parser("model", help="Manage model artifacts and pinning")
@@ -620,6 +629,8 @@ def main():
         cmd_status(args)
     elif args.command == "self-test":
         cmd_self_test(args)
+    elif args.command == "demo":
+        cmd_demo(args)
     elif args.command == "model":
         cmd_model(args)
     elif args.command == "activate":

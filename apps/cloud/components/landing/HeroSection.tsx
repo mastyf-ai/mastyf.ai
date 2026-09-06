@@ -13,8 +13,8 @@ export function HeroSection({ session }: Props) {
       <div className="lp-hero-inner">
         <div className="lp-hero-copy">
           <p className="lp-eyebrow">
-            <span className="lp-pill">MCP security platform</span>
-            <span className="lp-pill lp-pill-gold">Open source</span>
+            <span className="lp-pill">AI Agent & MCP Gateway</span>
+            <span className="lp-pill lp-pill-gold">Reference Monitor</span>
           </p>
 
           <h1 className="lp-hero-title">
@@ -35,18 +35,12 @@ export function HeroSection({ session }: Props) {
           </ul>
 
           <div className="lp-hero-cta">
-            <Link href="/certified" className="btn btn-primary btn-pill motion-cta">
-              Look up a package
-            </Link>
-            {session ? (
-              <Link href="/dashboard" className="btn btn-secondary btn-pill motion-cta">
-                Cloud console
-              </Link>
-            ) : (
-              <Link href="/login" className="btn btn-secondary btn-pill motion-cta">
-                Sign in free
-              </Link>
-            )}
+            <a href="https://github.com/mastyf-ai/mastyf.ai#quickstart" className="btn btn-primary btn-pill motion-cta">
+              Install Mastyf Guard
+            </a>
+            <a href="#architecture" className="btn btn-secondary btn-pill motion-cta">
+              See the execution boundary
+            </a>
             <a href={GITHUB_REPO_URL} className="btn btn-ghost btn-pill motion-cta" rel="noopener noreferrer">
               View on GitHub
             </a>

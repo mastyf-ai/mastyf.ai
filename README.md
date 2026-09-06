@@ -4,9 +4,9 @@
 
 <h1 align="center">mastyf.ai</h1>
 
-<p align="center"><strong>Perimeter security for your AI.</strong></p>
+<p align="center"><strong>Secure the Action Boundary, Not Just the Prompt.</strong></p>
 
-<p align="center">Runtime enforcement, policy control, and full audit trail for every AI action.</p>
+<p align="center">A local reference monitor and security gateway for AI agents and MCP.<br>Your LLM proposes actions. Mastyf decides whether those actions reach the real world.</p>
 
 <p align="center">
   <a href="https://mastyf-ai-cloud-jet.vercel.app/">Website</a> ·

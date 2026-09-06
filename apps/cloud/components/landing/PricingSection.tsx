@@ -4,10 +4,10 @@ export function PricingSection() {
   return (
     <section className="lp-section" id="pricing" aria-label="Pricing">
       <div className="lp-section-header">
-        <h2>From research preview to production</h2>
+        <h2>Developer &amp; Team Licensing</h2>
         <p>
-          The 1.5B guard is gated on Hugging Face for research and enterprise preview. Commercial
-          production requires an active Mastyf Enterprise Pass.
+          Deploy autonomous agents with sensitive tool access under a deterministic execution boundary.
+          Simple monthly licensing for developers, startups, and security-conscious agent builders.
         </p>
       </div>
 
@@ -26,18 +26,19 @@ export function PricingSection() {
         </div>
 
         <div className="card lp-pricing-card lp-pricing-featured">
-          <span className="lp-pricing-badge">Most teams</span>
-          <h3>Enterprise Pass</h3>
-          <p className="muted">Commercial production deployments.</p>
+          <span className="lp-pricing-badge">Recommended for Builders</span>
+          <h3>Mastyf Guard Pro</h3>
+          <p className="muted">Production tool execution boundary (₹2,500 / month).</p>
           <ul className="lp-pricing-features">
-            <li>License key for production tool dispatch</li>
-            <li>Fleet policy, evidence packs, support</li>
-            <li>Cloud console — policy, keys, fleet, audit</li>
+            <li>Instance-backed license key for gateway execution</li>
+            <li>Gated V6 weights access on Hugging Face</li>
+            <li>CBAC capability control + DIFC information flow</li>
+            <li>Offline 7-day grace period resilience</li>
           </ul>
           <a href={HF_CHECKOUT_URL} className="btn btn-primary btn-pill" target="_blank" rel="noopener noreferrer">
-            Get Enterprise Pass — Lemon Squeezy
+            Get Pro License — ₹2,500/mo
           </a>
-          <small className="muted">Requires Lemon Squeezy order / API license key for gated checkout.</small>
+          <small className="muted">Instant activation via Lemon Squeezy with Ed25519 cryptographic token.</small>
         </div>
 
         <div className="card lp-pricing-card">
