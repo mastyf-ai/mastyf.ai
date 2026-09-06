@@ -685,7 +685,7 @@ def cmd_audit(args):
 
         if res.valid:
             print("\n  [✓] Chain Integrity:    100% VALID (zero broken links)")
-            print("  [✓] Security Invariant: 100% VALID (Decision != ALLOW ⇒ Execution == 0)")
+            print("  [✓] Security Invariant: 100% VALID (100% of non-ALLOW receipts satisfy enforced non-execution invariant: backend_execution_count == 0 ∧ execution_observation == NOT_SENT)")
             print("======================================================================\n")
             sys.exit(0)
         else:
