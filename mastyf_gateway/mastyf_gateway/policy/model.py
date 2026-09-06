@@ -42,6 +42,47 @@ class RuleSettings:
     require_audit_for: Tuple[str, ...] = ()
 
 @dataclass(frozen=True)
+class WorkflowTransition:
+    from_state: str
+    on_tool: str
+    to_state: str
+
+@dataclass(frozen=True)
+class WorkflowConstraint:
+    when_state: Optional[str] = None
+    when_execution_certainty: Optional[str] = None
+    deny: Tuple[str, ...] = ()
+    reason: str = ""
+
+@dataclass(frozen=True)
+class CannotFollowRule:
+    trigger: str
+    forbidden: Tuple[str, ...] = ()
+
+@dataclass(frozen=True)
+class RequiresStateRule:
+    tool: str
+    state: str
+
+@dataclass(frozen=True)
+class MaxOccurrencesRule:
+    tool: str
+    count: int
+    scope: str = "session"
+
+@dataclass(frozen=True)
+class WorkflowDefinition:
+    name: str
+    scope: str = "session"
+    initial_state: str = "CLEAN"
+    states: Tuple[str, ...] = ()
+    transitions: Tuple[WorkflowTransition, ...] = ()
+    constraints: Tuple[WorkflowConstraint, ...] = ()
+    cannot_follow: Tuple[CannotFollowRule, ...] = ()
+    requires_state: Tuple[RequiresStateRule, ...] = ()
+    max_occurrences: Tuple[MaxOccurrencesRule, ...] = ()
+
+@dataclass(frozen=True)
 class PolicyDocument:
     id: str
     version: str = "1.0"
@@ -49,6 +90,7 @@ class PolicyDocument:
     capabilities: Tuple[CapabilityRule, ...] = ()
     information_flow: InformationFlowRule = field(default_factory=InformationFlowRule)
     rules: RuleSettings = field(default_factory=RuleSettings)
+    workflows: Tuple[WorkflowDefinition, ...] = ()
 
 @dataclass(frozen=True)
 class CompiledPolicy:
@@ -56,6 +98,7 @@ class CompiledPolicy:
     cbac: Dict[str, Dict[str, Any]]
     difc: Dict[str, Dict[str, List[str]]]
     rules: Dict[str, Any]
+    workflows: Dict[str, Any] = field(default_factory=dict)
 
     def as_runtime_config(self) -> Dict[str, Any]:
         return {
@@ -65,6 +108,7 @@ class CompiledPolicy:
             "cbac": self.cbac,
             "difc": self.difc,
             "rules": self.rules,
+            "workflows": self.workflows,
         }
 
     def to_gateway_policy(self) -> GatewayPolicyDocument:

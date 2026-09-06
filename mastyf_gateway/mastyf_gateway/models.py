@@ -57,6 +57,18 @@ class AIADecision(BaseModel):
     latency_ms: float = 0.0
     model_revision: str = "d59a6aa01f9139dff106146addb04109afa69c03"
 
+class WorkflowDecision(BaseModel):
+    """Outcome of Stateful Workflow & Sequence Policy evaluation."""
+    allowed: bool = True
+    reason_code: str = "WORKFLOW_PERMITTED"
+    workflow_id: Optional[str] = None
+    workflow_state_before: Optional[str] = None
+    workflow_transition: Optional[str] = None
+    workflow_state_after: Optional[str] = None
+    workflow_rule: Optional[str] = None
+    execution_certainty: str = "KNOWN"
+    latency_ms: float = 0.0
+
 class GatewayDecision(BaseModel):
     """Final unified decision rendered by the Gateway Decision Arbiter."""
     request_id: str
@@ -69,12 +81,20 @@ class GatewayDecision(BaseModel):
     policy_id: Optional[str] = None
     cbac_allowed: bool
     difc_allowed: bool
+    workflow_allowed: bool = True
+    workflow_id: Optional[str] = None
+    workflow_state_before: Optional[str] = None
+    workflow_transition: Optional[str] = None
+    workflow_state_after: Optional[str] = None
+    workflow_rule: Optional[str] = None
+    execution_certainty: str = "KNOWN"
     aia_evaluated: bool
     aia_decision: Optional[DecisionType] = None
     invariant_violation: Optional[str] = "none"
     total_latency_ms: float
     cbac_latency_ms: float = 0.0
     difc_latency_ms: float = 0.0
+    workflow_latency_ms: float = 0.0
     aia_latency_ms: float = 0.0
     model_revision: str = "d59a6aa01f9139dff106146addb04109afa69c03"
 

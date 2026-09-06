@@ -39,11 +39,24 @@ class ExecutionReceipt:
     reason_code: str
     previous_receipt_hash: str
     receipt_hash: str = ""
+    workflow_id: Optional[str] = None
+    workflow_state_before: Optional[str] = None
+    workflow_transition: Optional[str] = None
+    workflow_state_after: Optional[str] = None
+    workflow_rule: Optional[str] = None
+    execution_certainty: Optional[str] = "KNOWN"
 
     def to_canonical_dict(self) -> Dict[str, Any]:
         """Returns the deterministic dictionary for hash computation (excluding receipt_hash)."""
         d = asdict(self)
         d.pop("receipt_hash", None)
+        if self.workflow_id is None:
+            d.pop("workflow_id", None)
+            d.pop("workflow_state_before", None)
+            d.pop("workflow_transition", None)
+            d.pop("workflow_state_after", None)
+            d.pop("workflow_rule", None)
+            d.pop("execution_certainty", None)
         return d
 
     def compute_hash(self) -> str:
@@ -52,7 +65,15 @@ class ExecutionReceipt:
 
     def to_dict(self) -> Dict[str, Any]:
         """Full serializable dictionary including the calculated receipt_hash."""
-        return asdict(self)
+        d = asdict(self)
+        if self.workflow_id is None:
+            d.pop("workflow_id", None)
+            d.pop("workflow_state_before", None)
+            d.pop("workflow_transition", None)
+            d.pop("workflow_state_after", None)
+            d.pop("workflow_rule", None)
+            d.pop("execution_certainty", None)
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> ExecutionReceipt:
@@ -81,6 +102,12 @@ class ExecutionReceipt:
             reason_code=str(data["reason_code"]),
             previous_receipt_hash=str(data["previous_receipt_hash"]),
             receipt_hash=str(data["receipt_hash"]),
+            workflow_id=data.get("workflow_id"),
+            workflow_state_before=data.get("workflow_state_before"),
+            workflow_transition=data.get("workflow_transition"),
+            workflow_state_after=data.get("workflow_state_after"),
+            workflow_rule=data.get("workflow_rule"),
+            execution_certainty=data.get("execution_certainty", "KNOWN"),
         )
 
 

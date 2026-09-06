@@ -18,25 +18,31 @@ from .telemetry.audit import AuditLogger
 from .telemetry.metrics import GatewayMetrics
 from .health.checks import HealthChecker
 
+from .workflow.engine import WorkflowEngine
+
 class MastyfGateway:
     """
     Unified Mastyf Security Gateway.
     Enforces:
     1. Deterministic CBAC Policy.
     2. Deterministic DIFC Taint Tracking.
-    3. Neural AIA Intent Auditing on permissible calls.
-    4. Immutable Decision Arbitration & SHA-256 Audit Logging.
+    3. Deterministic Stateful Workflow & Sequence Policy.
+    4. Neural AIA Intent Auditing on permissible calls.
+    5. Immutable Decision Arbitration & SHA-256 Audit Logging.
     """
 
     def __init__(
         self,
         config: Optional[GatewayConfig] = None,
         policy: Optional[PolicyDocument] = None,
-        auditor: Optional[BaseAIAAuditor] = None
+        auditor: Optional[BaseAIAAuditor] = None,
+        compiled_policy: Optional[Any] = None,
+        workflow_engine: Optional[WorkflowEngine] = None,
     ):
         self.config = config or GatewayConfig()
         self.cbac = CBACEngine(policy=policy)
         self.difc = SessionTaintTracker()
+        self.workflow = workflow_engine or WorkflowEngine(compiled_policy=compiled_policy or policy)
 
         if auditor is not None:
             self.auditor = auditor
@@ -56,7 +62,9 @@ class MastyfGateway:
 
     async def evaluate_async(self, req: ToolCallRequest) -> GatewayDecision:
         """
-        Asynchronously evaluates the proposed tool call across all security layers.
+        Asynchronously evaluates the proposed tool call across all security layers:
+        Deterministic Authority: A_det = A_CBAC ∩ A_DIFC ∩ A_Workflow.
+        AIA is only evaluated if all deterministic layers permit.
         """
         start_time = time.perf_counter()
 
@@ -66,19 +74,23 @@ class MastyfGateway:
         # Layer 2: Deterministic DIFC
         difc_res = self.difc.evaluate(req)
 
-        # Layer 3: AIA Neural Auditor (Evaluated only if CBAC and DIFC permit)
+        # Layer 3: Deterministic Stateful Workflow & Sequence Authorization
+        workflow_res = self.workflow.evaluate(req)
+
+        # Layer 4: AIA Neural Auditor (Evaluated only if CBAC ∩ DIFC ∩ Workflow permit)
         aia_res = None
-        if cbac_res.allowed and difc_res.allowed and self.config.aia.enabled:
+        if cbac_res.allowed and difc_res.allowed and workflow_res.allowed and self.config.aia.enabled:
             aia_res = await self.auditor.evaluate(req)
 
         total_elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
-        # Layer 4: Decision Arbiter
+        # Layer 5: Decision Arbiter
         decision = self.arbiter.arbitrate(
             req=req,
             cbac_res=cbac_res,
             difc_res=difc_res,
             aia_res=aia_res,
+            workflow_res=workflow_res,
             total_latency_ms=total_elapsed_ms
         )
 

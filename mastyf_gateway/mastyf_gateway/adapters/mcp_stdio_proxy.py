@@ -199,6 +199,9 @@ class MCPStdioProxy:
                 # Child errored or timed out after dispatch
                 obs = ExecutionObservation.SENT_CHILD_NO_RESPONSE
 
+            # Commit or handle outcome in workflow engine
+            self.gateway.workflow.commit_outcome(self.session_id, tool_name, obs, request_id=str(req_id))
+
             self.ledger.record(
                 request_id=str(req_id),
                 session_id=self.session_id,
@@ -213,11 +216,18 @@ class MCPStdioProxy:
                 arbiter_decision=decision.final_decision,
                 execution_observation=obs,
                 reason_code=decision.reason_code,
+                workflow_id=decision.workflow_id,
+                workflow_state_before=decision.workflow_state_before,
+                workflow_transition=decision.workflow_transition if obs == ExecutionObservation.RESPONSE_RECEIVED else None,
+                workflow_state_after=decision.workflow_state_after if obs == ExecutionObservation.RESPONSE_RECEIVED else decision.workflow_state_before,
+                workflow_rule=decision.workflow_rule,
+                execution_certainty="KNOWN" if obs == ExecutionObservation.RESPONSE_RECEIVED else "UNKNOWN",
             )
             return resp
 
         # NON-ALLOW (BLOCK or ESCALATE):
         # CRITICAL INVARIANT: Exactly zero bytes written to child stdin!
+        self.gateway.workflow.commit_outcome(self.session_id, tool_name, ExecutionObservation.NOT_SENT, request_id=str(req_id))
         self.ledger.record(
             request_id=str(req_id),
             session_id=self.session_id,
@@ -232,6 +242,12 @@ class MCPStdioProxy:
             arbiter_decision=decision.final_decision,
             execution_observation=ExecutionObservation.NOT_SENT,
             reason_code=decision.reason_code,
+            workflow_id=decision.workflow_id,
+            workflow_state_before=decision.workflow_state_before,
+            workflow_transition=None,
+            workflow_state_after=decision.workflow_state_before,
+            workflow_rule=decision.workflow_rule,
+            execution_certainty=decision.execution_certainty,
         )
 
         return {

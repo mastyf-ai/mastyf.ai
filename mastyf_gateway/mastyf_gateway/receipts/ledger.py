@@ -99,6 +99,12 @@ class ExecutionReceiptLedger:
         execution_observation: ExecutionObservation | str,
         reason_code: str,
         timestamp_utc: Optional[str] = None,
+        workflow_id: Optional[str] = None,
+        workflow_state_before: Optional[str] = None,
+        workflow_transition: Optional[str] = None,
+        workflow_state_after: Optional[str] = None,
+        workflow_rule: Optional[str] = None,
+        execution_certainty: Optional[str] = "KNOWN",
     ) -> ExecutionReceipt:
         """
         Constructs, hashes, and atomically appends an execution receipt to disk.
@@ -149,6 +155,12 @@ class ExecutionReceiptLedger:
                 execution_observation=obs_str,
                 reason_code=reason_code,
                 previous_receipt_hash=prev_hash,
+                workflow_id=workflow_id,
+                workflow_state_before=workflow_state_before,
+                workflow_transition=workflow_transition,
+                workflow_state_after=workflow_state_after,
+                workflow_rule=workflow_rule,
+                execution_certainty=execution_certainty or "KNOWN",
             )
 
             # Compute canonical receipt hash
@@ -173,6 +185,12 @@ class ExecutionReceiptLedger:
                 reason_code=receipt_candidate.reason_code,
                 previous_receipt_hash=receipt_candidate.previous_receipt_hash,
                 receipt_hash=r_hash,
+                workflow_id=workflow_id,
+                workflow_state_before=workflow_state_before,
+                workflow_transition=workflow_transition,
+                workflow_state_after=workflow_state_after,
+                workflow_rule=workflow_rule,
+                execution_certainty=execution_certainty or "KNOWN",
             )
 
             # Atomically serialize, append, and flush to disk

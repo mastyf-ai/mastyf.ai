@@ -17,6 +17,12 @@ from .model import (
     PolicyDocument,
     RuleSettings,
     TaintRule,
+    WorkflowDefinition,
+    WorkflowTransition,
+    WorkflowConstraint,
+    CannotFollowRule,
+    RequiresStateRule,
+    MaxOccurrencesRule,
 )
 
 
@@ -98,6 +104,155 @@ def _taint(value: Any, index: int) -> TaintRule:
     )
 
 
+def _workflow_transition(value: Any, path: str, declared_states: set[str]) -> WorkflowTransition:
+    obj = _mapping(value, path)
+    from_state = _string(obj.get("from"), f"{path}.from")
+    if declared_states and from_state not in declared_states:
+        raise PolicyError(f"{path}.from '{from_state}' is not in declared states")
+
+    on_raw = obj.get("on")
+    if on_raw is None and True in obj:
+        # PyYAML parses unquoted 'on:' as boolean True
+        on_raw = obj[True]
+
+    if isinstance(on_raw, dict):
+        on_tool = _string(on_raw.get("tool") or on_raw.get("on_tool"), f"{path}.on.tool")
+    elif isinstance(on_raw, str):
+        on_tool = _string(on_raw, f"{path}.on")
+    elif "on_tool" in obj:
+        on_tool = _string(obj.get("on_tool"), f"{path}.on_tool")
+    elif "tool" in obj:
+        on_tool = _string(obj.get("tool"), f"{path}.tool")
+    else:
+        raise PolicyError(f"{path} missing transition tool trigger (expected 'on.tool' or 'on')")
+
+    to_state = _string(obj.get("to"), f"{path}.to")
+    if declared_states and to_state not in declared_states:
+        raise PolicyError(f"{path}.to '{to_state}' is not in declared states")
+
+    return WorkflowTransition(from_state=from_state, on_tool=on_tool, to_state=to_state)
+
+
+def _workflow_constraint(value: Any, path: str, declared_states: set[str]) -> WorkflowConstraint:
+    obj = _mapping(value, path)
+    when_state = obj.get("when_state")
+    if when_state is not None:
+        when_state = _string(when_state, f"{path}.when_state")
+        if declared_states and when_state not in declared_states:
+            raise PolicyError(f"{path}.when_state '{when_state}' is not in declared states")
+
+    when_cert = obj.get("when_execution_certainty")
+    if when_cert is not None:
+        when_cert = _string(when_cert, f"{path}.when_execution_certainty")
+        if when_cert not in {"KNOWN", "UNKNOWN"}:
+            raise PolicyError(f"{path}.when_execution_certainty must be 'KNOWN' or 'UNKNOWN'")
+
+    deny = _string_list(obj.get("deny", []), f"{path}.deny", allow_empty=False)
+    reason = str(obj.get("reason", ""))
+    return WorkflowConstraint(
+        when_state=when_state,
+        when_execution_certainty=when_cert,
+        deny=deny,
+        reason=reason,
+    )
+
+
+def _cannot_follow_rule(value: Any, path: str) -> CannotFollowRule:
+    obj = _mapping(value, path)
+    trigger = _string(obj.get("trigger"), f"{path}.trigger")
+    forbidden = _string_list(obj.get("forbidden", []), f"{path}.forbidden", allow_empty=False)
+    return CannotFollowRule(trigger=trigger, forbidden=forbidden)
+
+
+def _requires_state_rule(value: Any, path: str, declared_states: set[str]) -> RequiresStateRule:
+    obj = _mapping(value, path)
+    tool = _string(obj.get("tool"), f"{path}.tool")
+    state = _string(obj.get("state"), f"{path}.state")
+    if declared_states and state not in declared_states:
+        raise PolicyError(f"{path}.state '{state}' is not in declared states")
+    return RequiresStateRule(tool=tool, state=state)
+
+
+def _max_occurrences_rule(value: Any, path: str) -> MaxOccurrencesRule:
+    obj = _mapping(value, path)
+    tool = _string(obj.get("tool"), f"{path}.tool")
+    count_val = obj.get("count")
+    if not isinstance(count_val, int) or count_val < 0:
+        raise PolicyError(f"{path}.count must be a non-negative integer")
+    scope = str(obj.get("scope", "session"))
+    return MaxOccurrencesRule(tool=tool, count=count_val, scope=scope)
+
+
+def _workflow(value: Any, index: int) -> WorkflowDefinition:
+    path = f"workflows[{index}]"
+    obj = _mapping(value, path)
+    name = _string(obj.get("name"), f"{path}.name")
+    scope = str(obj.get("scope", "session"))
+    initial_state = str(obj.get("initial_state", "CLEAN"))
+    states = _string_list(obj.get("states", []), f"{path}.states", allow_empty=True)
+    declared_states = set(states)
+    if declared_states and initial_state not in declared_states:
+        raise PolicyError(f"{path}.initial_state '{initial_state}' is not in declared states")
+
+    transitions_raw = obj.get("transitions", [])
+    if not isinstance(transitions_raw, list):
+        raise PolicyError(f"{path}.transitions must be a list")
+    transitions = tuple(
+        _workflow_transition(t, f"{path}.transitions[{i}]", declared_states)
+        for i, t in enumerate(transitions_raw)
+    )
+
+    constraints_raw = obj.get("constraints", [])
+    if not isinstance(constraints_raw, list):
+        raise PolicyError(f"{path}.constraints must be a list")
+    constraints = tuple(
+        _workflow_constraint(c, f"{path}.constraints[{i}]", declared_states)
+        for i, c in enumerate(constraints_raw)
+    )
+
+    cannot_follow_raw = obj.get("cannot_follow", [])
+    if isinstance(cannot_follow_raw, dict):
+        cannot_follow_raw = [cannot_follow_raw]
+    elif not isinstance(cannot_follow_raw, list):
+        raise PolicyError(f"{path}.cannot_follow must be a mapping or list of mappings")
+    cannot_follow = tuple(
+        _cannot_follow_rule(cf, f"{path}.cannot_follow[{i}]")
+        for i, cf in enumerate(cannot_follow_raw)
+    )
+
+    requires_state_raw = obj.get("requires_state", [])
+    if isinstance(requires_state_raw, dict):
+        requires_state_raw = [requires_state_raw]
+    elif not isinstance(requires_state_raw, list):
+        raise PolicyError(f"{path}.requires_state must be a mapping or list of mappings")
+    requires_state = tuple(
+        _requires_state_rule(rs, f"{path}.requires_state[{i}]", declared_states)
+        for i, rs in enumerate(requires_state_raw)
+    )
+
+    max_occurrences_raw = obj.get("max_occurrences", [])
+    if isinstance(max_occurrences_raw, dict):
+        max_occurrences_raw = [max_occurrences_raw]
+    elif not isinstance(max_occurrences_raw, list):
+        raise PolicyError(f"{path}.max_occurrences must be a mapping or list of mappings")
+    max_occurrences = tuple(
+        _max_occurrences_rule(mo, f"{path}.max_occurrences[{i}]")
+        for i, mo in enumerate(max_occurrences_raw)
+    )
+
+    return WorkflowDefinition(
+        name=name,
+        scope=scope,
+        initial_state=initial_state,
+        states=states,
+        transitions=transitions,
+        constraints=constraints,
+        cannot_follow=cannot_follow,
+        requires_state=requires_state,
+        max_occurrences=max_occurrences,
+    )
+
+
 def parse_policy(data: Any) -> PolicyDocument:
     root = _mapping(data, "policy")
     capabilities_raw = root.get("capabilities", [])
@@ -125,6 +280,14 @@ def parse_policy(data: Any) -> PolicyDocument:
         require_audit_for=require_audit,
     )
 
+    workflows_raw = root.get("workflows", [])
+    if not isinstance(workflows_raw, list):
+        raise PolicyError("workflows must be a list")
+    workflows = tuple(_workflow(item, i) for i, item in enumerate(workflows_raw))
+    wf_names = [wf.name for wf in workflows]
+    if len(wf_names) != len(set(wf_names)):
+        raise PolicyError("workflows contains duplicate workflow names")
+
     return PolicyDocument(
         id=_string(root.get("id"), "id"),
         version=_string(root.get("version"), "version"),
@@ -132,6 +295,7 @@ def parse_policy(data: Any) -> PolicyDocument:
         capabilities=caps,
         information_flow=InformationFlowRule(taints=taints),
         rules=rules,
+        workflows=workflows,
     )
 
 
@@ -184,4 +348,39 @@ def compile_policy(policy: PolicyDocument) -> CompiledPolicy:
         "fail_closed": policy.rules.fail_closed,
         "require_audit_for": list(policy.rules.require_audit_for),
     }
-    return CompiledPolicy(policy=policy, cbac=cbac, difc=difc, rules=rules)
+
+    compiled_workflows: dict[str, dict[str, Any]] = {}
+    for wf in policy.workflows:
+        compiled_workflows[wf.name] = {
+            "name": wf.name,
+            "scope": wf.scope,
+            "initial_state": wf.initial_state,
+            "states": list(wf.states),
+            "transitions": [
+                {"from": t.from_state, "on_tool": t.on_tool, "to": t.to_state}
+                for t in wf.transitions
+            ],
+            "constraints": [
+                {
+                    "when_state": c.when_state,
+                    "when_execution_certainty": c.when_execution_certainty,
+                    "deny": list(c.deny),
+                    "reason": c.reason,
+                }
+                for c in wf.constraints
+            ],
+            "cannot_follow": [
+                {"trigger": cf.trigger, "forbidden": list(cf.forbidden)}
+                for cf in wf.cannot_follow
+            ],
+            "requires_state": [
+                {"tool": rs.tool, "state": rs.state}
+                for rs in wf.requires_state
+            ],
+            "max_occurrences": [
+                {"tool": mo.tool, "count": mo.count, "scope": mo.scope}
+                for mo in wf.max_occurrences
+            ],
+        }
+
+    return CompiledPolicy(policy=policy, cbac=cbac, difc=difc, rules=rules, workflows=compiled_workflows)
