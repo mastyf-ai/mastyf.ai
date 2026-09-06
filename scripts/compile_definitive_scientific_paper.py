@@ -1405,9 +1405,9 @@ def build_pdf():
     story.append(Paragraph("16. Systemization & Production Hardening: The Mastyf Security Gateway", h1))
     story.append(Paragraph(
         "To bridge the divide between a standalone neural model checkpoint and an enterprise-grade production deployment, the architecture has been "
-        "systemized into the <b>Mastyf Security Gateway</b>. The evaluated research runtime reported in this manuscript was <b>v0.1.0-RC1</b> "
-        "(verifying 38/38 automated security invariant tests); the subsequently hardened commercial-pilot runtime is <b>v0.1.1-rc1</b> "
-        "(extending the regression suite to 50/50 passing tests and introducing container security hardening) -- an asynchronous, transport-level reverse proxy "
+        "systemized into the <b>Mastyf Security Gateway</b>. The research evaluation reported in this manuscript used gateway runtime <b>v0.1.0-RC1</b> "
+        "(verifying 38/38 automated security invariant tests); subsequent commercial-pilot hardening produced <b>v0.1.1-rc1</b> "
+        "(which adds further regression to 50/50 passing tests, deployment, licensing, and release-integrity validation) -- an asynchronous, transport-level reverse proxy "
         "implementing the Model Context Protocol (MCP). The gateway sits between upstream agent runtimes and downstream MCP tool servers, enforcing complete mediation over JSON-RPC tool dispatch streams.",
         body
     ))

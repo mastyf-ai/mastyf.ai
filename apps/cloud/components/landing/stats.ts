@@ -27,7 +27,7 @@ export const HERO_VALUE_PILLARS = [
 ] as const;
 
 export const HERO_TRUST_ITEMS = [
-  { label: 'Paper DOI 10.5281/zenodo.22206627', href: 'https://zenodo.org/records/22206627' },
+  { label: 'Paper DOI 10.5281/zenodo.22463320', href: 'https://zenodo.org/records/22463320' },
   { label: 'Model Rudraneel93/mastyf-guard-1.5b', href: 'https://huggingface.co/Rudraneel93/mastyf-guard-1.5b' },
   { label: '97.5% hybrid coverage · 0% FPR', href: '#paper' },
   { label: 'Public trust badges', href: '/certified' },
