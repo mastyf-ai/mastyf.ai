@@ -116,10 +116,11 @@ class WorkflowEngine:
                         denied_tools = c.get("deny", [])
                         if tool_name in denied_tools:
                             latency_ms = (time.perf_counter() - start_time) * 1000.0
-                            rule_str = f"when_execution_certainty: {when_cert} -> deny: {tool_name}"
+                            reason_txt = c.get("reason")
+                            rule_str = f"{reason_txt}: when_execution_certainty: {when_cert} -> deny: {tool_name}" if reason_txt else f"when_execution_certainty: {when_cert} -> deny: {tool_name}"
                             return WorkflowDecision(
                                 allowed=False,
-                                reason_code=c.get("reason") or f"UNCERTAIN_EXECUTION_DENIAL: Tool '{tool_name}' prohibited when certainty is {current_certainty}",
+                                reason_code=reason_txt or f"UNCERTAIN_EXECUTION_DENIAL: Tool '{tool_name}' prohibited when certainty is {current_certainty}",
                                 workflow_id=wf_name,
                                 workflow_state_before=current_state,
                                 workflow_transition=None,
@@ -136,10 +137,11 @@ class WorkflowEngine:
                         denied_tools = c.get("deny", [])
                         if tool_name in denied_tools:
                             latency_ms = (time.perf_counter() - start_time) * 1000.0
-                            rule_str = f"when_state: {current_state} -> deny: {tool_name}"
+                            reason_txt = c.get("reason")
+                            rule_str = f"{reason_txt}: when_state: {current_state} -> deny: {tool_name}" if reason_txt else f"when_state: {current_state} -> deny: {tool_name}"
                             return WorkflowDecision(
                                 allowed=False,
-                                reason_code=c.get("reason") or f"WORKFLOW_CONSTRAINT_VIOLATION: Tool '{tool_name}' prohibited in state '{current_state}'",
+                                reason_code=reason_txt or f"WORKFLOW_CONSTRAINT_VIOLATION: Tool '{tool_name}' prohibited in state '{current_state}'",
                                 workflow_id=wf_name,
                                 workflow_state_before=current_state,
                                 workflow_transition=None,

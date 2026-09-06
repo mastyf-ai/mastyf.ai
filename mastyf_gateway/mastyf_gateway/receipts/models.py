@@ -59,6 +59,10 @@ class ExecutionReceipt:
             d.pop("execution_certainty", None)
         return d
 
+    @property
+    def previous_hash(self) -> str:
+        return self.previous_receipt_hash
+
     def compute_hash(self) -> str:
         """Computes SHA-256 over the canonical JSON of all receipt fields except receipt_hash."""
         return canonical_hash(self.to_canonical_dict())
