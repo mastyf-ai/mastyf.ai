@@ -51,7 +51,7 @@ extra_gated_fields:
 
 <p align="center">
   <img src="https://img.shields.io/badge/Checkpoint-V6%20(Frozen)-10B981?style=flat-square" alt="Checkpoint" />
-  <img src="https://img.shields.io/badge/Gateway%20Regression-118%2F118%20PASS-10B981?style=flat-square" alt="118/118 Pass" />
+  <img src="https://img.shields.io/badge/Gateway%20Regression-156%2F156%20PASS-10B981?style=flat-square" alt="156/156 Pass" />
   <img src="https://img.shields.io/badge/Workflow%20Adversarial-23%2F23%20PASS-10B981?style=flat-square" alt="23/23 Pass" />
   <img src="https://img.shields.io/badge/InjecAgent%20Defense-98.43%25-10B981?style=flat-square" alt="InjecAgent Defense" />
   <img src="https://img.shields.io/badge/ASB%20Defense-92.44%25-10B981?style=flat-square" alt="ASB Defense" />
@@ -89,7 +89,7 @@ extra_gated_fields:
 > * **Immutable Commit SHA:** `d59a6aa01f9139dff106146addb04109afa69c03`
 > * **Base Foundation:** `Qwen/Qwen2.5-1.5B-Instruct`
 > * **Bundled Publication:** [`mastyf-guard-definitive-scientific-paper.pdf`](mastyf-guard-definitive-scientific-paper.pdf) (Manuscript Version: 5.3, 15 pages, 45 citations, 16 tables, 9 figures).
-> * **Gateway Integration Verification:** **118/118 tests PASS** across full regression (23 system-level adversarial workflow tests + 16 Phase 4 unit tests + 79 baseline regression tests).
+> * **Gateway Integration Verification:** **156/156 tests PASS** across full regression (Phase 5 complete freeze: unified entrypoint, clean-machine adversarial validation, policy synthesis, stateful workflows, and tamper-evident receipts).
 > * **Training Lineage & Corpus:** Fine-tuned via Low-Rank Adaptation (LoRA, $r=16, \alpha=32$) on **$N = 6,000$ counterfactually balanced parameter perturbation records**, building upon the relational context-disentangled foundation ($N = 5,000$ 5-tuples).
 > * **Partition Disjointness:** Verified 100% disjoint across ontology, entity sets, tool manifests, and 4-gram templates ($H_{\text{train}} \cap H_{\text{dev}} \cap H_{\text{sealed-v2}} = \emptyset$).
 > * **Operational Role:** Acts as the Tier 1.5 in-line neural auditor within the Mastyf Guard gateway or as a standalone tool authorization gatekeeper.
@@ -238,7 +238,7 @@ where $Q$ represents declared workflow states, $q_0 \in Q$ is the initial state,
 | **Authority Intersection** | Workflow permit over CBAC denial | **PASS** | Monotonic denial strictly preserved |
 | **AIA Non-Override** | Advisory neural allowance on workflow block | **PASS** | Arbiter blocks deterministically |
 | **Receipt Tampering** | Bit-flip in receipt signature/state fields | **PASS** | Tamper detected by audit verify |
-| **Total Gateway Integration** | **23 adversarial + 16 Phase 4 + 79 baseline** | **118/118 PASS** | **100% Assurance across Gateway** |
+| **Total Gateway Integration** | **Adversarial (23) + Phase 4 (16) + Security Regressions (79) + Product Lifecycle & Assurance (38)** | **156/156 PASS** | **100% Full-Stack Gateway Assurance** |
 
 ## 🏛️ System Architecture: Cognitive Harvard Decoupling
 
@@ -404,17 +404,20 @@ mastyf
 * **First run:** Automatically probes local runtimes (Ollama, llama-server, Lemonade, vLLM), inspects local MCP servers/tools, asks *"What should your agent be allowed to do?"*, generates a conservative policy, presents a human-readable diff, and requests explicit `[Y/n]` confirmation.
 * **Subsequent runs:** Launches directly into secured conversation (`mastyf chat`) where every proposed tool call is mediated with 0 bytes dispatched on non-ALLOW decisions.
 
-#### Step 3: Run Invariant Verification (156/156 Tests)
-Verify the complete mathematical and transport invariant test suite:
+#### Step 3: Plain-English Policy Assistant (`mastyf policy`)
+Synthesize conservative capability envelopes, argument constraints, and workflow state transitions without manual YAML editing:
 ```bash
-pytest
-# Expected Output:
-# ======================== 156 passed in 11.09s ========================
-# Status: 156/156 Tests PASS (100% Invariant Assurance)
+# Propose a conservative policy candidate from natural-language intent
+mastyf policy "Allow read-only GitHub issue lookup and creating Jira bugs, but block all deletes and external HTTP sinks"
+
+# Review human-readable diff against active policy
+mastyf policy diff candidate_policy.yaml
+
+# Explicitly activate candidate policy
+mastyf policy activate candidate_policy.yaml
 ```
 
-#### Step 4: Define Declarative Security Policy (`mastyf-policy.yaml`)
-Create your capability envelopes, taint rules, and stateful workflow state machine:
+Declarative policy format (`mastyf-policy.yaml`):
 ```yaml
 version: "1.0"
 principals:
@@ -445,25 +448,13 @@ workflow:
       prohibited_tools: ["wire_transfer", "slack.post_message"]
 ```
 
-#### Step 3: Run Invariant Verification (118/118 Tests)
-Verify the complete mathematical and transport invariant test suite:
-```bash
-mastyf verify
-# Expected Output:
-# ======================== MASTYF GATEWAY ASSURANCE ========================
-# 23/23 Adversarial Workflow Tests PASS
-# 16/16 Phase 4 Workflow Unit Tests PASS
-# 79/79 Gateway Security Regression Tests PASS
-# Status: 118/118 Tests PASS (100% Invariant Assurance)
-```
-
-#### Step 4: Run the MCP Stdio Reverse Proxy
+#### Step 4: Run the MCP Stdio Reverse Proxy (`mastyf proxy`)
 Intercept and mediate JSON-RPC Model Context Protocol streams between agent and tool:
 ```bash
 mastyf proxy --config mastyf-policy.yaml --child "python mcp_server.py"
 ```
 
-#### Step 5: Verify Cryptographic Audit Receipts
+#### Step 5: Verify Cryptographic Audit Receipts (`mastyf audit verify`)
 Ensure tamper-evident SHA-256 chain integrity and zero child bytes on non-ALLOW decisions:
 ```bash
 mastyf audit verify --log-file ./mastyf_gateway/logs/audit.jsonl
@@ -471,6 +462,15 @@ mastyf audit verify --log-file ./mastyf_gateway/logs/audit.jsonl
 # Receipts verified: 250
 # SHA-256 Hash Chain: VALID
 # Zero-Byte Transport Invariant: CONFIRMED (0 child stdin bytes on BLOCK/ESCALATE)
+```
+
+#### Step 6: Mathematical Invariant Verification (156/156 Tests PASS)
+Verify the complete mathematical and transport invariant test suite:
+```bash
+pytest
+# Expected Output:
+# ======================== 156 passed in 11.09s ========================
+# Status: 156/156 Tests PASS (100% Invariant Assurance)
 ```
 
 ---
