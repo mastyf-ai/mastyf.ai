@@ -33,7 +33,7 @@
 
 \IEEEtitleabstractindextext{%
 \begin{abstract}
-Autonomous artificial intelligence agents executing over extensible tool interfaces (such as Anthropic's Model Context Protocol) operate with ambient authority over connected tools. Because autoregressive Transformers ingest instructions and untrusted third-party data within a single homogeneous context window, adversarial observations can manipulate the model into executing unintended privileged actions -- the classic Confused Deputy problem. In this paper, we explore an architectural defense-in-depth approach that treats \textbf{LLM agents as potentially compromised, untrusted principals}. Rather than relying on linguistic moderation alone, tool dispatch is governed by an external capability-mediated reference monitor enforcing complete mediation, least privilege, and four typed relational argument invariants (destination containment, scope boundedness, privilege monotonicity, and aggregate monetary clamping). Under complete mediation axioms (A1--A6) over the trusted computing base, out-of-scope tool invocation is deterministically rejected at the transport boundary, formalized as an \textbf{Inductive Multi-Step Tool Chain Composability Invariant (Proposition 1)} showing that adversarial observations cannot synthesize authority across arbitrary execution sequences. However, in-scope parameter poisoning within authorized tools and cross-tool data exfiltration present harder challenges: semantic neural validation is distribution-bounded (exhibiting an empirical false-negative rate of 21.5\% on in-scope manipulations prior to boundary sharpening and remaining susceptible to adversarial optimization), while cross-tool exfiltration requires explicit decentralized information-flow tracking (DIFC). We report empirical evaluations across both foundational baseline studies (a 50,000-sample macro benchmark and a 3,000-case ablation matrix) and a Six-Regime Empirical Validation Program totaling 6,662 evaluation cases with frozen checkpoint $V_6$: achieving 100\% Correct Identification Rate on internal factorized diagnostics ($N = 145$), 100\% accuracy on a pre-sealed holdout suite (75/75, SHA-256: \texttt{22bc736c...}), 98.43\% defense on the 4,216-instance InjecAgent evaluation used in this study ($P_{50}$: 267.7~ms), 92.44\% defense on AI Safety Bench (416/450 attacks blocked, 550/550 benign operations allowed), 99.52\% attack defense on interactive AgentDojo ($N = 629$) with exact clean-task utility parity (6/97 tasks) matching the unprotected base agent, and 100\% defense across 500 targeted adaptive red-team trials. Finally, we systemize the runtime into the Mastyf Security Gateway: the evaluated research runtime was v0.1.0-RC1 (verifying 38/38 security invariant tests), while the subsequently hardened commercial-pilot runtime is v0.1.1-rc1 (verifying 50/50 tests), establishing complete mediation non-executability ($\text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{BackendToolInvocations} = 0$) and $>330,000$~req/s reference monitor throughput under an Ed25519-signed release manifest. We contextualize Mastyf as an empirically evaluated pre-production architecture, highlighting residual risks and outlining requirements for broader production-scale validation.
+Autonomous artificial intelligence agents executing over extensible tool interfaces (such as Anthropic's Model Context Protocol) operate with ambient authority over connected tools. Because autoregressive Transformers ingest instructions and untrusted third-party data within a single homogeneous context window, adversarial observations can manipulate the model into executing unintended privileged actions -- the classic Confused Deputy problem. In this paper, we explore an architectural defense-in-depth approach that treats \textbf{LLM agents as potentially compromised, untrusted principals}. Rather than relying on linguistic moderation alone, tool dispatch is governed by an external capability-mediated reference monitor enforcing complete mediation, least privilege, and four typed relational argument invariants (destination containment, scope boundedness, privilege monotonicity, and aggregate monetary clamping). Under complete mediation axioms (A1--A6) over the trusted computing base, out-of-scope tool invocation is deterministically rejected at the transport boundary, formalized as an \textbf{Inductive Multi-Step Tool Chain Composability Invariant (Proposition 1)} showing that adversarial observations cannot synthesize authority across arbitrary execution sequences. However, in-scope parameter poisoning within authorized tools and cross-tool data exfiltration present harder challenges: semantic neural validation is distribution-bounded (exhibiting an empirical false-negative rate of 21.5\% on in-scope manipulations prior to boundary sharpening and remaining susceptible to adversarial optimization), while cross-tool exfiltration requires explicit decentralized information-flow tracking (DIFC). We further introduce declarative stateful workflow authorization, which constrains specified multi-step action sequences as a restrictive intersection with CBAC and DIFC, and validate the integrated gateway through 23 author-constructed adversarial workflow tests covering trajectory, concurrency, desynchronization, execution uncertainty, and receipt-integrity attacks. We report empirical evaluations across both foundational baseline studies (a 50,000-sample macro benchmark and a 3,000-case ablation matrix) and a Six-Regime Empirical Validation Program totaling 6,662 evaluation cases with frozen checkpoint $V_6$: achieving 100\% Correct Identification Rate on internal factorized diagnostics ($N = 145$), 100\% accuracy on a pre-sealed holdout suite (75/75, SHA-256: \texttt{22bc736c...}), 98.43\% defense on the 4,216-instance InjecAgent evaluation used in this study ($P_{50}$: 267.7~ms), 92.44\% defense on AI Safety Bench (416/450 attacks blocked, 550/550 benign operations allowed), 99.52\% attack defense on interactive AgentDojo ($N = 629$) with exact clean-task utility parity (6/97 tasks) matching the unprotected base agent, and 100\% defense across 500 targeted adaptive red-team trials. Finally, we systemize the runtime into the Mastyf Security Gateway: the evaluated research runtime was v0.1.0-RC1 (verifying 38/38 security invariant tests), while the subsequently hardened commercial-pilot runtime is v0.1.1-rc1 (verifying 50/50 tests), establishing complete mediation non-executability ($\text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{BackendToolInvocations} = 0$) and $>330,000$~req/s reference monitor throughput under an Ed25519-signed release manifest. We contextualize Mastyf as an empirically evaluated pre-production architecture, highlighting residual risks and outlining requirements for broader production-scale validation.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -48,7 +48,7 @@ Autonomous AI Agents, Indirect Prompt Injection, Model Context Protocol (MCP), C
 \textbf{Flagship Model Checkpoint (V6):} \url{https://huggingface.co/Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened}\\
 \textbf{Historical Baseline (v2.0):} \url{https://huggingface.co/Rudraneel93/mastyf-guard-1.5b}\\
 \textbf{Implementation Code:} \url{https://github.com/mastyf-ai/mastyf.ai}\\
-\textbf{Manuscript Version:} 5.2 -- Open Research Preprint
+\textbf{Manuscript Version:} 5.3 -- Open Research Preprint
 
 \section{Introduction \& Foundational Motivation}
 \IEEEPARstart{I}{n} 1945, John von Neumann formulated the foundational computer architecture that bears his name, characterized by a single shared memory bus storing both executable instructions and operand data~\cite{ref_1}. While this unification offered unprecedented programmability, it introduced the most persistent security vulnerability in computing history: because control instructions and passive data occupy a homogeneous address space, adversarial inputs can subvert instruction pointers. Decades of buffer overflow exploits~\cite{ref_2}, stack smashing, and return-oriented programming (ROP) stem directly from this fundamental architectural conflation.
@@ -189,6 +189,8 @@ In distributed agent-tool execution, network latency, tool timeouts, and process
 \end{figure}
 
 \section{System Implementation: The Multi-Tier Pipeline}
+The gateway implementation comprises five enforcement stages preceded by frame parsing, designed to balance ultra-low latency with deep semantic inspection:
+
 \begin{algorithm}[t]
 \caption{Mastyf Security Gateway Complete Mediation \& Decision Flow}
 \begin{algorithmic}[1]
@@ -213,17 +215,19 @@ In distributed agent-tool execution, network latency, tool timeouts, and process
 \ENDIF
 \STATE \COMMENT{Stage 4: Relational Invariants \& Semantic Audit Gate (AIA under Deadline)}
 \IF{\textbf{not} $\operatorname{RequiresSemanticAudit}(T_{\text{target}}, \theta)$}
-    \STATE \textbf{return} $\operatorname{ALLOW}(T_{\text{target}}, \theta)$ \COMMENT{Microsecond fast-path ($<5\ \mu\text{s}$)}
-\ENDIF
-\STATE $\text{aia\_result} \leftarrow \operatorname{InvokeAIA\_WithDeadline}(T_{\text{target}}, \theta, \text{context}, \text{deadline\_ms}=50)$
-\IF{$\text{aia\_result.decision} == \text{BLOCK}$}
-    \STATE \textbf{return} $\operatorname{BLOCK}(\text{aia\_result.explanation})$
-\ENDIF
-\IF{$\text{aia\_result.decision} \in \{\text{ESCALATE}, \text{TIMEOUT}, \text{DECODER\_ERROR}\}$}
-    \STATE \textbf{return} $\operatorname{PolicyFailClosed}(\text{aia\_result})$
+    \STATE $\text{aia\_result} \leftarrow \operatorname{ALLOW}$ \COMMENT{Microsecond fast-path bypass ($<5\ \mu\text{s}$)}
+\ELSE
+    \STATE $\text{aia\_result} \leftarrow \operatorname{InvokeAIA\_WithDeadline}(T_{\text{target}}, \theta, \text{context}, \text{deadline\_ms}=50)$
+    \IF{$\text{aia\_result.decision} == \text{BLOCK}$}
+        \STATE \textbf{return} $\operatorname{BLOCK}(\text{aia\_result.explanation})$
+    \ENDIF
+    \IF{$\text{aia\_result.decision} \in \{\text{ESCALATE}, \text{TIMEOUT}, \text{DECODER\_ERROR}\}$}
+        \STATE \textbf{return} $\operatorname{PolicyFailClosed}(\text{aia\_result})$
+    \ENDIF
 \ENDIF
 \STATE \COMMENT{Stage 5: Deterministic Arbiter (Monotonic Authority Intersection)}
-\STATE \textbf{return} $\operatorname{ALLOW}(T_{\text{target}}, \theta)$
+\STATE $\text{final} \leftarrow \operatorname{Arbitrate}(\text{CBAC}, \text{DIFC}, \text{Workflow}, \text{AIA})$
+\STATE \textbf{return} $\text{final}$
 \STATE \COMMENT{Postcondition 1: $\text{Final} = \text{ALLOW} \implies \text{CBAC} \land \text{DIFC} \land \text{Workflow} = \text{ALLOW}$}
 \STATE \COMMENT{Postcondition 2: $\text{Final} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{Calls} = 0 \land \text{ChildStdinBytes} = 0$}
 \end{algorithmic}

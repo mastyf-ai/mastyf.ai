@@ -177,10 +177,10 @@ def build_pdf():
     h2 = ParagraphStyle('H2', fontName='Times-Bold', fontSize=9.2, leading=12.0, textColor=colors.HexColor('#1E293B'), spaceBefore=4, spaceAfter=1.8, keepWithNext=True)
     h3 = ParagraphStyle('H3', fontName='Times-BoldItalic', fontSize=8.2, leading=10.5, textColor=colors.HexColor('#334155'), spaceBefore=3, spaceAfter=1.8, keepWithNext=True)
 
-    body = ParagraphStyle('Body', fontName='Times-Roman', fontSize=7.95, leading=10.25, textColor=colors.HexColor('#1E293B'), alignment=4, spaceAfter=2.4)
-    body_bold = ParagraphStyle('BodyBold', fontName='Times-Bold', fontSize=8.0, leading=10.4, textColor=colors.HexColor('#0F172A'), spaceAfter=2.5)
+    body = ParagraphStyle('Body', fontName='Times-Roman', fontSize=7.95, leading=10.25, textColor=colors.HexColor('#1E293B'), alignment=4, spaceAfter=2.2)
+    body_bold = ParagraphStyle('BodyBold', fontName='Times-Bold', fontSize=8.0, leading=10.4, textColor=colors.HexColor('#0F172A'), spaceAfter=2.3)
     caption = ParagraphStyle('Caption', fontName='Times-Italic', fontSize=7.0, leading=8.8, alignment=1, textColor=colors.HexColor('#475569'), spaceBefore=1.8, spaceAfter=3.5)
-    callout = ParagraphStyle('Callout', fontName='Times-Italic', fontSize=7.95, leading=10.25, textColor=colors.HexColor('#0284C7'), alignment=4, spaceAfter=2.4)
+    callout = ParagraphStyle('Callout', fontName='Times-Italic', fontSize=7.95, leading=10.25, textColor=colors.HexColor('#0284C7'), alignment=4, spaceAfter=2.2)
 
     th = ParagraphStyle('TH', fontName='Times-Bold', fontSize=7.0, leading=8.5, textColor=colors.HexColor('#0F172A'), alignment=1)
     td = ParagraphStyle('TD', fontName='Times-Roman', fontSize=6.8, leading=8.2, textColor=colors.HexColor('#1E293B'), alignment=0)
@@ -249,6 +249,8 @@ def build_pdf():
         "in-scope parameter poisoning within authorized tools and cross-tool data exfiltration present harder challenges where semantic neural validation is distribution-bounded "
         "(exhibiting an empirical false-negative rate of 21.5% on in-scope manipulations prior to boundary sharpening and remaining susceptible to adversarial optimization), "
         "while cross-tool exfiltration requires explicit decentralized information-flow tracking (DIFC). "
+        "We further introduce declarative stateful workflow authorization, which constrains specified multi-step action sequences as a restrictive intersection with CBAC and DIFC, "
+        "and validate the integrated gateway through 23 author-constructed adversarial workflow tests covering trajectory, concurrency, desynchronization, execution uncertainty, and receipt-integrity attacks. "
         "We report empirical evaluations across both foundational baseline studies (a 50,000-sample macro benchmark and a 3,000-case ablation matrix) and a "
         "Six-Regime Empirical Validation Program totaling 6,662 evaluation cases with frozen checkpoint V6: achieving 100% Correct Identification Rate on internal factorized diagnostics (N = 145), "
         "100% accuracy on a pre-sealed holdout suite (75/75, SHA-256: <code>22bc736c...</code>), 98.43% defense on the 4,216-instance InjecAgent evaluation (2,075/2,108 attacks blocked, 1,916/2,108 benign allowed) (P50: 267.7 ms), "
@@ -281,7 +283,7 @@ def build_pdf():
         "<b>Flagship Model Checkpoint (V6):</b> <font color='#0284C7'><u>https://huggingface.co/Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened</u></font> &nbsp;|&nbsp; "
         "<b>Historical Baseline (v2.0):</b> <font color='#0284C7'><u>https://huggingface.co/Rudraneel93/mastyf-guard-1.5b</u></font> &nbsp;|&nbsp; "
         "<b>Code:</b> <font color='#0284C7'><u>https://github.com/mastyf-ai/mastyf.ai</u></font> &nbsp;|&nbsp; "
-        "<b>Manuscript Version:</b> 5.2 -- Open Research Preprint<br/>"
+        "<b>Manuscript Version:</b> 5.3 -- Open Research Preprint<br/>"
         "<b>How to Cite:</b> Das, R. (2026). Capability-Mediated Perimeters for Secure AI Agent Tool Execution: "
         "Conditional Non-Escalation Invariants and Empirical Evaluation Against Indirect Prompt Injection. <i>Zenodo</i>. "
         "doi: 10.5281/zenodo.22179415"
@@ -336,7 +338,7 @@ def build_pdf():
 
     # Figure 1: Cognitive Harvard Topology
     story.append(safe_fig_flowable(
-        'fig1_cognitive_harvard_topology.png', target_height_inch=2.3,
+        'fig1_cognitive_harvard_topology.png', target_height_inch=2.15,
         caption_text="FIGURE 1: Architectural Comparison: (a) Shared context conflation permitting prompt injection vs (b) Capability-Mediated Perimeter enforcing external reference monitor authorization."
     ))
 
@@ -410,7 +412,7 @@ def build_pdf():
 
     # Figure 1c: Master Guardrail Trilemma Infographic
     story.append(safe_fig_flowable(
-        'infographic_master_guardrail_trilemma_v2.png', target_height_inch=2.35,
+        'infographic_master_guardrail_trilemma_v2.png', target_height_inch=2.15,
         caption_text="FIGURE 2b: The AI Agent Guardrail Trilemma: Balancing Threat Recall, Microsecond Latency, and Zero-GPU Commodity CPU Footprint."
     ))
 
@@ -430,7 +432,7 @@ def build_pdf():
 
     # Figure 2: MCP Capability Architecture
     story.append(safe_fig_flowable(
-        'fig1b_mcp_capability_architecture.png', target_height_inch=2.3,
+        'fig1b_mcp_capability_architecture.png', target_height_inch=2.15,
         caption_text="FIGURE 2: Detailed Model Context Protocol (MCP) Capability Mediation and Token Capability Table (TCT) Verification Topology."
     ))
 
@@ -576,7 +578,7 @@ def build_pdf():
 
     # Figure 3: FSM Diagram
     story.append(safe_fig_flowable(
-        'fig5_security_fsm_diagram.png', target_height_inch=2.3,
+        'fig5_security_fsm_diagram.png', target_height_inch=2.15,
         caption_text="FIGURE 3: Formal Finite State Machine (FSM) Execution Flow for Pipelined Capability Verification."
     ))
 
@@ -585,7 +587,7 @@ def build_pdf():
     # ─────────────────────────────────────────────────────────────────────────
     story.append(Paragraph("7. System Implementation: The Mastyf Guard Multi-Tier Pipeline", h1))
     story.append(Paragraph(
-        "Mastyf Guard implements a multi-tier pipelined architecture designed to balance ultra-low latency with deep semantic inspection:",
+        "The gateway implementation comprises five enforcement stages preceded by frame parsing, designed to balance ultra-low latency with deep semantic inspection:",
         body
     ))
 
@@ -609,14 +611,14 @@ def build_pdf():
         "13:     return BLOCK(reason=wf_eval.reason_code) // Sequence/Certainty violation -> Zero-byte dispatch\n"
         "14: // Stage 4: Relational Invariants & Semantic Audit Gate (AIA under Deadline)\n"
         "15: if not RequiresSemanticAudit(T_target, theta) then\n"
-        "16:     return ALLOW(T_target, theta)  // Microsecond fast-path reference monitor (<5 us)\n"
-        "17: aia_result <- InvokeAIA_WithDeadline(T_target, theta, context, deadline_ms=50)\n"
-        "18: if aia_result.decision == BLOCK then\n"
-        "19:     return BLOCK(reason=aia_result.explanation)\n"
-        "20: if aia_result.decision in {ESCALATE, TIMEOUT, DECODER_ERROR} then\n"
-        "21:     return PolicyFailClosed(aia_result)  // Resolves to ESCALATE or BLOCK per policy\n"
-        "22: // Stage 5: Deterministic Arbiter (Monotonic Authority Intersection)\n"
-        "23: return ALLOW(T_target, theta)\n"
+        "16:     aia_result <- ALLOW  // Microsecond fast-path bypass (<5 us)\n"
+        "17: else\n"
+        "18:     aia_result <- InvokeAIA_WithDeadline(T_target, theta, context, deadline_ms=50)\n"
+        "19:     if aia_result.decision == BLOCK then return BLOCK(reason=aia_result.explanation)\n"
+        "20:     if aia_result.decision in {ESCALATE, TIMEOUT, DECODER_ERROR} then return PolicyFailClosed(aia_result)\n"
+        "21: // Stage 5: Deterministic Arbiter (Monotonic Authority Intersection)\n"
+        "22: final <- Arbitrate(CBAC, DIFC, Workflow, aia_result)\n"
+        "23: return final\n"
         "Postcondition 1 (Authority Monotonicity): Final = ALLOW => CBAC=ALLOW and DIFC=ALLOW and Workflow=ALLOW\n"
         "Postcondition 2 (Complete Mediation): Final in {BLOCK, ESCALATE} => BackendToolInvocations = 0 and ChildStdinBytes = 0"
     )
