@@ -61,7 +61,27 @@ Every decision is enforced, logged, and auditable.
 
 ## Quick start
 
-### Build from source
+### 🛡️ Mastyf Security Gateway & Protected Agent (Python Quickstart)
+
+Run the local reference monitor, MCP discovery, and plain-English protected agent runtime:
+
+```bash
+# Install Mastyf Gateway package
+git clone https://github.com/mastyf-ai/mastyf.ai.git
+cd mastyf.ai/mastyf_gateway
+pip install -e .
+
+# Launch Mastyf (Auto-discovers tools, prompts for permissions, and starts protected agent)
+mastyf
+```
+
+* On first run, Mastyf automatically discovers your local MCP servers/tools, prompts for your intended permissions in plain English, presents a conservative diff, and upon confirmation activates the policy.
+* Every tool proposal from the conversational agent is intercepted by the reference monitor ($A = \text{CBAC} \cap \text{DIFC} \cap \text{Workflow}$). Non-ALLOW actions dispatch **strictly 0 bytes** to tool backends.
+* Includes real-time **Security HUD** and cryptographic receipt audit chaining (`mastyf audit verify`).
+
+---
+
+### Build from source (TypeScript / Cloud Platform)
 
 Clone the repository and run the setup script.
 

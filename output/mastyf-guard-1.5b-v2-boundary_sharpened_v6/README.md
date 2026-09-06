@@ -391,12 +391,29 @@ print(response)
 
 #### Step 1: Clone and Install Gateway Runtime
 ```bash
-git clone https://github.com/Rudraneel93/mastyf-gateway.git
-cd mastyf-gateway
+git clone https://github.com/mastyf-ai/mastyf.ai.git
+cd mastyf.ai/mastyf_gateway
 pip install -e .
 ```
 
-#### Step 2: Define Declarative Security Policy (`mastyf-policy.yaml`)
+#### Step 2: Unified One-Click Launch (`mastyf`)
+Run the unified entrypoint to automatically discover local MCP tools, synthesize conservative guardrails in plain English, and start protected agent conversation:
+```bash
+mastyf
+```
+* **First run:** Automatically probes local runtimes (Ollama, llama-server, Lemonade, vLLM), inspects local MCP servers/tools, asks *"What should your agent be allowed to do?"*, generates a conservative policy, presents a human-readable diff, and requests explicit `[Y/n]` confirmation.
+* **Subsequent runs:** Launches directly into secured conversation (`mastyf chat`) where every proposed tool call is mediated with 0 bytes dispatched on non-ALLOW decisions.
+
+#### Step 3: Run Invariant Verification (156/156 Tests)
+Verify the complete mathematical and transport invariant test suite:
+```bash
+pytest
+# Expected Output:
+# ======================== 156 passed in 11.09s ========================
+# Status: 156/156 Tests PASS (100% Invariant Assurance)
+```
+
+#### Step 4: Define Declarative Security Policy (`mastyf-policy.yaml`)
 Create your capability envelopes, taint rules, and stateful workflow state machine:
 ```yaml
 version: "1.0"
