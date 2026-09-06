@@ -218,21 +218,21 @@ success "Build complete!"
 NIXSHELL
 
 # ── 6. Add shell alias ────────────────────────────────────────────────────────
-step "Setting up 'mastyf' alias"
+step "Setting up 'mastyf-dashboard' alias"
 
 # Write alias with each experimental feature as a separate flag to avoid quoting issues
 ALIAS_CMD="nix --extra-experimental-features nix-command --extra-experimental-features flakes develop ${ROOT}/config --command node dist/cli.js start"
 if getent group nix-users &>/dev/null; then
-  ALIAS_LINE="alias mastyf='sg nix-users -c \"cd ${ROOT} && ${ALIAS_CMD}\"'"
+  ALIAS_LINE="alias mastyf-dashboard='sg nix-users -c \"cd ${ROOT} && ${ALIAS_CMD}\"'"
 else
-  ALIAS_LINE="alias mastyf='cd ${ROOT} && ${ALIAS_CMD}'"
+  ALIAS_LINE="alias mastyf-dashboard='cd ${ROOT} && ${ALIAS_CMD}'"
 fi
-ALIAS_MARKER="# mastyf.ai alias"
+ALIAS_MARKER="# mastyf.ai dashboard alias"
 
 # Remove any old/broken mastyf alias first
-if grep -q "mastyf" "$SHELL_RC" 2>/dev/null; then
-  sed_inplace '/# mastyf.ai alias/,+1d' "$SHELL_RC"
-  sed_inplace '/alias mastyf=/d' "$SHELL_RC"
+if grep -q "mastyf-dashboard" "$SHELL_RC" 2>/dev/null; then
+  sed_inplace '/# mastyf.ai dashboard alias/,+1d' "$SHELL_RC"
+  sed_inplace '/alias mastyf-dashboard=/d' "$SHELL_RC"
 fi
 
 {
@@ -241,14 +241,14 @@ fi
   echo "$ALIAS_LINE"
 } >> "$SHELL_RC"
 
-success "Added 'mastyf' alias to $SHELL_RC"
+success "Added 'mastyf-dashboard' alias to $SHELL_RC"
 
 # Apply to current session
 # shellcheck disable=SC2139
 if getent group nix-users &>/dev/null; then
-  alias mastyf="sg nix-users -c \"cd ${ROOT} && ${ALIAS_CMD}\""
+  alias mastyf-dashboard="sg nix-users -c \"cd ${ROOT} && ${ALIAS_CMD}\""
 else
-  alias mastyf="cd ${ROOT} && ${ALIAS_CMD}"
+  alias mastyf-dashboard="cd ${ROOT} && ${ALIAS_CMD}"
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
