@@ -55,8 +55,8 @@ graph TD
 
 | Layer / Artifact Component | Forensic Baseline (`v0.1.0-rc1`) | Hardened Candidate (`v0.1.1-rc1`) | Status / Notes |
 | :--- | :--- | :--- | :--- |
-| **Git Commit SHA** | `4331fa92305bf9c4d25785089e52e46b9a896d8e` | `4331fa468f70a7887a9e41cad92e8a12d4b48f80` | Branch `harden-container-v0.1.1-rc1` |
-| **Release Tag / Identifier** | `v0.1.0-rc1` (Frozen Baseline) | `v0.1.1-rc1` (Remediated Candidate) | Separate release candidate |
+| **Git Commit SHA** | `4331fa92305bf9c4d25785089e52e46b9a896d8e` | `b880f3eb76ad28906875cdd3b1dfcab1aaca69ca` | Canonical release `v0.1.1-rc1` (container base `4331fa4`, superseding commercial milestone `aa1cc5a`) |
+| **Release Tag / Identifier** | `v0.1.0-rc1` (Frozen Baseline) | `v0.1.1-rc1` (Canonical Release Candidate) | Separate release candidate |
 | **Container Spec (Dockerfile)** | `ffdc470700ef351d8a819e0e2195a8c2...` | `15245b7bcdd9e247801d08ea28104cb1a7e11ca6c78665871ff75cad22520b8d` | Multi-stage, stripped build tools |
 | **Container Base OS** | `python:3.11-slim (Debian 12 Bookworm)` | `ubuntu:24.04 (Noble Numbat)` | Ubuntu LTS runtime |
 | **Base Image Digest** | Upstream Debian library | `docker.io/library/ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517` | Exact build base digest |
