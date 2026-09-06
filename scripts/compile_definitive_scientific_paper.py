@@ -541,6 +541,39 @@ def build_pdf():
     story.append(safe_eq_flowable('eq5_lemma1.png', base_height=22))
     story.append(Paragraph("EQUATION 5: Lemma 1 Empirical In-Scope False-Negative Rate on Evaluated Workloads.", caption))
 
+    # Formal Stateful Workflow Authorization Model
+    story.append(Paragraph(
+        "<b>Stateful Workflow Authorization Model:</b> "
+        "Because individually authorized actions can compose into unintended or hazardous trajectories (as articulated in Proposition 1), "
+        "Mastyf introduces a stateful workflow authorization layer modeled as a deterministic finite automaton with sequence constraints: "
+        "<i>W = (Q, q<sub>0</sub>, &Sigma;, &delta;, C)</i>, where <i>Q</i> is the finite set of declared workflow states, "
+        "<i>q<sub>0</sub> &isin; Q</i> is the initial state, <i>&Sigma;</i> is the registered tool alphabet, "
+        "<i>&delta;: Q &times; &Sigma; &rarr; Q</i> is the state-transition function, and <i>C</i> represents sequence constraints "
+        "(including state-dependent tool prohibitions <i>C<sub>state</sub>: Q &rarr; &Pscr;(&Sigma;)</i> and execution-certainty prohibitions <i>C<sub>cert</sub>: Cert &rarr; &Pscr;(&Sigma;)</i>). "
+        "The deterministic authority permitted for execution is the strict monotonic intersection: "
+        "<i>A<sub>det</sub> = A<sub>CBAC</sub> &cap; A<sub>DIFC</sub> &cap; A<sub>Workflow</sub></i>. "
+        "Crucially, workflow policy operates as an additional restrictive authorization layer: it can only reduce authority, never expand it, "
+        "and the advisory neural auditor (AIA) cannot override or expand <i>A<sub>det</sub></i>. "
+        "Any workflow constraint violation produces a deterministic non-ALLOW decision: "
+        "<i>WorkflowViolation &rArr; Decision &isin; {BLOCK, ESCALATE} &rArr; BackendExecutionCount = 0</i>.",
+        body
+    ))
+    story.append(Paragraph(
+        "<b>Execution-Certainty Semantics &amp; Outcome-Conditioned Commits:</b> "
+        "In distributed agent-tool execution, network latency, tool timeouts, and process terminations introduce an observation gap: "
+        "writing an authorized request to a tool backend does not guarantee observed completion. "
+        "To prevent desynchronization between physical execution and the security monitor, the architecture strictly decouples "
+        "the application workflow state from execution certainty: "
+        "<code>workflow_state &ne; execution_certainty</code>. "
+        "State transitions commit conditionally upon transport-level outcomes:<br/>"
+        "&bull; <b>RESPONSE_RECEIVED:</b> The tool backend returns a valid response. The pending state transition commits (<i>q &larr; &delta;(q, T)</i>), and certainty is marked <code>KNOWN</code>.<br/>"
+        "&bull; <b>NOT_SENT:</b> The request was blocked or escalated by the reference monitor. Zero bytes are dispatched to the backend, and the pending transition is discarded.<br/>"
+        "&bull; <b>SENT_CHILD_NO_RESPONSE:</b> The request was written to the tool process, but the child timed out or terminated before responding. "
+        "Rather than falsely inferring zero execution or prematurely advancing state, the gateway retains the prior declared state (<i>q<sub>t+1</sub> = q<sub>t</sub></i>) "
+        "and transitions certainty to <code>UNKNOWN</code>. Sensitive downstream tools conditioned on <code>when_execution_certainty: UNKNOWN</code> are deterministically blocked.",
+        body
+    ))
+
     # Figure 3: FSM Diagram
     story.append(safe_fig_flowable(
         'fig5_security_fsm_diagram.png', target_height_inch=2.3,
@@ -570,18 +603,22 @@ def build_pdf():
         "7:  // Stage 2: Decentralized Information Flow Control (DIFC Dynamic Session Taint)\n"
         "8:  if DIFC_TaintViolation(session.taint_labels, T_target, theta.destination_sinks) then\n"
         "9:      return BLOCK(reason='Dynamic taint-to-sink data exfiltration policy violation')\n"
-        "10: // Stage 3: Relational Invariants & Semantic Audit Gate\n"
-        "11: if not RequiresSemanticAudit(T_target, theta) then\n"
-        "12:     return ALLOW(T_target, theta)  // Microsecond fast-path reference monitor (<5 us)\n"
-        "13: // Stage 4: V6 Argument Intent Auditor (AIA) under Fast-Path Deadline\n"
-        "14: aia_result <- InvokeAIA_WithDeadline(T_target, theta, context, deadline_ms=50)\n"
-        "15: if aia_result.decision == BLOCK then\n"
-        "16:     return BLOCK(reason=aia_result.explanation)\n"
-        "17: if aia_result.decision in {ESCALATE, TIMEOUT, DECODER_ERROR} then\n"
-        "18:     return PolicyFailClosed(aia_result)  // Resolves to ESCALATE or BLOCK per policy\n"
-        "19: return ALLOW(T_target, theta)\n"
-        "Postcondition 1 (Monotonicity): Final = ALLOW => CBAC=ALLOW and DIFC=ALLOW and AIA=ALLOW\n"
-        "Postcondition 2 (Complete Mediation): Final in {BLOCK, ESCALATE} => BackendToolInvocations = 0"
+        "10: // Stage 3: Stateful Workflow & Sequence Authorization (FSM Constraints)\n"
+        "11: wf_eval <- Workflow_Authorize(session.workflow_state, session.execution_certainty, T_target)\n"
+        "12: if not wf_eval.allowed then\n"
+        "13:     return BLOCK(reason=wf_eval.reason_code) // Sequence/Certainty violation -> Zero-byte dispatch\n"
+        "14: // Stage 4: Relational Invariants & Semantic Audit Gate (AIA under Deadline)\n"
+        "15: if not RequiresSemanticAudit(T_target, theta) then\n"
+        "16:     return ALLOW(T_target, theta)  // Microsecond fast-path reference monitor (<5 us)\n"
+        "17: aia_result <- InvokeAIA_WithDeadline(T_target, theta, context, deadline_ms=50)\n"
+        "18: if aia_result.decision == BLOCK then\n"
+        "19:     return BLOCK(reason=aia_result.explanation)\n"
+        "20: if aia_result.decision in {ESCALATE, TIMEOUT, DECODER_ERROR} then\n"
+        "21:     return PolicyFailClosed(aia_result)  // Resolves to ESCALATE or BLOCK per policy\n"
+        "22: // Stage 5: Deterministic Arbiter (Monotonic Authority Intersection)\n"
+        "23: return ALLOW(T_target, theta)\n"
+        "Postcondition 1 (Authority Monotonicity): Final = ALLOW => CBAC=ALLOW and DIFC=ALLOW and Workflow=ALLOW\n"
+        "Postcondition 2 (Complete Mediation): Final in {BLOCK, ESCALATE} => BackendToolInvocations = 0 and ChildStdinBytes = 0"
     )
     alg_t = Table([[Preformatted(alg_code, code_box)]], colWidths=[W])
     alg_t.setStyle(TableStyle([
@@ -1399,33 +1436,49 @@ def build_pdf():
     ))
     story.append(Spacer(1, 3))
 
+    # 15.8 System-Level Adversarial Workflow Validation
+    story.append(Paragraph("15.8 System-Level Adversarial Workflow Validation (N = 23)", h2))
+    story.append(Paragraph(
+        "While Regimes 1–6 evaluate model and runtime behavior against external academic and synthetic benchmark datasets, "
+        "we subjected the integrated gateway runtime to an <b>author-constructed system-level adversarial validation suite</b> (N = 23). "
+        "Rather than serving as a statistical benchmark, this suite functions as an adversarial integration gate exercising implementation-level "
+        "execution contracts across 10 critical attack surfaces:<br/>"
+        "&bull; <b>Multi-Step Exfiltration Trajectories:</b> Canonical PII lookup (<code>customer.lookup</code>) followed by immediate exfiltration attempts (<code>slack.post_message</code>), asserting zero dispatch on the forbidden followup.<br/>"
+        "&bull; <b>Alternate Sink Evasion:</b> Probing whether an adversary can circumvent workflow constraints by alternating across six diverse exfiltration sinks (<code>webhook.post</code>, <code>email.send</code>, <code>export_csv</code>, <code>http.request</code>, <code>http.post</code>, <code>cloud_storage.upload</code>); all six were intercepted with zero bytes written to child stdin.<br/>"
+        "&bull; <b>Session Isolation:</b> Verifying that state advances in Session A do not constrain or contaminate independent Session B.<br/>"
+        "&bull; <b>Concurrent Session Contamination:</b> 25 parallel sessions executing under a synchronized thread barrier without race conditions or cross-session state leakage.<br/>"
+        "&bull; <b>Malformed-Input Desynchronization:</b> Corrupt and truncated JSON-RPC payloads fail closed without corrupting or resetting the declared workflow FSM state.<br/>"
+        "&bull; <b>Invalid Tool Probing:</b> Non-existent, empty, path-traversal, and malformed tool names cannot trigger state transitions or bypass constraints.<br/>"
+        "&bull; <b>Post-Dispatch Crash &amp; Timeout Uncertainty:</b> When a child process fails to respond after dispatch (<code>SENT_CHILD_NO_RESPONSE</code>), the gateway retains declared state, transitions certainty to <code>UNKNOWN</code>, and blocks follow-up operations.<br/>"
+        "&bull; <b>Authority Intersection:</b> Proving that workflow permission cannot expand CBAC denial (<i>A<sub>det</sub> = A<sub>CBAC</sub> &cap; A<sub>DIFC</sub> &cap; A<sub>Workflow</sub></i>).<br/>"
+        "&bull; <b>AIA Non-Override:</b> Proving that advisory AIA recommendations cannot override a deterministic workflow block.<br/>"
+        "&bull; <b>Cryptographic Receipt Tampering:</b> Verifying that altering any field in an execution receipt breaks the SHA-256 tamper-evident ledger verification.<br/>"
+        "<b>Observed Outcome:</b> Across all 23 adversarial tests, Mastyf Guard achieved <b>23/23 PASS (100%)</b>, while legitimate operational trajectories remained permitted. "
+        "Combined with the 16/16 Phase 4 workflow unit tests and 95/95 pre-existing gateway regression tests, the full gateway suite reached <b>118/118 PASS</b>.",
+        callout
+    ))
+    story.append(Spacer(1, 3))
+
     # ─────────────────────────────────────────────────────────────────────────
     # SECTION 16: SYSTEMIZATION & PRODUCTION HARDENING - MASTYF GATEWAY V0.1
     # ─────────────────────────────────────────────────────────────────────────
     story.append(Paragraph("16. Systemization & Production Hardening: The Mastyf Security Gateway", h1))
     story.append(Paragraph(
         "To bridge the divide between a standalone neural model checkpoint and an enterprise-grade production deployment, the architecture has been "
-        "systemized into the <b>Mastyf Security Gateway</b>. The research evaluation reported in this manuscript used gateway runtime <b>v0.1.0-RC1</b> "
-        "(verifying 38/38 automated security invariant tests); subsequent commercial-pilot hardening produced <b>v0.1.1-rc1</b> "
-        "(which adds further regression to 50/50 passing tests, deployment, licensing, and release-integrity validation) -- an asynchronous, transport-level reverse proxy "
-        "implementing the Model Context Protocol (MCP). The gateway sits between upstream agent runtimes and downstream MCP tool servers, enforcing complete mediation over JSON-RPC tool dispatch streams.",
+        "systemized into the <b>Mastyf Security Gateway</b>. The gateway validation adheres to a strict three-tier verification hierarchy:<br/>"
+        "1. <b>Research Runtime (v0.1.0-RC1):</b> Original 38/38 automated security-invariant tests verifying CBAC, DIFC, complete mediation, and fail-closed parsing.<br/>"
+        "2. <b>Commercial-Pilot Hardened Runtime (v0.1.1-rc1):</b> 50/50 passing tests incorporating non-root container packaging, licensing, and Ed25519 release-integrity validation.<br/>"
+        "3. <b>Post-Phase-4 Repository Validation:</b> 95/95 gateway regression tests combined with 23/23 system-level adversarial workflow tests, totaling <b>118/118 passing executions</b>.<br/>"
+        "The gateway sits as an asynchronous, transport-level reverse proxy mediating Model Context Protocol (MCP) JSON-RPC streams between upstream agent runtimes and downstream tool servers.",
         body
     ))
     story.append(Paragraph(
-        "<b>Rigorous Security Invariant Verification (38/38 Tests Passing):</b> The production gateway was subjected to an exhaustive automated test harness "
-        "validating four core operational invariants:<br/>"
-        "1. <b>Zero-Leak Invariant:</b> For all tool dispatches, <i>Decision &isin; {BLOCK, ESCALATE} &rArr; BackendToolInvocations = 0</i>. Across all evaluated attack payloads, "
-        "no unauthorized tool invocation reached the downstream tool server.<br/>"
-        "2. <b>Authority Monotonicity:</b> An agent cannot gain privileges through indirect injection; effective authority is strictly bounded by "
-        "<i>A<sub>effective</sub> = A<sub>agent</sub> &cap; A<sub>policy</sub></i>.<br/>"
-        "3. <b>Fail-Closed Protocol Parsing:</b> Under malformed JSON-RPC frames, recursive argument bombs, and network timeouts (&gt;50 ms gateway fast-path target budget), the gateway deterministically resolves to a non-executing terminal state (<code>BLOCK</code> or <code>ESCALATE</code>) under the fail-closed policy, guaranteeing <i>Decision &isin; {BLOCK, ESCALATE} &rArr; BackendToolInvocations = 0</i>. Note that the 50 ms budget governs the deterministic reference-monitor queue ceiling; neural forward passes incur measured inference latencies (e.g., 267.7 ms P50 on InjecAgent and 951.5 ms P50 on AgentDojo).<br/>"
-        "4. <b>Cross-Session Dynamic DIFC Isolation:</b> Dynamic taint labels accumulated in Session <i>S<sub>i</sub></i> cannot contaminate concurrent or subsequent Session <i>S<sub>j</sub></i>, "
-        "verified under 200 interleaved client worker pools.<br/>"
-        "<b>Microsecond Reference Monitor Throughput:</b> In synthetic benchmark profiling, the deterministic CBAC/DIFC reference-monitor fast-path sustains "
-        "<b>&gt;330,000 requests/sec</b> with a median decision latency of <b>3.1 &mu;s</b> (P99 &lt; 15.0 &mu;s), confirming zero perceptible overhead on routine enterprise tool invocations.<br/>"
-        "<b>Cryptographic Provenance & Release Integrity:</b> To guarantee reproducibility, every gateway release is cryptographically pinned and verified via an "
-        "Ed25519-signed <code>release_manifest.json</code>. The manifest uniquely binds the <b>Gateway Source Git SHA (<code>4331fa4</code>)</b> to the <b>Frozen V6 Hugging Face Revision (<code>d59a6aa01f9139dff106146addb04109afa69c03</code>)</b>, "
-        "providing a fully verifiable chain of custody from source code to model weights.",
+        "<b>Hardened Stateful Workflow &amp; Transport Enforcement:</b> Gateway v0.1.1-rc1 incorporates stateful sequence authorization and zero-byte physical transport enforcement:<br/>"
+        "&bull; <b>Physical Zero-Byte Transport Invariant:</b> For any decision in {<code>BLOCK</code>, <code>ESCALATE</code>}, the proxy writes <b>strictly 0 bytes</b> to the downstream tool process stdin, physically eliminating execution risk.<br/>"
+        "&bull; <b>Outcome-Conditioned Commits:</b> State transitions commit only upon confirmed child receipt (<code>RESPONSE_RECEIVED</code>), discard on <code>NOT_SENT</code>, and preserve declared state with <code>UNKNOWN</code> certainty on post-dispatch failure (<code>SENT_CHILD_NO_RESPONSE</code>).<br/>"
+        "&bull; <b>Tamper-Evident SHA-256 Ledger:</b> Execution receipts cryptographically bind tool arguments, policy hash, decisions, workflow state, and execution certainty into an append-only hash chain.<br/>"
+        "&bull; <b>Monotonic Authority Monotonicity:</b> Effective execution authority is the strict intersection <i>A<sub>effective</sub> = A<sub>CBAC</sub> &cap; A<sub>DIFC</sub> &cap; A<sub>Workflow</sub></i>, with advisory neural auditing strictly non-escalating.<br/>"
+        "&bull; <b>Microsecond Fast-Path Throughput:</b> The deterministic CBAC/DIFC/Workflow reference monitor sustains <b>&gt;330,000 req/s</b> with a median decision latency of <b>3.1 &mu;s</b> (P99 &lt; 15.0 &mu;s).",
         body
     ))
 
@@ -1439,10 +1492,13 @@ def build_pdf():
         [Paragraph("Security Verification Dimension", th), Paragraph("Formal Verification Invariant / Standard", th), Paragraph("Test Harness Regimen", th), Paragraph("Empirical Status", th), Paragraph("Observed Performance", th)],
         [Paragraph("Reference Monitor Fast-Path", td), Paragraph("Deterministic CBAC/DIFC schema enforcement", td), Paragraph("In-process microbenchmark", td), Paragraph("<b>38/38 PASS</b>", td_bold), Paragraph("<b>&gt;330,000 req/s, 3.1 &mu;s P50</b>", td_bold)],
         [Paragraph("Complete Mediation Invariant", td), Paragraph("<i>Decision &isin; {BLOCK, ESCALATE} &rArr; Calls = 0</i>", td), Paragraph("35 attack injection tests", td), Paragraph("<b>100.0% PASS</b>", td_bold), Paragraph("0 backend invocations", td)],
-        [Paragraph("Authority Monotonicity", td), Paragraph("<i>A<sub>effective</sub> = A<sub>agent</sub> &cap; A<sub>policy</sub></i>", td), Paragraph("Parameter drift fuzzing", td), Paragraph("<b>100.0% PASS</b>", td_bold), Paragraph("Zero authority escalation", td)],
+        [Paragraph("Stateful Workflow Authorization", td), Paragraph("<i>A<sub>det</sub> = A<sub>CBAC</sub> &cap; A<sub>DIFC</sub> &cap; A<sub>Workflow</sub></i>", td), Paragraph("16 unit + 23 adversarial tests", td), Paragraph("<b>100.0% PASS</b>", td_bold), Paragraph("Zero sequence bypass", td)],
+        [Paragraph("Outcome-Conditioned Commits", td), Paragraph("Commit iff RESPONSE_RECEIVED; UNKNOWN on crash", td), Paragraph("Timeout & crash harness", td), Paragraph("<b>100.0% PASS</b>", td_bold), Paragraph("Zero false state advance", td)],
+        [Paragraph("Authority Monotonicity", td), Paragraph("AIA cannot expand deterministic authority", td), Paragraph("Parameter drift fuzzing", td), Paragraph("<b>100.0% PASS</b>", td_bold), Paragraph("Zero authority escalation", td)],
         [Paragraph("Cross-Session Taint Confinement", td), Paragraph("<i>Taint(S<sub>i</sub>) &cap; Context(S<sub>j</sub>) = &empty;</i>", td), Paragraph("200 interleaved sessions", td), Paragraph("<b>100.0% PASS</b>", td_bold), Paragraph("Zero cross-session leaks", td)],
         [Paragraph("Protocol Fuzzing & Bomb Defense", td), Paragraph("Fail-closed on malformed / recursive JSON", td), Paragraph("Recursive arg unwrapper", td), Paragraph("<b>100.0% PASS</b>", td_bold), Paragraph("Fail-closed within 0.05 ms", td)],
-        [Paragraph("Cryptographic Release Binding", td), Paragraph("Ed25519 Signed Manifest (Git SHA: 4331fa4)", td), Paragraph("SHA-256 binary validation", td), Paragraph("<b>VERIFIED</b>", td_bold), Paragraph("Immutable trust chain", td)],
+        [Paragraph("Cryptographic Ledger Receipts", td), Paragraph("SHA-256 hash chain with workflow binding", td), Paragraph("Tamper-evident verification", td), Paragraph("<b>VERIFIED</b>", td_bold), Paragraph("Tampering detected", td)],
+        [Paragraph("Adversarial Integration Suite", td), Paragraph("Multi-step trajectories, 6 sinks, 25-thread barrier", td), Paragraph("23 adversarial tests", td), Paragraph("<b>23/23 PASS</b>", td_bold), Paragraph("118/118 full regression", td)],
     ]
     t16 = Table(t16_data, colWidths=[1.6*inch, 2.0*inch, 1.4*inch, 1.0*inch, 1.5*inch])
     t16.setStyle(TableStyle([
@@ -1467,14 +1523,12 @@ def build_pdf():
         "<code>d59a6aa</code>) demonstrated robust, calibrated protection against indirect prompt injection: achieving 100% Correct Identification Rate on "
         "internal factorized diagnostics (N = 145), 100% accuracy on a sealed holdout suite (75/75, SHA-256: <code>22bc736c...</code>), 98.43% defense on the 4,216-instance InjecAgent evaluation (2,075/2,108 attacks blocked, 1,916/2,108 benign allowed) (N = 4,216, P50: 267.7 ms), 92.44% defense on AI Safety Bench (416/450 attacks blocked, 550/550 benign operations allowed), 99.52% attack interception on "
         "interactive AgentDojo (N = 629) with exact utility parity (6/97 tasks) matching the unprotected base agent, and 100% defense across 500 targeted adaptive red-team trials. "
-        "Furthermore, we have systemized the runtime into the Mastyf Security Gateway: the evaluated research runtime was v0.1.0-RC1 (verifying 38/38 automated security regression tests); "
-        "the subsequently hardened commercial-pilot runtime is v0.1.1-rc1 (verifying 50/50 tests), preserving complete mediation non-executability "
-        "(<i>Decision &isin; {BLOCK, ESCALATE} &rArr; BackendToolInvocations = 0</i>), authority monotonicity, and session taint isolation with a fast-path "
-        "reference monitor sustaining &gt;330,000 req/s (3.1 &mu;s P50). "
-        "In foundational historical baseline studies across 50,000 macro instances and 3,000 enterprise samples, capability mediation filtered 82.40% of attacks at the transport boundary "
-        "in 0.003 ms, while relational leaf-walking provided the sub-millisecond structural foundation. We have formalized Theorem 1 (Conditional Non-Escalation Invariant over the Trusted "
-        "Computing Base), proving that under complete mediation and fail-closed dispatch, untrusted observations cannot cause execution of out-of-scope mutating tools, while Theorem 2 "
-        "formalizes dynamic taint tracking for preventing cross-tool exfiltration.",
+        "The system has evolved from per-call capability mediation toward declarative trajectory-aware authorization, where specified multi-step action sequences can be constrained by workflow state while remaining subordinate to CBAC and DIFC. "
+        "System-level adversarial validation confirms that the implemented sequence constraints and execution-boundary enforcement survived the specified trajectory, concurrency, desynchronization, uncertainty, and receipt-integrity attacks (23/23 PASS, with 118/118 total passing gateway regression tests). "
+        "We explicitly emphasize that this validation demonstrates implementation correctness and contract enforcement over specified adversarial trajectories; "
+        "it does not establish semantic safety of arbitrary authorized action compositions or general resistance to arbitrary multi-step attacks. "
+        "Furthermore, the runtime has been systemized into the Mastyf Security Gateway: across research (v0.1.0-RC1, 38/38 tests), commercial-pilot (v0.1.1-rc1, 50/50 tests), and trajectory-aware post-Phase-4 releases (118/118 tests), "
+        "the gateway preserves complete mediation non-executability (<i>Decision &isin; {BLOCK, ESCALATE} &rArr; BackendToolInvocations = 0</i>), zero-byte transport delivery, authority monotonicity, and session taint isolation with a fast-path reference monitor sustaining &gt;330,000 req/s (3.1 &mu;s P50).",
         body
     ))
 

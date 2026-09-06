@@ -159,6 +159,28 @@ When an adversary attempts to mutate arguments $\theta$ of an already authorized
 \end{equation}
 \end{lemma}
 
+\subsection{Formal Stateful Workflow Authorization Model}
+Because individually authorized actions can compose into unintended or hazardous trajectories (as articulated in Proposition 1), Mastyf introduces a stateful workflow authorization layer modeled as a deterministic finite automaton with sequence constraints:
+\begin{equation}
+W = (Q, q_0, \Sigma, \delta, C)
+\end{equation}
+where $Q$ is the finite set of declared workflow states, $q_0 \in Q$ is the initial state, $\Sigma$ is the registered tool alphabet, $\delta: Q \times \Sigma \to Q$ is the state-transition function, and $C$ represents sequence constraints (including state-dependent tool prohibitions $C_{\text{state}}: Q \to \mathcal{P}(\Sigma)$ and execution-certainty prohibitions $C_{\text{cert}}: \text{Cert} \to \mathcal{P}(\Sigma)$). The deterministic authority permitted for execution is the strict monotonic intersection:
+\begin{equation}
+A_{\text{det}} = A_{\text{CBAC}} \cap A_{\text{DIFC}} \cap A_{\text{Workflow}}
+\end{equation}
+Crucially, workflow policy operates as an additional restrictive authorization layer: it can only reduce authority, never expand it, and the advisory neural auditor (AIA) cannot override or expand $A_{\text{det}}$. Any workflow constraint violation produces a deterministic non-ALLOW decision:
+\begin{equation}
+\text{WorkflowViolation} \implies \text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{BackendExecutionCount} = 0
+\end{equation}
+
+\subsection{Execution-Certainty Semantics \& Outcome-Conditioned Commits}
+In distributed agent-tool execution, network latency, tool timeouts, and process terminations introduce an observation gap: writing an authorized request to a tool backend does not guarantee observed completion. To prevent desynchronization between physical execution and the security monitor, the architecture strictly decouples application workflow state from execution certainty: $\text{workflow\_state} \ne \text{execution\_certainty}$. State transitions commit conditionally upon transport-level outcomes:
+\begin{itemize}
+    \item \textbf{RESPONSE\_RECEIVED:} The tool backend returns a valid response. The pending state transition commits ($q \leftarrow \delta(q, T)$), and certainty is marked \texttt{KNOWN}.
+    \item \textbf{NOT\_SENT:} The request was blocked or escalated by the reference monitor. Zero bytes are dispatched to the backend, and the pending transition is discarded.
+    \item \textbf{SENT\_CHILD\_NO\_RESPONSE:} The request was written to the tool process, but the child timed out or terminated before responding. Rather than falsely inferring zero execution or prematurely advancing state, the gateway retains the prior declared state ($q_{t+1} = q_t$) and transitions certainty to \texttt{UNKNOWN}. Sensitive downstream tools conditioned on \texttt{when\_execution\_certainty: UNKNOWN} are deterministically blocked.
+\end{itemize}
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig5_security_fsm_diagram.png}
@@ -168,24 +190,42 @@ When an adversary attempts to mutate arguments $\theta$ of an already authorized
 
 \section{System Implementation: The Multi-Tier Pipeline}
 \begin{algorithm}[t]
-\caption{Pipelined Agent Perimeter Defense Execution Flow}
+\caption{Mastyf Security Gateway Complete Mediation \& Decision Flow}
 \begin{algorithmic}[1]
-\REQUIRE Proposed Action $a = (T_{\text{target}}, \theta)$, Token $\tau = (C, \text{TTL}, \sigma)$, Context $x$
-\ENSURE Decision $\in \{\text{200\_OK\_DISPATCH}, \text{403\_FORBIDDEN\_DROP}\}$
-\STATE $x^* \leftarrow \operatorname{ConfusableMap}(\operatorname{NormalizeUnicodeNFKC}(\operatorname{FixpointCanon}(x, 10)))$
-\IF{$\operatorname{MatchDestructiveSignature}(x^*, \theta)$}
-    \STATE \textbf{return} \texttt{403\_FORBIDDEN\_DROP('Destructive signature detected')}
+\REQUIRE Dispatch Request $a = (T_{\text{target}}, \theta, \text{principal}, \text{session}, \text{context})$
+\ENSURE Final Decision $\in \{\text{ALLOW}, \text{BLOCK}, \text{ESCALATE}\}$
+\STATE $\text{frame} \leftarrow \operatorname{ParseAndValidateJSONRPC}(a)$
+\IF{$\text{frame is MALFORMED} \lor \operatorname{Depth}(\theta) > \text{MAX\_DEPTH}$}
+    \STATE \textbf{return} $\operatorname{FailClosedDecision}(\text{`Malformed payload / recursive argument bomb'})$
 \ENDIF
-\IF{\textbf{not} $(\operatorname{MACValid}(\tau.\sigma, k) \land T_{\text{target}} \in \tau.C \land \operatorname{TTLValid}(\tau))$}
-    \STATE \textbf{return} \texttt{403\_FORBIDDEN\_DROP('Out-of-scope capability pivot')}
+\STATE \COMMENT{Stage 1: Capability-Based Access Control (CBAC Reference Monitor)}
+\IF{\textbf{not} $\operatorname{CBAC\_Authorize}(\text{principal}, T_{\text{target}}, \text{session.capability\_envelope})$}
+    \STATE \textbf{return} $\operatorname{BLOCK}(\text{`Unauthorized out-of-scope tool invocation'})$
 \ENDIF
-\IF{$\operatorname{IsMutatingTool}(T_{\text{target}})$}
-    \STATE $\text{threat\_score} \leftarrow \operatorname{Mastyf\_1\_5B\_Forward}(x^*, a)$
-    \IF{$\text{threat\_score} \ge 0.50$}
-        \STATE \textbf{return} \texttt{403\_FORBIDDEN\_DROP('Neural divergence threat')}
-    \ENDIF
+\STATE \COMMENT{Stage 2: Decentralized Information Flow Control (DIFC Dynamic Session Taint)}
+\IF{$\operatorname{DIFC\_TaintViolation}(\text{session.taint\_labels}, T_{\text{target}}, \theta.\text{destination\_sinks})$}
+    \STATE \textbf{return} $\operatorname{BLOCK}(\text{`Dynamic taint-to-sink data exfiltration policy violation'})$
 \ENDIF
-\STATE \textbf{return} \texttt{200\_OK\_DISPATCH}($T_{\text{target}}, \theta$)
+\STATE \COMMENT{Stage 3: Stateful Workflow \& Sequence Authorization (FSM Constraints)}
+\STATE $\text{wf\_eval} \leftarrow \operatorname{Workflow\_Authorize}(\text{session.workflow\_state}, \text{session.execution\_certainty}, T_{\text{target}})$
+\IF{\textbf{not} $\text{wf\_eval.allowed}$}
+    \STATE \textbf{return} $\operatorname{BLOCK}(\text{wf\_eval.reason\_code})$ \COMMENT{Sequence/Certainty violation $\to$ 0 bytes}
+\ENDIF
+\STATE \COMMENT{Stage 4: Relational Invariants \& Semantic Audit Gate (AIA under Deadline)}
+\IF{\textbf{not} $\operatorname{RequiresSemanticAudit}(T_{\text{target}}, \theta)$}
+    \STATE \textbf{return} $\operatorname{ALLOW}(T_{\text{target}}, \theta)$ \COMMENT{Microsecond fast-path ($<5\ \mu\text{s}$)}
+\ENDIF
+\STATE $\text{aia\_result} \leftarrow \operatorname{InvokeAIA\_WithDeadline}(T_{\text{target}}, \theta, \text{context}, \text{deadline\_ms}=50)$
+\IF{$\text{aia\_result.decision} == \text{BLOCK}$}
+    \STATE \textbf{return} $\operatorname{BLOCK}(\text{aia\_result.explanation})$
+\ENDIF
+\IF{$\text{aia\_result.decision} \in \{\text{ESCALATE}, \text{TIMEOUT}, \text{DECODER\_ERROR}\}$}
+    \STATE \textbf{return} $\operatorname{PolicyFailClosed}(\text{aia\_result})$
+\ENDIF
+\STATE \COMMENT{Stage 5: Deterministic Arbiter (Monotonic Authority Intersection)}
+\STATE \textbf{return} $\operatorname{ALLOW}(T_{\text{target}}, \theta)$
+\STATE \COMMENT{Postcondition 1: $\text{Final} = \text{ALLOW} \implies \text{CBAC} \land \text{DIFC} \land \text{Workflow} = \text{ALLOW}$}
+\STATE \COMMENT{Postcondition 2: $\text{Final} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{Calls} = 0 \land \text{ChildStdinBytes} = 0$}
 \end{algorithmic}
 \end{algorithm}
 
@@ -617,20 +657,39 @@ To ensure reproducibility of reported aggregate metrics and enable independent a
     \item \textbf{Targeted Adaptive Red-Team ($N = 500$):} \texttt{reports/adaptive\_redteam\_v6\_report.json} (375/375 attacks blocked, 125/125 benign allowed).
 \end{itemize}
 
+\subsection{System-Level Adversarial Workflow Validation ($N = 23$)}
+While Regimes 1--6 evaluate model and runtime behavior against external academic and synthetic benchmark datasets, we subjected the integrated gateway runtime to an \textbf{author-constructed system-level adversarial validation suite} ($N = 23$). Rather than serving as a statistical benchmark, this suite functions as an adversarial integration gate exercising implementation-level execution contracts across 10 critical attack surfaces:
+\begin{itemize}
+    \item \textbf{Multi-Step Exfiltration Trajectories:} Canonical PII lookup (\texttt{customer.lookup}) followed by immediate exfiltration attempts (\texttt{slack.post\_message}), asserting zero dispatch on the forbidden followup.
+    \item \textbf{Alternate Sink Evasion:} Probing whether an adversary can circumvent workflow constraints by alternating across six diverse exfiltration sinks (\texttt{webhook.post}, \texttt{email.send}, \texttt{export\_csv}, \texttt{http.request}, \texttt{http.post}, \texttt{cloud\_storage.upload}); all six were intercepted with zero bytes written to child stdin.
+    \item \textbf{Session Isolation:} Verifying that state advances in Session A do not constrain or contaminate independent Session B.
+    \item \textbf{Concurrent Session Contamination:} 25 parallel sessions executing under a synchronized thread barrier without race conditions or cross-session state leakage.
+    \item \textbf{Malformed-Input Desynchronization:} Corrupt and truncated JSON-RPC payloads fail closed without corrupting or resetting declared workflow FSM state.
+    \item \textbf{Invalid Tool Probing:} Non-existent, empty, path-traversal, and malformed tool names cannot trigger state transitions or bypass constraints.
+    \item \textbf{Post-Dispatch Crash \& Timeout Uncertainty:} When a child process fails to respond after dispatch (\texttt{SENT\_CHILD\_NO\_RESPONSE}), the gateway retains declared state, transitions certainty to \texttt{UNKNOWN}, and blocks follow-up operations.
+    \item \textbf{Authority Intersection:} Proving that workflow permission cannot expand CBAC denial ($A_{\text{det}} = A_{\text{CBAC}} \cap A_{\text{DIFC}} \cap A_{\text{Workflow}}$).
+    \item \textbf{AIA Non-Override:} Proving that advisory AIA recommendations cannot override a deterministic workflow block.
+    \item \textbf{Cryptographic Receipt Tampering:} Verifying that altering any field in an execution receipt breaks the SHA-256 tamper-evident ledger verification.
+\end{itemize}
+Across all 23 adversarial tests, Mastyf Guard achieved \textbf{23/23 PASS (100\%)}, while legitimate operational trajectories remained permitted. Combined with the 16/16 Phase 4 workflow unit tests and 95/95 pre-existing gateway regression tests, the full gateway suite reached \textbf{118/118 PASS}.
+
 \section{Systemization \& Production Hardening: The Mastyf Security Gateway}
-To bridge the divide between a standalone neural model checkpoint and an enterprise-grade production deployment, the architecture has been systemized into the \textbf{Mastyf Security Gateway}. The research evaluation reported in this manuscript used gateway runtime \textbf{v0.1.0-RC1} (verifying 38/38 automated security invariant tests); subsequent commercial-pilot hardening produced \textbf{v0.1.1-rc1}, which adds further regression (extending the test harness to 50/50 passing cases), deployment, licensing, and release-integrity validation. The gateway operates as an asynchronous, transport-level reverse proxy implementing the Model Context Protocol (MCP). The gateway sits between upstream agent runtimes and downstream MCP tool servers, enforcing complete mediation over JSON-RPC tool dispatch streams.
-
-\textbf{Rigorous Security Invariant Verification (38/38 Tests Passing):} The production gateway was subjected to an exhaustive automated test harness validating four core operational invariants:
+To bridge the divide between a standalone neural model checkpoint and an enterprise-grade production deployment, the architecture has been systemized into the \textbf{Mastyf Security Gateway}. Gateway validation adheres to a strict three-tier verification hierarchy:
 \begin{enumerate}
-    \item \textbf{Zero-Leak Invariant:} For all tool dispatches, $\text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{BackendToolInvocations} = 0$. Across all evaluated attack payloads, no unauthorized tool invocation reached the downstream tool server.
-    \item \textbf{Authority Monotonicity:} An agent cannot gain privileges through indirect injection; effective authority is strictly bounded by $A_{\text{effective}} = A_{\text{agent}} \cap A_{\text{policy}}$.
-    \item \textbf{Fail-Closed Protocol Parsing:} Under malformed JSON-RPC frames, recursive argument bombs, and network timeouts ($>50$~ms gateway fast-path target budget), the gateway deterministically resolves to a non-executing terminal state (\texttt{BLOCK} or \texttt{ESCALATE}) under the fail-closed policy, guaranteeing $\text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{BackendToolInvocations} = 0$. Note that the 50~ms budget governs the deterministic reference-monitor queue ceiling; neural forward passes incur measured inference latencies (e.g., 267.7~ms $P_{50}$ on InjecAgent and 951.5~ms $P_{50}$ on AgentDojo).
-    \item \textbf{Cross-Session Dynamic DIFC Isolation:} Dynamic taint labels accumulated in Session $S_i$ cannot contaminate concurrent or subsequent Session $S_j$, verified under 200 interleaved client worker pools.
+    \item \textbf{Research Runtime (v0.1.0-RC1):} Original 38/38 automated security-invariant tests verifying CBAC, DIFC, complete mediation, and fail-closed parsing.
+    \item \textbf{Commercial-Pilot Hardened Runtime (v0.1.1-rc1):} 50/50 passing tests incorporating non-root container packaging, licensing, and Ed25519 release-integrity validation.
+    \item \textbf{Post-Phase-4 Repository Validation:} 95/95 gateway regression tests combined with 23/23 system-level adversarial workflow tests, totaling \textbf{118/118 passing executions}.
 \end{enumerate}
+The gateway operates as an asynchronous, transport-level reverse proxy implementing the Model Context Protocol (MCP). It sits between upstream agent runtimes and downstream MCP tool servers, enforcing complete mediation over JSON-RPC tool dispatch streams.
 
-\textbf{Microsecond Reference Monitor Throughput:} In synthetic benchmark profiling, the deterministic CBAC/DIFC reference-monitor fast-path sustains \textbf{$>330,000$~requests/sec} with a median decision latency of \textbf{3.1~$\mu$s} ($P_{99} < 15.0~\mu$s), confirming zero perceptible overhead on routine enterprise tool invocations.
-
-\textbf{Cryptographic Provenance \& Release Integrity:} To guarantee reproducibility, every gateway release is cryptographically pinned and verified via an Ed25519-signed \texttt{release\_manifest.json}. The manifest uniquely binds the \textbf{Gateway Source Git SHA (\texttt{4331fa4})} to the \textbf{Frozen $V_6$ Hugging Face Revision (\texttt{d59a6aa01f9139dff106146addb04109afa69c03})}, providing a fully verifiable chain of custody from source code to model weights (Table~\ref{tab:gateway_scorecard}).
+\textbf{Hardened Stateful Workflow \& Transport Enforcement:} Gateway v0.1.1-rc1 incorporates stateful sequence authorization and zero-byte physical transport enforcement:
+\begin{itemize}
+    \item \textbf{Physical Zero-Byte Transport Invariant:} For any decision in \{\texttt{BLOCK}, \texttt{ESCALATE}\}, the proxy writes \textbf{strictly 0 bytes} to the downstream tool process stdin, physically eliminating execution risk.
+    \item \textbf{Outcome-Conditioned Commits:} State transitions commit only upon confirmed child receipt (\texttt{RESPONSE\_RECEIVED}), discard on \texttt{NOT\_SENT}, and preserve declared state with \texttt{UNKNOWN} certainty on post-dispatch failure (\texttt{SENT\_CHILD\_NO\_RESPONSE}).
+    \item \textbf{Tamper-Evident SHA-256 Ledger:} Execution receipts cryptographically bind tool arguments, policy hash, decisions, workflow state, and execution certainty into an append-only hash chain.
+    \item \textbf{Authority Monotonicity:} Effective execution authority is the strict intersection $A_{\text{effective}} = A_{\text{CBAC}} \cap A_{\text{DIFC}} \cap A_{\text{Workflow}}$, with advisory neural auditing strictly non-escalating.
+    \item \textbf{Microsecond Fast-Path Throughput:} The deterministic CBAC/DIFC/Workflow reference monitor sustains \textbf{$>330,000$~req/s} with a median decision latency of \textbf{3.1~$\mu$s} ($P_{99} < 15.0~\mu$s).
+\end{itemize}
 
 \begin{table}[t]
 \centering
@@ -643,17 +702,20 @@ To bridge the divide between a standalone neural model checkpoint and an enterpr
 \midrule
 Reference Monitor Fast-Path & Deterministic CBAC/DIFC & Microbenchmark & \textbf{38/38 PASS} & \textbf{$>330,000$~req/s, 3.1~$\mu$s} \\
 Complete Mediation Invariant & $\text{Decision} \in \{\text{B}, \text{E}\} \implies \text{Calls} = 0$ & 35 injection tests & \textbf{100.0\% PASS} & 0 backend invocations \\
-Authority Monotonicity & $A_{\text{eff}} = A_{\text{agent}} \cap A_{\text{pol}}$ & Parameter drift fuzzing & \textbf{100.0\% PASS} & Zero authority escalation \\
+Stateful Workflow Authorization & $A_{\text{det}} = A_{\text{CBAC}} \cap A_{\text{DIFC}} \cap A_{\text{Workflow}}$ & 16 unit + 23 adv tests & \textbf{100.0\% PASS} & Zero sequence bypass \\
+Outcome-Conditioned Commits & Commit on response, retain on crash & Timeout/crash harness & \textbf{100.0\% PASS} & Zero false advance \\
+Authority Monotonicity & AIA cannot expand authority & Parameter drift fuzzing & \textbf{100.0\% PASS} & Zero escalation \\
 Cross-Session Taint Confinement & $\text{Taint}(S_i) \cap \text{Ctx}(S_j) = \emptyset$ & 200 interleaved sessions & \textbf{100.0\% PASS} & Zero cross-session leaks \\
 Protocol Fuzzing & Fail-closed on malformed JSON & Recursive arg unwrapper & \textbf{100.0\% PASS} & Fail-closed in $<0.05$~ms \\
-Cryptographic Release Binding & Ed25519 Signed (Git SHA: 4331fa4) & SHA-256 binary check & \textbf{VERIFIED} & Immutable trust chain \\
+Cryptographic Ledger Receipts & SHA-256 hash chain with workflow & Tamper-evident verify & \textbf{VERIFIED} & Tampering detected \\
+Adversarial Integration Suite & Multi-step trajectories, 6 sinks & 23 adversarial tests & \textbf{23/23 PASS} & 118/118 full regression \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
 
 \section{Conclusion \& Artifact Availability}
-Across six empirical validation regimes totaling 6,662 instances, the frozen Mastyf Guard $V_6$ checkpoint (Hugging Face revision \texttt{d59a6aa}) demonstrated robust, calibrated protection against indirect prompt injection: achieving 100\% Correct Identification Rate on internal factorized diagnostics ($N = 145$), 100\% accuracy on a sealed holdout suite (75/75, SHA-256: \texttt{22bc736c...}), 98.43\% defense on the 4,216-instance InjecAgent evaluation used in this study ($N = 4,216$, $P_{50}$: 267.7~ms), 92.44\% defense on AI Safety Bench ($N = 1,000$, 100\% benign utility), 99.52\% attack interception on interactive AgentDojo ($N = 629$) with exact utility parity (6/97 tasks) matching the unprotected base agent, and 100\% defense across 500 targeted adaptive red-team trials. Furthermore, we have systemized the runtime into the Mastyf Security Gateway: the evaluated research runtime was v0.1.0-RC1 (verifying 38/38 automated security regression tests), with the subsequently hardened commercial-pilot runtime being v0.1.1-rc1 (verifying 50/50 tests), preserving complete mediation non-executability ($\text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{BackendToolInvocations} = 0$), authority monotonicity, and session taint isolation with a fast-path reference monitor sustaining $>330,000$~req/s (3.1~$\mu$s $P_{50}$). In foundational historical baseline studies across 50,000 macro instances and 3,000 enterprise samples, capability mediation filtered 82.40\% of attacks at the transport boundary in 0.003~ms, while relational leaf-walking provided the sub-millisecond structural foundation. We have formalized Proposition 1 (Conditional Non-Escalation Invariant over the Trusted Computing Base), proving that under complete mediation and fail-closed dispatch, untrusted observations cannot cause execution of out-of-scope mutating tools, while Theorem 2 formalizes dynamic taint tracking for preventing cross-tool exfiltration.
+Across six empirical validation regimes totaling 6,662 instances, the frozen Mastyf Guard $V_6$ checkpoint (Hugging Face revision \texttt{d59a6aa}) demonstrated robust, calibrated protection against indirect prompt injection: achieving 100\% Correct Identification Rate on internal factorized diagnostics ($N = 145$), 100\% accuracy on a sealed holdout suite (75/75, SHA-256: \texttt{22bc736c...}), 98.43\% defense on the 4,216-instance InjecAgent evaluation used in this study ($N = 4,216$, $P_{50}$: 267.7~ms), 92.44\% defense on AI Safety Bench ($N = 1,000$, 100\% benign utility), 99.52\% attack interception on interactive AgentDojo ($N = 629$) with exact utility parity (6/97 tasks) matching the unprotected base agent, and 100\% defense across 500 targeted adaptive red-team trials. The system has evolved from per-call capability mediation toward declarative trajectory-aware authorization, where specified multi-step action sequences can be constrained by workflow state while remaining subordinate to CBAC and DIFC. System-level adversarial validation confirms that the implemented sequence constraints and execution-boundary enforcement survived the specified trajectory, concurrency, desynchronization, uncertainty, and receipt-integrity attacks (23/23 PASS, with 118/118 total passing gateway regression tests). We explicitly emphasize that this validation demonstrates implementation correctness and contract enforcement over specified adversarial trajectories; it does not establish semantic safety of arbitrary authorized action compositions or general resistance to arbitrary multi-step attacks. Furthermore, the runtime has been systemized into the Mastyf Security Gateway: across research (v0.1.0-RC1, 38/38 tests), commercial-pilot (v0.1.1-rc1, 50/50 tests), and trajectory-aware post-Phase-4 releases (118/118 tests), the gateway preserves complete mediation non-executability ($\text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{BackendToolInvocations} = 0$), zero-byte transport delivery, authority monotonicity, and session taint isolation with a fast-path reference monitor sustaining $>330,000$~req/s (3.1~$\mu$s $P_{50}$).
 
 \subsection{Artifact Availability}
 To facilitate independent scientific reproduction and benchmarking, the fine-tuned Mastyf Guard 1.5B model is publicly available on Hugging Face at \url{https://huggingface.co/Rudraneel93/mastyf-guard-1.5b}. The repository contains safetensors weights, INT4 AWQ/GGUF binaries, tokenizer configurations, and inference scripts. The reference monitor implementation, tool authorization schemas, and benchmark evaluation harness are available at \url{https://github.com/mastyf-ai/mastyf.ai} under the Apache 2.0 license. The frozen boundary-sharpened $V_6$ model checkpoint is available on Hugging Face at \url{https://huggingface.co/Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened} (pinned revision: \texttt{d59a6aa}). The production reverse proxy runtime and standalone CLI distribution are available at \url{https://github.com/Rudraneel93/mastyf-gateway}.
