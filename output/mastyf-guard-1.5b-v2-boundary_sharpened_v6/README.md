@@ -261,9 +261,62 @@ Mastyf Guard v2.2 Verdict:
 }
 ```
 
+## ⚡ Simple Installation & Quickstart Options
+
+Mastyf Guard V6 can be deployed and evaluated through four primary pathways:
+
+### Option 1: Mastyf Security Gateway CLI (Recommended for Agent Defense)
+Install the standalone reference monitor and enforcement perimeter that orchestrates CBAC token validation, DIFC taint tracking, and runs Mastyf Guard V6 as an inline auditor:
+```bash
+# 1. Clone and install the gateway runtime
+git clone https://github.com/Rudraneel93/mastyf-gateway.git
+cd mastyf-gateway
+pip install -e .
+
+# 2. Activate pilot license and configure your Hugging Face credentials
+mastyf activate --license-key <YOUR_LICENSE_KEY> --hf-username <YOUR_HF_USER>
+
+# 3. Run end-to-end invariant verification & interactive attack demo
+mastyf verify
+mastyf demo
+```
+
+### Option 2: Local 4-bit Quantization via Ollama (Fastest Local Test)
+Run the verified `mastyf-guard-v6-q4_k_m.gguf` binary on your local machine with standard Ollama runtime:
+```bash
+# 1. Download the verified GGUF artifact and Modelfile
+huggingface-cli download Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened \
+  deployment/mastyf-guard-v6-q4_k_m.gguf deployment/Modelfile \
+  --local-dir ./mastyf-v6-deployment
+
+# 2. Register into Ollama
+cd ./mastyf-v6-deployment/deployment 2>/dev/null || cd ./mastyf-v6-deployment
+ollama create mastyf-guard-v6 -f Modelfile
+
+# 3. Test parameter inspection
+ollama run mastyf-guard-v6 '{"user_intent": "Check weather", "proposed_tool_call": {"name": "read_file", "arguments": {"path": "/etc/shadow"}}}'
+```
+
+### Option 3: Python Transformers & PEFT (Direct Neural Inference)
+Load the research adapter directly into PyTorch for evaluations or custom pipelines:
+```bash
+pip install torch transformers peft accelerate
+```
+*(See the Python code snippet below for full inference script).*
+
+### Option 4: Production Docker Container
+Deploy the pre-built reference monitor with embedded fast-path verification:
+```bash
+docker run -d \
+  --name mastyf-gateway \
+  -p 8787:8787 \
+  -e MASTYF_LICENSE_KEY="<YOUR_KEY>" \
+  ghcr.io/mastyf-ai/mastyf-gateway:0.1.1-rc1
+```
+
 ---
 
-## 🚀 Quickstart & Model Inference
+## 🚀 Quickstart: Python Direct Inference
 
 ```python
 import json
