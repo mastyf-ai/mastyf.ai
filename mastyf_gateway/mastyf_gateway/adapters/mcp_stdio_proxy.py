@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from ..models import ToolCallRequest, GatewayDecision
 from ..gateway import MastyfGateway
+from ..receipts import ExecutionReceiptLedger, ExecutionObservation
 
 
 class MCPStdioProxy:
@@ -37,12 +38,14 @@ class MCPStdioProxy:
         session_id: Optional[str] = None,
         principal_id: str = "mcp_client",
         timeout_seconds: float = 30.0,
+        ledger: Optional[ExecutionReceiptLedger] = None,
     ):
         self.gateway = gateway
         self.child_cmd = list(child_cmd)
         self.session_id = session_id or f"mcp-session-{uuid.uuid4().hex[:8]}"
         self.principal_id = principal_id
         self.timeout_seconds = timeout_seconds
+        self.ledger = ledger or ExecutionReceiptLedger()
 
         self.process: Optional[asyncio.subprocess.Process] = None
         self.pending: Dict[Any, asyncio.Future[Dict[str, Any]]] = {}
@@ -191,10 +194,46 @@ class MCPStdioProxy:
             if resp and "result" in resp:
                 # Record successful tool execution for DIFC state tracking
                 self.gateway.difc.record_tool_result(self.session_id, tool_name)
+                obs = ExecutionObservation.RESPONSE_RECEIVED
+            else:
+                # Child errored or timed out after dispatch
+                obs = ExecutionObservation.SENT_CHILD_NO_RESPONSE
+
+            self.ledger.record(
+                request_id=str(req_id),
+                session_id=self.session_id,
+                principal_id=self.principal_id,
+                tool_name=tool_name,
+                tool_args=tool_args,
+                policy_id=decision.policy_id or "default-policy",
+                policy_obj=self.gateway.policy,
+                cbac_decision="ALLOW" if decision.cbac_allowed else "DENY",
+                difc_decision="ALLOW" if decision.difc_allowed else "BLOCK",
+                aia_decision=decision.aia_decision or "NOT_EVALUATED",
+                arbiter_decision=decision.final_decision,
+                execution_observation=obs,
+                reason_code=decision.reason_code,
+            )
             return resp
 
         # NON-ALLOW (BLOCK or ESCALATE):
         # CRITICAL INVARIANT: Exactly zero bytes written to child stdin!
+        self.ledger.record(
+            request_id=str(req_id),
+            session_id=self.session_id,
+            principal_id=self.principal_id,
+            tool_name=tool_name,
+            tool_args=tool_args,
+            policy_id=decision.policy_id or "default-policy",
+            policy_obj=self.gateway.policy,
+            cbac_decision="ALLOW" if decision.cbac_allowed else "DENY",
+            difc_decision="ALLOW" if decision.difc_allowed else "BLOCK",
+            aia_decision=decision.aia_decision or "NOT_EVALUATED",
+            arbiter_decision=decision.final_decision,
+            execution_observation=ExecutionObservation.NOT_SENT,
+            reason_code=decision.reason_code,
+        )
+
         return {
             "jsonrpc": "2.0",
             "id": req_id,

@@ -50,6 +50,10 @@ class MastyfGateway:
         self.metrics = GatewayMetrics()
         self.health = HealthChecker(self.cbac, self.difc, self.auditor)
 
+    @property
+    def policy(self) -> Optional[PolicyDocument]:
+        return self.cbac.policy
+
     async def evaluate_async(self, req: ToolCallRequest) -> GatewayDecision:
         """
         Asynchronously evaluates the proposed tool call across all security layers.

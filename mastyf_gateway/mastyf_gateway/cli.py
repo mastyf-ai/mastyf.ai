@@ -642,6 +642,70 @@ def cmd_proxy(args):
         print(f"Proxy error: {e}", file=sys.stderr)
         sys.exit(1)
 
+def cmd_audit(args):
+    """Handles audit ledger commands (status, verify, export)."""
+    from .receipts import ExecutionReceiptLedger, LedgerCorruptionError
+    from pathlib import Path
+
+    file_path = args.file
+    if file_path and not Path(file_path).exists():
+        print(f"Error: Receipt ledger file not found: {file_path}", file=sys.stderr)
+        sys.exit(2)
+
+    ledger = ExecutionReceiptLedger(ledger_path=file_path)
+
+    if args.audit_action == "status":
+        st = ledger.get_status()
+        print("\n======================================================================")
+        print("     Mastyf Audit — Cryptographic Execution Ledger Status")
+        print("======================================================================")
+        print(f"  Ledger Path:         {st.ledger_path}")
+        print(f"  Chain Length:        {st.chain_length}")
+        print(f"  ALLOW Decisions:     {st.allow_count}")
+        print(f"  BLOCK Decisions:     {st.block_count}")
+        print(f"  ESCALATE Decisions:  {st.escalate_count}")
+        print(f"  Chain Integrity:     {st.chain_integrity}")
+        print(f"  Security Invariant:  {st.security_invariant}")
+        print(f"  Head Sequence ID:    {st.head_sequence_id if st.head_sequence_id is not None else 'N/A'}")
+        print(f"  Head Hash:           {st.head_hash or 'N/A'}")
+        print("======================================================================\n")
+        sys.exit(0 if st.chain_integrity in ("VALID", "EMPTY") else 1)
+
+    elif args.audit_action == "verify":
+        res = ledger.verify()
+        print("\n======================================================================")
+        print("     Mastyf Audit — Cryptographic Chain & Invariant Verification")
+        print("======================================================================")
+        print(f"  Total Receipts:      {res.total_receipts}")
+        print(f"  ALLOW (Executed=1):  {res.observed_execution_count}")
+        print(f"  ALLOW (Post-crash):  {res.unknown_execution_count}")
+        print(f"  Non-ALLOW (Zero-exec): {res.zero_execution_count}")
+        print(f"  Head Sequence:       {res.head_sequence_id if res.head_sequence_id is not None else 'N/A'}")
+        print(f"  Head Hash:           {res.head_receipt_hash or 'N/A'}")
+
+        if res.valid:
+            print("\n  [✓] Chain Integrity:    100% VALID (zero broken links)")
+            print("  [✓] Security Invariant: 100% VALID (Decision != ALLOW ⇒ Execution == 0)")
+            print("======================================================================\n")
+            sys.exit(0)
+        else:
+            print(f"\n  [!] VERIFICATION FAILURE: {res.error_message}")
+            if res.error_sequence_id is not None:
+                print(f"      Failure at sequence ID: {res.error_sequence_id}")
+            print("======================================================================\n")
+            sys.exit(1)
+
+    elif args.audit_action == "export":
+        out_path = args.output or "mastyf-audit-export.json"
+        fmt = getattr(args, "format", "json")
+        try:
+            count = ledger.export(out_path, format=fmt)
+            print(f"Exported {count} execution receipts to {out_path} ({fmt.upper()})")
+            sys.exit(0)
+        except Exception as exc:
+            print(f"Export Error: {exc}", file=sys.stderr)
+            sys.exit(2)
+
 def main():
     parser = argparse.ArgumentParser(
         prog="mastyf",
@@ -717,6 +781,24 @@ def main():
     proxy_parser.add_argument("--principal-id", default="mcp_client", help="Principal identity for authorization")
     proxy_parser.add_argument("server_command", nargs=argparse.REMAINDER, help="Target MCP server command (use after --)")
 
+    # mastyf audit
+    audit_parser = subparsers.add_parser("audit", help="Verify and inspect cryptographic execution receipts")
+    audit_sub = audit_parser.add_subparsers(dest="audit_action", required=True)
+
+    # mastyf audit status
+    audit_st_p = audit_sub.add_parser("status", help="Display operational status of execution receipt ledger")
+    audit_st_p.add_argument("--file", "-f", help="Path to receipts.jsonl file (default: ~/.mastyf/receipts.jsonl)")
+
+    # mastyf audit verify
+    audit_ver_p = audit_sub.add_parser("verify", help="Verify cryptographic hash chain and zero-execution invariants")
+    audit_ver_p.add_argument("--file", "-f", help="Path to receipts.jsonl file (default: ~/.mastyf/receipts.jsonl)")
+
+    # mastyf audit export
+    audit_exp_p = audit_sub.add_parser("export", help="Export execution receipts to JSON, JSONL, or CSV")
+    audit_exp_p.add_argument("--file", "-f", help="Path to receipts.jsonl file (default: ~/.mastyf/receipts.jsonl)")
+    audit_exp_p.add_argument("--output", "-o", default="mastyf-audit-export.json", help="Output destination file")
+    audit_exp_p.add_argument("--format", choices=["json", "jsonl", "csv"], default="json", help="Export format (default: json)")
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -745,6 +827,8 @@ def main():
         cmd_policy(args)
     elif args.command == "proxy":
         cmd_proxy(args)
+    elif args.command == "audit":
+        cmd_audit(args)
     else:
         parser.print_help()
 
