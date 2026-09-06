@@ -37,49 +37,73 @@ Every tool call passes through deterministic capability authorization and inform
 ## Architectural Overview
 
 ```text
-                AI / LLM
+                 AI / LLM
             Untrusted Principal
-                   │
-                   │ proposes tool call
-                   ▼
-          ┌───────────────────┐
-          │       CBAC        │
-          │ Capability Policy │
-          └─────────┬─────────┘
                     │
+                    │ proposes tool call
                     ▼
-          ┌───────────────────┐
-          │       DIFC        │
-          │ Information Flow  │
-          └─────────┬─────────┘
-                    │
-                    ▼
-          ┌───────────────────┐
-          │   AIA (Advisory)  │
-          │ Semantic Anomaly  │
-          └─────────┬─────────┘
-                    │
-                    ▼
-          ┌───────────────────┐
-          │ Deterministic     │
-          │      Arbiter      │
-          └─────────┬─────────┘
-                    │
-             ALLOW / BLOCK /
-                ESCALATE
-                    │
-                    ▼
-              Tool Backend
+           ┌───────────────────┐
+           │       CBAC        │
+           │ Capability Policy │
+           └─────────┬─────────┘
+                     │
+                     ▼
+           ┌───────────────────┐
+           │       DIFC        │
+           │ Information Flow  │
+           └─────────┬─────────┘
+                     │
+                     ▼
+           ┌───────────────────┐
+           │     Workflow      │
+           │  Sequence Policy  │
+           └─────────┬─────────┘
+                     │
+                     ▼
+           ┌───────────────────┐
+           │   AIA (Advisory)  │
+           │ Semantic Anomaly  │
+           └─────────┬─────────┘
+                     │
+                     ▼
+           ┌───────────────────┐
+           │ Deterministic     │
+           │      Arbiter      │
+           └─────────┬─────────┘
+                     │
+              ALLOW / BLOCK /
+                 ESCALATE
+                     │
+                     ▼
+        ┌─────────────────────────┐
+        │   Zero-Byte MCP Proxy   │
+        └────────────┬────────────┘
+                     │
+                     ▼
+               Tool Backend
+                     │
+                     ▼
+        ┌─────────────────────────┐
+        │  Tamper-Evident Ledger  │
+        │ (SHA-256 Receipt Chain) │
+        └─────────────────────────┘
 ```
 
 ### Core Security Invariants
 
-$$\text{Authority}(\text{Final}) \subseteq \text{Authority}(\text{CBAC}) \cap \text{Authority}(\text{DIFC})$$
-$$\text{BackendExecutionCount} > 0 \implies \text{Decision} == \text{ALLOW}$$
+$$\text{Authority}(\text{Final}) \subseteq \text{Authority}(\text{CBAC}) \cap \text{Authority}(\text{DIFC}) \cap \text{Authority}(\text{Workflow})$$
+$$\text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{ChildStdinBytesDispatched} = 0 \land \text{BackendExecutionCount} = 0$$
 
-* **Authority Monotonicity**: Active Intent Auditor ($V_6$) can recommend `BLOCK`, `ALLOW`, or `ESCALATE`, but it can **never expand authority** beyond deterministic CBAC and DIFC bounds.
-* **AIA is Advisory**: The model does not constitute the root of trust and does not independently grant execution authority. The deterministic arbiter decides whether execution occurs.
-* **MCP Enforcement Invariant**: $\text{Decision} \in \{\text{BLOCK}, \text{ESCALATE}\} \implies \text{BackendToolInvocations} = 0$.
+* **Monotonic Authority Intersection**: Deterministic authority is the strict intersection of Capability-Based Access Control (CBAC), Decentralized Information Flow Control (DIFC), and Stateful Workflow sequence constraints. Workflow constraints can only **reduce** authority, never expand it.
+* **AIA is Advisory**: The Active Intent Auditor ($V_6$) can recommend `BLOCK`, `ALLOW`, or `ESCALATE`, but it can **never expand authority** beyond deterministic bounds. The deterministic arbiter decides whether execution occurs.
+* **MCP Zero-Byte Transport Invariant**: Non-ALLOW decisions write **strictly 0 bytes** to the backend tool's standard input.
+
+### Execution Observation Contract
+
+The gateway strictly distinguishes observed backend execution from inference:
+* `RESPONSE_RECEIVED`: Confirmed child execution (`backend_execution_count: 1`). Workflow state transitions commit.
+* `SENT_CHILD_NO_RESPONSE`: Post-dispatch timeout or child crash (`backend_execution_count: null`). Execution certainty is marked `UNKNOWN`; declared workflow state is retained without speculative advancement.
+* `NOT_SENT`: Non-ALLOW decision (`backend_execution_count: 0`). Zero bytes dispatched; workflow transitions discarded.
 
 ---
 
@@ -153,7 +177,28 @@ mastyf doctor
 mastyf demo --scenario all
 ```
 
-### 4. Commercial License Activation
+### 4. Declarative Policy & Validation
+```bash
+# Generate starter policy template (mastyf-policy.yaml)
+mastyf policy init
+
+# Validate policy syntax, regexes, and transition consistency
+mastyf policy validate mastyf-policy.yaml
+```
+
+### 5. Run MCP Stdio Reverse Proxy
+```bash
+# Intercept MCP stdio communication between client and child server
+mastyf proxy --policy mastyf-policy.yaml -- uvx mcp-server-sqlite --db /tmp/test.db
+```
+
+### 6. Verify Tamper-Evident Audit Ledger
+```bash
+# Verify cryptographic SHA-256 hash chain of execution receipts
+mastyf audit verify --ledger ~/.mastyf/audit.jsonl
+```
+
+### 7. Commercial License Activation
 ```bash
 # Activate Pro subscription and fetch Ed25519 signed local token
 mastyf activate --license-key <LICENSE_KEY> --hf-username <YOUR_HF_USERNAME>
@@ -165,10 +210,28 @@ mastyf license status
 mastyf self-test --commercial
 ```
 
-### 5. Start the Gateway
+### 8. Start the Gateway
 ```bash
 mastyf start --port 8787
 ```
+
+---
+
+## System-Level Adversarial Validation
+
+```text
+PHASE 4 SYSTEM VALIDATION
+
+23/23 adversarial workflow tests PASS
+16/16 Phase 4 workflow unit tests PASS
+95/95 pre-existing gateway regression tests PASS
+
+Total observed test executions: 118/118 PASS
+```
+
+> **System-level adversarial validation completed: 23/23 tests passed, with 118/118 gateway tests passing when combined with the existing Phase 1–4 regression suite. The validation exercised trajectory constraints, sink-evasion attempts, concurrent session isolation, malformed-input desynchronization, post-dispatch execution uncertainty, authority intersection, and cryptographic receipt integrity.**
+>
+> *Note on claim scope: The adversarial validation confirms that implemented workflow constraints survived the specified adversarial trajectories and integration attacks; it is not a claim of general resistance to arbitrary multi-step attacks.*
 
 ---
 
