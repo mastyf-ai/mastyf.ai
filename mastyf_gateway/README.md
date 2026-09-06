@@ -281,36 +281,144 @@ mastyf policy activate
 
 ---
 
-## Advanced Operator & Developer Commands
+---
 
-### 1. Transparent MCP Reverse Proxy
+## 💻 Complete CLI Command Reference
+
+### 1. Interactive Agent & Single-Query Execution
+
+```bash
+# Start interactive protected conversational agent (or run first-run setup if fresh install)
+mastyf
+
+# Execute a single message non-interactively and exit
+mastyf -m "Find my unpaid customer invoices"
+
+# Force offline simulated mock agent (useful for automated CI/CD and offline testing)
+mastyf --mock -m "Find my unpaid customer invoices"
+
+# Connect to a specific local or remote OpenAI-compatible model endpoint
+mastyf --endpoint http://localhost:11434/v1 --model mastyf-guard-1.5b-v2-boundary-sharpened
+
+# Run with an explicit custom policy YAML file (bypasses ~/.mastyf/active_policy.yaml)
+mastyf -p /path/to/mastyf-policy.yaml
+
+# Specify custom session ID and ledger file
+mastyf --session-id session_prod_001 --ledger /var/log/mastyf_receipts.jsonl
+```
+
+### 2. First-Run Bootstrap & Onboarding
+
+```bash
+# To test the fresh-machine onboarding bootstrap experience again:
+mv ~/.mastyf/active_policy.yaml ~/.mastyf/active_policy.yaml.bak
+mastyf
+```
+
+### 3. Plain-English Policy Assistant (`mastyf policy`)
+
+```bash
+# Propose a new security policy in natural language (stages to ~/.mastyf/proposed_policy.yaml)
+mastyf policy "Allow reading invoices and customer lookup, but never delete data or make HTTP calls."
+
+# View human-readable diff card of staged proposal vs currently active policy
+mastyf policy status
+
+# Explicitly promote and activate the staged proposal to active enforcement
+mastyf policy activate
+
+# Generate a starter declarative policy template (mastyf-policy.yaml)
+mastyf policy init
+
+# Validate policy YAML syntax, argument constraints, regexes, and FSM transition consistency
+mastyf policy validate ~/.mastyf/active_policy.yaml
+```
+
+### 4. Zero-Config Tool & MCP Discovery (`mastyf discover`)
+
+```bash
+# Discover local MCP servers (Claude Desktop, Cursor, and enterprise configs) and list tool schemas
+mastyf discover
+
+# Run discovery and immediately trigger interactive policy onboarding
+mastyf discover --onboard
+
+# Synthesize a policy directly from discovered tools and non-interactive intent string
+mastyf discover --intent "Allow reading customer invoices only."
+```
+
+### 5. Action Boundary Attack Demos (`mastyf demo`)
+
+```bash
+# Run interactive demonstration across all 5 canonical failure modes
+mastyf demo --scenario all
+
+# Test Scenario 1: Poisoned tool description (indirect prompt injection)
+mastyf demo --scenario 1
+
+# Test Scenario 2: Sensitive data exfiltration (DIFC taint lattice block)
+mastyf demo --scenario 2
+
+# Test Scenario 3: Privilege escalation attempt (CBAC denial)
+mastyf demo --scenario 3
+
+# Test Scenario 4: Ambiguous / anomalous intent (advisory AIA escalation)
+mastyf demo --scenario 4
+
+# Test Scenario 5: Legitimate authorized tool execution
+mastyf demo --scenario 5
+```
+
+### 6. Transparent MCP Stdio Reverse Proxy (`mastyf proxy`)
+
 ```bash
 # Intercept MCP stdio communication between any MCP client and server
 mastyf proxy --policy ~/.mastyf/active_policy.yaml -- uvx mcp-server-sqlite --db /tmp/test.db
+
+# Proxy with custom AIA auditor endpoint
+mastyf proxy --policy ~/.mastyf/active_policy.yaml --auditor-url http://localhost:8787 -- uvx mcp-server-git
 ```
 
-### 2. Verify Tamper-Evident Audit Ledger
+### 7. Cryptographic Receipt Ledger & Audit (`mastyf audit`)
+
 ```bash
-# Verify cryptographic SHA-256 hash chain across all execution receipts
+# Verify cryptographic SHA-256 hash chain and zero-byte invariant across all receipts
 mastyf audit verify --ledger ~/.mastyf/receipts.jsonl
+
+# Display operational summary: total receipts, decision distribution, head sequence, and hash
+mastyf audit status --ledger ~/.mastyf/receipts.jsonl
+
+# Export tamper-evident receipts to structured JSON for SIEM ingestion or compliance
+mastyf audit export --ledger ~/.mastyf/receipts.jsonl --format json --output audit_export.json
+
+# Export receipts to JSONL or CSV
+mastyf audit export --ledger ~/.mastyf/receipts.jsonl --format jsonl --output audit_export.jsonl
+mastyf audit export --ledger ~/.mastyf/receipts.jsonl --format csv --output audit_export.csv
 ```
 
-### 3. Commercial License Activation
+### 8. System Diagnostics, Health & Commercial Licensing
+
 ```bash
-# Activate Pro subscription and fetch Ed25519 signed local token
+# Run comprehensive environment, permissions, and tool diagnostics
+mastyf doctor
+
+# Inspect live security posture, component health, and active policy
+mastyf status
+
+# Run local end-to-end canary verifying reference monitor and 0-byte guarantees
+mastyf self-test
+
+# Run commercial entitlement and cryptographic signature validation
+mastyf self-test --commercial
+
+# Activate commercial Pro subscription with Lemon Squeezy license key
 mastyf activate --license-key <LICENSE_KEY> --hf-username <YOUR_HF_USERNAME>
 
-# Inspect license status and 7-day offline grace period
+# Inspect commercial license status and 7-day offline grace period
 mastyf license status
-```
 
-### 4. Run Action Boundary Demos & Self-Tests
-```bash
-# Run interactive demonstration of all 5 canonical failure modes
-mastyf demo --scenario all
-
-# Run complete local canary test
-mastyf self-test
+# Deactivate commercial license on current machine
+mastyf license deactivate
 ```
 
 ---

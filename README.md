@@ -79,6 +79,33 @@ mastyf
 * Every tool proposal from the conversational agent is intercepted by the reference monitor ($A = \text{CBAC} \cap \text{DIFC} \cap \text{Workflow}$). Non-ALLOW actions dispatch **strictly 0 bytes** to tool backends.
 * Includes real-time **Security HUD** and cryptographic receipt audit chaining (`mastyf audit verify`).
 
+#### Common CLI Commands
+```bash
+# Start interactive protected agent (or first-run onboarding if fresh install)
+mastyf
+
+# Run a single query non-interactively
+mastyf -m "Find unpaid customer invoices"
+
+# Propose a policy change in plain English
+mastyf policy "Allow reading invoices, but never delete data or make HTTP calls"
+
+# Inspect staged proposed policy vs active policy diff
+mastyf policy status
+
+# Promote staged policy to active enforcement
+mastyf policy activate
+
+# Intercept an MCP server via stdio reverse proxy
+mastyf proxy -- uvx mcp-server-sqlite --db /tmp/test.db
+
+# Cryptographically verify the tamper-evident execution receipt ledger
+mastyf audit verify --ledger ~/.mastyf/receipts.jsonl
+
+# Run local action boundary failure mode demonstrations
+mastyf demo --scenario all
+```
+
 ---
 
 ### Build from source (TypeScript / Cloud Platform)
