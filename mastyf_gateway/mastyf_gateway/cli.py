@@ -561,7 +561,8 @@ def cmd_self_test(args):
 def cmd_demo(args):
     """Executes live, reproducible demonstrations of the 5 canonical ways an agent can lose control of an action boundary."""
     from .demo import run_demo
-    run_demo(getattr(args, "scenario", None))
+    sc = getattr(args, "scenario", None) or getattr(args, "scenario_opt", None)
+    run_demo(sc)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -588,7 +589,8 @@ def main():
 
     # mastyf demo
     demo_parser = subparsers.add_parser("demo", help="Demonstrate action boundary enforcement across 5 canonical agent security scenarios")
-    demo_parser.add_argument("--scenario", "-s", help="Scenario number (1-5) or 'all'")
+    demo_parser.add_argument("scenario", nargs="?", default=None, help="Scenario number (1-5) or 'all'")
+    demo_parser.add_argument("--scenario", "-s", dest="scenario_opt", help="Scenario number (1-5) or 'all'")
 
     # mastyf model
     model_parser = subparsers.add_parser("model", help="Manage model artifacts and pinning")
