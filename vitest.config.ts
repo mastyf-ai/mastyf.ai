@@ -11,6 +11,7 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       'tests/integration/**',
+      'tests/e2e-ui/**',
       'adversarial-harness/**',
       'apps/cloud/**',
     ],
