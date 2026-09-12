@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BeforeToolCallHook, HookContext } from './tool-call-hooks.js';
 import { persistApprovalRequest, type ApprovalRequest } from '../audit/approval-store.js';
+import { peekMatchingAllowGrant } from '../gateway-ledger/operator-grant-peek.js';
 
 export interface ApprovalHookOptions {
   matchTools: string[];
@@ -18,6 +19,18 @@ export function createApprovalHook(opts: ApprovalHookOptions): BeforeToolCallHoo
     async beforeToolCall(context: HookContext): Promise<{ allowed: boolean; reason?: string; modifiedArgs?: Record<string, unknown> }> {
       const toolName = (context.tool.toolName || '').toLowerCase();
       if (!toolSet.has(toolName)) return { allowed: true };
+
+      const grant = peekMatchingAllowGrant({
+        toolName: context.tool.toolName || '',
+        serverName: context.tool.serverName || '',
+        serverId: context.tool.serverName || '',
+      });
+      if (grant) {
+        return {
+          allowed: true,
+          reason: `Operator grant ${grant.grant_id} (consumed at /v1/decide)`,
+        };
+      }
 
       const approvalId = randomUUID();
       const expiresAt = new Date(Date.now() + opts.timeoutSeconds * 1000).toISOString();

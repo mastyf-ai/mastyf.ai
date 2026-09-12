@@ -14,6 +14,7 @@
 import type { Container } from '../container.js';
 import { createHash } from 'crypto';
 import { Logger } from '../utils/logger.js';
+import { peekMatchingAllowGrant } from '../gateway-ledger/operator-grant-peek.js';
 import {
   fleetChainBlockConfidenceThreshold,
   resolveGlobalSessionId,
@@ -286,8 +287,15 @@ export async function runAgenticPreForwardHooks(
   const tierScope = { scopeType: 'server' as const, scopeId: serverName };
   const tier = container.sandboxEnforcer.getTier(tierScope);
   if (container.sandboxEnforcer.shouldShadow(tierScope)) {
-    Logger.info(`[Sandbox] Shadow mode block: ${toolName} on ${serverName} (tier=${tier})`);
-    return { blocked: true, reason: `Sandbox shadow tier: ${toolName} logged but not forwarded` };
+    const grant = peekMatchingAllowGrant({ toolName, serverName, serverId: serverName });
+    if (grant) {
+      Logger.info(
+        `[Sandbox] Shadow bypass via operator grant ${grant.grant_id} for ${toolName} on ${serverName}`,
+      );
+    } else {
+      Logger.info(`[Sandbox] Shadow mode block: ${toolName} on ${serverName} (tier=${tier})`);
+      return { blocked: true, reason: `Sandbox shadow tier: ${toolName} logged but not forwarded` };
+    }
   } else if (container.sandboxEnforcer.shouldRedact(tierScope)) {
     const redacted = { ...args };
     for (const k of Object.keys(redacted)) {
