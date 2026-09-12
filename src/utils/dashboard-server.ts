@@ -14,6 +14,10 @@ import helmet from 'helmet';
 import express from 'express';
 import { LRUCache } from 'lru-cache';
 import { Logger } from './logger.js';
+import {
+  resolveDashboardBindHost,
+  shouldRefuseUnauthenticatedDashboardBind,
+} from './dashboard-bind.js';
 import { registerAuthRoutes } from '../auth/auth-routes.js';
 import { registerFederationRoutes } from '../auth/federation/federation-routes.js';
 import { DbFederationStore } from '../auth/federation/db-federation-store.js';
@@ -809,6 +813,7 @@ export async function startDashboardServer(
       || path === '/api/agentic/status'
       || path.startsWith('/api/agentic/')
       || path.startsWith('/api/compliance/')
+      || path.startsWith('/api/gateway/')
     );
   }
 
@@ -1115,7 +1120,11 @@ export async function startDashboardServer(
         return;
       }
 
-      const authResult = auth.authenticate({ url, headers: req.headers, method });
+      const publicUnauth =
+        method === 'GET' && (url === '/api/health' || url === '/api/gateway/bff-info');
+      const authResult = publicUnauth
+        ? { authenticated: true, identity: 'public' }
+        : auth.authenticate({ url, headers: req.headers, method });
       if (!authResult.authenticated) {
         setCors();
         if (req.headers['accept']?.includes('text/html')) {
@@ -1588,6 +1597,21 @@ export async function startDashboardServer(
         const { handleRoadmapApiRoutes } = await import('../dashboard/roadmap-routes.js');
         const handled = await handleRoadmapApiRoutes({
           url,
+          method,
+          req,
+          res,
+          tenantId: requestTenantId,
+          writeJson,
+          readBody,
+          setCors,
+        });
+        if (handled) return;
+      }
+
+      {
+        const { handleGatewayApiRoutes } = await import('../dashboard/gateway-routes.js');
+        const handled = await handleGatewayApiRoutes({
+          url: req.url || url,
           method,
           req,
           res,
@@ -3132,60 +3156,90 @@ export async function startDashboardServer(
           const u = new URL(req.url || url, 'http://localhost');
           const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
           const region = parseRegionParam(u.searchParams);
+          const wantProjections = u.searchParams.get('projections') === '1';
           const fed = await resolveChartContext(requestTenantId, windowDays, region);
           const db = fed.db;
           if (!db) {
             writeJson(res, 200, unavailable({
-              serverReports: [], totalCost: null, projectedMonthly: null, budgetAlerts: [],
+              serverReports: [],
+              totalCost: null,
+              projectedMonthly: null,
+              burnRatePerHour: null,
+              budgetAlerts: [],
+              spendMethod: 'unavailable',
             }, 'No history database connected'));
             return;
           }
           const srvs = await getAllActiveServerNames(db, requestTenantId);
           const reps: any[] = [];
-          let totalCost = 0;
           const cutoff = Date.now() - windowDays * 86400000;
           let windowRecords = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
-          const { repriceRecordsForDisplay, buildCostCoverage } = await import('./cost-coverage.js');
+          const {
+            repriceRecordsForDisplay,
+            buildCostCoverage,
+            resolveSpendHeadline,
+            shouldShowCostHeadline,
+          } = await import('./cost-coverage.js');
           const { recordsTimeSpanHours } = await import('./cost-metrics.js');
+          const coverageBefore = buildCostCoverage(windowRecords);
           const repriced = await repriceRecordsForDisplay(windowRecords);
           windowRecords = repriced.records;
           const costCoverage = buildCostCoverage(windowRecords);
+          const headline = resolveSpendHeadline({
+            coverageBeforeReprice: coverageBefore,
+            coverageAfterReprice: costCoverage,
+            repricedCount: repriced.repricedCount,
+          });
           const { getRuntimeModelPricing } = await import('../services/runtime-model-pricing.js');
           const active = await getRuntimeModelPricing().getActivePricing();
           for (const srv of srvs) {
-            const recs = await db.getCallRecordsForServer(srv, undefined, requestTenantId);
             const windowRecs = windowRecords.filter(
               (r) => r.serverName === srv && Date.parse(String(r.timestamp || '')) >= cutoff,
             );
             const sum = summarizeRecords(windowRecs);
-            reps.push({ name: srv, tokens: sum.totalInput + sum.totalOutput, cost: sum.costUsd, trend: computeCostTrend(windowRecs), unpriced: sum.unpricedCalls });
-            totalCost += sum.costUsd;
+            reps.push({
+              name: srv,
+              tokens: sum.totalInput + sum.totalOutput,
+              cost: sum.costUsd,
+              trend: computeCostTrend(windowRecs),
+              unpriced: sum.unpricedCalls,
+            });
           }
-          totalCost = costCoverage.measuredUsd;
+          // Headline USD only when gate passes (measured, or repriced+env opt-in).
+          const totalCost = headline.showHeadline ? headline.headlineUsd : null;
+          const displayCoverage = headline.spendMethod === 'measured' ? coverageBefore : costCoverage;
           const spanHours = recordsTimeSpanHours(windowRecords);
-          const burnRatePerHour = computeBurnRatePerHour(totalCost, windowRecords);
-          let projectedMonthly = computeProjectedMonthly(totalCost, windowRecords);
-          if (costCoverage.coveragePct < 50 || spanHours < 24) {
-            projectedMonthly = 0;
+          let burnRatePerHour: number | null = null;
+          let projectedMonthly: number | null = null;
+          if (wantProjections && totalCost != null && totalCost > 0) {
+            burnRatePerHour = computeBurnRatePerHour(totalCost, windowRecords);
+            let proj = computeProjectedMonthly(totalCost, windowRecords);
+            if (displayCoverage.coveragePct < 50 || spanHours < 24) {
+              proj = 0;
+            }
+            projectedMonthly = proj > 0 ? proj : null;
           }
           const pricingModel = active
             ? `${active.displayName} (${active.source})`
             : 'per-call stored rates';
           const budgetUsd = parseCostBudgetUsd();
           const budgetAlerts: string[] = [];
-          if (budgetUsd != null && totalCost > budgetUsd) {
+          if (budgetUsd != null && totalCost != null && totalCost > budgetUsd) {
             budgetAlerts.push(`Spend $${totalCost.toFixed(4)} exceeds budget $${budgetUsd.toFixed(2)}`);
           }
           writeJson(res, 200, available({
             serverReports: reps,
             totalCost,
-            projectedMonthly: projectedMonthly > 0 ? projectedMonthly : null,
+            projectedMonthly,
             burnRatePerHour,
             budgetUsd,
             budgetAlerts,
             pricingModel,
-            costCoverage,
-            disclaimer: costCoverage.disclaimer,
+            costCoverage: displayCoverage,
+            spendMethod: headline.spendMethod,
+            repricedCount: repriced.repricedCount,
+            headlineEligible: shouldShowCostHeadline(displayCoverage) || headline.showHeadline,
+            disclaimer: displayCoverage.disclaimer,
             windowDays,
             meta: mergeFedMeta({
               window: windowToLabel(windowDays),
@@ -3195,7 +3249,13 @@ export async function startDashboardServer(
             }, fed),
           }));
         } catch {
-          writeJson(res, 200, unavailable({ serverReports: [], totalCost: null, projectedMonthly: null }, 'Failed to read cost data'));
+          writeJson(res, 200, unavailable({
+            serverReports: [],
+            totalCost: null,
+            projectedMonthly: null,
+            burnRatePerHour: null,
+            spendMethod: 'unavailable',
+          }, 'Failed to read cost data'));
         }
         return;
       }
@@ -4844,12 +4904,26 @@ export async function startDashboardServer(
             return;
           }
           const certs = container.certifier.listCertified();
-          const tiers = certs.map((c: { serverName: string; level: string }) => ({
+          const certifiedTiers = certs.map((c: { serverName: string; level: string }) => ({
             serverName: c.serverName,
             tier: container.sandboxEnforcer.getTier({ scopeType: 'server', scopeId: c.serverName }),
             certLevel: c.level,
+            source: 'certified',
           }));
-          writeJson(res, 200, available({ tenantId: requestTenantId, tiers }));
+          let persisted: Array<{ serverName: string; tier: string; source: string }> = [];
+          if (runtimeHistoryDb) {
+            const { IndustryStandardStore } = await import('../database/industry-standard-store.js');
+            const store = new IndustryStandardStore(runtimeHistoryDb);
+            persisted = store.listSandboxTiers().map((row) => ({
+              serverName: row.scopeId,
+              tier: row.tier,
+              source: 'persisted',
+            }));
+          }
+          const byName = new Map<string, { serverName: string; tier: string; certLevel?: string; source: string }>();
+          for (const row of persisted) byName.set(row.serverName, row);
+          for (const row of certifiedTiers) byName.set(row.serverName, row);
+          writeJson(res, 200, available({ tenantId: requestTenantId, tiers: [...byName.values()] }));
         } catch (err: unknown) {
           writeJson(res, 500, { error: err instanceof Error ? err.message : 'sandbox_tiers_failed' });
         }
@@ -5827,6 +5901,10 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
       setCors(); writeJson(res, 404, { error: 'Not found' });
     } catch (err: unknown) { setCors(); writeJson(res, 500, { error: err instanceof Error ? err.message : String(err) }); }
   });
+  // Live self-test / canary matrix can exceed Node's default idle timeout while
+  // the gateway is still evaluating. Keep the socket open to match BFF→gateway.
+  server.requestTimeout = 180_000;
+  server.timeout = 180_000;
 
   let ws: WsBroadcaster | null = null;
 
@@ -5845,8 +5923,18 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
     };
 
     server.once('error', onError);
-    server.listen(port, () => {
+    const bindHost = resolveDashboardBindHost();
+    const authOff = process.env.DASHBOARD_AUTH_DISABLED === 'true';
+    if (shouldRefuseUnauthenticatedDashboardBind(bindHost, authOff)) {
+      Logger.error(
+        `[dashboard] Refusing to bind ${bindHost} while DASHBOARD_AUTH_DISABLED=true. Use DASHBOARD_BIND=127.0.0.1 or enable dashboard auth.`,
+      );
+      resolve(null);
+      return;
+    }
+    server.listen(port, bindHost, () => {
       server.removeListener('error', onError);
+      Logger.info(`[dashboard] Listening on http://${bindHost}:${port}/ (set DASHBOARD_BIND=0.0.0.0 to expose)`);
       resolve(port);
     });
   });

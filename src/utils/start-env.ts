@@ -4,6 +4,7 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { defaultDashboardAuthDisabled } from './dashboard-bind.js';
 
 /** LLM + async semantic audit + AI learning defaults for proxy/dashboard processes. */
 export function applyProxyRuntimeDefaults(): void {
@@ -26,10 +27,12 @@ export function applyProxyRuntimeDefaults(): void {
 export function applyStartEnv(overrides?: Record<string, string>): void {
   applyProxyRuntimeDefaults();
   const home = homedir();
+  const bindHost = overrides?.DASHBOARD_BIND ?? process.env.DASHBOARD_BIND ?? '127.0.0.1';
   const defaults: Record<string, string> = {
     MASTYF_AI_DB_PATH: join(home, '.mastyf-ai', 'history.db'),
     DASHBOARD_ENABLED: 'true',
-    DASHBOARD_AUTH_DISABLED: 'true',
+    DASHBOARD_BIND: bindHost,
+    DASHBOARD_AUTH_DISABLED: defaultDashboardAuthDisabled(),
     MASTYF_AI_CI_BYPASS_LICENSE: 'true',
     MASTYF_AI_WS_ENABLED: 'true',
     MASTYF_AI_LLM_ENABLED: 'true',

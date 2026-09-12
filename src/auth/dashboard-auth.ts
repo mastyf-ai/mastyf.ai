@@ -139,13 +139,48 @@ export class DashboardAuth {
     url?: string;
     headers?: Record<string, string | string[] | undefined>;
     method?: string;
+    /** Remote IP when available — used for appliance loopback bind */
+    remoteAddress?: string;
   }): AuthResult {
     const requestTenantId = resolveTenantContext({ headers: req.headers }).tenantId;
     if (!this.config.enabled) {
       return { authenticated: true, identity: 'anonymous' };
     }
 
-    if (!this.config.apiKey && !this.config.jwtSecret) {
+    const headers = this.normalizeHeaders(req.headers || {});
+
+    // Phase 5.4 — appliance token is localhost-bound only.
+    const applianceToken = process.env['MASTYF_APPLIANCE_TOKEN']?.trim();
+    if (applianceToken) {
+      const authHeader = headers['authorization'];
+      const bearer = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+      const xAppliance = headers['x-mastyf-appliance-token'];
+      const presented = bearer || (typeof xAppliance === 'string' ? xAppliance : undefined);
+      if (presented && this.timingSafeCompare(presented, applianceToken)) {
+        const remote = String(req.remoteAddress || headers['x-forwarded-for'] || '')
+          .split(',')[0]
+          .trim();
+        const loopback =
+          !remote ||
+          remote === '127.0.0.1' ||
+          remote === '::1' ||
+          remote === '::ffff:127.0.0.1' ||
+          remote === 'localhost';
+        if (!loopback) {
+          return {
+            authenticated: false,
+            reason: 'MASTYF_APPLIANCE_TOKEN is localhost-bound — rejected non-loopback peer',
+          };
+        }
+        return {
+          authenticated: true,
+          identity: 'appliance_localhost',
+          roles: ['operator'],
+        };
+      }
+    }
+
+    if (!this.config.apiKey && !this.config.jwtSecret && !applianceToken) {
       return {
         authenticated: false,
         reason: 'Dashboard authentication enabled but DASHBOARD_API_KEY or DASHBOARD_JWT_SECRET is not configured',
@@ -153,7 +188,10 @@ export class DashboardAuth {
     }
 
     const url = req.url || '/';
-    const headers = this.normalizeHeaders(req.headers || {});
+
+    // API keys are machine clients (Next rewrite, curl). CSRF stays on cookie sessions.
+    const apiKeyResult = this.authenticateApiKey(headers);
+    if (apiKeyResult) return apiKeyResult;
 
     // ── CSRF check for mutating requests (skipped when auth disabled) ──
     if (req.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method) && this.isCsrfEnforced()) {
@@ -167,15 +205,6 @@ export class DashboardAuth {
       const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
       if (bearerMatch) {
         const token = bearerMatch[1];
-
-        // Check if it's the API key
-        if (this.config.apiKey && this.timingSafeCompare(token, this.config.apiKey)) {
-          return {
-            authenticated: true,
-            identity: 'api_key',
-            roles: resolveRolesForApiKey(token, this.apiKeyRoles),
-          };
-        }
 
         // Cloud control plane API key (gcp_...) when configured (optional)
         if (isCloudLicenseKey(token)) {
@@ -232,19 +261,19 @@ export class DashboardAuth {
       };
     }
 
-    // ── Check X-API-Key header ──
-    const apiKeyHeader = headers['x-api-key'];
-    if (apiKeyHeader && this.config.apiKey) {
-      if (this.timingSafeCompare(apiKeyHeader, this.config.apiKey)) {
-        return {
-          authenticated: true,
-          identity: 'api_key',
-          roles: resolveRolesForApiKey(apiKeyHeader, this.apiKeyRoles),
-        };
-      }
-    }
-
     return { authenticated: false, reason: 'No valid authentication provided' };
+  }
+
+  private authenticateApiKey(headers: Record<string, string | undefined>): AuthResult | null {
+    if (!this.config.apiKey) return null;
+    const bearer = headers['authorization']?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const presented = bearer || headers['x-api-key'];
+    if (!presented || !this.timingSafeCompare(presented, this.config.apiKey)) return null;
+    return {
+      authenticated: true,
+      identity: 'api_key',
+      roles: resolveRolesForApiKey(presented, this.apiKeyRoles),
+    };
   }
 
   /**

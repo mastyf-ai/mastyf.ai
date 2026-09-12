@@ -28,6 +28,8 @@ import { triggerLearningCycleIfEnabled } from './ai/suggestion-engine.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { resolveMastyfAiInstallRoot } from './utils/mastyf-ai-package-root.js';
+import { defaultDashboardAuthDisabled } from './utils/dashboard-bind.js';
+import { ensureLocalDashboardApiKey } from './utils/dashboard-api-key.js';
 
 const __cliDir = dirname(fileURLToPath(import.meta.url));
 function cliVersion(): string {
@@ -1044,7 +1046,10 @@ program
       process.env['DASHBOARD_ENABLED'] = 'true';
     }
     if (process.env['DASHBOARD_AUTH_DISABLED'] === undefined) {
-      process.env['DASHBOARD_AUTH_DISABLED'] = 'true';
+      process.env['DASHBOARD_AUTH_DISABLED'] = defaultDashboardAuthDisabled();
+    }
+    if (process.env['DASHBOARD_AUTH_DISABLED'] !== 'true') {
+      ensureLocalDashboardApiKey();
     }
     if (process.env['MASTYF_AI_WS_ENABLED'] === undefined) {
       process.env['MASTYF_AI_WS_ENABLED'] = 'true';

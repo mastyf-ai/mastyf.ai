@@ -9,13 +9,21 @@ if [ ! -f dist/cli.js ]; then
   pnpm build
 elif [ ! -f dist/utils/dashboard-server.js ] \
   || [ src/utils/dashboard-server.ts -nt dist/utils/dashboard-server.js ] \
+  || [ src/dashboard/gateway-routes.ts -nt dist/dashboard/gateway-routes.js 2>/dev/null ] \
+  || [ ! -f dist/dashboard/gateway-routes.js ] \
+  || [ src/clients/gateway-client.ts -nt dist/clients/gateway-client.js 2>/dev/null ] \
   || [ src/utils/swarm-session.ts -nt dist/utils/swarm-session.js 2>/dev/null ] \
   || [ src/utils/swarm-artifacts.ts -nt dist/utils/swarm-artifacts.js 2>/dev/null ] \
   || [ src/utils/threat-discovery-status.ts -nt dist/utils/threat-discovery-status.js 2>/dev/null ] \
+  || [ src/gateway-ledger/execution-ledger.ts -nt dist/gateway-ledger/execution-ledger.js 2>/dev/null ] \
+  || [ src/gateway-ledger/gateway-arbiter-client.ts -nt dist/gateway-ledger/gateway-arbiter-client.js 2>/dev/null ] \
+  || [ src/utils/metrics.ts -nt dist/utils/metrics.js 2>/dev/null ] \
+  || [ src/proxy/proxy-server.ts -nt dist/proxy/proxy-server.js 2>/dev/null ] \
+  || [ src/types.ts -nt dist/types.js 2>/dev/null ] \
   || [ ! -f dist/ai/mcp-health-report.js ] \
   || [ src/ai/mcp-health-report.ts -nt dist/ai/mcp-health-report.js 2>/dev/null ] \
   || [ src/ai/mastyf-ai-full-analysis.ts -nt dist/ai/mastyf-ai-full-analysis.js 2>/dev/null ]; then
-  echo "[dashboard-proxy] Rebuilding dist (dashboard API changed)…" >&2
+  echo "[dashboard-proxy] Rebuilding dist (dashboard / gateway-routes API changed)…" >&2
   pnpm exec tsc --project tsconfig.json
 fi
 
@@ -46,7 +54,25 @@ fi
 #   MASTYF_AI_DB_PATH="$PWD/reports/local-history.db" ./scripts/start-dashboard-proxy.sh
 export MASTYF_AI_DB_PATH="${MASTYF_AI_DB_PATH:-$HOME/.mastyf-ai/history.db}"
 export DASHBOARD_ENABLED=true
-export DASHBOARD_AUTH_DISABLED="${DASHBOARD_AUTH_DISABLED:-true}"
+export DASHBOARD_BIND="${DASHBOARD_BIND:-127.0.0.1}"
+# Auth is on by default, including loopback. Explicit auth-off is loopback-only.
+# shellcheck disable=SC1091
+. "$(dirname "$0")/lib/dashboard-api-key.sh"
+is_loopback_bind() {
+  case "$1" in
+    127.*|localhost|::1|'[::1]') return 0 ;;
+    *) return 1 ;;
+  esac
+}
+export DASHBOARD_AUTH_DISABLED="${DASHBOARD_AUTH_DISABLED:-false}"
+if [ "$DASHBOARD_AUTH_DISABLED" = "true" ] && ! is_loopback_bind "$DASHBOARD_BIND"; then
+  echo "[dashboard-proxy] Refusing DASHBOARD_BIND=$DASHBOARD_BIND with DASHBOARD_AUTH_DISABLED=true. Bind 127.0.0.1 or enable dashboard auth." >&2
+  exit 1
+fi
+if [ "$DASHBOARD_AUTH_DISABLED" != "true" ]; then
+  ensure_dashboard_api_key
+  echo "[dashboard-proxy] Dashboard auth ON. Key file: $(dashboard_api_key_path) (value not printed)" >&2
+fi
 export MASTYF_AI_WS_ENABLED="${MASTYF_AI_WS_ENABLED:-true}"
 export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
 # Local dev: enable dashboard REST API (set DASHBOARD_ENABLED=true)

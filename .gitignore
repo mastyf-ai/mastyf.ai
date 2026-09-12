@@ -79,3 +79,5 @@ mastyf-ai-docker.tar
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv-test/
+.pnpm-store/

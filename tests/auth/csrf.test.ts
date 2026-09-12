@@ -29,7 +29,7 @@ describe('DashboardAuth CSRF', () => {
     expect(result.authenticated).toBe(true);
   });
 
-  it('rejects POST without CSRF when auth enabled', () => {
+  it('accepts API-key POST without CSRF (machine clients / Next rewrite)', () => {
     const auth = new DashboardAuth({
       enabled: true,
       apiKey: 'test-key',
@@ -39,6 +39,31 @@ describe('DashboardAuth CSRF', () => {
       url: '/api/policy',
       method: 'POST',
       headers: { authorization: 'Bearer test-key', origin: 'http://localhost:4000' },
+    });
+    expect(result.authenticated).toBe(true);
+    expect(result.identity).toBe('api_key');
+  });
+
+  it('rejects cookie-session POST without CSRF when auth enabled', () => {
+    const auth = new DashboardAuth({
+      enabled: true,
+      apiKey: 'test-key',
+      jwtSecret: 'jwt-secret-for-csrf-test',
+      allowedOrigins: ['http://localhost:4000'],
+    });
+    const login = auth.login({
+      body: { api_key: 'test-key' },
+      headers: { origin: 'http://localhost:4000' },
+      ip: '127.0.0.1',
+    });
+    expect(login.success).toBe(true);
+    const result = auth.authenticate({
+      url: '/api/policy',
+      method: 'POST',
+      headers: {
+        cookie: `mastyf_ai_session=${login.token}`,
+        origin: 'http://localhost:4000',
+      },
     });
     expect(result.authenticated).toBe(false);
     expect(result.reason).toContain('CSRF');
@@ -62,19 +87,27 @@ describe('DashboardAuth CSRF', () => {
     expect(result.authenticated).toBe(true);
   });
 
-  it('rejects disallowed Origin', () => {
+  it('rejects cookie-session POST from a disallowed Origin', () => {
     const auth = new DashboardAuth({
       enabled: true,
       apiKey: 'test-key',
+      jwtSecret: 'jwt-secret-for-csrf-test',
       allowedOrigins: ['http://localhost:4000'],
     });
+    const login = auth.login({
+      body: { api_key: 'test-key' },
+      headers: { origin: 'http://localhost:4000' },
+      ip: '127.0.0.1',
+    });
+    expect(login.success).toBe(true);
     const token = auth.issueCsrfToken();
     const result = auth.authenticate({
       url: '/api/policy',
       method: 'POST',
       headers: {
-        authorization: 'Bearer test-key',
-        ...csrfHeaders(token, 'https://evil.example'),
+        cookie: `mastyf_ai_session=${login.token}; ${CSRF_COOKIE_NAME}=${token}`,
+        'x-csrf-token': token,
+        origin: 'https://evil.example',
       },
     });
     expect(result.authenticated).toBe(false);
