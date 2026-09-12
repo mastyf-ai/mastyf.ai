@@ -11,6 +11,7 @@ import csv
 import io
 import json
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,12 +19,62 @@ from typing import Any, Dict, List, Optional
 
 from .canonical import canonical_json, hash_arguments, hash_policy
 from .models import (
+    CURRENT_LEDGER_SCHEMA,
     GENESIS_PREVIOUS_HASH,
     ExecutionObservation,
     ExecutionReceipt,
     LedgerStatus,
     VerificationResult,
 )
+
+
+_HARNESS_RECEIPT_RE = re.compile(
+    r"^(slo-e2e|node-e2e-lat|obs-prom|pw_shield|allow_once_next_)",
+    re.IGNORECASE,
+)
+
+
+def is_harness_receipt_id(receipt_id: Optional[str]) -> bool:
+    """Probe ids stay in the hash chain but must not enter customer KPIs."""
+    if not receipt_id:
+        return False
+    return bool(_HARNESS_RECEIPT_RE.match(str(receipt_id)))
+
+
+def _producing_layer(receipt: ExecutionReceipt) -> str:
+    """Best-effort producing layer for a non-ALLOW receipt — never invents ALLOW."""
+    code = str(getattr(receipt, "reason_code", "") or "").upper()
+    if code.startswith("CBAC") or "CBAC_" in code:
+        return "CBAC"
+    if "DIFC" in code:
+        return "DIFC"
+    if "WORKFLOW" in code or "SEQUENCE" in code:
+        return "WORKFLOW"
+    if code.startswith("AIA") or "AUDITOR" in code or "INJECTION" in code:
+        return "AIA"
+    cbac = str(getattr(receipt, "cbac_decision", "") or "").upper()
+    if cbac in ("DENY", "BLOCK"):
+        return "CBAC"
+    difc = str(getattr(receipt, "difc_decision", "") or "").upper()
+    if difc in ("DENY", "BLOCK"):
+        return "DIFC"
+    aia = str(getattr(receipt, "aia_decision", "") or "").upper()
+    if aia in ("DENY", "BLOCK", "ESCALATE"):
+        return "AIA"
+    return "ARBITER"
+
+
+def _percentile_ms(samples: List[float], p: float) -> Optional[float]:
+    if not samples:
+        return None
+    ordered = sorted(float(x) for x in samples)
+    if len(ordered) == 1:
+        return round(ordered[0], 2)
+    k = (len(ordered) - 1) * (p / 100.0)
+    lo = int(k)
+    hi = min(len(ordered) - 1, lo + 1)
+    frac = k - lo
+    return round(ordered[lo] * (1.0 - frac) + ordered[hi] * frac, 2)
 
 
 class LedgerCorruptionError(ValueError):
@@ -105,9 +156,32 @@ class ExecutionReceiptLedger:
         workflow_state_after: Optional[str] = None,
         workflow_rule: Optional[str] = None,
         execution_certainty: Optional[str] = "KNOWN",
+        server_id: Optional[str] = None,
+        server_name: Optional[str] = None,
+        client_name: Optional[str] = None,
+        command_digest: Optional[str] = None,
+        child_stdin_bytes: Optional[int] = None,
+        workflow_decision: Optional[str] = None,
+        cbac_latency_ms: Optional[float] = None,
+        difc_latency_ms: Optional[float] = None,
+        workflow_latency_ms: Optional[float] = None,
+        aia_latency_ms: Optional[float] = None,
+        total_latency_ms: Optional[float] = None,
+        aia_engine: Optional[str] = None,
+        aia_model: Optional[str] = None,
+        aia_invariant_violation: Optional[str] = None,
+        response_firewall_decision: Optional[str] = None,
+        response_firewall_action: Optional[str] = None,
+        response_firewall_reason: Optional[str] = None,
+        response_secrets_redacted_count: Optional[int] = None,
+        trace_id: Optional[str] = None,
     ) -> ExecutionReceipt:
         """
         Constructs, hashes, and atomically appends an execution receipt to disk.
+        Schema 2 binds first-class MCP server identity into the hash chain.
+        Schema 3 binds ActionTrace timings and Guard metadata when provided.
+        Schema 4 binds response-firewall decision fields (never raw secrets).
+        Arguments are secret-redacted before hashing so tokens never enter the ledger path.
         """
         if self._is_corrupted:
             raise LedgerCorruptionError(f"Cannot record to corrupted ledger: {self._corruption_detail}")
@@ -120,6 +194,8 @@ class ExecutionReceiptLedger:
         if arbiter_decision != "ALLOW":
             backend_execution_count: Optional[int] = 0
             obs_str = ExecutionObservation.NOT_SENT.value
+            if child_stdin_bytes is None:
+                child_stdin_bytes = 0
         elif obs_str == ExecutionObservation.RESPONSE_RECEIVED.value:
             backend_execution_count = 1
         elif obs_str == ExecutionObservation.SENT_CHILD_NO_RESPONSE.value:
@@ -129,15 +205,33 @@ class ExecutionReceiptLedger:
             obs_str = ExecutionObservation.NOT_SENT.value
 
         ts = timestamp_utc or datetime.now(timezone.utc).isoformat()
-        args_hash = hash_arguments(tool_args)
+        # Never persist raw secrets — hash redacted args only
+        try:
+            from ..enforcement.secrets_scan import redact_args_for_persistence
+
+            safe_args, arg_secret_hits = redact_args_for_persistence(
+                tool_args if isinstance(tool_args, dict) else {}
+            )
+        except Exception:
+            safe_args = tool_args if isinstance(tool_args, dict) else {}
+            arg_secret_hits = []
+        if arg_secret_hits and response_secrets_redacted_count is None:
+            response_secrets_redacted_count = len(arg_secret_hits)
+        elif arg_secret_hits and response_secrets_redacted_count is not None:
+            response_secrets_redacted_count = int(response_secrets_redacted_count) + len(arg_secret_hits)
+
+        args_hash = hash_arguments(safe_args)
         p_hash = hash_policy(policy_obj)
+
+        resolved_server_name = server_name or None
+        resolved_server_id = server_id or resolved_server_name
 
         with self._lock:
             seq = self._next_sequence_id
             prev_hash = self._last_receipt_hash
 
-            receipt_candidate = ExecutionReceipt(
-                schema=1,
+            common = dict(
+                schema=CURRENT_LEDGER_SCHEMA,
                 sequence_id=seq,
                 timestamp_utc=ts,
                 request_id=request_id,
@@ -161,40 +255,35 @@ class ExecutionReceiptLedger:
                 workflow_state_after=workflow_state_after,
                 workflow_rule=workflow_rule,
                 execution_certainty=execution_certainty or "KNOWN",
+                server_id=resolved_server_id,
+                server_name=resolved_server_name,
+                client_name=client_name,
+                command_digest=command_digest,
+                child_stdin_bytes=child_stdin_bytes,
+                workflow_decision=workflow_decision,
+                cbac_latency_ms=cbac_latency_ms,
+                difc_latency_ms=difc_latency_ms,
+                workflow_latency_ms=workflow_latency_ms,
+                aia_latency_ms=aia_latency_ms,
+                total_latency_ms=total_latency_ms,
+                aia_engine=aia_engine,
+                aia_model=aia_model,
+                aia_invariant_violation=aia_invariant_violation,
+                response_firewall_decision=response_firewall_decision,
+                response_firewall_action=response_firewall_action,
+                response_firewall_reason=response_firewall_reason,
+                response_secrets_redacted_count=response_secrets_redacted_count,
+                trace_id=trace_id or None,
             )
+
+            receipt_candidate = ExecutionReceipt(**common)
 
             # Compute canonical receipt hash
             r_hash = receipt_candidate.compute_hash()
-            receipt = ExecutionReceipt(
-                schema=receipt_candidate.schema,
-                sequence_id=receipt_candidate.sequence_id,
-                timestamp_utc=receipt_candidate.timestamp_utc,
-                request_id=receipt_candidate.request_id,
-                session_id=receipt_candidate.session_id,
-                principal_id=receipt_candidate.principal_id,
-                tool_name=receipt_candidate.tool_name,
-                arguments_hash=receipt_candidate.arguments_hash,
-                policy_id=receipt_candidate.policy_id,
-                policy_hash=receipt_candidate.policy_hash,
-                cbac_decision=receipt_candidate.cbac_decision,
-                difc_decision=receipt_candidate.difc_decision,
-                aia_decision=receipt_candidate.aia_decision,
-                arbiter_decision=receipt_candidate.arbiter_decision,
-                backend_execution_count=receipt_candidate.backend_execution_count,
-                execution_observation=receipt_candidate.execution_observation,
-                reason_code=receipt_candidate.reason_code,
-                previous_receipt_hash=receipt_candidate.previous_receipt_hash,
-                receipt_hash=r_hash,
-                workflow_id=workflow_id,
-                workflow_state_before=workflow_state_before,
-                workflow_transition=workflow_transition,
-                workflow_state_after=workflow_state_after,
-                workflow_rule=workflow_rule,
-                execution_certainty=execution_certainty or "KNOWN",
-            )
+            receipt = ExecutionReceipt(**{**common, "receipt_hash": r_hash})
 
             # Atomically serialize, append, and flush to disk
-            line = json.dumps(receipt.to_dict(), ensure_ascii=False) + "\n"
+            line = json.dumps(receipt.to_storage_dict(), ensure_ascii=False) + "\n"
             with open(self.path, "a", encoding="utf-8") as f:
                 f.write(line)
                 f.flush()
@@ -422,9 +511,15 @@ class ExecutionReceiptLedger:
             if not receipts:
                 out.write_text("", encoding="utf-8")
             else:
-                fields = list(receipts[0].keys())
+                fields: List[str] = []
+                seen = set()
+                for row in receipts:
+                    for key in row.keys():
+                        if key not in seen:
+                            seen.add(key)
+                            fields.append(key)
                 with open(out, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.DictWriter(f, fieldnames=fields)
+                    writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader()
                     writer.writerows(receipts)
         else:
@@ -450,4 +545,233 @@ class ExecutionReceiptLedger:
             if r.sequence_id == sequence_id:
                 return r
         return None
+
+    def get_receipts(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        server_id: Optional[str] = None,
+        server_name: Optional[str] = None,
+    ) -> List[ExecutionReceipt]:
+        """Returns paginated receipts from the ledger, optionally filtered by MCP server."""
+        all_r = self.read_all_receipts()
+        if server_id or server_name:
+            needle_id = (server_id or "").strip()
+            needle_name = (server_name or server_id or "").strip()
+            filtered: List[ExecutionReceipt] = []
+            for r in all_r:
+                rid = r.resolved_server_id()
+                rname = r._derive_server_name()
+                if needle_id and rid == needle_id:
+                    filtered.append(r)
+                elif needle_name and (rname == needle_name or rid == needle_name):
+                    filtered.append(r)
+            all_r = filtered
+        return all_r[offset : offset + limit]
+
+    def get_receipt_by_id(self, receipt_id: str) -> Optional[ExecutionReceipt]:
+        """Fetches receipt by request_id or receipt_hash."""
+        for r in self.read_all_receipts():
+            if r.request_id == receipt_id or r.receipt_hash == receipt_id:
+                return r
+        return None
+
+    def server_stats(self) -> List[Dict[str, Any]]:
+        """Aggregate allow/block/escalate counts per MCP server identity."""
+        buckets: Dict[str, Dict[str, Any]] = {}
+        for r in self.read_all_receipts():
+            sid = r.resolved_server_id()
+            name = r._derive_server_name()
+            if sid not in buckets:
+                buckets[sid] = {
+                    "server_id": sid,
+                    "server_name": name,
+                    "client_name": r.client_name,
+                    "command_digest": r.command_digest,
+                    "total": 0,
+                    "allowed": 0,
+                    "blocked": 0,
+                    "escalated": 0,
+                    "zero_byte_enforcements": 0,
+                    "last_tool": None,
+                    "last_timestamp": None,
+                    "last_decision": None,
+                }
+            b = buckets[sid]
+            b["total"] += 1
+            decision = r.arbiter_decision
+            if decision == "ALLOW":
+                b["allowed"] += 1
+            elif decision == "BLOCK":
+                b["blocked"] += 1
+                b["zero_byte_enforcements"] += 1
+            elif decision == "ESCALATE":
+                b["escalated"] += 1
+                b["zero_byte_enforcements"] += 1
+            b["last_tool"] = r.tool_name
+            b["last_timestamp"] = r.timestamp_utc
+            b["last_decision"] = decision
+            if r.client_name and not b.get("client_name"):
+                b["client_name"] = r.client_name
+            if r.command_digest and not b.get("command_digest"):
+                b["command_digest"] = r.command_digest
+        return sorted(buckets.values(), key=lambda x: (-x["total"], x["server_name"] or ""))
+
+    def window_stats(
+        self,
+        since_utc: Optional[str] = None,
+        until_utc: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Aggregate decision counts for receipts in [since, until] (ISO-8601 UTC).
+
+        Missing/unparseable timestamps are excluded from the window (never invented).
+        """
+        from datetime import datetime, timezone
+
+        def parse_ts(raw: Optional[str]) -> Optional[datetime]:
+            if not raw:
+                return None
+            try:
+                s = str(raw).strip().replace("Z", "+00:00")
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.astimezone(timezone.utc)
+            except Exception:
+                return None
+
+        since_dt = parse_ts(since_utc)
+        until_dt = parse_ts(until_utc)
+        allowed = blocked = escalated = other = 0
+        zero_byte = 0
+        scanned = 0
+        in_window = 0
+        harness_excluded = 0
+        newest: Optional[str] = None
+        oldest: Optional[str] = None
+
+        by_reason: Dict[str, int] = {}
+        by_server: Dict[str, Dict[str, int]] = {}
+        by_tool: Dict[str, Dict[str, int]] = {}
+        by_layer: Dict[str, int] = {"CBAC": 0, "DIFC": 0, "WORKFLOW": 0, "AIA": 0, "ARBITER": 0}
+        reason_last: Dict[str, str] = {}
+        server_last: Dict[str, str] = {}
+        latencies: List[float] = []
+        last_block_id: Optional[str] = None
+        last_escalate_id: Optional[str] = None
+
+        def bump(bucket: Dict[str, Dict[str, int]], key: str, field: str) -> None:
+            row = bucket.setdefault(key, {"allowed": 0, "blocked": 0, "escalated": 0, "total": 0})
+            row[field] = int(row.get(field, 0)) + 1
+            row["total"] = int(row.get("total", 0)) + 1
+
+        for r in self.read_all_receipts():
+            scanned += 1
+            ts = parse_ts(getattr(r, "timestamp_utc", None))
+            if ts is None:
+                continue
+            if since_dt is not None and ts < since_dt:
+                continue
+            if until_dt is not None and ts > until_dt:
+                continue
+            rid = r.request_id or f"rcpt-{r.sequence_id}"
+            if is_harness_receipt_id(rid):
+                harness_excluded += 1
+                continue
+            in_window += 1
+            iso = ts.isoformat().replace("+00:00", "Z")
+            if newest is None or iso > newest:
+                newest = iso
+            if oldest is None or iso < oldest:
+                oldest = iso
+            decision = getattr(r, "arbiter_decision", None) or ""
+            server = (getattr(r, "server_name", None) or getattr(r, "server_id", None) or "unknown")
+            tool = getattr(r, "tool_name", None) or "unknown"
+            code = str(getattr(r, "reason_code", None) or "")
+            if decision == "ALLOW":
+                allowed += 1
+                bump(by_server, str(server), "allowed")
+                bump(by_tool, str(tool), "allowed")
+            elif decision == "BLOCK":
+                blocked += 1
+                zero_byte += 1
+                last_block_id = rid
+                bump(by_server, str(server), "blocked")
+                bump(by_tool, str(tool), "blocked")
+                layer = _producing_layer(r)
+                by_layer[layer] = by_layer.get(layer, 0) + 1
+            elif decision == "ESCALATE":
+                escalated += 1
+                zero_byte += 1
+                last_escalate_id = rid
+                bump(by_server, str(server), "escalated")
+                bump(by_tool, str(tool), "escalated")
+                layer = _producing_layer(r)
+                by_layer[layer] = by_layer.get(layer, 0) + 1
+            else:
+                other += 1
+                for bucket, key in ((by_server, str(server)), (by_tool, str(tool))):
+                    row = bucket.setdefault(key, {"allowed": 0, "blocked": 0, "escalated": 0, "total": 0})
+                    row["total"] = int(row.get("total", 0)) + 1
+            if code:
+                by_reason[code] = by_reason.get(code, 0) + 1
+                reason_last[code] = rid
+            server_last[str(server)] = rid
+            lat = getattr(r, "total_latency_ms", None)
+            if lat is not None:
+                try:
+                    latencies.append(float(lat))
+                except (TypeError, ValueError):
+                    pass
+
+        def top_rows(
+            bucket: Dict[str, Dict[str, int]], last_ids: Dict[str, str], limit: int = 15
+        ) -> List[Dict[str, Any]]:
+            ranked = sorted(bucket.items(), key=lambda kv: int(kv[1].get("total", 0)), reverse=True)
+            out: List[Dict[str, Any]] = []
+            for key, counts in ranked[:limit]:
+                out.append(
+                    {
+                        "name": key,
+                        "allowed": int(counts.get("allowed", 0)),
+                        "blocked": int(counts.get("blocked", 0)),
+                        "escalated": int(counts.get("escalated", 0)),
+                        "total": int(counts.get("total", 0)),
+                        "last_receipt_id": last_ids.get(key),
+                    }
+                )
+            return out
+
+        reason_rows = [
+            {"reason_code": k, "count": c, "last_receipt_id": reason_last.get(k)}
+            for k, c in sorted(by_reason.items(), key=lambda kv: kv[1], reverse=True)[:15]
+        ]
+
+        return {
+            "source": "live-ledger",
+            "since": since_utc,
+            "until": until_utc,
+            "scanned_receipts": scanned,
+            "harness_excluded": harness_excluded,
+            "in_window": in_window,
+            "allowed": allowed,
+            "blocked": blocked,
+            "escalated": escalated,
+            "other": other,
+            "zero_byte_enforcements": zero_byte,
+            "oldest_in_window": oldest,
+            "newest_in_window": newest,
+            "by_reason": reason_rows,
+            "by_server": top_rows(by_server, server_last),
+            "by_tool": top_rows(by_tool, {}),
+            "by_layer": by_layer,
+            "last_block_receipt_id": last_block_id,
+            "last_escalate_receipt_id": last_escalate_id,
+            "latency": {
+                "samples": len(latencies),
+                "p50_ms": _percentile_ms(latencies, 50) if latencies else None,
+                "p95_ms": _percentile_ms(latencies, 95) if latencies else None,
+                "p99_ms": _percentile_ms(latencies, 99) if latencies else None,
+            },
+        }
 
