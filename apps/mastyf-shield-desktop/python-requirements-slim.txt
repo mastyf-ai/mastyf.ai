@@ -1,0 +1,8 @@
+# Gateway serve path (Ollama AIA). Do not pull torch/transformers into the DMG.
+pydantic>=2.5.0
+fastapi>=0.110.0
+uvicorn>=0.29.0
+httpx>=0.27.0
+cryptography>=42.0.0
+pyyaml>=6.0.0
+numpy>=1.26.0

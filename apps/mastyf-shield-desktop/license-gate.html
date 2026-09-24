@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mastyf Shield — Activate license</title>
+    <style>
+      :root {
+        --bg: #07090e;
+        --ink: #e8edf5;
+        --muted: #8b95a8;
+        --line: rgba(255, 255, 255, 0.1);
+      }
+      body {
+        font-family: 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        letter-spacing: -0.011em;
+      }
+      .card {
+        width: min(34rem, calc(100vw - 3rem));
+        padding: 2.25rem 2rem 2rem;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(12, 16, 24, 0.92);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+      }
+      .brand img {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: #0b1220;
+        border: 1px solid var(--line);
+        object-fit: contain;
+      }
+      .brand-name {
+        font-weight: 650;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-size: 0.92rem;
+      }
+      .brand-tag {
+        font-size: 0.65rem;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 0.12rem 0.45rem;
+        margin-left: 0.35rem;
+      }
+      h1 {
+        font-size: 1.45rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        margin: 0 0 0.5rem;
+      }
+      p { color: var(--muted); line-height: 1.55; margin: 0 0 0.85rem; }
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 7rem;
+        background: #111820;
+        color: var(--ink);
+        border: 1px solid #2a3544;
+        border-radius: 10px;
+        padding: 0.8rem;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 0.8rem;
+      }
+      button {
+        margin-top: 0.9rem;
+        background: #1f6f4a;
+        color: var(--ink);
+        border: 0;
+        border-radius: 8px;
+        padding: 0.6rem 1.1rem;
+        font: inherit;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: wait; }
+      .err { color: #ff5c7a; }
+      a { color: #7eb6ff; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="brand">
+        <img src="icon.png" alt="Mastyf" />
+        <div>
+          <span class="brand-name">Mastyf</span>
+          <span class="brand-tag">Shield</span>
+        </div>
+      </div>
+      <h1>Activate Mastyf Shield</h1>
+      <p>
+        This paid build will not start Gateway or Shield until a license is stored
+        on this machine. Paste the <code>MSH1</code> key or the Lemon Squeezy
+        license from your receipt.
+      </p>
+      <p id="buy"></p>
+      <textarea id="key" placeholder="MSH1.… or Lemon license key"></textarea>
+      <div>
+        <button id="go" type="button">Activate</button>
+      </div>
+      <p id="msg" class="err"></p>
+    </div>
+    <script>
+      const buy = document.getElementById('buy');
+      const q = new URLSearchParams(location.search);
+      const url = q.get('store') || '';
+      if (url) {
+        buy.innerHTML = 'No key yet? <a id="store" href="#">Buy / recover license</a>.';
+        document.getElementById('store').addEventListener('click', (e) => {
+          e.preventDefault();
+          if (window.mastyfShield && window.mastyfShield.openExternal) {
+            window.mastyfShield.openExternal(url);
+          }
+        });
+      }
+      document.getElementById('go').addEventListener('click', async () => {
+        const btn = document.getElementById('go');
+        const msg = document.getElementById('msg');
+        msg.textContent = '';
+        btn.disabled = true;
+        try {
+          const result = await window.mastyfShield.activateLicense(
+            document.getElementById('key').value,
+          );
+          if (!result || !result.ok) {
+            msg.textContent = (result && result.detail) || 'License rejected.';
+            btn.disabled = false;
+            return;
+          }
+          msg.className = '';
+          msg.textContent = 'License stored. Starting Shield…';
+        } catch (err) {
+          msg.textContent = err && err.message ? err.message : String(err);
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

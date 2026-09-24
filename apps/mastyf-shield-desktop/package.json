@@ -1,0 +1,109 @@
+{
+  "name": "@mastyf_ai/mastyf-shield-desktop",
+  "version": "0.2.2",
+  "private": true,
+  "author": "Mastyf",
+  "description": "Mastyf Shield desktop product — bundled Gateway, BFF, Shield UI, and isolated first-run home.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "dev": "env -u ELECTRON_RUN_AS_NODE MASTYF_SHIELD_AUTOSTART=1 electron .",
+    "stage": "sh ../../scripts/stage-shield-bundle.sh",
+    "pack:mac": "sh scripts/pack-mac.sh",
+    "pack:mac:dir": "sh scripts/pack-mac.sh --dir",
+    "pack:mac:gguf": "MASTYF_BUNDLE_GGUF=1 sh scripts/pack-mac.sh",
+    "pack:mac:intel": "sh scripts/pack-mac.sh --x64",
+    "pack:win": "sh scripts/pack-win.sh",
+    "pack:linux": "sh scripts/pack-linux.sh",
+    "notarize:mac": "sh scripts/notarize-mac.sh",
+    "checksums": "sh scripts/write-checksums.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "build": {
+    "appId": "ai.mastyf.shield",
+    "productName": "Mastyf Shield",
+    "copyright": "Copyright © Mastyf",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "resolve-appliance-homes.cjs",
+      "resolve-appliance-ports.cjs",
+      "resolve-stack.cjs",
+      "license-local.cjs",
+      "license-gate.html",
+      "icon.png",
+      "dev-license-public.pem",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".pack-resources/deployment",
+        "to": "deployment",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".pack-resources/stack",
+        "to": "stack",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "identity": null
+    },
+    "dmg": {
+      "title": "Mastyf Shield"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "synopsis": "Local MCP reference monitor and Shield control surface"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  }
+}
