@@ -42,8 +42,6 @@ jobs:
       - name: Install Monorepo Dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
-      - name: Build Core Dist & Dependencies
-        run: pnpm run build
 
       - name: Package macOS ARM64 & Intel DMGs
         run: |
@@ -95,8 +93,6 @@ jobs:
       - name: Install Monorepo Dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
-      - name: Build Core Dist & Dependencies
-        run: pnpm run build
 
       - name: Package Linux & Windows Binaries
         run: |
