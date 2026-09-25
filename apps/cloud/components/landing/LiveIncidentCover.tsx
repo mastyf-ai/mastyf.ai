@@ -19,7 +19,7 @@ export function LiveIncidentCover() {
   const [incidents, setIncidents] = useState<LiveIncidentItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
-  const [scrollProgress, setScrollProgress] = useState<number>(0);
+  const [showAll, setShowAll] = useState<boolean>(false);
   const [activeIncidentIndex, setActiveIncidentIndex] = useState<number>(0);
 
   // Fetch real-time live articles from our edge API route
@@ -46,19 +46,6 @@ export function LiveIncidentCover() {
     return () => clearInterval(interval);
   }, []);
 
-  // Track scroll position for the containment convergence transition
-  useEffect(() => {
-    const handleScroll = () => {
-      const y = window.scrollY;
-      // Normalizes scroll progress from 0 (top of cover) to 1 (passed 350px)
-      const progress = Math.min(Math.max(y / 350, 0), 1);
-      setScrollProgress(progress);
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
   // Filter incidents based on category pill
   const filteredIncidents = useMemo(() => {
     if (activeFilter === 'ALL') return incidents;
@@ -74,8 +61,10 @@ export function LiveIncidentCover() {
     return () => clearInterval(timer);
   }, [filteredIncidents.length]);
 
+  const displayedIncidents = showAll ? filteredIncidents : filteredIncidents.slice(0, 6);
+
   return (
-    <div className={`lp-incident-cover-wrapper ${scrollProgress > 0.6 ? 'is-collapsed' : ''}`}>
+    <section className="lp-incident-cover-wrapper" aria-label="Live Real-Time Threat Wire">
       {/* Background cybernetic grid lines */}
       <div className="lp-incident-cover-bg" aria-hidden="true">
         <div className="lp-incident-radial-glow" />
@@ -96,7 +85,7 @@ export function LiveIncidentCover() {
             </span>
             <span className="lp-telemetry-sep">/</span>
             <span className="lp-telemetry-stat">
-              LIVE COVERAGE: <strong>{incidents.length > 0 ? `${incidents.length} DISPATCHES` : 'STREAMING...'}</strong>
+              LIVE COVERAGE: <strong>{incidents.length > 0 ? `${incidents.length} DISPATCHES INGESTED` : 'STREAMING...'}</strong>
             </span>
           </div>
         </div>
@@ -111,7 +100,7 @@ export function LiveIncidentCover() {
           </h1>
           <p className="lp-incident-hero-desc">
             Autonomous coding, DevOps, and customer agents execute unchecked bash, database, and API tools.
-            Below is the live uncurated stream of real-world prompt injections, tool poisoning disclosures, and enterprise data breaches happening right now.
+            Below is the live uncurated stream of real-world prompt injections, tool poisoning disclosures, and enterprise breaches happening right now.
           </p>
 
           {/* Category Filter Pills */}
@@ -135,22 +124,15 @@ export function LiveIncidentCover() {
           </div>
         </div>
 
-        {/* Clustered Real-Time Newspaper Headline Cards */}
-        <div
-          className="lp-incident-cluster-grid"
-          style={{
-            transform: `scale(${1 - scrollProgress * 0.12}) translateY(-${scrollProgress * 40}px)`,
-            opacity: Math.max(1 - scrollProgress * 1.3, 0),
-            pointerEvents: scrollProgress > 0.8 ? 'none' : 'auto',
-          }}
-        >
+        {/* Clustered Real-Time Newspaper Headline Cards (Always fully visible on scroll) */}
+        <div className="lp-incident-cluster-grid">
           {loading && incidents.length === 0 ? (
             <div className="lp-incident-loading-state">
               <span className="lp-pulse-dot" />
               <span>Querying global cybersecurity newsrooms & threat feeds...</span>
             </div>
           ) : (
-            filteredIncidents.slice(0, 6).map((item, idx) => {
+            displayedIncidents.map((item, idx) => {
               const isHighlight = idx === activeIncidentIndex;
               return (
                 <article
@@ -202,35 +184,36 @@ export function LiveIncidentCover() {
           )}
         </div>
 
-        {/* Scroll Down Convergence Prompt & In-Line Barrier Anchor */}
-        <div
-          className="lp-incident-scroll-cue"
-          style={{
-            opacity: Math.max(1 - scrollProgress * 2, 0),
-          }}
-        >
-          <div className="lp-scroll-beam-line" />
-          <span className="lp-scroll-prompt-text">
-            SCROLL DOWN TO DEPLOY MASTYF IN-LINE CONTAINMENT
-          </span>
-          <div className="lp-scroll-arrow">↓</div>
+        {/* Toggle to view more live dispatches if feed is large */}
+        {filteredIncidents.length > 6 && (
+          <div className="lp-incident-more-wrap">
+            <button
+              type="button"
+              className="lp-incident-more-btn"
+              onClick={() => setShowAll((prev) => !prev)}
+            >
+              {showAll ? 'Show Fewer Dispatches ↑' : `View All ${filteredIncidents.length} Live Dispatches ↓`}
+            </button>
+          </div>
+        )}
+
+        {/* Prominent Containment Transition Bridge */}
+        <div className="lp-incident-containment-bridge">
+          <div className="lp-bridge-banner">
+            <div className="lp-bridge-laser-line" />
+            <div className="lp-bridge-content">
+              <span className="lp-bridge-eyebrow">THE DEFENSE BARRIER</span>
+              <h3 className="lp-bridge-title">
+                Every breach above occurred because an AI agent executed an unvetted tool.
+              </h3>
+              <p className="lp-bridge-desc">
+                Mastyf Shield and Gateway sit directly on the MCP stdio & network transport, enforcing sub-4.8µs zero-trust inspection and blocking unauthorized tool calls before they reach your infrastructure.
+              </p>
+            </div>
+            <div className="lp-bridge-laser-line" />
+          </div>
         </div>
       </div>
-
-      {/* The Laser Containment Line that ignites when scrolled */}
-      <div
-        className="lp-incident-severance-laser"
-        style={{
-          opacity: Math.min(scrollProgress * 2, 1),
-          transform: `scaleX(${Math.min(0.2 + scrollProgress * 0.8, 1)})`,
-        }}
-      >
-        <div className="lp-laser-core" />
-        <div className="lp-laser-glow" />
-        <span className="lp-laser-badge">
-          MASTYF SHIELD & GATEWAY /// IN-LINE PROTOCOL INTERCEPT ACTIVE (SUB-4.8µS)
-        </span>
-      </div>
-    </div>
+    </section>
   );
 }
