@@ -6303,9 +6303,18 @@ main .lp-section:first-child {
    ========================================================================== */
 
 .lp-marquee-icon {
-  font-size: 1.05rem;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
+}
+
+.lp-marquee-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
 .lp-ecosystem-stats {
