@@ -5372,13 +5372,22 @@ main .lp-section:first-child {
 }
 
 .lp-ecosystem-eyebrow {
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   font-family: var(--font-mono, monospace);
-  letter-spacing: 0.08em;
-  color: #64748b;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: #94a3b8;
   text-transform: uppercase;
   display: block;
-  margin-bottom: 1.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.lp-ecosystem-sub {
+  font-size: 0.88rem;
+  color: #64748b;
+  margin: 0 auto 1.6rem auto;
+  max-width: 620px;
+  line-height: 1.5;
 }
 
 .lp-marquee-container {

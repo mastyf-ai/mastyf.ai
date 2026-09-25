@@ -184,8 +184,11 @@ export function EcosystemMarquee() {
     <section className="lp-ecosystem-section" aria-label="Supported Agent Ecosystem">
       <div className="lp-ecosystem-inner">
         <span className="lp-ecosystem-eyebrow">
-          NATIVELY ENFORCED ACROSS THE MCP AGENTIC ECOSYSTEM
+          TRANSPARENT IN-LINE ENFORCEMENT ACROSS EVERY MCP CLIENT
         </span>
+        <p className="lp-ecosystem-sub">
+          Works out-of-the-box with any client, IDE, or framework speaking the Model Context Protocol.
+        </p>
         <div className="lp-marquee-container">
           <div className="lp-marquee-track">
             {doubled.map((client, idx) => (
