@@ -1,0 +1,1 @@
+{"version":3,"file":"003_metrics_timeseries.js","sourceRoot":"","sources":["../../../../src/database/migrations/legacy-sqlite/003_metrics_timeseries.ts"],"names":[],"mappings":"AAEA,MAAM,UAAU,EAAE,CAAC,EAAqB;IACtC,EAAE,CAAC,IAAI,CAAC;;;;;;;;;;;GAWP,CAAC,CAAC;AACL,CAAC;AAED,MAAM,UAAU,IAAI,CAAC,EAAqB;IACxC,EAAE,CAAC,IAAI,CAAC,yCAAyC,CAAC,CAAC;AACrD,CAAC"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"circuit-breaker-registry.d.ts","sourceRoot":"","sources":["../../src/utils/circuit-breaker-registry.ts"],"names":[],"mappings":"AAAA;;GAEG;AACH,OAAO,EAAE,cAAc,EAAE,MAAM,sBAAsB,CAAC;AAMtD,wBAAgB,iBAAiB,CAAC,QAAQ,EAAE,MAAM,EAAE,UAAU,EAAE,MAAM,GAAG,cAAc,CAqBtF;AAED,gBAAgB;AAChB,wBAAgB,mCAAmC,IAAI,IAAI,CAE1D"}

@@ -1,0 +1,436 @@
+/**
+ * Automated Threat Research → corpus pipeline orchestrator.
+ */
+import { Logger } from '../utils/logger.js';
+import { getLicenseClient } from '../license/license-client.js';
+import { isCiLicenseBypass } from '../license/feature-tiers.js';
+import { isCiTokenCached } from '../license/ci-token.js';
+import { discoverFromBypass, discoverFromCorpusSeed, discoverFromSemanticFlag, discoverFromThreatIntel, ensureThreatLabLlmReady, loadCorpusSamples, validateThreatLabDiscovery, } from './threat-lab.js';
+import { normalizeDiscoveryClassification, categoryFromBlockRule } from './threat-taxonomy.js';
+import { candidateFingerprint, isFingerprintProcessed, markThreatResearchProcessed, writeAutoCorpusFixture, } from './auto-corpus-writer.js';
+export { countProcessedFingerprints } from './auto-corpus-writer.js';
+import { promoteToCorpus } from './auto-corpus-promoter.js';
+import { loadAttackLearningState } from './instant-attack-learning.js';
+/** Map Threat Lab provenance sources to auto-corpus writer sources. */
+export function threatLabSourceToAutoCorpusSource(source) {
+    switch (source) {
+        case 'semantic-tp':
+            return 'semantic_flag';
+        case 'threat-intel':
+            return 'threat_intel';
+        case 'corpus-proactive':
+            return 'corpus_proactive';
+        case 'vuln-discovery':
+            return 'vuln_discovery';
+        case 'bypass':
+        default:
+            return 'bypass';
+    }
+}
+function replayRequiredForCorpusWrite(override) {
+    if (override !== undefined)
+        return override;
+    return process.env.MASTYF_AI_AUTOPILOT_CORPUS_GATE === 'true' || requireReplay();
+}
+/** Shared normalize → validate → write → promote path for runtime and Threat Lab batch. */
+async function persistValidatedDiscoveryToAutoCorpus(input, opts) {
+    const { discovery, source, inputFingerprint } = input;
+    const fp = inputFingerprint || candidateFingerprint(discovery);
+    if (isFingerprintProcessed(fp)) {
+        return { ok: false, reason: 'duplicate fingerprint', fingerprint: fp };
+    }
+    let normalized;
+    try {
+        normalized = normalizeDiscoveryClassification(discovery);
+    }
+    catch {
+        return { ok: false, reason: 'classification normalization failed', fingerprint: fp };
+    }
+    const validation = validateThreatLabDiscovery(normalized, {
+        requireReplayBlock: replayRequiredForCorpusWrite(opts?.requireReplayBlock),
+    });
+    if (!validation.ok) {
+        return { ok: false, reason: validation.errors.join('; '), fingerprint: fp };
+    }
+    const written = writeAutoCorpusFixture(normalized, {
+        source,
+        inputFingerprint: fp,
+        llmUsed: input.llmUsed ?? true,
+        attackClass: normalized.attackClass,
+        hypothesis: normalized.hypothesis,
+        confidence: normalized.confidence,
+    });
+    if (!written) {
+        return { ok: false, reason: 'fixture write skipped (duplicate)', fingerprint: fp };
+    }
+    markThreatResearchProcessed(fp);
+    if (opts?.recordRateLimit) {
+        recordHourlyWrite();
+    }
+    try {
+        const { promoteDiscoveryToCoreRules } = await import('./core-rule-promoter.js');
+        promoteDiscoveryToCoreRules(normalized, {
+            source,
+            inputFingerprint: fp,
+            confidence: normalized.confidence,
+        });
+    }
+    catch {
+        /* non-fatal */
+    }
+    Logger.info(`[threat-research] auto-wrote ${written.advId} (${normalized.attackClass}, source=${source})`);
+    try {
+        const { appendLearningEvent } = await import('../utils/learning-events.js');
+        appendLearningEvent({
+            type: 'threat_research_write',
+            detail: `${written.advId} ${normalized.attackClass}`,
+            fingerprint: fp,
+            confidence: normalized.confidence,
+        });
+    }
+    catch {
+        /* non-fatal */
+    }
+    if (process.env.MASTYF_AI_AUTO_CORPUS_PROMOTE === 'true') {
+        try {
+            const provenance = {
+                source,
+                inputFingerprint: fp,
+                attackClass: normalized.attackClass,
+                hypothesis: normalized.hypothesis,
+                confidence: normalized.confidence,
+                llmUsed: input.llmUsed ?? true,
+                advId: written.advId,
+            };
+            const promoted = await promoteToCorpus(normalized, provenance);
+            if (promoted.ok) {
+                Logger.info(`[threat-research] auto-promoted ${written.advId} → corpus/attacks/${promoted.category}/${promoted.relPath?.split('/').pop()}`);
+            }
+        }
+        catch (err) {
+            Logger.debug(`[threat-research] auto-promotion failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+    return {
+        ok: true,
+        advId: written.advId,
+        relPath: written.relPath,
+        fingerprint: written.fingerprint,
+    };
+}
+/**
+ * Write a Threat Lab–validated discovery via the auto-corpus path (no second LLM call, no rate limit).
+ */
+export async function writeValidatedDiscoveryToAutoCorpus(discovery, provenance, opts) {
+    const fp = provenance.inputFingerprint || candidateFingerprint(discovery);
+    return persistValidatedDiscoveryToAutoCorpus({
+        discovery,
+        source: threatLabSourceToAutoCorpusSource(provenance.source),
+        inputFingerprint: fp,
+        llmUsed: provenance.llmUsed,
+    }, { requireReplayBlock: opts?.requireReplayBlock, recordRateLimit: false });
+}
+const queue = [];
+let drainTimer = null;
+const hourTimestamps = [];
+function debounceMs() {
+    const n = parseInt(process.env.MASTYF_AI_THREAT_RESEARCH_DEBOUNCE_MS || '5000', 10);
+    return Number.isFinite(n) && n >= 0 ? n : 5000;
+}
+function maxPerHour() {
+    const n = parseInt(process.env.MASTYF_AI_THREAT_RESEARCH_MAX_PER_HOUR || '20', 10);
+    return Number.isFinite(n) && n > 0 ? n : 20;
+}
+function minConfidence() {
+    if (process.env.MASTYF_AI_THREAT_RESEARCH_MIN_CONFIDENCE !== undefined) {
+        const n = parseFloat(process.env.MASTYF_AI_THREAT_RESEARCH_MIN_CONFIDENCE);
+        if (Number.isFinite(n))
+            return n;
+    }
+    if (process.env.MASTYF_AI_CI_BYPASS_LICENSE === 'true')
+        return 0.75;
+    const n = parseFloat(process.env.MASTYF_AI_THREAT_RESEARCH_MIN_CONFIDENCE || '0.85');
+    return Number.isFinite(n) ? n : 0.85;
+}
+function requireReplay() {
+    return process.env.MASTYF_AI_THREAT_RESEARCH_REQUIRE_REPLAY === 'true';
+}
+export function threatResearchAutoEnabled() {
+    if (process.env.MASTYF_AI_THREAT_RESEARCH_AUTO !== 'true')
+        return false;
+    if (process.env.SWARM_THREAT_RESEARCH_AUTO === 'true')
+        return true;
+    if (isCiLicenseBypass() || isCiTokenCached())
+        return true;
+    return getLicenseClient().hasFeature('swarm');
+}
+/** When true, Threat Lab writes adv fixtures via the auto-corpus path (not legacy direct writes). */
+export function autoThreatResearchOwnsAdvWrites() {
+    return (process.env.MASTYF_AI_THREAT_RESEARCH_AUTO === 'true'
+        && process.env.SWARM_THREAT_RESEARCH_AUTO === 'true');
+}
+function semanticEnabled() {
+    return process.env.MASTYF_AI_THREAT_RESEARCH_SEMANTIC !== 'false';
+}
+function blocksEnabled() {
+    return process.env.MASTYF_AI_THREAT_RESEARCH_BLOCKS !== 'false';
+}
+function threatIntelEnabled() {
+    return process.env.MASTYF_AI_THREAT_RESEARCH_THREAT_INTEL !== 'false';
+}
+function pruneHourly() {
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    while (hourTimestamps.length && hourTimestamps[0] < cutoff) {
+        hourTimestamps.shift();
+    }
+}
+function rateLimitOk() {
+    pruneHourly();
+    return hourTimestamps.length < maxPerHour();
+}
+function recordHourlyWrite() {
+    hourTimestamps.push(Date.now());
+}
+export function getThreatResearchConfig() {
+    const semanticMin = parseFloat(process.env.MASTYF_AI_THREAT_RESEARCH_SEMANTIC_MIN_CONFIDENCE || '0.85');
+    const batchMax = parseInt(process.env.SWARM_THREAT_RESEARCH_MAX || '10', 10);
+    return {
+        autoEnabled: process.env.MASTYF_AI_THREAT_RESEARCH_AUTO === 'true',
+        swarmAutoEnabled: process.env.SWARM_THREAT_RESEARCH_AUTO === 'true',
+        ownsAdvWrites: autoThreatResearchOwnsAdvWrites(),
+        minConfidence: minConfidence(),
+        semanticMinConfidence: Number.isFinite(semanticMin) ? semanticMin : 0.85,
+        requireReplay: requireReplay(),
+        maxPerHour: maxPerHour(),
+        debounceMs: debounceMs(),
+        batchMax: Number.isFinite(batchMax) && batchMax > 0 ? batchMax : 10,
+        proactiveEnabled: process.env.SWARM_THREAT_RESEARCH_PROACTIVE !== 'false',
+        sources: {
+            semantic: semanticEnabled(),
+            blocks: blocksEnabled(),
+            threatIntel: threatIntelEnabled(),
+        },
+    };
+}
+export function getThreatResearchQueueStatus() {
+    pruneHourly();
+    const config = getThreatResearchConfig();
+    return {
+        queued: queue.length,
+        writesThisHour: hourTimestamps.length,
+        maxPerHour: config.maxPerHour,
+        debounceMs: config.debounceMs,
+        enabled: threatResearchAutoEnabled(),
+        sources: config.sources,
+    };
+}
+export function enqueueThreatResearch(event) {
+    if (!threatResearchAutoEnabled())
+        return;
+    if (event.confidence !== undefined && event.confidence < minConfidence())
+        return;
+    if (isFingerprintProcessed(event.fingerprint))
+        return;
+    queue.push(event);
+    if (drainTimer)
+        return;
+    drainTimer = setTimeout(() => {
+        drainTimer = null;
+        void drainThreatResearchQueue();
+    }, debounceMs());
+}
+async function drainThreatResearchQueue() {
+    while (queue.length > 0) {
+        const event = queue.shift();
+        if (!event)
+            break;
+        try {
+            await processThreatResearchEvent(event);
+        }
+        catch (err) {
+            Logger.debug(`[threat-research] event failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+}
+async function discoverForEvent(event, llm, seq) {
+    switch (event.type) {
+        case 'semantic_flag':
+            if (!semanticEnabled() || !event.semanticRecord)
+                return null;
+            return discoverFromSemanticFlag(event.semanticRecord, { llm, seq });
+        case 'block_repeat':
+            if (!blocksEnabled() || !event.bypass)
+                return null;
+            return discoverFromBypass(event.bypass, { llm, seq });
+        case 'threat_intel':
+            if (!threatIntelEnabled() || !event.threatEntry)
+                return null;
+            return discoverFromThreatIntel(event.threatEntry, { llm, seq });
+        case 'bypass':
+            if (!event.bypass)
+                return null;
+            return discoverFromBypass(event.bypass, { llm, seq });
+        case 'corpus_proactive':
+            if (!event.corpusSeed)
+                return null;
+            return discoverFromCorpusSeed(event.corpusSeed, { llm, seq });
+        case 'dependency_anomaly':
+        case 'vuln_discovery': {
+            if (!event.vulnFinding && !event.bypass)
+                return null;
+            if (event.vulnFinding) {
+                const { discoverFromVulnFinding } = await import('./threat-lab.js');
+                return discoverFromVulnFinding(event.vulnFinding, { llm, seq });
+            }
+            return discoverFromBypass(event.bypass, { llm, seq });
+        }
+        default:
+            return null;
+    }
+}
+export async function processThreatResearchEvent(event) {
+    if (!threatResearchAutoEnabled()) {
+        return { ok: false, reason: 'auto threat research disabled' };
+    }
+    if (!rateLimitOk()) {
+        return { ok: false, reason: 'hourly rate limit exceeded' };
+    }
+    if (isFingerprintProcessed(event.fingerprint)) {
+        return { ok: false, reason: 'duplicate fingerprint' };
+    }
+    const ready = await ensureThreatLabLlmReady();
+    if (!ready.ok) {
+        return { ok: false, reason: ready.reason || 'LLM unavailable' };
+    }
+    const discovery = await discoverForEvent(event, ready.llm, 1);
+    if (!discovery) {
+        return { ok: false, reason: 'LLM discovery returned null' };
+    }
+    if (discovery.confidence < minConfidence()) {
+        return { ok: false, reason: 'below min confidence' };
+    }
+    return persistValidatedDiscoveryToAutoCorpus({
+        discovery,
+        source: event.type,
+        inputFingerprint: event.fingerprint,
+        llmUsed: true,
+    }, { recordRateLimit: true });
+}
+export async function processThreatResearchBatch(events) {
+    const results = [];
+    for (const event of events) {
+        if (!rateLimitOk()) {
+            results.push({ ok: false, reason: 'hourly rate limit exceeded' });
+            break;
+        }
+        results.push(await processThreatResearchEvent(event));
+    }
+    return results;
+}
+/** Test helper — reset in-memory queue and hourly rate limit state. */
+export function resetThreatResearchQueueForTests() {
+    queue.length = 0;
+    if (drainTimer) {
+        clearTimeout(drainTimer);
+        drainTimer = null;
+    }
+    hourTimestamps.length = 0;
+}
+export function buildBlockRepeatEvent(blockRule, toolName, blockReason, argsFingerprint, opts) {
+    const snippets = [
+        ...(opts?.argSnippets || []),
+        ...(opts?.windowBlocks || []).flatMap((b) => b.argSnippets || []),
+    ].slice(0, 8);
+    const latestArgs = opts?.arguments
+        || [...(opts?.windowBlocks || [])].reverse().find((b) => b.arguments)?.arguments;
+    const reasons = [
+        blockReason,
+        ...(opts?.windowBlocks || []).map((b) => b.blockReason).filter(Boolean),
+    ].slice(0, 5);
+    const payloadParts = [...new Set([...snippets, ...reasons.map((r) => r.slice(0, 200))])];
+    return {
+        type: 'block_repeat',
+        fingerprint: `block:${blockRule}:${toolName}:${argsFingerprint}`,
+        bypass: {
+            fingerprint: `block-${blockRule}-${toolName}-${argsFingerprint}`,
+            toolName,
+            category: categoryFromBlockRule(blockRule),
+            block_reason: blockReason,
+            ruleHint: blockRule,
+            payload: payloadParts.join(' | ').slice(0, 1200),
+            arguments: latestArgs,
+            args: latestArgs,
+        },
+    };
+}
+export function buildSemanticFlagEvent(record) {
+    return {
+        type: 'semantic_flag',
+        fingerprint: `semantic:${record.id}`,
+        confidence: record.semanticAudit?.confidence,
+        semanticRecord: record,
+    };
+}
+export function buildThreatIntelEvent(entry) {
+    return {
+        type: 'threat_intel',
+        fingerprint: `threat-intel:${entry.id}`,
+        threatEntry: entry,
+    };
+}
+/** Pre-advisory npm audit / SBOM finding without a published CVE. */
+export function buildDependencyAnomalyEvent(finding) {
+    return {
+        type: 'dependency_anomaly',
+        fingerprint: finding.fingerprint || `dep-anomaly:${finding.id}`,
+        confidence: finding.severity === 'CRITICAL' || finding.severity === 'HIGH' ? 0.9 : 0.7,
+        vulnFinding: finding,
+    };
+}
+export function buildVulnDiscoveryEvent(finding) {
+    return {
+        type: 'vuln_discovery',
+        fingerprint: finding.fingerprint || `vuln:${finding.id}`,
+        confidence: 0.85,
+        vulnFinding: finding,
+    };
+}
+export function buildBypassEvent(bypass) {
+    const fp = bypass.fingerprint ||
+        `bypass:${bypass.toolName || bypass.tool}:${JSON.stringify(bypass.arguments || bypass.args || {})}`;
+    return { type: 'bypass', fingerprint: fp, bypass };
+}
+export function buildCorpusProactiveEvents(limit) {
+    return loadCorpusSamples({ limit }).map((seed) => ({
+        type: 'corpus_proactive',
+        fingerprint: `corpus-seed:${seed.relPath}`,
+        corpusSeed: seed,
+        confidence: 1,
+    }));
+}
+/** Live block-repeat signals from instant attack-learning state (batch job + runtime queue). */
+export function buildBlockRepeatEventsFromAttackState(limit, tenantId) {
+    if (!blocksEnabled())
+        return [];
+    const state = loadAttackLearningState(tenantId);
+    const events = [];
+    const seen = new Set();
+    for (const block of [...(state.recentBlocks ?? [])].reverse()) {
+        if (events.length >= limit)
+            break;
+        const fp = `block:${block.blockRule}:${block.toolName}:${block.argsFingerprint}`;
+        if (seen.has(fp))
+            continue;
+        seen.add(fp);
+        events.push(buildBlockRepeatEvent(block.blockRule, block.toolName, block.blockReason, block.argsFingerprint, {
+            arguments: block.arguments,
+            argSnippets: block.argSnippets,
+        }));
+    }
+    return events;
+}
+/** Prefer signals not yet in the processed ledger (avoids wasted LLM calls on reruns). */
+export function filterUnprocessedEvents(events) {
+    return events.filter((ev) => !isFingerprintProcessed(ev.fingerprint));
+}
+//# sourceMappingURL=threat-research-pipeline.js.map

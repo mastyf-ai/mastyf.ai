@@ -1,0 +1,1 @@
+{"version":3,"file":"start-env.d.ts","sourceRoot":"","sources":["../../src/utils/start-env.ts"],"names":[],"mappings":"AAQA,uFAAuF;AACvF,wBAAgB,yBAAyB,IAAI,IAAI,CAehD;AAED,wBAAgB,aAAa,CAAC,SAAS,CAAC,EAAE,MAAM,CAAC,MAAM,EAAE,MAAM,CAAC,GAAG,IAAI,CAiDtE;AAED,wBAAgB,kBAAkB,CAAC,WAAW,EAAE,MAAM,GAAG,MAAM,CAM9D;AAED,wBAAgB,mBAAmB,CAAC,WAAW,EAAE,MAAM,GAAG,OAAO,CAEhE"}

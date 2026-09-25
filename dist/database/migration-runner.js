@@ -1,0 +1,63 @@
+/**
+ * Ordered PostgreSQL migrations with schema_migrations tracking (Flyway-style).
+ */
+import { readFileSync, readdirSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { Logger } from '../utils/logger.js';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_MIGRATIONS_DIR = resolve(__dirname, 'migrations');
+export async function runMigrations(pool, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
+    const all = readdirSync(migrationsDir);
+    const skippedTs = all.filter((f) => f.endsWith('.ts'));
+    if (skippedTs.length > 0) {
+        Logger.warn(`[migrations] Skipping ${skippedTs.length} legacy SQLite .ts migration(s) — PostgreSQL uses .sql only: ${skippedTs.join(', ')}`);
+    }
+    const files = all.filter((f) => f.endsWith('.sql')).sort();
+    const prefixCounts = new Map();
+    for (const file of files) {
+        const prefix = file.slice(0, 3);
+        const list = prefixCounts.get(prefix) ?? [];
+        list.push(file);
+        prefixCounts.set(prefix, list);
+    }
+    for (const [prefix, group] of prefixCounts) {
+        if (group.length > 1) {
+            Logger.warn(`[migrations] Duplicate numeric prefix "${prefix}" on ${group.join(', ')} — versions are tracked by full filename; ensure both are intentional`);
+        }
+    }
+    const applied = [];
+    const client = await pool.connect();
+    try {
+        await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+        for (const file of files) {
+            const version = file.replace(/\.sql$/, '');
+            const check = await client.query('SELECT 1 FROM schema_migrations WHERE version = $1', [version]);
+            if (check.rows.length > 0)
+                continue;
+            const sql = readFileSync(resolve(migrationsDir, file), 'utf-8');
+            await client.query('BEGIN');
+            try {
+                await client.query(sql);
+                await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [version]);
+                await client.query('COMMIT');
+                applied.push(version);
+                Logger.info(`[migrations] Applied ${file}`);
+            }
+            catch (err) {
+                await client.query('ROLLBACK');
+                throw err;
+            }
+        }
+    }
+    finally {
+        client.release();
+    }
+    return applied;
+}
+//# sourceMappingURL=migration-runner.js.map

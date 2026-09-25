@@ -1,0 +1,1 @@
+{"version":3,"file":"grafana-trace.d.ts","sourceRoot":"","sources":["../../src/dashboard/grafana-trace.ts"],"names":[],"mappings":"AAAA,iFAAiF;AAEjF,wBAAgB,gBAAgB,CAC9B,QAAQ,EAAE,MAAM,GAAG,IAAI,GAAG,SAAS,EACnC,OAAO,EAAE,MAAM,GAAG,IAAI,GAAG,SAAS,GACjC,MAAM,GAAG,IAAI,CAOf;AAED,iEAAiE;AACjE,eAAO,MAAM,2BAA2B,yIACgG,CAAC"}

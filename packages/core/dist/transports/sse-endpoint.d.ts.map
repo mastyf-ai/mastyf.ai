@@ -1,0 +1,1 @@
+{"version":3,"file":"sse-endpoint.d.ts","sourceRoot":"","sources":["../../src/transports/sse-endpoint.ts"],"names":[],"mappings":"AAAA,oEAAoE;AACpE,wBAAgB,oBAAoB,CAClC,IAAI,EAAE,MAAM,EACZ,OAAO,EAAE,GAAG,GACX;IAAE,SAAS,EAAE,MAAM,CAAC;IAAC,UAAU,EAAE,GAAG,CAAA;CAAE,GAAG,IAAI,CAuB/C;AAED,wBAAgB,aAAa,CAAC,OAAO,EAAE,GAAG,GAAG,MAAM,EAAE,CAKpD"}

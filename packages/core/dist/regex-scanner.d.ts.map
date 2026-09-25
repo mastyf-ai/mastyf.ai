@@ -1,0 +1,1 @@
+{"version":3,"file":"regex-scanner.d.ts","sourceRoot":"","sources":["../src/regex-scanner.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,KAAK,EAAE,cAAc,EAAE,MAAM,YAAY,CAAC;AAIxD,MAAM,WAAW,gBAAgB;IAC/B,oEAAoE;IACpE,aAAa,CAAC,EAAE,OAAO,CAAC;CACzB;AAmID,wBAAgB,YAAY,CAC1B,IAAI,EAAE,cAAc,EACpB,OAAO,GAAE,gBAAqB,GAC7B,KAAK,EAAE,CAgFT"}

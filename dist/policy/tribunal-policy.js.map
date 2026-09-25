@@ -1,0 +1,1 @@
+{"version":3,"file":"tribunal-policy.js","sourceRoot":"","sources":["../../src/policy/tribunal-policy.ts"],"names":[],"mappings":"AAUA,IAAI,MAAM,GAAgC,IAAI,CAAC;AAE/C,MAAM,UAAU,2BAA2B,CAAC,QAA+B;IACzE,MAAM,GAAG,QAAQ,IAAI,IAAI,CAAC;AAC5B,CAAC;AAED,MAAM,UAAU,2BAA2B;IACzC,OAAO,MAAM,CAAC;AAChB,CAAC;AAED,gBAAgB;AAChB,MAAM,UAAU,2BAA2B;IACzC,MAAM,GAAG,IAAI,CAAC;AAChB,CAAC"}

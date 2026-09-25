@@ -1,0 +1,1 @@
+{"version":3,"file":"003_metrics_timeseries.d.ts","sourceRoot":"","sources":["../../../../src/database/migrations/legacy-sqlite/003_metrics_timeseries.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,QAAQ,MAAM,gBAAgB,CAAC;AAE3C,wBAAgB,EAAE,CAAC,EAAE,EAAE,QAAQ,CAAC,QAAQ,GAAG,IAAI,CAa9C;AAED,wBAAgB,IAAI,CAAC,EAAE,EAAE,QAAQ,CAAC,QAAQ,GAAG,IAAI,CAEhD"}

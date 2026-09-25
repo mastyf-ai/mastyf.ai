@@ -1,0 +1,1 @@
+{"version":3,"file":"semantic-strict.js","sourceRoot":"","sources":["../src/semantic-strict.ts"],"names":[],"mappings":"AAAA,8FAA8F;AAC9F,MAAM,UAAU,wBAAwB;IACtC,IAAI,OAAO,CAAC,GAAG,CAAC,mCAAmC,KAAK,MAAM;QAAE,OAAO,IAAI,CAAC;IAC5E,OAAO,OAAO,CAAC,GAAG,CAAC,yBAAyB,KAAK,MAAM,CAAC;AAC1D,CAAC"}

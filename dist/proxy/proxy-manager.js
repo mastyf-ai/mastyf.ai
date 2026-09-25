@@ -1,0 +1,396 @@
+import { McpProxyServer } from './proxy-server.js';
+import { StdioConnectionPool, stdioPoolSize } from './stdio-connection-pool.js';
+import { SseProxyServer } from './sse-proxy-server.js';
+import { StreamableHttpProxyServer } from './streamable-http-proxy-server.js';
+import { WebSocketProxyServer } from './websocket-proxy-server.js';
+import { assertGatewayStartup, isGatewayModeEnabled } from '../tenant/gateway-mode.js';
+import { requireUpstreamTlsAllowed } from '../utils/upstream-tls.js';
+import { Logger } from '../utils/logger.js';
+import { PolicyWatcher } from '../policy/policy-watcher.js';
+import { TenantPolicyRegistry } from '../policy/tenant-policy-registry.js';
+import { globalHookRegistry } from './tool-call-defense-orchestrator.js';
+import { createRateLimitHook, createPiiRedactionHook, createSensitivePathGuard, createSlackNotifierHook, createPagerDutyHook, createTimeBasedAccessHook, createGeoFencingHook, createCustomHook } from '../policy/tool-call-hooks.js';
+import { createApprovalHook } from '../policy/approval-hook.js';
+import { createSessionRateLimitHook } from '../policy/session-rate-limit.js';
+import { getUserToolEnforcementEngine } from '../policy/strategies/user-tool-enforcement-strategy.js';
+import { getPersistenceStore } from '../utils/persistence-store.js';
+import { StructuredLogger } from '../utils/structured-logger.js';
+let hooksInitialized = false;
+function initBuiltinHooks() {
+    if (hooksInitialized)
+        return;
+    hooksInitialized = true;
+    try {
+        globalHookRegistry.registerBefore(createRateLimitHook({ maxCallsPerMinute: 60, perUser: true }));
+        globalHookRegistry.registerAfter(createPiiRedactionHook(['api_key', 'password', 'secret', 'token', 'access_token', 'private_key']));
+        if (process.env.MASTYF_AI_BUILTIN_PATH_GUARD_ENABLED !== 'false') {
+            globalHookRegistry.registerBefore(createSensitivePathGuard(['/home/*', '/tmp/*', '/workspace/*', '/app/*'], ['/etc/shadow', '/etc/ssl/private/*', '*.pem', '*.key', '.env', '.aws/*', '.ssh/*']));
+        }
+        // Conditional hooks — activate when env vars are set
+        const slackUrl = process.env.MASTYF_AI_SLACK_WEBHOOK || process.env.ALERT_SLACK_WEBHOOK;
+        if (slackUrl) {
+            globalHookRegistry.registerBefore(createSlackNotifierHook(slackUrl));
+            globalHookRegistry.registerAfter(createSlackNotifierHook(slackUrl));
+        }
+        const pdKey = process.env.ALERT_PAGERDUTY_KEY;
+        if (pdKey)
+            globalHookRegistry.registerAfter(createPagerDutyHook(pdKey));
+        const allowedRegions = process.env.MASTYF_AI_ALLOWED_REGIONS || process.env.MASTYF_AI_ZERO_TRUST_ALLOWED_REGIONS;
+        if (allowedRegions)
+            globalHookRegistry.registerBefore(createGeoFencingHook(allowedRegions.split(',').map(r => r.trim())));
+        if (process.env.MASTYF_AI_ACCESS_HOURS) {
+            const [start, end] = process.env.MASTYF_AI_ACCESS_HOURS.split('-').map(Number);
+            if (!isNaN(start) && !isNaN(end))
+                globalHookRegistry.registerBefore(createTimeBasedAccessHook({ allowedHours: [start, end] }));
+        }
+        if (process.env.MASTYF_AI_ACCESS_DENIED_DAYS) {
+            const days = process.env.MASTYF_AI_ACCESS_DENIED_DAYS.split(',').map(Number).filter(n => n >= 0 && n <= 6);
+            if (days.length > 0)
+                globalHookRegistry.registerBefore(createTimeBasedAccessHook({ deniedDays: days }));
+        }
+        // Approval hook — activated when MASTYF_AI_APPROVAL_ENABLED not explicitly false
+        if (process.env['MASTYF_AI_APPROVAL_ENABLED'] !== 'false') {
+            const approvalTools = (process.env['MASTYF_AI_APPROVAL_TOOLS'] || 'execute_command,bash,shell,run_sql,git_push,deploy,delete_record,rm').split(',');
+            globalHookRegistry.registerBefore(createApprovalHook({
+                matchTools: approvalTools,
+                approvers: ['admin'],
+                timeoutSeconds: parseInt(process.env['MASTYF_AI_APPROVAL_TIMEOUT_SEC'] || '300', 10),
+                notifyChannel: process.env['MASTYF_AI_APPROVAL_CHANNEL'] || 'stdout',
+            }));
+        }
+        // Session rate-limit hook — activated when MASTYF_AI_SESSION_RATE_LIMIT_ENABLED not explicitly false
+        if (process.env['MASTYF_AI_SESSION_RATE_LIMIT_ENABLED'] !== 'false') {
+            const perSessionMax = parseInt(process.env['MASTYF_AI_SESSION_RATE_LIMIT_MAX'] || '120', 10);
+            globalHookRegistry.registerBefore(createSessionRateLimitHook(perSessionMax));
+        }
+    }
+    catch { }
+}
+function loadUserPoliciesFromDb() {
+    try {
+        const store = getPersistenceStore();
+        const rows = store.getUserPolicies('default');
+        if (rows.length === 0)
+            return;
+        const safe = (s) => { try {
+            return JSON.parse(s);
+        }
+        catch {
+            return [];
+        } };
+        const policies = rows.map(r => ({
+            userId: r.user_id, username: r.username, tenantId: r.tenant_id,
+            roles: safe(r.roles), allowedTools: safe(r.allowed_tools), deniedTools: safe(r.denied_tools),
+            rateLimitPerMinute: r.rate_limit_per_minute, maxTokensPerCall: r.max_tokens_per_call,
+            allowedPaths: safe(r.allowed_paths), deniedPaths: safe(r.denied_paths),
+        }));
+        if (policies.length > 0) {
+            getUserToolEnforcementEngine().registerUserPolicies(policies);
+            Logger.info(`[proxy-manager] Loaded ${policies.length} user policies from DB`);
+        }
+    }
+    catch { }
+}
+function loadCustomHooksFromDb() {
+    try {
+        const store = getPersistenceStore();
+        const hooks = store.getCustomHooks();
+        if (hooks.length === 0)
+            return;
+        for (const h of hooks) {
+            const hook = createCustomHook(h.name, h.code, h.type, h.priority);
+            if (!hook)
+                continue;
+            if (h.type === 'before')
+                globalHookRegistry.registerBefore(hook);
+            else if (h.type === 'after')
+                globalHookRegistry.registerAfter(hook);
+            else
+                globalHookRegistry.registerError(hook);
+        }
+        Logger.info(`[proxy-manager] Loaded ${hooks.length} custom hooks from DB`);
+    }
+    catch { }
+}
+import * as Metrics from '../utils/metrics.js';
+import { isStreamableHttpMcpUrl, resolveStreamableHttpUpstreamBase } from '../utils/mcp-transport-url.js';
+export class ProxyManager {
+    db;
+    authValidator;
+    stdioProxies = [];
+    stdioPools = [];
+    sseProxies = new Map();
+    streamableProxies = new Map();
+    wsProxies = new Map();
+    policyEngine;
+    tenantPolicyRegistry;
+    constructor(db, policyEngineOrWatcher, authValidator) {
+        this.db = db;
+        this.authValidator = authValidator;
+        initBuiltinHooks();
+        loadUserPoliciesFromDb();
+        loadCustomHooksFromDb();
+        if (policyEngineOrWatcher instanceof PolicyWatcher) {
+            this.policyEngine = policyEngineOrWatcher.get() ?? undefined;
+            const updateEngine = () => {
+                const newEngine = policyEngineOrWatcher.get();
+                if (newEngine) {
+                    this.policyEngine = newEngine;
+                    for (const proxy of this.stdioProxies) {
+                        proxy.setPolicyEngine(newEngine);
+                    }
+                    for (const pool of this.stdioPools) {
+                        pool.getPrimary().setPolicyEngine(newEngine);
+                    }
+                    Logger.info(`[proxy-manager] Policy hot-reloaded across ${this.stdioProxies.length} stdio + ${this.sseProxies.size} SSE proxy(s)`);
+                }
+            };
+            policyEngineOrWatcher.onReload = updateEngine;
+        }
+        else {
+            this.policyEngine = policyEngineOrWatcher ?? undefined;
+        }
+        if (this.policyEngine) {
+            this.tenantPolicyRegistry = new TenantPolicyRegistry(this.policyEngine);
+        }
+    }
+    getProxies() {
+        if (this.stdioPools.length > 0) {
+            return this.stdioPools.map((p) => p.getPrimary());
+        }
+        return this.stdioProxies;
+    }
+    /** Primary stdio handler — pool round-robin or single proxy. */
+    async dispatchStdioInput(raw) {
+        if (this.stdioPools.length === 1) {
+            await this.stdioPools[0].handleClientInput(raw);
+            return;
+        }
+        if (this.stdioProxies.length === 1) {
+            await this.stdioProxies[0].handleClientInput(raw);
+        }
+    }
+    /** Returns summary counts for the CLI proxy command output */
+    getProxyStats() {
+        return {
+            stdioCount: this.stdioProxies.length,
+            sseCount: this.sseProxies.size,
+            streamableCount: this.streamableProxies.size,
+            wsCount: this.wsProxies.size,
+        };
+    }
+    async startAll(configs) {
+        const gateway = isGatewayModeEnabled();
+        if (gateway)
+            assertGatewayStartup();
+        const stdioServers = gateway
+            ? []
+            : configs.filter((c) => c.command && c.transport !== 'websocket');
+        const streamableServers = configs.filter((c) => !c.command && c.url && isStreamableHttpMcpUrl(c.url));
+        const sseServers = configs.filter((c) => !c.command && c.url && !isStreamableHttpMcpUrl(c.url)
+            && (c.transport === 'sse' || !c.transport));
+        const wsServers = configs.filter((c) => c.transport === 'websocket' && c.url);
+        let stdioStarted = 0;
+        let sseStarted = 0;
+        let streamableStarted = 0;
+        let wsStarted = 0;
+        // ─── Stdio proxies ─────────────────────────────────────
+        for (const config of stdioServers) {
+            try {
+                const sanitizedEnv = {
+                    ...(config.env || {}),
+                    PATH: process.env['PATH'] || '',
+                    HOME: process.env['HOME'] || '',
+                };
+                if (stdioPoolSize() > 1) {
+                    const pool = new StdioConnectionPool(config.command, config.args || [], sanitizedEnv, this.db, config.name, this.policyEngine, this.authValidator, this.tenantPolicyRegistry);
+                    await pool.start();
+                    this.stdioPools.push(pool);
+                }
+                else {
+                    const proxy = new McpProxyServer(config.command, config.args || [], sanitizedEnv, this.db, config.name, this.policyEngine, this.authValidator, 30000, 5, this.tenantPolicyRegistry);
+                    this.stdioProxies.push(proxy);
+                }
+                stdioStarted++;
+                Logger.info(`[proxy] stdio active for "${config.name}" → ${config.command}`);
+            }
+            catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                Logger.error(`[proxy] FAILED stdio for "${config.name}": ${message}`);
+            }
+        }
+        // ─── Streamable HTTP proxies (/mcp) ───────────────────
+        for (const config of streamableServers) {
+            try {
+                const url = config.url;
+                requireUpstreamTlsAllowed(url);
+                const streamableProxy = new StreamableHttpProxyServer({
+                    listenPort: parseInt(config.env?.['MASTYF_AI_STREAMABLE_HTTP_PORT']
+                        || config.env?.['MASTYF_AI_SSE_PROXY_PORT']
+                        || '0', 10) || 0,
+                    upstreamBaseUrl: resolveStreamableHttpUpstreamBase(url),
+                    serverName: config.name,
+                    policy: this.policyEngine,
+                    db: this.db,
+                    authValidator: this.authValidator,
+                    upstreamRelay: true,
+                });
+                const listenPort = await streamableProxy.start();
+                this.streamableProxies.set(config.name, streamableProxy);
+                streamableStarted++;
+                StructuredLogger.info({
+                    event: 'streamable_http_proxy_listening',
+                    serverName: config.name,
+                    upstreamUrl: url,
+                    listenPort,
+                    message: `Point MCP client at http://127.0.0.1:${listenPort}/mcp`,
+                });
+                Logger.info(`[proxy] Streamable HTTP active for "${config.name}" → ${url} (local :${listenPort}/mcp)`);
+            }
+            catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                Logger.error(`[proxy] FAILED streamable HTTP for "${config.name}": ${message}`);
+            }
+        }
+        // ─── SSE/HTTP proxies ─────────────────────────────────
+        for (const config of sseServers) {
+            try {
+                const url = config.url;
+                if (!url) {
+                    Logger.warn(`[proxy] SKIPPED SSE server "${config.name}" — no URL configured. Add 'url' to mcp.json.`);
+                    continue;
+                }
+                requireUpstreamTlsAllowed(url);
+                const authHeader = config.env?.['AUTH_TOKEN']
+                    ? `Bearer ${config.env['AUTH_TOKEN']}`
+                    : undefined;
+                const sseProxy = new SseProxyServer({
+                    upstreamUrl: url,
+                    serverName: config.name,
+                    policy: this.policyEngine,
+                    db: this.db,
+                    authHeader,
+                    listenPort: parseInt(config.env?.['MASTYF_AI_SSE_PROXY_PORT'] || '0', 10) || 0,
+                });
+                sseProxy.on('blocked', ({ reason }) => {
+                    Logger.warn(`[proxy][${config.name}] BLOCKED: ${reason}`);
+                });
+                const listenPort = await sseProxy.start();
+                this.sseProxies.set(config.name, sseProxy);
+                sseStarted++;
+                Metrics.sseUntrackedServers.set({ server_name: config.name }, 0);
+                StructuredLogger.info({
+                    event: 'sse_proxy_listening',
+                    serverName: config.name,
+                    upstreamUrl: url,
+                    listenPort,
+                    message: `Point MCP client at http://127.0.0.1:${listenPort}/sse (GET) + /message (POST)`,
+                });
+                Logger.info(`[proxy] SSE active for "${config.name}" → ${url} (local :${listenPort})`);
+            }
+            catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                Logger.error(`[proxy] FAILED SSE for "${config.name}": ${message}`);
+            }
+        }
+        for (const config of wsServers) {
+            try {
+                const url = config.url;
+                if (!url) {
+                    Logger.warn(`[proxy] SKIPPED WebSocket "${config.name}" — no url`);
+                    continue;
+                }
+                requireUpstreamTlsAllowed(url);
+                const listenPort = parseInt(config.env?.['MASTYF_AI_WS_PROXY_PORT'] || config.env?.['MASTYF_AI_SSE_PROXY_PORT'] || '0', 10) || 0;
+                const wsProxy = new WebSocketProxyServer({
+                    listenPort: listenPort > 0 ? listenPort : 0,
+                    upstreamWsUrl: url,
+                    serverName: config.name,
+                    policy: this.policyEngine,
+                    db: this.db,
+                    authValidator: this.authValidator,
+                });
+                const boundPort = await wsProxy.start();
+                this.wsProxies.set(config.name, wsProxy);
+                wsStarted++;
+                Logger.info(`[proxy] WebSocket active for "${config.name}" → ${url} (local ws://127.0.0.1:${boundPort})`);
+            }
+            catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                Logger.error(`[proxy] FAILED WebSocket for "${config.name}": ${message}`);
+            }
+        }
+        // ─── Summary — loud and clear ═══════════════════════════
+        const total = stdioStarted + sseStarted + streamableStarted + wsStarted;
+        const skipped = configs.length - total;
+        if (total === 0) {
+            Logger.error('╔══════════════════════════════════════════════════════════╗\n' +
+                '║  ZERO PROXIES STARTED — NO PROTECTION ACTIVE             ║\n' +
+                '╠══════════════════════════════════════════════════════════╣\n' +
+                '║  All configured servers were skipped.                    ║\n' +
+                '║  Check command (stdio) or url (SSE/WS) in MCP config.   ║\n' +
+                '╚══════════════════════════════════════════════════════════╝');
+            return;
+        }
+        Logger.info(`╔══════════════════════════════════════════╗\n` +
+            `║  MCP Mastyf AI Proxy — Protection Active  ║\n` +
+            `╠══════════════════════════════════════════╣\n` +
+            `║  Stdio:       ${String(stdioStarted).padStart(4)} servers              ║\n` +
+            `║  SSE:         ${String(sseStarted).padStart(4)} servers              ║\n` +
+            `║  Streamable:  ${String(streamableStarted).padStart(4)} servers              ║\n` +
+            `║  WS:          ${String(wsStarted).padStart(4)} servers              ║\n` +
+            `║  Total: ${String(total).padStart(4)} servers protected        ║`);
+        if (skipped > 0) {
+            const startedNames = new Set();
+            for (const p of this.stdioProxies)
+                startedNames.add(p['serverName']);
+            for (const [name] of this.sseProxies)
+                startedNames.add(name);
+            for (const [name] of this.streamableProxies)
+                startedNames.add(name);
+            for (const [name] of this.wsProxies)
+                startedNames.add(name);
+            const skippedNames = configs.filter(c => !startedNames.has(c.name)).map(c => c.name);
+            Logger.warn(`║  ⚠  SKIPPED: ${String(skipped).padStart(2)} server(s)              ║\n` +
+                `║     ${skippedNames.join(', ').substring(0, 40)}${skippedNames.join(', ').length > 40 ? '…' : ''}`);
+        }
+        const policyMsg = this.policyEngine
+            ? `║  Policy: ${this.policyEngine.getMode().padEnd(8)}                    ║\n`
+            : '║  Policy: audit-only (no --policy flag)      ║\n';
+        Logger.info(`║                                          ║\n` +
+            policyMsg +
+            `╚══════════════════════════════════════════╝`);
+    }
+    async reloadServers(configs) {
+        Logger.info('[proxy-manager] Hot-reloading server configs…');
+        await this.stopAll();
+        await this.startAll(configs);
+        Logger.info('[proxy-manager] Server configs hot-reloaded');
+    }
+    async stopAll() {
+        for (const proxy of this.stdioProxies) {
+            proxy.kill();
+        }
+        this.stdioProxies = [];
+        for (const pool of this.stdioPools) {
+            pool.kill();
+        }
+        this.stdioPools = [];
+        for (const [name, sseProxy] of this.sseProxies) {
+            Metrics.sseUntrackedServers.set({ server_name: name }, 0);
+            sseProxy.removeAllListeners();
+            await sseProxy.stop();
+        }
+        this.sseProxies.clear();
+        for (const [, streamableProxy] of this.streamableProxies) {
+            await streamableProxy.stop();
+        }
+        this.streamableProxies.clear();
+        for (const [, wsProxy] of this.wsProxies) {
+            await wsProxy.stop();
+        }
+        this.wsProxies.clear();
+        Logger.info('All proxies stopped');
+    }
+}
+//# sourceMappingURL=proxy-manager.js.map

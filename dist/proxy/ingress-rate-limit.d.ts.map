@@ -1,0 +1,1 @@
+{"version":3,"file":"ingress-rate-limit.d.ts","sourceRoot":"","sources":["../../src/proxy/ingress-rate-limit.ts"],"names":[],"mappings":"AAaA,8FAA8F;AAC9F,wBAAsB,qBAAqB,CACzC,QAAQ,GAAE,MAA0B,GACnC,OAAO,CAAC;IAAE,OAAO,EAAE,OAAO,CAAC;IAAC,MAAM,CAAC,EAAE,MAAM,CAAA;CAAE,CAAC,CAoBhD"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"observability-gauges.d.ts","sourceRoot":"","sources":["../../src/utils/observability-gauges.ts"],"names":[],"mappings":"AASA,mFAAmF;AACnF,wBAAgB,iBAAiB,CAAC,MAAM,EAAE,OAAO,GAAG,IAAI,CAEvD;AAED,wBAAsB,mBAAmB,IAAI,OAAO,CAAC,OAAO,CAAC,CAS5D;AAED,gFAAgF;AAChF,wBAAsB,0BAA0B,IAAI,OAAO,CAAC,IAAI,CAAC,CAahE"}

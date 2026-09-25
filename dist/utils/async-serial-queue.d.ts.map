@@ -1,0 +1,1 @@
+{"version":3,"file":"async-serial-queue.d.ts","sourceRoot":"","sources":["../../src/utils/async-serial-queue.ts"],"names":[],"mappings":"AAAA;;GAEG;AACH,qBAAa,gBAAgB;IAC3B,OAAO,CAAC,IAAI,CAAoC;IAEhD,OAAO,CAAC,CAAC,EAAE,EAAE,EAAE,MAAM,OAAO,CAAC,CAAC,CAAC,GAAG,OAAO,CAAC,CAAC,CAAC;CAQ7C"}

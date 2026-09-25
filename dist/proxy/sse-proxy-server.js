@@ -1,0 +1,552 @@
+import http from 'http';
+import https from 'https';
+import { createServer } from 'http';
+import { EventEmitter } from 'events';
+import { randomUUID } from 'crypto';
+import { URL } from 'url';
+import { createStreamingInspectorState } from '../utils/streaming-inspector.js';
+import { inspectCostStreamingChunk } from '../agentic/response-dlp/cost-streaming-inspector.js';
+import { withProxyRequestVault } from './proxy-request-context.js';
+import { inspectToolResponse as sharedInspectToolResponse } from './response-inspection.js';
+import { TokenCounter, extractModelFromPayload } from '../utils/token-counter.js';
+import { Logger } from '../utils/logger.js';
+import { requireUpstreamTlsAllowed } from '../utils/upstream-tls.js';
+import { persistCallRecord } from '../utils/call-record-cost.js';
+import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js';
+import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
+import { resolveTenantContext, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
+import { getHttpMaxBodyBytes } from './http-proxy-security.js';
+import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
+import { acquireProxyInflight, releaseProxyInflight } from './proxy-inflight.js';
+import { evaluateToolCallDefense } from './tool-call-defense-orchestrator.js';
+import { fingerprintJsonRpcToolsList, } from './rug-pull-transport.js';
+import { injectIntoUpstreamHeaders, runWithExtractedTraceAsync, withMcpToolCallSpan, } from './trace-context.js';
+/**
+ * MCP HTTP+SSE transport proxy.
+ * - GET /sse (or /) — long-lived event stream; relays upstream SSE; exposes local /message endpoint
+ * - POST /message?sessionId=... — JSON-RPC with policy + token accounting on tools/call
+ * - interceptAndForward() — programmatic API (tests, direct integration)
+ */
+export class SseProxyServer extends EventEmitter {
+    opts;
+    tokenCounter;
+    sessions = new Map();
+    httpServer = null;
+    boundPort = 0;
+    rugPullState = { fingerprint: null, blocked: false };
+    constructor(opts) {
+        super();
+        requireUpstreamTlsAllowed(opts.upstreamUrl);
+        this.opts = opts;
+        this.tokenCounter = new TokenCounter();
+        void opts.mtlsConfig;
+        getMtlsAgent();
+        if (getMtlsAgent()) {
+            Logger.info(`[sse-proxy:${opts.serverName}] mTLS enabled for upstream connection`);
+        }
+    }
+    getListenPort() {
+        return this.boundPort;
+    }
+    async start(listenPort) {
+        if (this.httpServer)
+            return this.boundPort;
+        const port = listenPort ??
+            this.opts.listenPort ??
+            (parseInt(process.env['MASTYF_AI_SSE_PROXY_PORT'] || '0', 10) || 0);
+        this.httpServer = createServer((req, res) => {
+            void this.handleHttpRequest(req, res);
+        });
+        await new Promise((resolve, reject) => {
+            this.httpServer.once('error', reject);
+            this.httpServer.listen(port, () => {
+                this.httpServer.removeListener('error', reject);
+                const addr = this.httpServer.address();
+                this.boundPort = typeof addr === 'object' && addr ? addr.port : port;
+                Logger.info(`[sse-proxy:${this.opts.serverName}] Listening on http://127.0.0.1:${this.boundPort} → ${this.opts.upstreamUrl}`);
+                resolve();
+            });
+        });
+        return this.boundPort;
+    }
+    async stop() {
+        for (const session of this.sessions.values()) {
+            session.upstreamSseReq?.destroy();
+        }
+        this.sessions.clear();
+        if (this.httpServer) {
+            await new Promise((r) => this.httpServer.close(() => r()));
+            this.httpServer = null;
+        }
+    }
+    async handleHttpRequest(req, res) {
+        const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+        const path = url.pathname.replace(/\/$/, '') || '/';
+        if (req.method === 'GET' && (path === '/' || path === '/sse')) {
+            await this.handleSseGet(req, res, url);
+            return;
+        }
+        if (req.method === 'POST' && (path === '/message' || path.endsWith('/message'))) {
+            await this.handleMessagePost(req, res, url);
+            return;
+        }
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found — use GET /sse and POST /message' }));
+    }
+    async handleSseGet(_req, res, clientUrl) {
+        const sessionId = randomUUID();
+        const upstreamBase = new URL(this.opts.upstreamUrl.replace(/\/$/, ''));
+        const upstreamPaths = ['/', '/sse', upstreamBase.pathname || '/'].filter((p, i, arr) => arr.indexOf(p) === i);
+        let upstreamSessionId = null;
+        let upstreamMessageUrl = null;
+        for (const ssePath of upstreamPaths) {
+            const probe = new URL(upstreamBase.href);
+            probe.pathname = ssePath === '/' ? probe.pathname || '/' : ssePath;
+            const discovered = await this.discoverUpstreamSession(probe);
+            if (discovered) {
+                upstreamSessionId = discovered.sessionId;
+                upstreamMessageUrl = discovered.messageUrl;
+                break;
+            }
+        }
+        if (!upstreamSessionId || !upstreamMessageUrl) {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to establish upstream SSE session' }));
+            return;
+        }
+        const session = {
+            id: sessionId,
+            upstreamSessionId,
+            upstreamMessageUrl,
+            createdAt: Date.now(),
+        };
+        this.sessions.set(sessionId, session);
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+        });
+        const localMessage = new URL(clientUrl.href);
+        localMessage.pathname = '/message';
+        localMessage.search = `sessionId=${sessionId}`;
+        res.write(`event: endpoint\ndata: ${localMessage.pathname}${localMessage.search}\n\n`);
+        const upstreamSseUrl = new URL(upstreamBase.href);
+        upstreamSseUrl.pathname = upstreamMessageUrl.pathname.replace(/\/message.*$/, '') || '/sse';
+        if (upstreamSseUrl.pathname === '/')
+            upstreamSseUrl.pathname = '/sse';
+        const isHttps = upstreamSseUrl.protocol === 'https:';
+        const client = isHttps ? https : http;
+        const reqOpts = {
+            hostname: upstreamSseUrl.hostname,
+            port: upstreamSseUrl.port || (isHttps ? 443 : 80),
+            path: upstreamSseUrl.pathname + upstreamSseUrl.search,
+            method: 'GET',
+            headers: {
+                Accept: 'text/event-stream',
+                ...(this.opts.authHeader ? { Authorization: this.opts.authHeader } : {}),
+            },
+        };
+        const agent = getMtlsAgent();
+        if (isHttps && agent)
+            reqOpts.agent = agent;
+        const upstreamReq = client.request(reqOpts, (upstreamRes) => {
+            const costState = createStreamingInspectorState();
+            let eventBuffer = '';
+            upstreamRes.on('data', (chunk) => {
+                eventBuffer += chunk.toString();
+                let boundary = eventBuffer.indexOf('\n\n');
+                while (boundary !== -1) {
+                    const event = eventBuffer.slice(0, boundary + 2);
+                    eventBuffer = eventBuffer.slice(boundary + 2);
+                    const costCheck = inspectCostStreamingChunk(costState, event);
+                    if (costCheck.terminateStream) {
+                        upstreamReq.destroy();
+                        if (!res.writableEnded) {
+                            res.write(`event: error\ndata: ${JSON.stringify({ message: costCheck.reason })}\n\n`);
+                            res.end();
+                        }
+                        this.sessions.delete(sessionId);
+                        return;
+                    }
+                    const rewritten = event.replace(/sessionId=([^&\s]+)/g, `sessionId=${sessionId}`);
+                    if (!res.writableEnded)
+                        res.write(rewritten);
+                    boundary = eventBuffer.indexOf('\n\n');
+                }
+            });
+            upstreamRes.on('end', () => {
+                if (!res.writableEnded)
+                    res.end();
+                this.sessions.delete(sessionId);
+            });
+        });
+        upstreamReq.on('error', (err) => {
+            Logger.warn(`[sse-proxy:${this.opts.serverName}] upstream SSE error: ${err.message}`);
+            if (!res.writableEnded) {
+                res.write(`event: error\ndata: ${JSON.stringify({ message: err.message })}\n\n`);
+                res.end();
+            }
+            this.sessions.delete(sessionId);
+        });
+        session.upstreamSseReq = upstreamReq;
+        upstreamReq.end();
+        reqOnClose(res, () => {
+            upstreamReq.destroy();
+        });
+    }
+    async handleMessagePost(req, res, url) {
+        const sessionId = url.searchParams.get('sessionId');
+        if (!sessionId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing sessionId query parameter' }));
+            return;
+        }
+        const session = this.sessions.get(sessionId);
+        if (!session) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Unknown sessionId: ${sessionId}` }));
+            return;
+        }
+        const body = await readRequestBody(req);
+        let jsonRpc;
+        try {
+            jsonRpc = JSON.parse(body);
+        }
+        catch {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+            return;
+        }
+        try {
+            const result = await runWithExtractedTraceAsync(req.headers, () => withProxyRequestVault(body, req.headers, () => this.interceptAndForward(jsonRpc, req.headers, session)));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+        }
+        catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            Logger.warn(`[sse-proxy:${this.opts.serverName}] message forward failed: ${message}`);
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: message }));
+        }
+    }
+    async discoverUpstreamSession(sseUrl) {
+        const isHttps = sseUrl.protocol === 'https:';
+        const client = isHttps ? https : http;
+        return new Promise((resolve) => {
+            const reqOpts = {
+                hostname: sseUrl.hostname,
+                port: sseUrl.port || (isHttps ? 443 : 80),
+                path: sseUrl.pathname + sseUrl.search,
+                method: 'GET',
+                headers: {
+                    Accept: 'text/event-stream',
+                    ...(this.opts.authHeader ? { Authorization: this.opts.authHeader } : {}),
+                },
+                timeout: 5000,
+            };
+            const probeAgent = getMtlsAgent();
+            if (isHttps && probeAgent)
+                reqOpts.agent = probeAgent;
+            const req = client.request(reqOpts, (res) => {
+                let data = '';
+                res.on('data', (chunk) => {
+                    const next = appendSseChunk(data, chunk);
+                    if (next === null) {
+                        req.destroy();
+                        resolve(null);
+                        return;
+                    }
+                    data = next;
+                    const parsed = parseEndpointFromSse(data, sseUrl);
+                    if (parsed) {
+                        req.destroy();
+                        resolve(parsed);
+                    }
+                });
+                res.on('end', () => {
+                    resolve(parseEndpointFromSse(data, sseUrl));
+                });
+            });
+            req.on('timeout', () => {
+                req.destroy();
+                resolve(null);
+            });
+            req.on('error', () => resolve(null));
+            req.end();
+        });
+    }
+    async interceptAndForward(jsonRpcRequest, requestHeaders, session) {
+        const { runMcpPrePipeline, applyMcpResponsePipeline, mcpResponseBlockJson } = await import('./mcp-request-pipeline.js');
+        const pre = runMcpPrePipeline({
+            msg: jsonRpcRequest,
+            serverName: this.opts.serverName,
+            authenticated: Boolean(this.opts.authHeader),
+            fallbackSessionKey: session?.id,
+        });
+        if (pre.blocked)
+            return pre.response;
+        const isToolCall = jsonRpcRequest.method === 'tools/call';
+        let resolvedTenantId = 'default';
+        let spendReservationId;
+        if (isToolCall && this.opts.policy) {
+            let tenantId;
+            try {
+                tenantId = resolveTenantContext({
+                    headers: requestHeaders,
+                    meta: jsonRpcRequest.params?._meta,
+                }).tenantId;
+            }
+            catch (err) {
+                if (err instanceof InvalidTenantIdError) {
+                    return {
+                        jsonrpc: '2.0',
+                        id: jsonRpcRequest.id,
+                        error: { code: -32602, message: err.message },
+                    };
+                }
+                throw err;
+            }
+            const inflight = acquireProxyInflight(this.opts.serverName);
+            if (!inflight.ok) {
+                return {
+                    jsonrpc: '2.0',
+                    id: jsonRpcRequest.id,
+                    error: {
+                        code: -32005,
+                        message: `Mastyf AI: proxy overloaded (${inflight.current}/${inflight.max} in flight)`,
+                    },
+                };
+            }
+            resolvedTenantId = tenantId;
+            const toolName = jsonRpcRequest.params?.name || 'unknown';
+            const requestId = String(jsonRpcRequest.id ?? 'sse-request');
+            const defense = await evaluateToolCallDefense({
+                serverName: this.opts.serverName,
+                toolName,
+                arguments: jsonRpcRequest.params?.arguments,
+                requestId,
+                requestTokens: this.tokenCounter.count(JSON.stringify(jsonRpcRequest)),
+                tenantId,
+                headers: requestHeaders,
+                meta: jsonRpcRequest.params?._meta,
+                mcpSessionId: session?.id ?? pre.session.sessionId,
+                agentId: pre.session.agentId !== 'unknown' ? pre.session.agentId : undefined,
+            }, {
+                policyEngine: this.opts.policy,
+                db: this.opts.db,
+                rugPullState: this.rugPullState,
+            });
+            if (!defense.allowed) {
+                releaseProxyInflight(this.opts.serverName);
+                if (defense.phase === 'pre-guard' && defense.preGuard) {
+                    const { toolCallGuardBlockResponse } = await import('./tool-call-pre-guard.js');
+                    return toolCallGuardBlockResponse(jsonRpcRequest.id, defense.preGuard);
+                }
+                return {
+                    jsonrpc: '2.0',
+                    id: jsonRpcRequest.id,
+                    error: { code: defense.code, message: `Blocked by MCP Mastyf AI: ${defense.reason}` },
+                };
+            }
+            if (defense.arguments) {
+                const params = jsonRpcRequest.params;
+                if (params)
+                    params.arguments = defense.arguments;
+            }
+            spendReservationId = defense.spendReservationId;
+        }
+        const startMs = Date.now();
+        const relayForward = () => this._forwardToUpstream(jsonRpcRequest, session, resolvedTenantId);
+        let response = isToolCall
+            ? await withMcpToolCallSpan({
+                serverName: this.opts.serverName,
+                toolName: jsonRpcRequest.params?.name ?? 'unknown',
+                tenantId: resolvedTenantId,
+                transport: 'sse',
+            }, relayForward)
+            : await relayForward();
+        fingerprintJsonRpcToolsList(this.rugPullState, response, this.opts.serverName, resolvedTenantId, `[sse-proxy:${this.opts.serverName}]`);
+        if (isToolCall) {
+            releaseProxyInflight(this.opts.serverName);
+        }
+        const durationMs = Date.now() - startMs;
+        if (!pre.blocked && pre.trackResponse && pre.requestMethod && response.result != null) {
+            const rp = applyMcpResponsePipeline({
+                method: pre.requestMethod,
+                result: response.result,
+                sessionId: pre.session.sessionId,
+                latencyMs: durationMs,
+            });
+            if (rp.blocked) {
+                return mcpResponseBlockJson(jsonRpcRequest.id, rp.reason ?? 'Resource/prompt blocked');
+            }
+            if (rp.result !== undefined) {
+                response.result = rp.result;
+            }
+        }
+        if (isToolCall) {
+            const toolParams = jsonRpcRequest.params;
+            const toolName = toolParams?.name ?? 'unknown';
+            const inspected = await sharedInspectToolResponse({
+                response,
+                toolName,
+                serverName: this.opts.serverName,
+                requestId: jsonRpcRequest.id ?? 0,
+                tenantId: resolvedTenantId,
+                policyEngine: this.opts.policy,
+                transportLabel: 'sse-proxy',
+                toolArguments: toolParams?.arguments,
+            });
+            if (inspected.blocked && inspected.blockResponse)
+                return inspected.blockResponse;
+        }
+        if (isToolCall) {
+            const params = jsonRpcRequest.params;
+            const model = resolveModelId(extractModelFromPayload(jsonRpcRequest)) ||
+                resolveModelIdForServer(this.opts.serverName);
+            const requestText = JSON.stringify(jsonRpcRequest);
+            const responseText = JSON.stringify(response);
+            const counts = this.tokenCounter.countProxyCall({
+                requestText,
+                responseText,
+                model,
+                requestPayload: jsonRpcRequest,
+                responsePayload: response,
+            });
+            const record = {
+                serverName: this.opts.serverName,
+                toolName: params?.name ?? 'unknown',
+                requestTokens: counts.requestTokens,
+                responseTokens: counts.responseTokens,
+                totalTokens: counts.totalTokens,
+                durationMs,
+                timestamp: new Date().toISOString(),
+                tokenSource: counts.tokenSource,
+                model,
+                tenantId: resolvedTenantId,
+                spendReservationId,
+            };
+            try {
+                persistCallRecord(this.opts.db, record, jsonRpcRequest).catch((err) => {
+                    Logger.warn(`[sse-proxy:${this.opts.serverName}] Failed to record call: ${err?.message}`);
+                });
+            }
+            catch {
+                /* best-effort */
+            }
+        }
+        return response;
+    }
+    _forwardToUpstream(body, session, tenantId) {
+        return new Promise((resolve, reject) => {
+            let targetUrl;
+            if (session) {
+                targetUrl = new URL(session.upstreamMessageUrl.href);
+                targetUrl.searchParams.set('sessionId', session.upstreamSessionId);
+            }
+            else {
+                targetUrl = new URL(this.opts.upstreamUrl);
+            }
+            const isHttps = targetUrl.protocol === 'https:';
+            const client = isHttps ? https : http;
+            const payload = JSON.stringify(body);
+            const reqOpts = {
+                hostname: targetUrl.hostname,
+                port: targetUrl.port || (isHttps ? 443 : 80),
+                path: targetUrl.pathname + targetUrl.search,
+                method: 'POST',
+                headers: injectIntoUpstreamHeaders({
+                    'Content-Type': 'application/json',
+                    'Content-Length': String(Buffer.byteLength(payload)),
+                    ...(this.opts.authHeader ? { Authorization: this.opts.authHeader } : {}),
+                }),
+                timeout: getUpstreamTimeoutMs(),
+            };
+            const fwdAgent = getMtlsAgent();
+            if (isHttps && fwdAgent) {
+                reqOpts.agent = fwdAgent;
+            }
+            const req = client.request(reqOpts, (res) => {
+                let data = '';
+                const costState = createStreamingInspectorState();
+                res.on('data', (chunk) => {
+                    const costCheck = inspectCostStreamingChunk(costState, chunk, tenantId);
+                    if (costCheck.terminateStream) {
+                        req.destroy();
+                        reject(new Error(costCheck.reason ?? 'Streaming token budget exceeded'));
+                        return;
+                    }
+                    const next = appendSseChunk(data, chunk);
+                    if (next === null) {
+                        req.destroy();
+                        reject(new Error('Upstream SSE response exceeded max body size'));
+                        return;
+                    }
+                    data = next;
+                });
+                res.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    }
+                    catch {
+                        reject(new Error(`Upstream returned non-JSON: ${data.slice(0, 200)}`));
+                    }
+                });
+            });
+            req.on('error', reject);
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Upstream request timed out after 30s'));
+            });
+            req.write(payload);
+            req.end();
+        });
+    }
+}
+function appendSseChunk(current, chunk) {
+    const max = getHttpMaxBodyBytes();
+    if (current.length + chunk.length > max)
+        return null;
+    return current + chunk.toString();
+}
+function parseEndpointFromSse(data, baseUrl) {
+    const lines = data.split('\n');
+    let currentEvent = null;
+    for (const line of lines) {
+        if (line.startsWith('event: '))
+            currentEvent = line.slice(7).trim();
+        else if (line.startsWith('data: ') && currentEvent === 'endpoint') {
+            const endpointData = line.slice(6).trim();
+            const m = endpointData.match(/sessionId=([^&\s]+)/);
+            if (!m)
+                return null;
+            const sessionId = m[1];
+            try {
+                const messageUrl = endpointData.startsWith('http')
+                    ? new URL(endpointData)
+                    : new URL(endpointData, baseUrl);
+                return { sessionId, messageUrl };
+            }
+            catch {
+                const messageUrl = new URL(`/message?sessionId=${sessionId}`, baseUrl);
+                return { sessionId, messageUrl };
+            }
+        }
+    }
+    return null;
+}
+async function readRequestBody(req) {
+    const { readRequestBodyWithLimit } = await import('./http-proxy-security.js');
+    const result = await readRequestBodyWithLimit(req);
+    if (!result.ok) {
+        const err = new Error('Request body too large');
+        err.tooLarge = true;
+        throw err;
+    }
+    return result.body;
+}
+function reqOnClose(res, fn) {
+    res.on('close', fn);
+    res.on('error', fn);
+}
+//# sourceMappingURL=sse-proxy-server.js.map

@@ -1,0 +1,1 @@
+{"version":3,"file":"bk-tree.d.ts","sourceRoot":"","sources":["../../src/scanners/bk-tree.ts"],"names":[],"mappings":"AAwBA,qBAAa,MAAM;IACjB,OAAO,CAAC,IAAI,CAAuB;IAEnC,IAAI,IAAI,IAAI,MAAM,CAEjB;IAED,OAAO,CAAC,UAAU;IASlB,MAAM,CAAC,IAAI,EAAE,MAAM,GAAG,IAAI;IAmB1B,wDAAwD;IACxD,MAAM,CAAC,KAAK,EAAE,MAAM,EAAE,WAAW,EAAE,MAAM,GAAG,MAAM,EAAE;CAgBrD"}

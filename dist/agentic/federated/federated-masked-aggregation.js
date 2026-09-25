@@ -1,0 +1,78 @@
+/**
+ * B3 — Pairwise-masked gradient aggregation (MPC-lite secure FedAvg analog).
+ * Masks cancel when all participant gradients are summed; server never sees raw local gradients.
+ */
+import { createHmac } from 'crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+function mpcSecretPath() {
+    const home = process.env['MASTYF_AI_HOME'] || join(homedir(), '.mastyf-ai');
+    return join(home, '.federated-mpc-secret');
+}
+function getMpcSecret() {
+    const fromEnv = process.env['MASTYF_AI_FEDERATED_MPC_SECRET']?.trim();
+    if (fromEnv)
+        return fromEnv;
+    const path = mpcSecretPath();
+    try {
+        if (existsSync(path)) {
+            const secret = readFileSync(path, 'utf8').trim();
+            if (secret) {
+                process.env['MASTYF_AI_FEDERATED_MPC_SECRET'] = secret;
+                return secret;
+            }
+        }
+    }
+    catch {
+        /* fall through */
+    }
+    throw new Error('MASTYF_AI_FEDERATED_MPC_SECRET or persisted federated MPC secret is required for federated MPC masking. ' +
+        'Set a cryptographically random secret (e.g., openssl rand -hex 32).');
+}
+function maskVector(participantId, peerId, roundId, dim, sign) {
+    const hmac = createHmac('sha256', getMpcSecret())
+        .update(`${roundId}:${participantId}:${peerId}`)
+        .digest();
+    const out = new Array(dim).fill(0);
+    for (let i = 0; i < dim; i++) {
+        const b = hmac[i % hmac.length];
+        out[i] = sign * ((b / 127.5) - 1) * 0.01;
+    }
+    return out;
+}
+/** Mask a local gradient before upload to aggregator. */
+export function maskGradientForUpload(gradient, participantId, peerIds, roundId) {
+    const dim = gradient.length;
+    const masked = [...gradient];
+    for (const peerId of peerIds) {
+        if (peerId === participantId)
+            continue;
+        const lo = participantId < peerId ? participantId : peerId;
+        const hi = participantId < peerId ? peerId : participantId;
+        const sign = participantId === lo ? 1 : -1;
+        const m = maskVector(lo, hi, roundId, dim, sign);
+        for (let i = 0; i < dim; i++)
+            masked[i] += m[i];
+    }
+    return masked;
+}
+/** Unmask aggregated sum — pairwise masks cancel when all parties contributed. */
+export function unmaskAggregatedGradients(summedMasked, participantIds, roundId) {
+    // Masks already canceled in sum when full participant set present.
+    void participantIds;
+    void roundId;
+    return summedMasked;
+}
+export function sumMaskedGradients(masked) {
+    if (!masked.length)
+        return [];
+    const dim = Math.max(...masked.map(m => m.length));
+    const acc = new Array(dim).fill(0);
+    for (const row of masked) {
+        for (let i = 0; i < row.length; i++)
+            acc[i] += row[i];
+    }
+    return acc;
+}
+//# sourceMappingURL=federated-masked-aggregation.js.map

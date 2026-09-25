@@ -1,0 +1,1 @@
+{"version":3,"file":"semantic-duration-hook.js","sourceRoot":"","sources":["../src/semantic-duration-hook.ts"],"names":[],"mappings":"AAGA,IAAI,YAAY,GAAgC,IAAI,CAAC;AAErD,MAAM,UAAU,2BAA2B,CAAC,IAAiC;IAC3E,YAAY,GAAG,IAAI,CAAC;AACtB,CAAC;AAED,MAAM,UAAU,0BAA0B,CAAC,KAAa,EAAE,UAAkB,EAAE,OAAe;IAC3F,YAAY,EAAE,CAAC,KAAK,EAAE,UAAU,EAAE,OAAO,CAAC,CAAC;AAC7C,CAAC"}

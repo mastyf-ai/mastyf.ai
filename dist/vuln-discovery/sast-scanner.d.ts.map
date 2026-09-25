@@ -1,0 +1,1 @@
+{"version":3,"file":"sast-scanner.d.ts","sourceRoot":"","sources":["../../src/vuln-discovery/sast-scanner.ts"],"names":[],"mappings":"AAQA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,aAAa,CAAC;AAQnD,OAAO,KAAK,EAAE,WAAW,EAAgB,MAAM,YAAY,CAAC;AA2N5D,wBAAsB,cAAc,CAAC,MAAM,EAAE,eAAe,GAAG,OAAO,CAAC,WAAW,EAAE,CAAC,CAepF"}

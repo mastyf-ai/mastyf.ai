@@ -1,0 +1,1 @@
+{"version":3,"file":"semantic-security-profile.d.ts","sourceRoot":"","sources":["../../src/tenant/semantic-security-profile.ts"],"names":[],"mappings":"AAAA;;GAEG;AACH,MAAM,MAAM,uBAAuB,GAAG,UAAU,GAAG,cAAc,CAAC;AAIlE,wBAAgB,8BAA8B,IAAI,uBAAuB,GAAG,IAAI,CAI/E;AAED,yEAAyE;AACzE,wBAAgB,4BAA4B,CAAC,OAAO,CAAC,EAAE,uBAAuB,GAAG,IAAI,GAAG,IAAI,CA8B3F"}

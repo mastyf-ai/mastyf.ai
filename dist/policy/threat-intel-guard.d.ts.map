@@ -1,0 +1,1 @@
+{"version":3,"file":"threat-intel-guard.d.ts","sourceRoot":"","sources":["../../src/policy/threat-intel-guard.ts"],"names":[],"mappings":"AAKA,OAAO,KAAK,EAAE,WAAW,EAAE,cAAc,EAAE,MAAM,mBAAmB,CAAC;AAiFrE,qCAAqC;AACrC,wBAAgB,0BAA0B,IAAI,IAAI,CAGjD;AAED,uFAAuF;AACvF,wBAAgB,wBAAwB,CAAC,GAAG,EAAE,WAAW,GAAG,cAAc,GAAG,IAAI,CAmBhF"}

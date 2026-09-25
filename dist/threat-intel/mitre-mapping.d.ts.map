@@ -1,0 +1,1 @@
+{"version":3,"file":"mitre-mapping.d.ts","sourceRoot":"","sources":["../../src/threat-intel/mitre-mapping.ts"],"names":[],"mappings":"AAAA,eAAO,MAAM,gBAAgB,EAAE,MAAM,CAAC,MAAM,EAAE,MAAM,CAqBnD,CAAC;AAEF,wBAAgB,iBAAiB,CAAC,QAAQ,EAAE,MAAM,GAAG,MAAM,CAE1D;AAED,wBAAgB,WAAW,CAAC,QAAQ,EAAE,MAAM,GAAG,MAAM,CAIpD"}

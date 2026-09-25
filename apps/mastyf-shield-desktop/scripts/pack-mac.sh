@@ -23,7 +23,7 @@ else
 fi
 
 TARGET=dmg
-ARCHS="${MASTYF_MAC_ARCHS:-arm64}"
+ARCHS="${MASTYF_MAC_ARCHS:-arm64,x64}"
 for arg in "$@"; do
   if [ "$arg" = "--dir" ]; then
     TARGET=dir

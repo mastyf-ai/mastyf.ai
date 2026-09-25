@@ -1,0 +1,121 @@
+import { readFileSync, writeFileSync } from 'fs';
+import { load, dump } from 'js-yaml';
+import { parsePolicyConfig } from '../policy/policy-schema.js';
+import { Logger } from '../utils/logger.js';
+import { resolvePolicyPath } from '../utils/tui-sources.js';
+import { requirePolicySimulationBeforeApply } from '../utils/policy-apply-gate.js';
+function rulesEqual(a, b) {
+    if (a.name === b.name)
+        return true;
+    if (JSON.stringify(a.tools) === JSON.stringify(b.tools)
+        && JSON.stringify(a.argPatterns) === JSON.stringify(b.argPatterns)) {
+        return true;
+    }
+    return false;
+}
+/**
+ * Merge an accepted suggestion into live policy YAML and hot-reload via PolicyWatcher.
+ */
+export async function applySuggestionToPolicy(rule, policyPath, policyWatcher, opts) {
+    const path = policyPath || resolvePolicyPath();
+    if (!path) {
+        return { applied: false, policyPath: null, reason: 'No policy file (set MASTYF_AI_POLICY_PATH)' };
+    }
+    const gate = await requirePolicySimulationBeforeApply({
+        draftRule: rule,
+        policyPath: path,
+        tenantId: opts?.tenantId,
+        skip: opts?.skipSimulation,
+    });
+    if (!gate.allowed) {
+        return { applied: false, policyPath: path, reason: gate.reason, simulationSummary: gate.simulationSummary };
+    }
+    try {
+        const raw = readFileSync(path, 'utf-8');
+        const parsed = load(raw);
+        const config = parsePolicyConfig(parsed);
+        const existing = config.policy.rules;
+        if (existing.some((r) => rulesEqual(r, rule))) {
+            Logger.info(`[policy-applier] Rule "${rule.name}" already present — skipping`);
+            return { applied: false, policyPath: path, reason: 'duplicate' };
+        }
+        config.policy.rules.push(rule);
+        const out = dump({
+            version: config.version,
+            policy: config.policy,
+        }, { lineWidth: 120, noRefs: true });
+        writeFileSync(path, out, 'utf-8');
+        Logger.info(`[policy-applier] Appended rule "${rule.name}" → ${path}`);
+        try {
+            const { recordConfigProvenance } = await import('../agentic/provenance/config-provenance-chain.js');
+            recordConfigProvenance({
+                actor: process.env.MASTYF_AI_ACTOR ?? 'policy-applier',
+                eventType: 'policy_apply',
+                resourcePath: path,
+                diff: { ruleName: rule.name, action: 'append' },
+                store: undefined,
+            });
+        }
+        catch {
+            /* best-effort provenance */
+        }
+        if (policyWatcher) {
+            // chokidar reloads on write; touch is unnecessary
+        }
+        return { applied: true, policyPath: path, simulationSummary: gate.simulationSummary };
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        Logger.error(`[policy-applier] Failed to apply rule: ${msg}`);
+        return { applied: false, policyPath: path, reason: msg };
+    }
+}
+/** Look up a rule by name in the policy YAML file. */
+export function findPolicyRuleByName(ruleName, policyPath) {
+    const path = policyPath || resolvePolicyPath();
+    if (!path || !ruleName.trim())
+        return null;
+    try {
+        const raw = readFileSync(path, 'utf-8');
+        const parsed = load(raw);
+        const config = parsePolicyConfig(parsed);
+        return config.policy.rules.find((r) => r.name === ruleName) ?? null;
+    }
+    catch {
+        return null;
+    }
+}
+/**
+ * Remove an existing policy rule by name and write updated YAML.
+ */
+export function removeSuggestionRuleFromPolicy(ruleName, policyPath, policyWatcher) {
+    const path = policyPath || resolvePolicyPath();
+    if (!path) {
+        return { removed: false, policyPath: null, reason: 'No policy file (set MASTYF_AI_POLICY_PATH)' };
+    }
+    try {
+        const raw = readFileSync(path, 'utf-8');
+        const parsed = load(raw);
+        const config = parsePolicyConfig(parsed);
+        const before = config.policy.rules.length;
+        config.policy.rules = config.policy.rules.filter((r) => r.name !== ruleName);
+        if (config.policy.rules.length === before) {
+            return { removed: false, policyPath: path, reason: 'not_found' };
+        }
+        const out = dump({
+            version: config.version,
+            policy: config.policy,
+        }, { lineWidth: 120, noRefs: true });
+        writeFileSync(path, out, 'utf-8');
+        if (policyWatcher) {
+            // chokidar reloads on write; touch is unnecessary
+        }
+        return { removed: true, policyPath: path };
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        Logger.error(`[policy-applier] Failed to remove rule "${ruleName}": ${msg}`);
+        return { removed: false, policyPath: path, reason: msg };
+    }
+}
+//# sourceMappingURL=policy-applier.js.map

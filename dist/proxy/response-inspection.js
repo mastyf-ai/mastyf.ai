@@ -1,0 +1,167 @@
+/**
+ * Shared tool-response inspection logic for all proxy transports
+ * (HTTP, SSE, WebSocket). Centralises response gating, DLP, logging,
+ * metrics, redaction-meta injection, and block-response generation.
+ */
+import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { gateToolResponseText } from '../utils/response-security-gate.js';
+import { injectRedactionMeta } from '../utils/redaction-meta.js';
+import { Logger } from '../utils/logger.js';
+import { StructuredLogger } from '../utils/structured-logger.js';
+import * as Metrics from '../utils/metrics.js';
+/**
+ * Inspect a JSON-RPC tool-call response for policy violations, DLP
+ * matches, and semantic threats.
+ *
+ * When the response is redacted the function **mutates** `response.result`
+ * in place (all three transports rely on this behaviour).
+ */
+export async function inspectToolResponse(params) {
+    const { response, toolName, serverName, requestId, tenantId, policyEngine, transportLabel } = params;
+    const result = response.result;
+    if (result == null || isResponseScanSkipped()) {
+        return { blocked: false, redacted: false };
+    }
+    const responseText = JSON.stringify(result);
+    // Scan tool result for prompt-injection / instruction-override payloads
+    try {
+        const { scanToolResult } = await import('../scanners/result-injection-scanner.js');
+        const scan = scanToolResult(result);
+        if (scan.injected && scan.confidence >= 0.85) {
+            Logger.warn(`[${transportLabel}:${serverName}] Blocked prompt injection in tool result from '${toolName}': ${scan.threatCategory ?? 'injection'}`);
+            StructuredLogger.logBlocked({
+                event: 'tool_blocked',
+                serverName,
+                toolName,
+                reason: `Prompt injection detected in tool result (${scan.threatCategory})`,
+                rule: 'result-prompt-injection',
+                requestId: String(requestId),
+            });
+            return {
+                blocked: true,
+                redacted: false,
+                blockResponse: {
+                    jsonrpc: '2.0',
+                    id: requestId,
+                    error: {
+                        code: -32002,
+                        message: `Blocked by Mastyf AI: Prompt injection detected in tool result (${scan.threatCategory})`,
+                    },
+                },
+            };
+        }
+    }
+    catch (err) {
+        Logger.debug(`[${transportLabel}] result-injection scanner error: ${String(err)}`);
+    }
+    // Vuln Discovery: record unpublished/injection findings from tool results
+    if (process.env.MASTYF_AI_VULN_DISCOVERY_ENABLED === 'true') {
+        try {
+            const { scanToolResponse } = await import('../vuln-discovery/response-scanner.js');
+            const vulnScan = scanToolResponse({
+                serverName,
+                toolName,
+                result,
+                createFindings: true,
+            });
+            if (vulnScan.shouldBlock) {
+                return {
+                    blocked: true,
+                    redacted: false,
+                    blockResponse: {
+                        jsonrpc: '2.0',
+                        id: requestId,
+                        error: {
+                            code: -32002,
+                            message: `Blocked by Mastyf AI vuln response scanner: ${vulnScan.hits.map((h) => h.patternId).join(', ')}`,
+                        },
+                    },
+                };
+            }
+        }
+        catch (err) {
+            Logger.debug(`[${transportLabel}] vuln response scan skipped: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        // Live traffic tap: malicious args + proven exploit effect on allowed calls
+        try {
+            const { tapAllowedToolCall } = await import('../vuln-discovery/live-traffic-tap.js');
+            tapAllowedToolCall({
+                serverName,
+                toolName,
+                args: params.toolArguments,
+                result,
+                blockedByProxy: false,
+                tenantId,
+            });
+        }
+        catch (err) {
+            Logger.debug(`[${transportLabel}] live traffic tap skipped: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+    const gate = await gateToolResponseText({
+        responseText,
+        toolName,
+        serverName,
+        policy: policyEngine,
+        requestId,
+        tenantId,
+    });
+    const inspect = gate.inspect;
+    // --- Log & record metrics when findings are present ----------------------
+    if (inspect && !inspect.clean) {
+        const allMessages = findingsToMessages(inspect.findings);
+        Logger.warn(`[${transportLabel}:${serverName}] Suspicious response from '${toolName}': ${allMessages.slice(0, 5).join('; ')}`);
+        StructuredLogger.info({
+            event: 'response_flagged',
+            serverName,
+            toolName,
+            detections: allMessages,
+            blocked: gate.outcome.action === 'block',
+        });
+        Metrics.injectionDetectedTotal?.inc({
+            server_name: serverName,
+            severity: inspect.hasCritical ? 'critical' : 'high',
+        });
+    }
+    // --- Handle redaction ----------------------------------------------------
+    if (gate.outcome.action === 'redact' && gate.outcome.body) {
+        try {
+            const parsed = JSON.parse(gate.outcome.body);
+            response.result = injectRedactionMeta(parsed, gate.outcome.redactionReasons);
+        }
+        catch {
+            /* keep upstream body on parse failure */
+        }
+        return { blocked: false, redacted: true, redactionReasons: gate.outcome.redactionReasons };
+    }
+    // --- Handle block --------------------------------------------------------
+    if (gate.outcome.action === 'block') {
+        return {
+            blocked: true,
+            redacted: false,
+            blockResponse: {
+                jsonrpc: '2.0',
+                id: requestId,
+                error: {
+                    code: -32002,
+                    message: gate.outcome.message,
+                },
+            },
+        };
+    }
+    // --- Ingest tool response into DIFC Session Taint Tracker ------------------
+    try {
+        const { globalSessionTaintTracker } = await import('../policy/difc/taint-tracker.js');
+        const sessionKey = `${tenantId || 'default'}:${serverName}`;
+        globalSessionTaintTracker.ingestToolResponse({
+            sessionKey,
+            toolName,
+            output: result,
+        });
+    }
+    catch (err) {
+        Logger.debug(`[${transportLabel}] DIFC taint ingest error: ${String(err)}`);
+    }
+    return { blocked: false, redacted: false };
+}
+//# sourceMappingURL=response-inspection.js.map

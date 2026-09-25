@@ -1,0 +1,1 @@
+{"version":3,"file":"resource-prompt-security-gate.d.ts","sourceRoot":"","sources":["../../src/utils/resource-prompt-security-gate.ts"],"names":[],"mappings":"AAiCA,wBAAgB,wBAAwB,CACtC,MAAM,EAAE,MAAM,EACd,MAAM,EAAE,OAAO,GACd;IAAE,OAAO,EAAE,OAAO,CAAC;IAAC,MAAM,CAAC,EAAE,MAAM,CAAC;IAAC,SAAS,CAAC,EAAE,OAAO,CAAA;CAAE,CAwB5D"}

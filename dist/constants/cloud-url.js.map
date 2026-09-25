@@ -1,0 +1,1 @@
+{"version":3,"file":"cloud-url.js","sourceRoot":"","sources":["../../src/constants/cloud-url.ts"],"names":[],"mappings":"AAAA,iFAAiF;AACjF,MAAM,CAAC,MAAM,yBAAyB,GAAG,uBAAuB,CAAC;AAEjE,MAAM,UAAU,sBAAsB;IACpC,OAAO,CACL,OAAO,CAAC,GAAG,CAAC,2BAA2B,EAAE,IAAI,EAAE;WAC5C,OAAO,CAAC,GAAG,CAAC,mBAAmB,EAAE,IAAI,EAAE;WACvC,yBAAyB,CAC7B,CAAC,OAAO,CAAC,KAAK,EAAE,EAAE,CAAC,CAAC;AACvB,CAAC"}

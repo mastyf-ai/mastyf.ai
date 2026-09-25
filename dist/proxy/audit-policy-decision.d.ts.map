@@ -1,0 +1,1 @@
+{"version":3,"file":"audit-policy-decision.d.ts","sourceRoot":"","sources":["../../src/proxy/audit-policy-decision.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,WAAW,EAAE,cAAc,EAAE,MAAM,2BAA2B,CAAC;AAG7E,yEAAyE;AACzE,wBAAgB,mBAAmB,CACjC,SAAS,EAAE,MAAM,GAAG,MAAM,EAC1B,UAAU,EAAE,MAAM,EAClB,QAAQ,EAAE,MAAM,EAChB,QAAQ,EAAE,cAAc,EACxB,OAAO,EAAE,WAAW,GACnB,IAAI,CAoBN"}

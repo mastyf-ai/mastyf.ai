@@ -9,13 +9,17 @@ if [ ! -d node_modules/electron ] || [ ! -d node_modules/electron-builder ]; the
   npm install
 fi
 
-sh "$ROOT/scripts/stage-shield-bundle.sh"
+if [ ! -d "$APP/.pack-resources/stack" ]; then
+  sh "$ROOT/scripts/stage-shield-bundle.sh"
+else
+  echo "[pack-win] reusing existing staged stack from .pack-resources/stack" >&2
+fi
 
 if [ -z "${CSC_LINK:-}" ] && [ -z "${WINDOWS_CERT_FILE:-}" ]; then
   echo "[pack-win] no Authenticode CSC_LINK — SmartScreen will treat this as unsigned" >&2
   export CSC_IDENTITY_AUTO_DISCOVERY=false
 fi
 
-echo "[pack-win] electron-builder --win nsis …" >&2
-npx electron-builder --win nsis
+echo "[pack-win] electron-builder --win nsis zip --x64 …" >&2
+npx electron-builder --win nsis zip --x64
 echo "[pack-win] artifacts under $APP/dist"

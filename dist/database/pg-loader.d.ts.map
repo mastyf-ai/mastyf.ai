@@ -1,0 +1,1 @@
+{"version":3,"file":"pg-loader.d.ts","sourceRoot":"","sources":["../../src/database/pg-loader.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,IAAI,IAAI,MAAM,EAAE,MAAM,IAAI,CAAC;AAIzC,wFAAwF;AACxF,wBAAsB,MAAM,IAAI,OAAO,CAAC,cAAc,IAAI,CAAC,CAAC,CAW3D;AAED,MAAM,MAAM,UAAU,GAAG,MAAM,CAAC"}

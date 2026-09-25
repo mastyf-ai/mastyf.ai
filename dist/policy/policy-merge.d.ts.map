@@ -1,0 +1,1 @@
+{"version":3,"file":"policy-merge.d.ts","sourceRoot":"","sources":["../../src/policy/policy-merge.ts"],"names":[],"mappings":"AAIA,OAAO,KAAK,EAAE,YAAY,EAAc,MAAM,mBAAmB,CAAC;AAYlE,wBAAgB,0BAA0B,IAAI,MAAM,GAAG,IAAI,CAO1D;AAED,wBAAgB,6BAA6B,IAAI,OAAO,CAEvD;AAaD,wFAAwF;AACxF,wBAAgB,oBAAoB,CAAC,IAAI,EAAE,YAAY,GAAG,YAAY,CA4BrE;AAED,wBAAgB,iBAAiB,CAAC,GAAG,EAAE,YAAY,GAAG,YAAY,CAEjE"}

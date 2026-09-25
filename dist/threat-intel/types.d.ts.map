@@ -1,0 +1,1 @@
+{"version":3,"file":"types.d.ts","sourceRoot":"","sources":["../../src/threat-intel/types.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,YAAY;IAC3B,QAAQ,CAAC,KAAK,EAAE;QACd,aAAa,EAAE,MAAM,CAAC;QACtB,WAAW,EAAE,MAAM,CAAC;QACpB,cAAc,EAAE,MAAM,CAAC;QACvB,QAAQ,EAAE,MAAM,CAAC;QACjB,WAAW,EAAE,MAAM,CAAC;QACpB,MAAM,EAAE,MAAM,CAAC;KAChB,GAAG,IAAI,CAAC;CACV"}

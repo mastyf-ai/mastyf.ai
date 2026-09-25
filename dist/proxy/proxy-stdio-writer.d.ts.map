@@ -1,0 +1,1 @@
+{"version":3,"file":"proxy-stdio-writer.d.ts","sourceRoot":"","sources":["../../src/proxy/proxy-stdio-writer.ts"],"names":[],"mappings":"AAAA;;GAEG;AACH,qBAAa,eAAe;IAC1B,OAAO,CAAC,IAAI,CAAoC;IAChD,OAAO,CAAC,QAAQ,CAAC,OAAO,CAA4B;gBAExC,OAAO,GAAE,CAAC,IAAI,EAAE,MAAM,KAAK,OAA8C;IAIrF,SAAS,CAAC,OAAO,EAAE,MAAM,GAAG,IAAI;IAYhC,uCAAuC;IACjC,KAAK,IAAI,OAAO,CAAC,IAAI,CAAC;CAG7B"}

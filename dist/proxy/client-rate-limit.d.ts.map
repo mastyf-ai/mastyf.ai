@@ -1,0 +1,1 @@
+{"version":3,"file":"client-rate-limit.d.ts","sourceRoot":"","sources":["../../src/proxy/client-rate-limit.ts"],"names":[],"mappings":"AAaA,6FAA6F;AAC7F,wBAAsB,wBAAwB,CAC5C,SAAS,EAAE,MAAM,EACjB,QAAQ,EAAE,MAAM,EAChB,QAAQ,EAAE,MAAM,GACf,OAAO,CAAC;IAAE,OAAO,EAAE,OAAO,CAAC;IAAC,MAAM,CAAC,EAAE,MAAM,CAAA;CAAE,CAAC,CAchD"}

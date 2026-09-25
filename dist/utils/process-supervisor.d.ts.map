@@ -1,0 +1,1 @@
+{"version":3,"file":"process-supervisor.d.ts","sourceRoot":"","sources":["../../src/utils/process-supervisor.ts"],"names":[],"mappings":"AAKA,wBAAgB,sBAAsB,CAAC,OAAO,EAAE,MAAM,EAAE,IAAI,EAAE,MAAM,EAAE,EAAE,GAAG,EAAE,MAAM,CAAC,MAAM,EAAE,MAAM,CAAC,GAAG,IAAI,CAuBzG;AAED,wBAAgB,qBAAqB,IAAI,IAAI,CAM5C;AAED,wBAAgB,gBAAgB,IAAI,MAAM,GAAG,IAAI,CAEhD"}

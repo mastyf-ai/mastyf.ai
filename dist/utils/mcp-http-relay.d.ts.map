@@ -1,0 +1,1 @@
+{"version":3,"file":"mcp-http-relay.d.ts","sourceRoot":"","sources":["../../src/utils/mcp-http-relay.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,cAAc,EAAE,MAAM,MAAM,CAAC;AAC5D,OAAO,KAAK,EAAE,YAAY,EAAE,MAAM,2BAA2B,CAAC;AAM9D,wBAAsB,mBAAmB,CACvC,GAAG,EAAE,eAAe,EACpB,GAAG,EAAE,cAAc,EACnB,YAAY,EAAE,YAAY,GACzB,OAAO,CAAC,IAAI,CAAC,CA0Ff"}

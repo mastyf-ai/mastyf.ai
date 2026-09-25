@@ -1,0 +1,1 @@
+{"version":3,"file":"argument-injection-rules.d.ts","sourceRoot":"","sources":["../src/argument-injection-rules.ts"],"names":[],"mappings":"AAAA,4FAA4F;AAE5F,MAAM,MAAM,wBAAwB,GAAG;IACrC,EAAE,EAAE,MAAM,CAAC;IACX,QAAQ,EAAE,UAAU,GAAG,MAAM,GAAG,QAAQ,CAAC;IACzC,WAAW,EAAE,MAAM,CAAC;IACpB,KAAK,EAAE,MAAM,CAAC;CACf,CAAC;AAEF,eAAO,MAAM,wBAAwB,EAAE,wBAAwB,EAmf9D,CAAC"}

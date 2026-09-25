@@ -1,0 +1,239 @@
+/**
+ * Optional Semgrep / heuristic SAST for MCP server package sources.
+ * Falls back to lightweight pattern scan when Semgrep is not installed.
+ */
+import { execSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, extname } from 'node:path';
+import { Logger } from '../utils/logger.js';
+import { resolveServerPackageRoot } from './sbom.js';
+import { createFindingId, fingerprintFinding, getFinding, upsertFinding, } from './store.js';
+const HEURISTIC_RULES = [
+    {
+        id: 'unsafe-eval',
+        pattern: /\beval\s*\(|new\s+Function\s*\(/,
+        severity: 'HIGH',
+        title: 'Unsafe eval / Function constructor',
+    },
+    {
+        id: 'child-process-shell',
+        pattern: /exec\s*\(|execSync\s*\(|spawn\s*\([^)]*shell\s*:\s*true/,
+        severity: 'HIGH',
+        title: 'Shell execution without clear sanitization',
+    },
+    {
+        id: 'path-join-user',
+        pattern: /path\.join\s*\([^)]*req\.|path\.resolve\s*\([^)]*args/,
+        severity: 'MEDIUM',
+        title: 'Path join with request/args input (possible traversal)',
+    },
+    {
+        id: 'hardcoded-secret',
+        pattern: /(api[_-]?key|secret|password|token)\s*[:=]\s*['"][^'"]{8,}/i,
+        severity: 'CRITICAL',
+        title: 'Possible hardcoded secret in source',
+    },
+    {
+        id: 'disable-tls',
+        pattern: /NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0|rejectUnauthorized\s*:\s*false/,
+        severity: 'HIGH',
+        title: 'TLS verification disabled',
+    },
+];
+function upsertFindingLocal(partial) {
+    const fp = fingerprintFinding({
+        class: partial.class,
+        target: partial.target,
+        title: partial.title,
+        evidence: { scanner: partial.evidence.scanner, reproSteps: partial.evidence.reproSteps },
+    });
+    const id = createFindingId(fp);
+    const existing = getFinding(id);
+    return upsertFinding({
+        ...partial,
+        id,
+        fingerprint: fp,
+        discoveredAt: existing?.discoveredAt || new Date().toISOString(),
+        status: existing?.status === 'validated' ? existing.status : partial.status,
+        validatedAt: existing?.validatedAt,
+        analysisReportId: existing?.analysisReportId,
+    });
+}
+function walkSourceFiles(root, maxFiles = 200) {
+    const out = [];
+    const walk = (dir) => {
+        if (out.length >= maxFiles)
+            return;
+        let entries;
+        try {
+            entries = readdirSync(dir);
+        }
+        catch {
+            return;
+        }
+        for (const name of entries) {
+            if (name === 'node_modules' || name === '.git' || name === 'dist' || name === 'coverage')
+                continue;
+            const p = join(dir, name);
+            let st;
+            try {
+                st = statSync(p);
+            }
+            catch {
+                continue;
+            }
+            if (st.isDirectory())
+                walk(p);
+            else if (['.js', '.ts', '.mjs', '.cjs', '.py'].includes(extname(name))) {
+                out.push(p);
+            }
+        }
+    };
+    walk(root);
+    return out;
+}
+/** Optional LLM code review pass — when MASTYF_AI_SAST_MODEL is set (e.g. qwen3-coder:480b-cloud). */
+async function runLlmSastIfConfigured(root, serverName) {
+    const model = process.env.MASTYF_AI_SAST_MODEL || process.env.MASTYF_AI_VULN_ANALYSIS_MODEL;
+    if (!model || process.env.MASTYF_AI_SAST_LLM === 'false')
+        return [];
+    try {
+        const { LlmAssistant } = await import('../ai/llm-assistant.js');
+        const llm = new LlmAssistant({ model, hotPath: false, maxTokens: 512, timeoutMs: 30000 });
+        if (!llm.isAvailable())
+            return [];
+        const files = walkSourceFiles(root).slice(0, 20);
+        const snippets = files.map((f) => { try {
+            return `${f}:\n${readFileSync(f, 'utf-8').slice(0, 4000)}`;
+        }
+        catch {
+            return '';
+        } }).filter(Boolean).join('\n\n---\n\n').slice(0, 12000);
+        if (!snippets.trim())
+            return [];
+        const res = await llm.generate('You are a senior AppSec reviewer. Analyze MCP server source for OWASP/SAST issues. Output ONLY JSON: {"findings":[{"title":string,"severity":"CRITICAL"|"HIGH"|"MEDIUM","description":string}]}. Never invent CVE IDs.', `Server: ${serverName}\nSources:\n${snippets}`);
+        if (!res?.text)
+            return [];
+        const m = res.text.match(/\{[\s\S]*\}/);
+        if (!m)
+            return [];
+        const parsed = JSON.parse(m[0]);
+        return (parsed.findings || []).slice(0, 5).map((f) => upsertFindingLocal({
+            class: 'implementation', severity: f.severity || 'MEDIUM', status: 'candidate',
+            title: `LLM SAST: ${f.title} in ${serverName}`, description: f.description || f.title,
+            target: { kind: 'mcp_server', name: serverName },
+            evidence: { scanner: 'sast-llm', reproSteps: [`LLM model ${model}`], stackTrace: f.description?.slice(0, 500) || '' },
+            exploitability: { preAuth: true, networkReachable: true, userInteraction: false },
+        }));
+    }
+    catch {
+        return [];
+    }
+}
+function runHeuristicSast(root, serverName) {
+    const findings = [];
+    for (const file of walkSourceFiles(root)) {
+        let text;
+        try {
+            text = readFileSync(file, 'utf-8');
+        }
+        catch {
+            continue;
+        }
+        const lines = text.split('\n');
+        for (const rule of HEURISTIC_RULES) {
+            for (let i = 0; i < lines.length; i++) {
+                if (rule.pattern.test(lines[i])) {
+                    findings.push(upsertFindingLocal({
+                        class: rule.id === 'hardcoded-secret' ? 'config' : 'implementation',
+                        severity: rule.severity,
+                        status: 'candidate',
+                        title: `SAST: ${rule.title} in ${serverName}`,
+                        description: `${file}:${i + 1} matched ${rule.id}`,
+                        target: { kind: 'mcp_server', name: serverName },
+                        evidence: {
+                            scanner: 'sast-heuristic',
+                            reproSteps: [`Open ${file} line ${i + 1}`, `Pattern: ${rule.id}`],
+                            stackTrace: `${file}:${i + 1}: ${lines[i].trim().slice(0, 200)}`,
+                        },
+                        exploitability: {
+                            preAuth: true,
+                            networkReachable: true,
+                            userInteraction: false,
+                        },
+                    }));
+                    break; // one hit per rule per file
+                }
+            }
+        }
+    }
+    return findings;
+}
+function runSemgrep(root, serverName) {
+    if (process.env.MASTYF_AI_VULN_DISCOVERY_SAST === 'off')
+        return [];
+    try {
+        execSync('semgrep --version', { stdio: 'pipe', timeout: 5000 });
+    }
+    catch {
+        return null; // not installed
+    }
+    try {
+        const out = execSync(`semgrep --config=auto --json --quiet --timeout=30 "${root}"`, { encoding: 'utf-8', maxBuffer: 20 * 1024 * 1024, timeout: 120_000, stdio: 'pipe' });
+        const parsed = JSON.parse(out);
+        const findings = [];
+        for (const r of parsed.results || []) {
+            const sev = (r.extra?.severity || 'WARNING').toUpperCase();
+            findings.push(upsertFindingLocal({
+                class: 'implementation',
+                severity: mapSemgrepSeverity(sev),
+                status: 'candidate',
+                title: `Semgrep: ${r.check_id}`,
+                description: r.extra?.message || r.check_id,
+                target: { kind: 'mcp_server', name: serverName },
+                evidence: {
+                    scanner: 'semgrep',
+                    reproSteps: [`${r.path}:${r.start?.line || '?'}`, r.check_id],
+                    stackTrace: `${r.path}:${r.start?.line || 0}`,
+                },
+                exploitability: {
+                    preAuth: true,
+                    networkReachable: true,
+                    userInteraction: false,
+                },
+            }));
+        }
+        return findings;
+    }
+    catch (err) {
+        Logger.warn(`[vuln:sast] Semgrep failed: ${err instanceof Error ? err.message : String(err)}`);
+        return null;
+    }
+}
+function mapSemgrepSeverity(s) {
+    if (s === 'ERROR' || s === 'CRITICAL')
+        return 'CRITICAL';
+    if (s === 'WARNING' || s === 'HIGH')
+        return 'HIGH';
+    if (s === 'INFO')
+        return 'LOW';
+    return 'MEDIUM';
+}
+export async function scanServerSast(server) {
+    const root = resolveServerPackageRoot(server);
+    if (!root || !existsSync(root)) {
+        Logger.debug(`[vuln:sast] No package root for ${server.name}`);
+        return [];
+    }
+    const prefer = process.env.MASTYF_AI_VULN_DISCOVERY_SAST || 'semgrep';
+    if (prefer === 'semgrep' || prefer === 'auto') {
+        const sem = runSemgrep(root, server.name);
+        if (sem !== null)
+            return sem;
+    }
+    const heuristic = runHeuristicSast(root, server.name);
+    // Optional LLM deep pass (best-effort, no-op if model not configured)
+    const llmFindings = await runLlmSastIfConfigured(root, server.name);
+    return [...heuristic, ...llmFindings];
+}
+//# sourceMappingURL=sast-scanner.js.map

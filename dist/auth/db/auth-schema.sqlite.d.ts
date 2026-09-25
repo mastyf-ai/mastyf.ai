@@ -1,0 +1,30 @@
+/**
+ * SQLite schema for the auth/RBAC subsystem.
+ *
+ * The rest of mastyf.ai defaults to a local SQLite file (DB_TYPE unset or
+ * `sqlite`) and only uses PostgreSQL when DB_TYPE=postgres. The Postgres
+ * schema lives in src/database/migrations/020-auth-rbac.sql and is applied
+ * by the existing Flyway-style migration-runner. SQLite has no such runner
+ * wired up for this subsystem, so we apply the equivalent DDL idempotently
+ * at startup (CREATE TABLE IF NOT EXISTS — safe to run on every boot).
+ *
+ * Schema is intentionally kept 1:1 with the Postgres version (same table
+ * and column names) so the two AuthDbAdapter implementations can share
+ * identical SQL for everything except a handful of dialect differences
+ * (UUID generation, JSON storage, RETURNING support) which are isolated
+ * in auth-db.ts.
+ */
+export declare const SQLITE_AUTH_SCHEMA_SQL = "\nCREATE TABLE IF NOT EXISTS auth_users (\n  id TEXT PRIMARY KEY,\n  tenant_id TEXT NOT NULL DEFAULT 'default',\n  username TEXT NOT NULL,\n  email TEXT NOT NULL,\n  display_name TEXT NOT NULL,\n  password_hash TEXT NOT NULL,\n  status TEXT NOT NULL DEFAULT 'active',\n  must_change_password INTEGER NOT NULL DEFAULT 0,\n  failed_login_count INTEGER NOT NULL DEFAULT 0,\n  locked_until TEXT,\n  last_login_at TEXT,\n  last_login_ip TEXT,\n  password_changed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  created_by TEXT,\n  UNIQUE (tenant_id, username),\n  UNIQUE (tenant_id, email)\n);\nCREATE INDEX IF NOT EXISTS idx_auth_users_tenant ON auth_users(tenant_id);\nCREATE INDEX IF NOT EXISTS idx_auth_users_status ON auth_users(tenant_id, status);\n\nCREATE TABLE IF NOT EXISTS auth_permissions (\n  key TEXT PRIMARY KEY,\n  category TEXT NOT NULL,\n  description TEXT NOT NULL\n);\n\nCREATE TABLE IF NOT EXISTS auth_roles (\n  id TEXT PRIMARY KEY,\n  tenant_id TEXT NOT NULL DEFAULT 'default',\n  name TEXT NOT NULL,\n  description TEXT NOT NULL DEFAULT '',\n  is_system INTEGER NOT NULL DEFAULT 0,\n  dashboard_tier TEXT NOT NULL DEFAULT 'viewer',\n  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  UNIQUE (tenant_id, name)\n);\nCREATE INDEX IF NOT EXISTS idx_auth_roles_tenant ON auth_roles(tenant_id);\n\nCREATE TABLE IF NOT EXISTS auth_role_permissions (\n  role_id TEXT NOT NULL REFERENCES auth_roles(id) ON DELETE CASCADE,\n  permission_key TEXT NOT NULL REFERENCES auth_permissions(key) ON DELETE CASCADE,\n  PRIMARY KEY (role_id, permission_key)\n);\n\nCREATE TABLE IF NOT EXISTS auth_user_roles (\n  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,\n  role_id TEXT NOT NULL REFERENCES auth_roles(id) ON DELETE CASCADE,\n  assigned_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  assigned_by TEXT,\n  PRIMARY KEY (user_id, role_id)\n);\n\nCREATE TABLE IF NOT EXISTS auth_groups (\n  id TEXT PRIMARY KEY,\n  tenant_id TEXT NOT NULL DEFAULT 'default',\n  name TEXT NOT NULL,\n  description TEXT NOT NULL DEFAULT '',\n  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  UNIQUE (tenant_id, name)\n);\nCREATE INDEX IF NOT EXISTS idx_auth_groups_tenant ON auth_groups(tenant_id);\n\nCREATE TABLE IF NOT EXISTS auth_group_roles (\n  group_id TEXT NOT NULL REFERENCES auth_groups(id) ON DELETE CASCADE,\n  role_id TEXT NOT NULL REFERENCES auth_roles(id) ON DELETE CASCADE,\n  PRIMARY KEY (group_id, role_id)\n);\n\nCREATE TABLE IF NOT EXISTS auth_user_groups (\n  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,\n  group_id TEXT NOT NULL REFERENCES auth_groups(id) ON DELETE CASCADE,\n  added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  added_by TEXT,\n  PRIMARY KEY (user_id, group_id)\n);\n\nCREATE TABLE IF NOT EXISTS auth_sessions (\n  id TEXT PRIMARY KEY,\n  tenant_id TEXT NOT NULL DEFAULT 'default',\n  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,\n  token_hash TEXT NOT NULL UNIQUE,\n  csrf_secret TEXT NOT NULL,\n  ip_address TEXT,\n  user_agent TEXT,\n  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  last_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  expires_at TEXT NOT NULL,\n  revoked_at TEXT\n);\nCREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);\nCREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);\n\nCREATE TABLE IF NOT EXISTS auth_audit_logs (\n  id TEXT PRIMARY KEY,\n  tenant_id TEXT NOT NULL DEFAULT 'default',\n  user_id TEXT,\n  username TEXT,\n  action TEXT NOT NULL,\n  result TEXT NOT NULL,\n  ip_address TEXT,\n  user_agent TEXT,\n  metadata TEXT,\n  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))\n);\nCREATE INDEX IF NOT EXISTS idx_auth_audit_tenant_time ON auth_audit_logs(tenant_id, created_at DESC);\nCREATE INDEX IF NOT EXISTS idx_auth_audit_user ON auth_audit_logs(user_id, created_at DESC);\nCREATE INDEX IF NOT EXISTS idx_auth_audit_action ON auth_audit_logs(action, created_at DESC);\n\nCREATE TABLE IF NOT EXISTS auth_settings (\n  tenant_id TEXT PRIMARY KEY DEFAULT 'default',\n  settings TEXT NOT NULL,\n  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n  updated_by TEXT\n);\n\nCREATE TABLE IF NOT EXISTS auth_setup_state (\n  tenant_id TEXT PRIMARY KEY DEFAULT 'default',\n  completed INTEGER NOT NULL DEFAULT 0,\n  completed_at TEXT\n);\n";
+/** Canonical permission catalog — shared source of truth for seeding both backends. */
+export declare const AUTH_PERMISSIONS: Array<{
+    key: string;
+    category: string;
+    description: string;
+}>;
+export declare const SYSTEM_ROLES: Array<{
+    name: string;
+    description: string;
+    dashboardTier: 'viewer' | 'analyst' | 'operator' | 'admin' | 'tenant-admin';
+    permissions: string[];
+}>;
+//# sourceMappingURL=auth-schema.sqlite.d.ts.map
