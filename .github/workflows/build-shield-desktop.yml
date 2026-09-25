@@ -52,10 +52,11 @@ jobs:
           sh scripts/pack-mac.sh
           mkdir -p dist/normalized
           cp dist/*arm64*.dmg dist/normalized/Mastyf-Shield-latest-arm64.dmg || true
-          cp dist/*x64*.dmg dist/normalized/Mastyf-Shield-latest-x64.dmg || true
-          if [ ! -f dist/normalized/Mastyf-Shield-latest-arm64.dmg ]; then
-            cp dist/*.dmg dist/normalized/Mastyf-Shield-latest-arm64.dmg || true
-          fi
+          for f in dist/*.dmg; do
+            if [ -f "$f" ] && echo "$f" | grep -v "arm64" >/dev/null; then
+              cp "$f" dist/normalized/Mastyf-Shield-latest-x64.dmg || true
+            fi
+          done
           echo "=== Built macOS Dist ==="
           ls -la dist/
           echo "=== Normalized Artifacts ==="
