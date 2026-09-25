@@ -6396,3 +6396,471 @@ main .lp-section:first-child {
   color: #475569;
   font-family: var(--font-mono, monospace);
 }
+
+/* ==========================================================================
+   LIVE REAL-TIME INCIDENT COVER STYLES
+   ========================================================================== */
+
+.lp-incident-cover-wrapper {
+  position: relative;
+  width: 100%;
+  padding: 3rem 1.5rem 5rem;
+  overflow: hidden;
+  background: #060913;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: padding 0.4s ease;
+}
+
+.lp-incident-cover-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.lp-incident-radial-glow {
+  position: absolute;
+  top: -20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.08) 0%, rgba(245, 158, 11, 0.05) 45%, transparent 70%);
+  filter: blur(80px);
+}
+
+.lp-incident-grid-lines {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+}
+
+.lp-incident-cover-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+/* Telemetry Strip */
+.lp-incident-telemetry-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.6rem 1.25rem;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  margin-bottom: 2.5rem;
+  backdrop-filter: blur(10px);
+}
+
+.lp-incident-live-beacon {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  position: relative;
+}
+
+.lp-pulse-ring {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: beacon-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  display: inline-block;
+}
+
+@keyframes beacon-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.9;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+}
+
+.lp-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.lp-telemetry-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #f87171;
+}
+
+.lp-telemetry-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.lp-telemetry-sep {
+  color: #334155;
+}
+
+/* Hero Block */
+.lp-incident-hero-block {
+  text-align: center;
+  max-width: 960px;
+  margin: 0 auto 3rem;
+}
+
+.lp-incident-hero-title {
+  font-size: clamp(2rem, 4.5vw, 3.4rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: #f8fafc;
+  margin-bottom: 1.25rem;
+}
+
+.lp-incident-title-gradient {
+  display: inline-block;
+  background: linear-gradient(135deg, #f59e0b 0%, #ef4444 60%, #dc2626 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lp-incident-hero-desc {
+  font-size: clamp(1rem, 1.8vw, 1.15rem);
+  color: #94a3b8;
+  line-height: 1.6;
+  max-width: 780px;
+  margin: 0 auto 2rem;
+}
+
+/* Filter Pills */
+.lp-incident-filters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lp-incident-filter-btn {
+  padding: 0.45rem 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-family: var(--font-mono, monospace);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lp-incident-filter-btn:hover {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+
+.lp-incident-filter-btn.is-active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  color: #fbbf24;
+  font-weight: 600;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.15);
+}
+
+/* Incident Cards Cluster Grid */
+.lp-incident-cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 3.5rem;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.lp-incident-loading-state {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 4rem 1rem;
+  color: #64748b;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85rem;
+}
+
+.lp-incident-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: rgba(11, 16, 30, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 1.5rem;
+  backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.lp-incident-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(245, 158, 11, 0.35);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(245, 158, 11, 0.08);
+}
+
+.lp-incident-card.is-highlighted {
+  border-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.12);
+}
+
+.lp-incident-card.is-highlighted::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #ef4444, #f59e0b);
+}
+
+.lp-incident-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.lp-incident-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lp-incident-source-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+}
+
+.lp-incident-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lp-severity-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.18rem 0.5rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lp-sev-critical {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.lp-sev-sev-1 {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.lp-sev-high {
+  background: rgba(234, 179, 8, 0.18);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.35);
+}
+
+.lp-incident-time {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.lp-incident-card-headline {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+
+.lp-incident-headline-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.lp-incident-headline-link:hover {
+  color: #f59e0b;
+}
+
+.lp-incident-card-snippet {
+  font-size: 0.84rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lp-incident-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.lp-incident-category-tag {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.lp-incident-action-link {
+  font-size: 0.75rem;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: #f59e0b;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.lp-incident-action-link:hover {
+  color: #fbbf24;
+  transform: translateX(2px);
+}
+
+/* Scroll Cue */
+.lp-incident-scroll-cue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  transition: opacity 0.3s ease;
+}
+
+.lp-scroll-beam-line {
+  width: 1px;
+  height: 36px;
+  background: linear-gradient(180deg, #f59e0b, transparent);
+  animation: beam-drop 1.8s infinite;
+}
+
+@keyframes beam-drop {
+  0% { transform: scaleY(0); transform-origin: top; }
+  50% { transform: scaleY(1); transform-origin: top; }
+  50.1% { transform: scaleY(1); transform-origin: bottom; }
+  100% { transform: scaleY(0); transform-origin: bottom; }
+}
+
+.lp-scroll-prompt-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #f59e0b;
+}
+
+.lp-scroll-arrow {
+  color: #f59e0b;
+  animation: bounce-subtle 1.6s infinite ease-in-out;
+}
+
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+/* Severance Laser Line */
+.lp-incident-severance-laser {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.lp-laser-core {
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #f59e0b 20%, #10b981 50%, #06b6d4 80%, transparent);
+}
+
+.lp-laser-glow {
+  position: absolute;
+  width: 100%;
+  height: 10px;
+  background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.4) 20%, rgba(16, 185, 129, 0.4) 50%, rgba(6, 182, 212, 0.4) 80%, transparent);
+  filter: blur(6px);
+}
+
+.lp-laser-badge {
+  position: relative;
+  top: -12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.8rem;
+  border-radius: 9999px;
+  background: #0f172a;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+  white-space: nowrap;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.3);
+}
+
+@media (max-width: 768px) {
+  .lp-incident-cluster-grid {
+    grid-template-columns: 1fr;
+  }
+  .lp-incident-hero-title {
+    font-size: 1.8rem;
+  }
+}
+

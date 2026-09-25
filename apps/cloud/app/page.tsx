@@ -3,6 +3,7 @@ import { SiteFooter } from '@/components/SiteFooter';
 import { SiteNav } from '@/components/SiteNav';
 import { AnimatedNebula } from '@/components/landing/AnimatedNebula';
 import { ArcadePerspectiveMesh } from '@/components/landing/ArcadePerspectiveMesh';
+import { LiveIncidentCover } from '@/components/landing/LiveIncidentCover';
 import { HeroSection } from '@/components/landing/HeroSection';
 import { LiveThreatTicker } from '@/components/landing/LiveThreatTicker';
 import { EcosystemMarquee } from '@/components/landing/EcosystemMarquee';
@@ -29,6 +30,9 @@ export default async function HomePage() {
       <SiteNav session={!!session} />
 
       <main className="relative z-10">
+        {/* Real-Time Live Incident Cover (Unseeded live streaming headlines) */}
+        <LiveIncidentCover />
+
         {/* 1. Hero: cinematic entry with UnifiedCommandDeck centerpiece */}
         <HeroSection session={!!session} />
 
