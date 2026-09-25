@@ -51,7 +51,7 @@ export async function enrichGitHubAdvisories(packageName: string): Promise<GitHu
   try {
     const params = new URLSearchParams({
       ecosystem: 'npm',
-      package: packageName,
+      affects: packageName,
       per_page: '30',
       sort: 'published',
       direction: 'desc',
@@ -87,11 +87,20 @@ export async function enrichGitHubAdvisories(packageName: string): Promise<GitHu
       published_at: string;
       updated_at: string;
       withdrawn_at: string | null;
-      vulnerabilities?: Array<{ package: { ecosystem: string }; first_patched_version?: string }>;
+      vulnerabilities?: Array<{ package: { ecosystem: string; name?: string }; first_patched_version?: string }>;
     }>;
 
     const advisories: GitHubAdvisory[] = data
-      .filter((a) => !a.withdrawn_at) // skip withdrawn advisories
+      .filter((a) => {
+        if (a.withdrawn_at) return false;
+        // Defensively ensure advisory actually applies to this package
+        const matches = (a.vulnerabilities || []).some(
+          (v) =>
+            v.package?.ecosystem?.toLowerCase() === 'npm' &&
+            v.package?.name?.toLowerCase() === packageName.toLowerCase(),
+        );
+        return matches;
+      })
       .map((a) => {
         const patched = a.vulnerabilities?.[0]?.first_patched_version;
         const severity = a.severity.toUpperCase();

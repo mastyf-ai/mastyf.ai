@@ -7,6 +7,7 @@ import { auth } from '@/lib/auth';
 import { CLOUD_NAME, SITE_NAME } from '@/lib/product-links';
 import { oauthProviderStatus } from '@/lib/oauth-providers';
 import { SUPPORT_EMAIL } from '@/lib/support';
+import { signOutAction } from '@/app/actions';
 import { redirect } from 'next/navigation';
 import '../landing.css';
 import './login.css';
@@ -48,10 +49,6 @@ export default async function LoginPage({ searchParams }: Props) {
     ? (ERROR_MESSAGES[errorCode] ?? ERROR_MESSAGES.Default)
     : null;
 
-  if (session?.user?.id) {
-    redirect(callbackUrl);
-  }
-
   const oauth = oauthProviderStatus();
   const oauthReady = oauth.google || oauth.github || oauth.dev;
   const devSetupNeeded = process.env.NODE_ENV === 'development' && !oauth.github && !oauth.google;
@@ -66,13 +63,40 @@ export default async function LoginPage({ searchParams }: Props) {
             <strong>{SITE_NAME}</strong>
           </Link>
 
-          <h1>Sign in to {CLOUD_NAME}</h1>
+          <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-left">
+            <p className="text-xs text-amber-200">
+              💡 <strong>Looking to download Mastyf Shield?</strong> No account or login is required. You can download and activate Shield directly.
+            </p>
+            <Link href="/download" className="text-xs text-amber-400 font-semibold underline mt-1 inline-block">
+              Go to Mastyf Shield Download →
+            </Link>
+          </div>
+
+          {session?.user?.id ? (
+            <div className="card p-3 mb-4 bg-slate-800/80 border-slate-700 text-center">
+              <p className="text-xs text-slate-300 mb-2">
+                Active session detected ({session.user.email || session.user.name || 'Demo Session'}).
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <form action={signOutAction}>
+                  <button type="submit" className="btn btn-secondary btn-sm text-xs py-1.5 px-3">
+                    Sign Out / Clear Session
+                  </button>
+                </form>
+                <Link href="/download" className="btn btn-primary btn-sm text-xs py-1.5 px-3">
+                  Download Shield →
+                </Link>
+              </div>
+            </div>
+          ) : null}
+
+          <h1>Sign in to Enterprise Control Plane</h1>
           <p className="login-lead">
             {oauth.github || oauth.google
               ? 'Use Google or GitHub to manage policy, API keys, and fleet settings.'
               : oauth.dev
                 ? 'Local dev mode — use the dev account below, or add GitHub OAuth for real sign-in.'
-                : 'Free cloud console for MCP policy and fleet management.'}
+                : 'Enterprise control plane for centralized policy and fleet governance.'}
           </p>
 
           {errorMessage ? (

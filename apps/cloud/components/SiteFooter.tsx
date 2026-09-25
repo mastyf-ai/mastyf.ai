@@ -11,10 +11,10 @@ import {
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '@/lib/support';
 
 const TRUST_BADGES = [
-  { label: '97.50% hybrid coverage', detail: '0% FPR · 3k enterprise' },
-  { label: `DOI ${ZENODO_DOI}`, detail: 'v2.0 · CC-BY 4.0' },
-  { label: '1.5B Guard', detail: '1.1GB CPU · 17.3µs' },
-  { label: 'Gated on HF', detail: 'Manual review · Lemon Squeezy' },
+  { label: '99.52% Defense on AgentDojo', detail: '629 episodes · Exact clean utility parity' },
+  { label: `DOI 10.5281/zenodo.22501491`, detail: 'Formal Research Monograph · CC-BY 4.0' },
+  { label: 'Deterministic CBAC Invariants', detail: '< 4.8µs fast-path · Complete mediation' },
+  { label: 'Open Source AGPL-3.0', detail: 'Self-hostable Gateway + Security Swarm' },
 ] as const;
 
 export function SiteFooter() {
@@ -39,8 +39,7 @@ export function SiteFooter() {
             className="site-footer-wordmark"
           />
           <p className="site-footer-tagline">
-            Perimeter security for AI agents. Runtime enforcement, Defense Fabric, trust scores,
-            and a self-improving Security Swarm — open source and enterprise-ready.
+            Your AI can reason. Mastyf controls what it can execute. An externally enforced security layer for AI agent tool execution, combining runtime authorization, adversarial testing, software trust, and centralized enterprise fleet governance.
           </p>
           <a href={SUPPORT_MAILTO} className="site-footer-email">
             {SUPPORT_EMAIL}
@@ -48,74 +47,84 @@ export function SiteFooter() {
         </div>
 
         <div className="site-footer-col">
-          <h4>Product</h4>
+          <h4>Platform</h4>
           <ul>
             <li>
-              <Link href="/certified">Trust scores</Link>
+              <Link href="/download" className="text-amber-400 font-semibold">Download Shield (Mac, Win, Linux)</Link>
             </li>
             <li>
-              <Link href="/dashboard">Cloud console</Link>
+              <Link href="/certified" className="text-emerald-400 font-semibold">Certified MCPs</Link>
             </li>
             <li>
-              <Link href="/login">Sign in free</Link>
+              <Link href="/platform">Platform Architecture</Link>
             </li>
             <li>
-              <a href="/#product">Platform overview</a>
+              <Link href="/platform#gateway">Mastyf Gateway</Link>
             </li>
             <li>
-              <a href="/#architecture">Defense Fabric</a>
+              <Link href="/platform#swarm">Mastyf Swarm</Link>
+            </li>
+            <li>
+              <Link href="/trust">Mastyf Trust</Link>
+            </li>
+            <li>
+              <Link href="/platform#control-plane">Control Plane</Link>
+            </li>
+            <li>
+              <Link href="/pricing">Pricing &amp; License</Link>
             </li>
           </ul>
         </div>
 
         <div className="site-footer-col">
-          <h4>Resources</h4>
+          <h4>Solutions &amp; Devs</h4>
           <ul>
             <li>
-              <a href={GITHUB_REPO_URL} rel="noopener noreferrer">
-                GitHub
-              </a>
+              <Link href="/solutions#mcp-security">MCP Security</Link>
             </li>
             <li>
-              <a href="/openapi.yaml">API docs</a>
+              <Link href="/solutions#coding-agents">Autonomous Coding Agents</Link>
             </li>
             <li>
-              <Link href="/tutorials/site-walkthrough">Walkthrough</Link>
+              <Link href="/solutions#enterprise-agents">Enterprise Data Stores</Link>
             </li>
             <li>
-              <a href="https://github.com/mastyf-ai/mastyf.ai/blob/main/docs/ENTERPRISE_EVIDENCE_PACK.md" rel="noopener noreferrer">
-                Evidence pack
+              <Link href="/developers">Developer Quickstart</Link>
+            </li>
+            <li>
+              <Link href="/assessment">Free Security Assessment</Link>
+            </li>
+            <li>
+              <a href={GITHUB_REPO_URL} rel="noopener noreferrer" target="_blank">
+                GitHub Repository
               </a>
             </li>
           </ul>
         </div>
 
         <div className="site-footer-col">
-          <h4>Research</h4>
+          <h4>Research &amp; Trust</h4>
           <ul>
             <li>
-              <a href={ZENODO_URL} target="_blank" rel="noopener noreferrer">
-                Zenodo · {ZENODO_DOI}
-              </a>
+              <Link href="/research">Research &amp; Formal Theorems</Link>
             </li>
             <li>
-              <a href={PAPER_PDF_URL} target="_blank" rel="noopener noreferrer">
-                Paper PDF
-              </a>
+              <Link href="/research#limitations">Guarantees &amp; Limitations</Link>
             </li>
             <li>
-              <a href={HF_MODEL_URL} target="_blank" rel="noopener noreferrer">
-                HF: mastyf-guard-1.5b
-              </a>
+              <Link href="/trust">Trust Center &amp; Compliance</Link>
             </li>
             <li>
-              <a href={SUPPORT_MAILTO}>Contact us</a>
+              <Link href="/pricing">Pricing &amp; Licensing</Link>
             </li>
             <li>
-              <Link href="/terms">Terms</Link>
+              <Link href="/pilot">30-Day Guided Pilot</Link>
             </li>
             <li>
-              <Link href="/privacy">Privacy</Link>
+              <Link href="/terms">Terms of Service</Link>
+            </li>
+            <li>
+              <Link href="/privacy">Privacy Policy</Link>
             </li>
           </ul>
         </div>
@@ -126,7 +135,7 @@ export function SiteFooter() {
         <span className="site-footer-bottom-links">
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
-          <a href={GITHUB_REPO_URL} rel="noopener noreferrer">
+          <a href={GITHUB_REPO_URL} rel="noopener noreferrer" target="_blank">
             GitHub
           </a>
         </span>

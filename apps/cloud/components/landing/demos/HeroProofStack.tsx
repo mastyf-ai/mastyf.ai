@@ -29,13 +29,13 @@ export function HeroProofStack() {
       <div className="lp-hero-proof-score card-elevated">
         <div className="lp-hero-score-ring" aria-hidden>
           <svg viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r="52" fill="none" stroke="#e8e4dc" strokeWidth="8" />
+            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255, 255, 255, 0.1)" strokeWidth="8" />
             <circle
               cx="60"
               cy="60"
               r="52"
               fill="none"
-              stroke="#c5a059"
+              stroke="#fbbf24"
               strokeWidth="8"
               strokeDasharray="327"
               strokeDashoffset={327 - (score / 100) * 327}

@@ -17,12 +17,12 @@ const FAQ_ITEMS = [
     a: 'Two coordinated swarms: CI Swarm runs on every PR with Scout, Corpus (228 fixtures), Evasion (120+ probes), Parity, and Report agents. Runtime Swarm enforces in production with BlockGuard, InstantLearner, SemanticAuditor, and Calibrator. Four feedback loops connect them.',
   },
   {
-    q: 'Do I need an account for trust scores?',
-    a: 'No. Package lookup and badge embedding are public and free. Sign in only for the cloud console — policy YAML, API keys, and fleet management.',
+    q: 'Do I need an account to use Mastyf?',
+    a: 'No. Mastyf Shield and Mastyf Gateway run entirely on your own local machine or self-hosted infrastructure. You do not need to register a cloud account or send your telemetry to external servers. Simply download Shield or pull the Docker image and activate with your license key.',
   },
   {
     q: 'How do I deploy mastyf.ai?',
-    a: 'Docker is the fastest path: clone the repo and run docker compose. Or build from source with ./setup.sh. The proxy and dashboard run at localhost:4000. Connect to the cloud console for hosted policy management.',
+    a: 'For developer workstations (protecting Claude Desktop, Cursor, and Windsurf), install Mastyf Shield for macOS (.dmg), Windows (.exe), or Linux (.AppImage / .deb). For server environments and production pipelines, deploy ghcr.io/mastyf-ai/mastyf-gateway as an inline sidecar proxy.',
   },
   {
     q: 'How do I get help?',

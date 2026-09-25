@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Plus_Jakarta_Sans, JetBrains_Mono, Instrument_Serif } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
 import { SessionProvider } from '@/components/SessionProvider';
 import { PRODUCTION_SITE_URL, SITE_NAME } from '@/lib/product-links';
@@ -7,27 +7,42 @@ import { isAuthConfigured } from '@/lib/safe-auth';
 import { resolveSiteUrl } from '@/lib/site-url';
 import './globals.css';
 
-const inter = Inter({
+const fontSans = Plus_Jakarta_Sans({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-inter',
+  variable: '--font-sans',
+  weight: ['400', '500', '600', '700', '800'],
+});
+
+const fontMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
+  weight: ['400', '500', '600', '700'],
+});
+
+const fontSerif = Instrument_Serif({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-serif',
+  weight: ['400'],
 });
 
 const siteUrl = resolveSiteUrl();
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl || PRODUCTION_SITE_URL),
-  title: `${SITE_NAME} — Perimeter security for your AI`,
+  title: 'Mastyf — AI Agent Security Platform | Control What AI Agents Can Execute',
   description:
-    `${SITE_NAME} intercepts every MCP tool call, enforces security policy, blocks violations before execution, and scores npm packages. Runtime proxy, ops dashboard, and free cloud console.`,
+    'Your AI can reason. Mastyf controls what it can execute. An externally enforced security layer for AI agent tool execution, combining runtime authorization, adversarial testing, MCP trust, and centralized enterprise fleet governance.',
   icons: {
     icon: '/logo.png',
     apple: '/logo.png',
   },
   openGraph: {
-    title: `${SITE_NAME} — Know which MCP servers are safe to trust`,
+    title: 'Mastyf — AI Agent Security Platform',
     description:
-      'Look up any npm MCP package for an instant 0–100 trust score. Free cloud console for policy and fleet management.',
+      'The model is not the security boundary. The agent proposes. Mastyf authorizes. Infrastructure executes.',
     images: ['/logo.png'],
   },
   twitter: {
@@ -41,7 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const content = authEnabled ? <SessionProvider>{children}</SessionProvider> : children;
 
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${fontSans.variable} ${fontMono.variable} ${fontSerif.variable}`}>
       <body>
         {content}
         <Analytics />

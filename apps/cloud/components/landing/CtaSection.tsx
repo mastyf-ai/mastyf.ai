@@ -54,18 +54,19 @@ export function CtaSection({ session }: Props) {
             </a>
           </div>
           <div className="lp-final-block">
-            <h2>Ready to score your MCP servers?</h2>
-            <p className="muted">Look up any npm package free — no account required.</p>
+            <h2>Move AI agents into production without unrestricted authority.</h2>
+            <p className="muted">Deploy Mastyf Gateway in Audit Mode in under 10 minutes, or launch a guided 30-Day Enterprise Pilot.</p>
             <div className="lp-final-actions">
-              <Link href="/certified" className="btn btn-primary btn-pill">
-                Look up a package
+              <Link href="/developers" className="btn btn-primary btn-pill">
+                Protect an Agent →
               </Link>
-              {!session ? (
-                <Link href="/login" className="btn btn-secondary btn-pill">
-                  Sign in free
-                </Link>
-              ) : null}
-              <a href={GITHUB_REPO_URL} className="btn btn-ghost btn-pill" rel="noopener noreferrer">
+              <Link href="/pilot" className="btn btn-secondary btn-pill">
+                Request a 30-Day Pilot
+              </Link>
+              <Link href="/assessment" className="btn btn-gold btn-pill">
+                Assess Agent Exposure Free
+              </Link>
+              <a href={GITHUB_REPO_URL} className="btn btn-ghost btn-pill" rel="noopener noreferrer" target="_blank">
                 GitHub
               </a>
             </div>

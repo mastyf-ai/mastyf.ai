@@ -32,12 +32,12 @@ export function DynamicBackground() {
     const draw = () => {
       const { width, height } = canvas;
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = 'rgba(10, 17, 40, 0.055)';
-      const step = 24;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+      const step = 32;
       for (let x = 0; x < width; x += step) {
         for (let y = 0; y < height; y += step) {
           ctx.beginPath();
-          ctx.arc(x + mx * 0.002, y + my * 0.002, 1.2, 0, Math.PI * 2);
+          ctx.arc(x + mx * 0.002, y + my * 0.002, 0.9, 0, Math.PI * 2);
           ctx.fill();
         }
       }

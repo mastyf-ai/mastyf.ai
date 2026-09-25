@@ -28,9 +28,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'licenseKey is required' }, { status: 400 });
   }
 
-  if (!hfUsername) {
-    return NextResponse.json({ error: 'hfUsername is required' }, { status: 400 });
-  }
+  // Shield-only activations omit hfUsername. Guard model bind still requires it.
 
   // 1. Authoritative License Activation via Lemon Squeezy License API
   const lemonActivation = await activateLemonLicense({
@@ -108,8 +106,8 @@ export async function POST(request: Request) {
     }
   }
 
-  // 3. Bind Identity and Grant Hugging Face Access (Out of band)
-  if (customerEmail) {
+  // 3. Bind Identity and Grant Hugging Face Access (Guard installs only)
+  if (customerEmail && hfUsername) {
     const bindRes = await bindAndGrantHFAccess({
       customerEmail,
       licenseKey,

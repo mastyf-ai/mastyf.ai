@@ -22,10 +22,9 @@ export function DifferentiationSection() {
             <p className="lp-eyebrow">
               <span className="lp-pill">Why mastyf</span>
             </p>
-            <h2>Built for agents that act — not just chat</h2>
+            <h2>Agents are no longer just generating text. They're taking actions.</h2>
             <p className="lp-diff-lead">
-              Generic AI firewalls describe risk. mastyf enforces on every MCP tool call with
-              repo-backed policy, corpus gates, and a Security Swarm that compounds with every attack.
+              Traditional model guardrails operate around the model. Mastyf puts an externally enforced control boundary around the action itself: <strong>The agent proposes. Mastyf authorizes. The tool executes.</strong>
             </p>
           </div>
 

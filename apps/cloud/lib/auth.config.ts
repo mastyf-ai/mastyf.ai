@@ -1,6 +1,6 @@
 import type { NextAuthConfig } from 'next-auth';
 import { ensureAuthUser } from './ensure-auth-user';
-import { configuredOAuthProviders, DEV_AUTH_PROVIDER_ID } from './oauth-providers';
+import { configuredOAuthProviders, DEV_AUTH_PROVIDER_ID, DEMO_AUTH_PROVIDER_ID } from './oauth-providers';
 
 export const authConfig = {
   providers: configuredOAuthProviders(),
@@ -11,7 +11,12 @@ export const authConfig = {
   callbacks: {
     async signIn({ user, account }) {
       if (!user?.id) return false;
-      if (account?.provider === DEV_AUTH_PROVIDER_ID || account?.provider === 'github' || account?.provider === 'google') {
+      if (
+        account?.provider === DEV_AUTH_PROVIDER_ID ||
+        account?.provider === DEMO_AUTH_PROVIDER_ID ||
+        account?.provider === 'github' ||
+        account?.provider === 'google'
+      ) {
         await ensureAuthUser({
           id: user.id,
           email: user.email,

@@ -28,6 +28,8 @@ export const ZENODO_CONCEPT_DOI = '10.5281/zenodo.22179415';
 export const PAPER_TITLE =
   'Capability-Mediated Perimeters for Secure AI Agent Tool Execution';
 export const PAPER_PDF_URL = 'https://zenodo.org/api/records/22463320/files/mastyf-guard.pdf/content';
-export const HF_CHECKOUT_URL =
-  'https://mastyfai.lemonsqueezy.com/checkout/buy/49323daa-90ef-4157-90b9-8706acd13fe6';
+/** Working Lemon storefront (bare /checkout and old buy UUIDs 404). */
+export const LEMON_STORE_URL = 'https://mastyfai.lemonsqueezy.com/';
+export const HF_CHECKOUT_URL = LEMON_STORE_URL;
 export const CONTACT_EMAIL = 'mastyf.support@gmail.com';
+export const SHIELD_DOWNLOAD_PATH = '/download';

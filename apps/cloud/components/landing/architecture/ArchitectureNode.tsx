@@ -1,14 +1,14 @@
 import type { ArchNode } from '@/lib/architecture-graph';
 
 const GROUP_COLORS: Record<ArchNode['group'], string> = {
-  ci: '#3b82f6',
-  runtime: '#16a34a',
-  external: '#c5a059',
-  threat: '#6366f1',
-  human: '#d97706',
-  output: '#16a34a',
-  research: '#8b5cf6',
-  fabric: '#0a1128',
+  ci: '#38bdf8',
+  runtime: '#10b981',
+  external: '#fbbf24',
+  threat: '#a78bfa',
+  human: '#f59e0b',
+  output: '#34d399',
+  research: '#c084fc',
+  fabric: '#38bdf8',
 };
 
 type Props = {

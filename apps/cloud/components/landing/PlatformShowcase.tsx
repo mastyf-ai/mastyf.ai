@@ -37,10 +37,10 @@ export function PlatformShowcase() {
     <RevealOnScroll mode="tab">
       <section className="lp-section lp-showcase-section" id="product">
         <div className="lp-section-header">
-          <h2>One platform. Every layer of MCP security.</h2>
+          <span className="lp-pill lp-pill-gold">Unified Product Family</span>
+          <h2>One Security Platform. Four Core Control Layers.</h2>
           <p>
-            Runtime enforcement, policy control, ops visibility, and public trust scores — built
-            from the open-source mastyf.ai repo.
+            Mastyf provides complete mediation between untrusted agent cognition and privileged execution — combining runtime enforcement, adversarial hardening, MCP trust, and centralized governance.
           </p>
         </div>
 
@@ -85,7 +85,7 @@ export function PlatformShowcase() {
               <span />
               <span />
               <span className="lp-browser-url">
-                {active === 'scores' ? 'mastyf.ai/certified' : 'localhost:4000'}
+                {active === 'scores' ? 'mastyf.ai/certified' : 'mastyf-gateway.local:4000'}
               </span>
             </div>
             <div className="lp-showcase-media">
@@ -97,17 +97,42 @@ export function PlatformShowcase() {
                 <div className="lp-showcase-live">
                   <BadgeLookupWidget variant="hero" />
                 </div>
-              ) : (
+              ) : 'image' in tab ? (
                 <Image
-                  src={tab.image}
-                  alt={tab.imageAlt}
+                  src={(tab as { image: string; imageAlt: string }).image}
+                  alt={(tab as { image: string; imageAlt: string }).imageAlt}
                   width={1920}
                   height={912}
                   className="lp-showcase-img"
                   priority={active === 'enforcement'}
                 />
-              )}
+              ) : null}
             </div>
+          </div>
+        </div>
+
+        <div className="lp-guard-callout card mt-8">
+          <div className="lp-guard-callout-header">
+            <span className="lp-pill lp-pill-gold">Subordinate Semantic Engine</span>
+            <h3>Mastyf Guard 1.5B (Frozen V6)</h3>
+          </div>
+          <p className="muted">
+            The semantic auditor inside the security perimeter. Governed by the formal invariant:
+            <code>A_final = A_struct ∩ A_semantic ⊆ A_struct</code>.
+            The learned model can revoke or escalate authority on ambiguous relational calls, but can never synthesize or grant permission. AI can help judge an action — AI never gets to grant itself authority.
+          </p>
+          <div className="lp-guard-links">
+            <a
+              href="https://huggingface.co/Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened"
+              className="text-link"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View Frozen V6 on Hugging Face (Revision d59a6aa) →
+            </a>
+            <Link href="/research" className="text-link">
+              Read the Research Paper &amp; Invariant Proofs →
+            </Link>
           </div>
         </div>
       </section>
