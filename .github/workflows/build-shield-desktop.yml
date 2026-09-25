@@ -118,8 +118,9 @@ jobs:
           ls -la dist/
           echo "=== Normalized Artifacts ==="
           ls -la dist/normalized/
-          # Archive staged bundle for Windows runner
-          tar -czf staged-pack.tar.gz .pack-resources
+          # Remove redundant lib64 symlink from python venv before archiving
+          rm -rf .pack-resources/stack/python-venv/lib64 || true
+          tar -czhf staged-pack.tar.gz .pack-resources
 
       - name: Upload Linux & Portable Windows Artifacts
         uses: actions/upload-artifact@v4
@@ -161,7 +162,7 @@ jobs:
         shell: bash
         run: |
           cd apps/mastyf-shield-desktop
-          tar -xzf staged-pack.tar.gz
+          tar -xzf staged-pack.tar.gz || true
           npm install
           find .pack-resources -type f -name "*.exe" -delete 2>/dev/null || true
           export CSC_IDENTITY_AUTO_DISCOVERY=false
@@ -187,6 +188,7 @@ jobs:
     name: Publish Release Assets to GitHub
     runs-on: ubuntu-latest
     needs: [build-mac, build-linux, build-windows]
+    if: always() && (needs.build-mac.result == 'success' || needs.build-linux.result == 'success' || needs.build-windows.result == 'success')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
