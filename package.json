@@ -240,7 +240,7 @@
     "@types/express": "^5.0.6",
     "@types/express-serve-static-core": "^5.0.0",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20.0.0",
+    "@types/node": "^26.6.2",
     "@types/pg": "^8.20.0",
     "@types/shell-quote": "^1.7.5",
     "@types/ws": "^8.18.1",
@@ -253,7 +253,7 @@
     "tsx": "^4.7.0",
     "turbo": "^2.9.14",
     "typescript": "^5.4.0",
-    "vitest": "^3.2.4",
+    "vitest": "^5.0.1",
     "zod-to-json-schema": "^3.24.5"
   },
   "packageManager": "pnpm@10.28.2+sha512.41872f037ad22f7348e3b1debbaf7e867cfd448f2726d9cf74c08f19507c31d2c8e7a11525b983febc2df640b5438dee6023ebb1f84ed43cc2d654d2bc326264",
