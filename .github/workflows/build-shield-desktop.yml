@@ -103,34 +103,39 @@ jobs:
       - name: Install Monorepo Dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
-      - name: Package Linux Binaries
+      - name: Package Linux & Portable Windows Binaries
         run: |
           cd apps/mastyf-shield-desktop
           npm install
           sh scripts/pack-linux.sh
+          # Build Windows zip directly on Linux (does not need wine)
+          npx electron-builder --win zip --x64 -c.win.signAndEditExecutable=false || true
           mkdir -p dist/normalized
           cp dist/*.AppImage dist/normalized/Mastyf-Shield-latest.AppImage || true
           cp dist/*.deb dist/normalized/Mastyf-Shield-latest.deb || true
+          cp dist/*.zip dist/normalized/Mastyf-Shield-win-x64.zip || true
           echo "=== Built Linux Dist ==="
           ls -la dist/
           echo "=== Normalized Artifacts ==="
           ls -la dist/normalized/
+          # Archive staged bundle for Windows runner
+          tar -czf staged-pack.tar.gz .pack-resources
 
-      - name: Upload Linux Artifacts
+      - name: Upload Linux & Portable Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: shield-linux
           path: |
             apps/mastyf-shield-desktop/dist/normalized/*.AppImage
             apps/mastyf-shield-desktop/dist/normalized/*.deb
+            apps/mastyf-shield-desktop/dist/normalized/*.zip
           retention-days: 7
 
-      - name: Upload Staged Stack for Windows
+      - name: Upload Staged Stack Archive for Windows
         uses: actions/upload-artifact@v4
         with:
-          name: staged-pack-resources
-          path: apps/mastyf-shield-desktop/.pack-resources
-          include-hidden-files: true
+          name: staged-pack-archive
+          path: apps/mastyf-shield-desktop/staged-pack.tar.gz
           retention-days: 1
 
   build-windows:
@@ -146,16 +151,17 @@ jobs:
         with:
           node-version: 22
 
-      - name: Download Staged Stack
+      - name: Download Staged Stack Archive
         uses: actions/download-artifact@v4
         with:
-          name: staged-pack-resources
-          path: apps/mastyf-shield-desktop/.pack-resources
+          name: staged-pack-archive
+          path: apps/mastyf-shield-desktop
 
-      - name: Package Windows Binaries
+      - name: Package Windows NSIS Installer
         shell: bash
         run: |
           cd apps/mastyf-shield-desktop
+          tar -xzf staged-pack.tar.gz
           npm install
           find .pack-resources -type f -name "*.exe" -delete 2>/dev/null || true
           export CSC_IDENTITY_AUTO_DISCOVERY=false
