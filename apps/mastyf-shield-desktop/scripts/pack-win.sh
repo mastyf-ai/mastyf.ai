@@ -15,11 +15,11 @@ else
   echo "[pack-win] reusing existing staged stack from .pack-resources/stack" >&2
 fi
 
-if [ -z "${CSC_LINK:-}" ] && [ -z "${WINDOWS_CERT_FILE:-}" ]; then
-  echo "[pack-win] no Authenticode CSC_LINK — SmartScreen will treat this as unsigned" >&2
-  export CSC_IDENTITY_AUTO_DISCOVERY=false
-fi
+# Clean up any third-party .exe files inside staged resources so electron-builder doesn't attempt to sign them
+find "$APP/.pack-resources" -type f -name "*.exe" -delete 2>/dev/null || true
+
+export CSC_IDENTITY_AUTO_DISCOVERY=false
 
 echo "[pack-win] electron-builder --win nsis zip --x64 …" >&2
-npx electron-builder --win nsis zip --x64
+npx electron-builder --win nsis zip --x64 -c.win.signAndEditExecutable=false
 echo "[pack-win] artifacts under $APP/dist"
