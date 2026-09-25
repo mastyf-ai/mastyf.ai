@@ -125,49 +125,41 @@ jobs:
             apps/mastyf-shield-desktop/dist/normalized/*.deb
           retention-days: 7
 
+      - name: Upload Staged Stack for Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: staged-pack-resources
+          path: apps/mastyf-shield-desktop/.pack-resources
+          include-hidden-files: true
+          retention-days: 1
+
   build-windows:
     name: Build Windows Packages
-    runs-on: ubuntu-latest
-    env:
-      MASTYF_SKIP_BFF_BUILD: '1'
-      MASTYF_SKIP_SPA_BUILD: '1'
+    runs-on: windows-latest
+    needs: [build-linux]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Download Staged Stack
+        uses: actions/download-artifact@v4
         with:
-          python-version: '3.11'
-
-      - name: Install system dependencies and Wine
-        run: |
-          sudo dpkg --add-architecture i386 || true
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libarchive-tools wine64 wine32 || sudo apt-get install -y --no-install-recommends wine64 || true
-          if ! command -v wine >/dev/null 2>&1 && command -v wine64 >/dev/null 2>&1; then
-            sudo ln -s "$(which wine64)" /usr/local/bin/wine || true
-          fi
-
-      - name: Install Monorepo Dependencies
-        run: pnpm install --no-frozen-lockfile --ignore-scripts
+          name: staged-pack-resources
+          path: apps/mastyf-shield-desktop/.pack-resources
 
       - name: Package Windows Binaries
+        shell: bash
         run: |
           cd apps/mastyf-shield-desktop
           npm install
-          sh scripts/pack-win.sh
+          find .pack-resources -type f -name "*.exe" -delete 2>/dev/null || true
+          export CSC_IDENTITY_AUTO_DISCOVERY=false
+          npx electron-builder --win nsis zip --x64 -c.win.signAndEditExecutable=false
           mkdir -p dist/normalized
           cp dist/*.exe dist/normalized/Mastyf-Shield-Setup-latest.exe || true
           cp dist/*.zip dist/normalized/Mastyf-Shield-win-x64.zip || true
