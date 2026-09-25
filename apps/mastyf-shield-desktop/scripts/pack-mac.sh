@@ -23,21 +23,24 @@ else
 fi
 
 TARGET=dmg
-ARCHS="${MASTYF_MAC_ARCHS:-arm64,x64}"
+ARCH_FLAGS="--arm64 --x64"
 for arg in "$@"; do
   if [ "$arg" = "--dir" ]; then
     TARGET=dir
   fi
+  if [ "$arg" = "--arm64" ]; then
+    ARCH_FLAGS="--arm64"
+  fi
   if [ "$arg" = "--x64" ]; then
-    ARCHS="x64"
+    ARCH_FLAGS="--x64"
   fi
   if [ "$arg" = "--universal" ]; then
-    ARCHS="arm64,x64"
+    ARCH_FLAGS="--universal"
   fi
 done
 
-echo "[pack-mac] electron-builder --mac $TARGET --$ARCHS …" >&2
+echo "[pack-mac] electron-builder --mac $TARGET $ARCH_FLAGS …" >&2
 # shellcheck disable=SC2086
-npx electron-builder --mac "$TARGET" --$ARCHS $SIGN_ARGS
+npx electron-builder --mac "$TARGET" $ARCH_FLAGS $SIGN_ARGS
 echo "[pack-mac] artifacts under $APP/dist"
 echo "[pack-mac] next: sh scripts/notarize-mac.sh (needs Apple ID + Developer ID cert)"

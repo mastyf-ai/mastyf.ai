@@ -56,6 +56,10 @@ jobs:
           if [ ! -f dist/normalized/Mastyf-Shield-latest-arm64.dmg ]; then
             cp dist/*.dmg dist/normalized/Mastyf-Shield-latest-arm64.dmg || true
           fi
+          echo "=== Built macOS Dist ==="
+          ls -la dist/
+          echo "=== Normalized Artifacts ==="
+          ls -la dist/normalized/
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
@@ -98,7 +102,6 @@ jobs:
       - name: Install Monorepo Dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
-
       - name: Package Linux & Windows Binaries
         run: |
           cd apps/mastyf-shield-desktop
@@ -110,6 +113,10 @@ jobs:
           cp dist/*.deb dist/normalized/Mastyf-Shield-latest.deb || true
           cp dist/*.exe dist/normalized/Mastyf-Shield-Setup-latest.exe || true
           cp dist/*.zip dist/normalized/Mastyf-Shield-win-x64.zip || true
+          echo "=== Built Linux/Win Dist ==="
+          ls -la dist/
+          echo "=== Normalized Artifacts ==="
+          ls -la dist/normalized/
 
       - name: Upload Linux & Windows Artifacts
         uses: actions/upload-artifact@v4
