@@ -1,5 +1,11 @@
 /**
- * Security gate for resources/read and prompts/get MCP responses.
+ * Security gate for resources/read, resources/subscribe, and prompts/get
+ * MCP responses.
+ *
+ * A subscribe response normally carries subscription metadata rather than
+ * content, so the generic JSON scan covers it; `resources/subscribe` is
+ * handled as content-bearing too because servers are permitted to echo
+ * resource contents in the subscribe result.
  */
 import { PROMPT_INJECTION_PATTERNS } from '../agentic/prompt-injection/payload-patterns.js';
 import {
@@ -12,34 +18,37 @@ interface ExtractedText {
   /** Concatenated text that was scanned. */
   text: string;
   /**
-   * Applies `replacement` in place of the scanned text, preserving the
-   * surrounding result structure. Returns null when nothing needs replacing.
+   * Rebuilds the result with every extracted segment passed through
+   * `redactSegment`, preserving the surrounding structure. Returns null when
+   * the result shape carries no locatable text.
+   *
+   * Redaction is applied per segment rather than by redistributing one joined
+   * replacement: a redaction placeholder is longer than the value it replaces
+   * (`987-65-4321` -> `[REDACTED:SSN]`), so offsets computed from the original
+   * text do not survive the substitution.
    */
-  rewrite: (replacement: string) => unknown;
+  rewrite: (redactSegment: (segment: string) => string) => unknown;
 }
 
 function extractText(method: string, result: unknown): ExtractedText {
-  const noRewrite = (text: string): ExtractedText => ({
+  const plainText = (text: string): ExtractedText => ({
     text,
-    rewrite: () => null,
+    rewrite: (redactSegment) => redactSegment(text),
   });
 
-  if (result == null) return noRewrite('');
-  if (typeof result === 'string') return noRewrite(result);
+  if (result == null) return plainText('');
+  if (typeof result === 'string') return plainText(result);
 
   const r = result as Record<string, unknown>;
-  if (method === 'resources/read') {
+  if (method === 'resources/read' || method === 'resources/subscribe') {
     const contents = r.contents as Array<{ text?: string; blob?: string }> | undefined;
     if (Array.isArray(contents)) {
       const text = contents.map((c) => c.text ?? c.blob ?? '').join('\n');
       return {
         text,
-        rewrite: (replacement) => {
-          let cursor = 0;
+        rewrite: (redactSegment) => {
           const rebuilt = contents.map((c) => {
-            const original = c.text ?? c.blob ?? '';
-            const next = replacement.slice(cursor, cursor + original.length);
-            cursor += original.length + 1;
+            const next = redactSegment(c.text ?? c.blob ?? '');
             return c.text != null ? { ...c, text: next } : { ...c, blob: next };
           });
           return { ...r, contents: rebuilt };
@@ -55,12 +64,11 @@ function extractText(method: string, result: unknown): ExtractedText {
         .join('\n');
       return {
         text,
-        rewrite: (replacement) => {
-          let cursor = 0;
+        rewrite: (redactSegment) => {
           const rebuilt = messages.map((m) => {
-            const original = typeof m.content === 'string' ? m.content : (m.content?.text ?? '');
-            const next = replacement.slice(cursor, cursor + original.length);
-            cursor += original.length + 1;
+            const next = redactSegment(
+              typeof m.content === 'string' ? m.content : (m.content?.text ?? ''),
+            );
             return typeof m.content === 'string'
               ? { ...m, content: next }
               : { ...m, content: { ...(m.content ?? {}), text: next } };
@@ -71,9 +79,9 @@ function extractText(method: string, result: unknown): ExtractedText {
     }
   }
   try {
-    return noRewrite(JSON.stringify(result));
+    return { text: JSON.stringify(result), rewrite: () => null };
   } catch {
-    return noRewrite(String(result));
+    return { text: String(result), rewrite: () => null };
   }
 }
 
@@ -115,7 +123,10 @@ export function gateResourceOrPromptText(
     };
   }
   if (dlp.mode === 'redact' && dlp.redactedBody != null) {
-    const sanitized = rewrite(dlp.redactedBody);
+    const sanitized = rewrite((segment) => {
+      const segmentDlp = evaluateResponseDlp(method, method, segment);
+      return segmentDlp.redactedBody ?? segment;
+    });
     if (sanitized != null) return { blocked: false, sanitized };
   }
   if (dlp.mode === 'audit' && !dlp.clean) {

@@ -307,7 +307,11 @@ export class McpProxyServer {
           this.requestContexts.clearTimeout(msg.id);
           const proxyLatencyMs = Date.now() - reqCtx.requestStartTime;
 
-          if (reqCtx.requestMethod === 'resources/read' || reqCtx.requestMethod === 'prompts/get') {
+            if (
+              reqCtx.requestMethod === 'resources/read' ||
+              reqCtx.requestMethod === 'resources/subscribe' ||
+              reqCtx.requestMethod === 'prompts/get'
+            ) {
             const rp = applyMcpResponsePipeline({
               method: reqCtx.requestMethod,
               result: msg.result,

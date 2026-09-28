@@ -23,7 +23,7 @@ export type McpPrePipelineResult =
   | { blocked: false; session: McpPipelineSession; trackResponse?: boolean; requestMethod?: string }
   | { blocked: true; response?: Record<string, unknown> };
 
-const RESPONSE_METHODS = new Set(['resources/read', 'prompts/get']);
+const RESPONSE_METHODS = new Set(['resources/read', 'resources/subscribe', 'prompts/get']);
 
 /**
  * Pre-dispatch authorization of the target a request names.
@@ -33,6 +33,11 @@ const RESPONSE_METHODS = new Set(['resources/read', 'prompts/get']);
  * denied by `canonical-resource-guard` and then never consulted, so
  * `resources/read`/`prompts/get` reached the upstream server regardless. The
  * guard's own primitives are the authority here — this only routes them.
+ *
+ * `resources/subscribe` names a `uri` and was mediated and allow-listed without
+ * ever being routed here, so `SubscriptionLifecycleManager.authorizeSubscription`
+ * — a pure delegation to `authorizeResourceRead` — had no callers and a
+ * traversal subscribe was never consulted at all.
  */
 function authorizeRequestTarget(
   method: string,
@@ -46,6 +51,15 @@ function authorizeRequestTarget(
       allowed: verdict.allowed,
       code: verdict.code ?? -32001,
       reason: verdict.reason ?? 'Resource access denied',
+    };
+  }
+  if (method === 'resources/subscribe') {
+    if (requestParams.uri === undefined) return undefined;
+    const verdict = authorizeResourceRead(String(requestParams.uri));
+    return {
+      allowed: verdict.allowed,
+      code: verdict.code ?? -32001,
+      reason: verdict.reason ?? 'Subscription access denied',
     };
   }
   if (method === 'prompts/get') {
