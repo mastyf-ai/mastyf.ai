@@ -248,11 +248,20 @@ export async function evaluateToolCallDefense(
     idempotencyKey: input.idempotencyKey,
   }, input.headers);
 
-  let decision: PolicyDecision;
-  try {
-    const rawDecision = deps.evaluatePolicy
-      ? await deps.evaluatePolicy(context)
-      : await deps.policyEngine.evaluateAsync(context);
+    let decision: PolicyDecision;
+    try {
+      // Fail closed explicitly when no policy engine is available. Absent an
+      // engine, `deps.policyEngine.evaluateAsync` would throw a TypeError that
+      // the catch below reports as POLICY_ENGINE_ERROR — the same verdict, but
+      // reached by accident, and a single optional chain would silently reopen
+      // this path. State the intent instead of inheriting it.
+      const engine = deps.policyEngine as PolicyEngine | undefined;
+      if (!deps.evaluatePolicy && !engine) {
+        throw new Error('policy engine missing; failing closed');
+      }
+      const rawDecision = deps.evaluatePolicy
+        ? await deps.evaluatePolicy(context)
+        : await (engine as PolicyEngine).evaluateAsync(context);
 
     // A decision that is missing its verdict is not a decision. Treating an
     // unrecognised shape as anything other than an error would let a broken

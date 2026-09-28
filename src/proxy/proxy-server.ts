@@ -112,8 +112,13 @@ export class McpProxyServer {
    * forward every tools/call unmediated.
    *
    * Entries are single-use: the forward step consumes the id.
+   *
+   * Keys are type-tagged (`typeof id` + value) rather than stringified. JSON-RPC
+   * ids may be numbers or strings, and a client that sends id 1 followed by "1"
+   * would otherwise share a key and inherit the first request's authorisation.
    */
   private readonly policyAuthorizedToolCalls = new Set<string>();
+  private static readonly MAX_UNCONSUMED_AUTHORISED_CALLS = 1024;
   private readonly stdoutWriter = new StdioLineWriter();
   private readonly responseTracker = new JsonRpcResponseTracker();
   private readonly sessionAuth = new ProxySessionAuthStore();
@@ -1180,7 +1185,7 @@ export class McpProxyServer {
           // here — inside the allow path — because the forward step below runs
           // outside this block and cannot otherwise tell an authorised call
           // from an unmediated one.
-          this.policyAuthorizedToolCalls.add(String(msg.id));
+            this.markPolicyAuthorizedCall(msg.id);
           requestArguments = defense.arguments ?? requestArguments;
             spendReservationId = defense.spendReservationId;
             ingestPolicyDecision({
@@ -1242,6 +1247,9 @@ export class McpProxyServer {
       try {
         const peek = JSON.parse(raw);
         if (peek?.method === 'tools/call' && hasJsonRpcId(peek.id)) {
+          // The forward step is never reached on this path, so release the
+          // authorisation marker here instead of leaking it for the process life.
+          this.consumePolicyAuthorizedCall(peek.id);
           this.sendError(
             peek.id,
             -32001,
@@ -1256,11 +1264,11 @@ export class McpProxyServer {
     }
 
     try {
-      const fwd = JSON.parse(raw);
-      if (fwd.method === 'tools/call' && fwd.id) {
-        // Only a request the policy engine allowed may reach the upstream
-        // server. Consume the marker so it cannot authorise a second dispatch.
-        if (!this.policyAuthorizedToolCalls.delete(String(fwd.id))) {
+        const fwd = JSON.parse(raw);
+        if (fwd.method === 'tools/call' && hasJsonRpcId(fwd.id)) {
+          // Only a request the policy engine allowed may reach the upstream
+          // server. Consume the marker so it cannot authorise a second dispatch.
+          if (!this.consumePolicyAuthorizedCall(fwd.id)) {
           Logger.error(
             `[proxy:${this.serverName}] Refusing to forward unmediated tools/call ${String(fwd.id)}: no policy decision`,
           );
@@ -1323,6 +1331,29 @@ export class McpProxyServer {
     }
     this.policyEngine = engine;
     Logger.info(`[proxy:${this.serverName}] Policy engine hot-swapped — mode: ${engine.getMode()}`);
+  }
+
+  private static authorizedCallKey(id: unknown): string {
+    return `${typeof id}:${String(id)}`;
+  }
+
+  /**
+   * Record an explicit policy allow for `id`. Bounded: a request that throws
+   * between the mark and the forward never reaches the consuming forward step,
+   * so without a cap the marker set would grow for the life of the process.
+   */
+  private markPolicyAuthorizedCall(id: unknown): void {
+    if (
+      this.policyAuthorizedToolCalls.size >= McpProxyServer.MAX_UNCONSUMED_AUTHORISED_CALLS
+    ) {
+      const oldest = this.policyAuthorizedToolCalls.values().next().value;
+      if (oldest !== undefined) this.policyAuthorizedToolCalls.delete(oldest);
+    }
+    this.policyAuthorizedToolCalls.add(McpProxyServer.authorizedCallKey(id));
+  }
+
+  private consumePolicyAuthorizedCall(id: unknown): boolean {
+    return this.policyAuthorizedToolCalls.delete(McpProxyServer.authorizedCallKey(id));
   }
 
   private async evaluatePolicyPinned(

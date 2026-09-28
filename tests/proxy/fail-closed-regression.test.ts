@@ -355,4 +355,56 @@ describe('P0 Fail-Closed Invariant Regression Suite (PolicyError => BLOCK => 0 D
       process.env.MASTYF_SECURITY_MODE = prevSec;
     }
   });
+
+  /**
+   * The authorisation marker is keyed by request id. JSON-RPC permits a numeric
+   * or string id, so a plain stringified key lets id 1 and id "1" alias. These
+   * tests pin the two properties the fix depends on: distinct types never
+   * collide, and the marker set stays bounded when marks are never consumed.
+   */
+  describe('authorisation marker hygiene', () => {
+    function newProxy(): McpProxyServer {
+      const db = new HistoryDatabase(':memory:');
+      const p = new McpProxyServer(
+        'node',
+        [ECHO_SERVER],
+        {},
+        db,
+        'test-marker-hygiene',
+        new PolicyEngine(basePolicy),
+      );
+      proxy = p;
+      return p;
+    }
+
+    type MarkerInternals = {
+      markPolicyAuthorizedCall(id: unknown): void;
+      consumePolicyAuthorizedCall(id: unknown): boolean;
+      policyAuthorizedToolCalls: Set<string>;
+    };
+
+    function internals(p: McpProxyServer): MarkerInternals {
+      return p as unknown as MarkerInternals;
+    }
+
+    it('does not let a string id alias a numeric id', () => {
+      const m = internals(newProxy());
+      m.markPolicyAuthorizedCall(1);
+      expect(m.consumePolicyAuthorizedCall('1')).toBe(false);
+      expect(m.consumePolicyAuthorizedCall(1)).toBe(true);
+    });
+
+    it('consumes a marker exactly once, so one allow cannot authorise two dispatches', () => {
+      const m = internals(newProxy());
+      m.markPolicyAuthorizedCall('once');
+      expect(m.consumePolicyAuthorizedCall('once')).toBe(true);
+      expect(m.consumePolicyAuthorizedCall('once')).toBe(false);
+    });
+
+    it('bounds the marker set so an unconsumed mark cannot grow without limit', () => {
+      const m = internals(newProxy());
+      for (let i = 0; i < 2000; i++) m.markPolicyAuthorizedCall(`leaked-${i}`);
+      expect(m.policyAuthorizedToolCalls.size).toBeLessThanOrEqual(1024);
+    });
+  });
 });
