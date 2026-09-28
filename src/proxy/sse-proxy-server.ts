@@ -305,6 +305,13 @@ export class SseProxyServer extends EventEmitter {
             ),
         ),
       );
+      // A blocked request without an id produces no response body; 204 keeps it
+      // from serialising an empty 200.
+      if (result === undefined) {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err: unknown) {
@@ -368,7 +375,7 @@ export class SseProxyServer extends EventEmitter {
     jsonRpcRequest: Record<string, unknown>,
     requestHeaders?: Record<string, string | string[] | undefined>,
     session?: SseSession,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<Record<string, unknown> | undefined> {
     const { runMcpPrePipeline, applyMcpResponsePipeline, mcpResponseBlockJson } = await import(
       './mcp-request-pipeline.js'
     );

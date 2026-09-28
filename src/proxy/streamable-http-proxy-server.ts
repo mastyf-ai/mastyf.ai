@@ -159,7 +159,10 @@ export class StreamableHttpProxyServer {
 
         const responses: unknown[] = [];
         for (const msg of messages) {
-          responses.push(await this.processMessage(msg, req));
+          // A blocked request without an id yields no response body; drop it
+        // rather than serialising a null into the batch.
+        const processed = await this.processMessage(msg, req);
+        if (processed !== undefined) responses.push(processed);
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });

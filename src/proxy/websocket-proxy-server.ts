@@ -324,7 +324,7 @@ export class WebSocketProxyServer {
       authenticated: Boolean(req.headers.authorization),
     });
     if (pre.blocked) {
-      clientWs.send(JSON.stringify(pre.response));
+      if (pre.response) clientWs.send(JSON.stringify(pre.response));
       return;
     }
     if (pre.trackResponse && pre.requestMethod && msg.id != null) {

@@ -699,9 +699,15 @@ export class McpProxyServer {
           : true,
         fallbackSessionKey: this.mcpSessionId ?? undefined,
       });
-      if (pre.blocked && hasJsonRpcId(msg.id)) {
-        const err = pre.response.error as { code?: number; message?: string } | undefined;
-        this.sendError(msg.id, err?.code ?? -32001, err?.message ?? 'MCP pre-pipeline blocked request');
+      if (pre.blocked) {
+        // `blocked` means stop, not merely "reply". A request without an id
+        // gets no response, but it must still not reach the upstream server.
+        if (hasJsonRpcId(msg.id)) {
+          const err = pre.response?.error as
+            | { code?: number; message?: string }
+            | undefined;
+          this.sendError(msg.id, err?.code ?? -32001, err?.message ?? 'MCP pre-pipeline blocked request');
+        }
         return;
       }
       if (!pre.blocked) {
