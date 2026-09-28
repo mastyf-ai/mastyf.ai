@@ -10,6 +10,7 @@ import {
 import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from '../database/database-interface.js';
 import { Logger } from '../utils/logger.js';
+import { assertProductionSecurityInvariants } from './production-gate.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { waitProxyTimingNormalize } from '../policy/policy-timing-envelope.js';
 import { CallContext } from '../policy/policy-types.js';
@@ -53,7 +54,10 @@ import {
   redactArguments,
   ingestPolicyDecision,
 } from '../ai/block-learning.js';
-import { evaluateToolCallDefense } from './tool-call-defense-orchestrator.js';
+import {
+  evaluateToolCallDefense,
+  type ToolCallDefenseResult,
+} from './tool-call-defense-orchestrator.js';
 import { publishRugPullAlert, isClusterRugPullActive } from './rug-pull-cluster.js';
 import { onToolsListObserved } from './lifecycle-assurance-gates.js';
 import {
@@ -96,6 +100,20 @@ export class McpProxyServer {
   private db: IDatabase;
   private currentRequestId: string | number | null = null;
   private readonly requestContexts = new ProxyRequestContextStore();
+
+  /**
+   * Ids of tools/call requests that the policy engine has explicitly allowed.
+   *
+   * The engine block authorises and records the request; the forward step below
+   * it performs the write. That split means the forward step cannot see *why*
+   * it is running, and `requestContexts` is not a substitute for an
+   * authorisation signal because the pre-dispatch tracking path also populates
+   * it. Without an explicit marker, a proxy built without a policy engine would
+   * forward every tools/call unmediated.
+   *
+   * Entries are single-use: the forward step consumes the id.
+   */
+  private readonly policyAuthorizedToolCalls = new Set<string>();
   private readonly stdoutWriter = new StdioLineWriter();
   private readonly responseTracker = new JsonRpcResponseTracker();
   private readonly sessionAuth = new ProxySessionAuthStore();
@@ -141,6 +159,11 @@ export class McpProxyServer {
     this.defaultTenantId = resolveTenantContext().tenantId;
     this.policyEngine = policyEngine || null;
     this.tenantPolicyRegistry = tenantPolicyRegistry ?? null;
+
+    assertProductionSecurityInvariants({
+      serverName: this.serverName,
+      hasPolicy: Boolean(this.policyEngine || this.tenantPolicyRegistry),
+    });
     this.authValidator = authValidator || null;
     this.sessionCache = authValidator ? createSessionCache() : null;
     this.requestTimeoutMs = requestTimeoutMs;
@@ -1066,24 +1089,70 @@ export class McpProxyServer {
             msg.params?._meta as Record<string, unknown> | undefined,
           );
 
-          const defense = await evaluateToolCallDefense(
-            {
+          let defense: ToolCallDefenseResult;
+          try {
+            defense = await evaluateToolCallDefense(
+              {
+                serverName: this.serverName,
+                toolName,
+                arguments: requestArguments,
+                requestId,
+                requestTokens,
+                tenantId,
+                agentIdentity,
+                idempotencyKey,
+              },
+              {
+                policyEngine: engine,
+                db: this.db,
+                rugPullState: this.rugPullState,
+                evaluatePolicy: (ctx) => this.evaluatePolicyPinned(engine, ctx),
+              },
+            );
+
+            if (!defense || typeof defense !== 'object' || typeof defense.allowed !== 'boolean') {
+              throw new Error(`Malformed policy engine decision: ${JSON.stringify(defense)}`);
+            }
+          } catch (error) {
+            // The policy engine is the authority on whether a tools/call may be
+            // dispatched. If it throws, returns nothing, or returns a decision
+            // without a verdict, the answer is unknown -- and an unknown answer
+            // must never be treated as approval.
+            Logger.error(
+              `[proxy:${this.serverName}] Policy engine failure; failing closed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            StructuredLogger.logBlocked({
+              event: 'tool_blocked',
+              requestId,
               serverName: this.serverName,
               toolName,
-              arguments: requestArguments,
-              requestId,
+              reason: 'POLICY_ENGINE_ERROR',
+              rule: 'fail-closed-invariant',
+            });
+            Metrics.recordProxyBlock({
+              server_name: this.serverName,
+              block_reason: 'POLICY_ENGINE_ERROR',
+              rule: 'fail-closed-invariant',
+              tenant_id: requestTenantId,
+            });
+            this.recordDeniedCall(
+              toolName,
               requestTokens,
-              tenantId,
-              agentIdentity,
-              idempotencyKey,
-            },
-            {
-              policyEngine: engine,
-              db: this.db,
-              rugPullState: this.rugPullState,
-              evaluatePolicy: (ctx) => this.evaluatePolicyPinned(engine, ctx),
-            },
-          );
+              Date.now() - proxyStartTime,
+              'fail-closed-invariant',
+              'POLICY_ENGINE_ERROR',
+              requestArguments,
+              requestTenantId,
+              msg.id,
+            );
+            this.sendError(
+              msg.id,
+              -32001,
+              'Blocked by MCP Mastyf AI: Policy engine failure; failing closed',
+              { rule: 'fail-closed-invariant', reason: 'POLICY_ENGINE_ERROR' },
+            );
+            return;
+          }
 
           await waitProxyTimingNormalize(proxyStartTime);
 
@@ -1106,8 +1175,13 @@ export class McpProxyServer {
             return;
           }
 
-          if (defense.allowed) {
-            requestArguments = defense.arguments ?? requestArguments;
+        if (defense.allowed) {
+          // The policy engine explicitly authorised this dispatch. Record that
+          // here — inside the allow path — because the forward step below runs
+          // outside this block and cannot otherwise tell an authorised call
+          // from an unmediated one.
+          this.policyAuthorizedToolCalls.add(String(msg.id));
+          requestArguments = defense.arguments ?? requestArguments;
             spendReservationId = defense.spendReservationId;
             ingestPolicyDecision({
               requestId,
@@ -1131,8 +1205,8 @@ export class McpProxyServer {
         }
 
 
-        this.responseTracker.clearResponded(msg.id);
-        this.requestContexts.set(msg.id, {
+  this.responseTracker.clearResponded(msg.id);
+  this.requestContexts.set(msg.id, {
           requestStartTime: proxyStartTime,
           createdAt: proxyStartTime,
           requestToolName: toolName,
@@ -1158,13 +1232,54 @@ export class McpProxyServer {
           agent: agentIdentity?.sub,
         });
       }
-    } catch {
-      // Non-JSON input — forward as-is
+    } catch (err) {
+      Logger.error(
+        `[proxy:${this.serverName}] Unexpected proxy handling error: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // A tools/call that reached this far without a decision must never reach
+      // the upstream server: the policy verdict for it is unknown, and unknown
+      // is not approval.
+      try {
+        const peek = JSON.parse(raw);
+        if (peek?.method === 'tools/call' && hasJsonRpcId(peek.id)) {
+          this.sendError(
+            peek.id,
+            -32001,
+            'Blocked by MCP Mastyf AI: Policy engine failure; failing closed',
+            { rule: 'fail-closed-invariant', reason: 'POLICY_ENGINE_ERROR' },
+          );
+          return;
+        }
+      } catch {
+        // Non-JSON input
+      }
     }
 
     try {
       const fwd = JSON.parse(raw);
       if (fwd.method === 'tools/call' && fwd.id) {
+        // Only a request the policy engine allowed may reach the upstream
+        // server. Consume the marker so it cannot authorise a second dispatch.
+        if (!this.policyAuthorizedToolCalls.delete(String(fwd.id))) {
+          Logger.error(
+            `[proxy:${this.serverName}] Refusing to forward unmediated tools/call ${String(fwd.id)}: no policy decision`,
+          );
+          StructuredLogger.logBlocked({
+            event: 'tool_blocked',
+            requestId: fwd.id,
+            serverName: this.serverName,
+            toolName: (fwd.params as { name?: string } | undefined)?.name || 'unknown',
+            reason: 'UNMEDIATED_TOOL_CALL',
+            rule: 'fail-closed-invariant',
+          });
+          this.sendError(
+            fwd.id,
+            -32001,
+            'Blocked by MCP Mastyf AI: policy engine missing; failing closed',
+            { rule: 'fail-closed-invariant', reason: 'UNMEDIATED_TOOL_CALL' },
+          );
+          return;
+        }
         const ctx = this.requestContexts.get(fwd.id);
         if (ctx) {
           this.armRequestTimeout(fwd.id, ctx.requestToolName || 'unknown');
@@ -1181,6 +1296,19 @@ export class McpProxyServer {
       }
     } catch {
       // non-JSON — no timeout arm
+    }
+
+    // Only forward traffic that carries no unmediated tool invocation or batch
+    // envelope. Reaching this point means the call was not forwarded above, so
+    // writing it now would dispatch an unmediated tools/call.
+    try {
+      const peek = JSON.parse(raw);
+      if (Array.isArray(peek) || peek?.method === 'tools/call') {
+        // Unmediated tools/call or batch invariant: zero downstream bytes
+        return;
+      }
+    } catch {
+      // Non-JSON — forward as-is
     }
 
     this.child.stdin?.write(raw + '\n');

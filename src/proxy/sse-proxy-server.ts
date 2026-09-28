@@ -12,6 +12,7 @@ import { inspectToolResponse as sharedInspectToolResponse } from './response-ins
 import { TokenCounter, extractModelFromPayload } from '../utils/token-counter.js';
 import { Logger } from '../utils/logger.js';
 import { requireUpstreamTlsAllowed } from '../utils/upstream-tls.js';
+import { assertProductionSecurityInvariants } from './production-gate.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { notifyToolBlock } from '../alerting/notify-tool-block.js';
@@ -75,6 +76,10 @@ export class SseProxyServer extends EventEmitter {
   constructor(opts: SseProxyOptions) {
     super();
     requireUpstreamTlsAllowed(opts.upstreamUrl);
+    assertProductionSecurityInvariants({
+      serverName: opts.serverName,
+      hasPolicy: Boolean(opts.policy),
+    });
     this.opts = opts;
     this.tokenCounter = new TokenCounter();
     void opts.mtlsConfig;

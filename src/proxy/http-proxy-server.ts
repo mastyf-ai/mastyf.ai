@@ -1,4 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { assertProductionSecurityInvariants } from './production-gate.js';
 import { createServer as createHttpsServer } from 'https';
 import { request as httpReq } from 'http';
 import { request as httpsReq, Agent as HttpsAgent } from 'https';
@@ -101,6 +102,10 @@ export class HttpProxyServer {
       );
     }
     this.policyEngine = policyEngine || null;
+    assertProductionSecurityInvariants({
+      serverName: this.serverName,
+      hasPolicy: Boolean(this.policyEngine),
+    });
     this.authValidator = authValidator || null;
     this.sessionCache = authValidator ? createSessionCache() : null;
     this.defaultTenantId = resolveTenantContext().tenantId;

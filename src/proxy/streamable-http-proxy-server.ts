@@ -10,6 +10,7 @@ import { URL } from 'url';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { Logger } from '../utils/logger.js';
 import { requireUpstreamTlsAllowed } from '../utils/upstream-tls.js';
+import { assertProductionSecurityInvariants } from './production-gate.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { resolveTenantContext, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
 import { resolveProxyTenantId, JwtTenantRequiredError } from '../tenant/jwt-tenant-binding.js';
@@ -70,6 +71,10 @@ export class StreamableHttpProxyServer {
 
   constructor(opts: StreamableHttpProxyOptions) {
     requireUpstreamTlsAllowed(opts.upstreamBaseUrl);
+    assertProductionSecurityInvariants({
+      serverName: opts.serverName,
+      hasPolicy: Boolean(opts.policy),
+    });
     this.opts = opts;
     this.upstreamRelay = opts.upstreamRelay
       ?? process.env['MASTYF_AI_STREAMABLE_HTTP_UPSTREAM_RELAY'] === 'true';

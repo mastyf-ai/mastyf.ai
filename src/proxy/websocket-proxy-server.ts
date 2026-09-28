@@ -35,6 +35,7 @@ import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
 import type { AgentIdentity } from '../auth/auth-types.js';
 import { sanitizeProxyClientError, webSocketClientOptions } from '../utils/ws-tls-config.js';
 import { requireUpstreamTlsAllowed } from '../utils/upstream-tls.js';
+import { assertProductionSecurityInvariants } from './production-gate.js';
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 import { getAnomalyDetector } from '../ai/anomaly-detector.js';
@@ -87,6 +88,13 @@ export class WebSocketProxyServer {
   }
 
   async start(): Promise<void> {
+    // traffic. The HTTP, SSE and streamable-HTTP proxies assert in their
+    // constructors; asserting here is equivalent because this class can only
+    // serve traffic via start(), which is the sole creator of httpServer/wss.
+    assertProductionSecurityInvariants({
+      serverName: this.opts.serverName,
+      hasPolicy: Boolean(this.opts.policy),
+    });
     this.httpServer = createServer();
     this.wss = new WebSocketServer({ server: this.httpServer });
 
