@@ -40,10 +40,27 @@ jobs:
         run: |
           mkdir -p fuzz-artifacts
           chmod 777 fuzz-artifacts
+          # `cli.js proxy` exits 1 when no MCP config exists (src/cli.ts:889),
+          # and deploy/mcp.json is not baked into the image, so the ingress
+          # would never start. Point the proxy at a loopback SSE upstream: the
+          # fuzzer only needs the gateway's own request path, and Mastyf
+          # decides before dispatch (src/proxy/mcp-request-pipeline.ts:29), so
+          # this upstream is never actually reached for blocked traffic.
+          cat > fuzz-mcp.json <<'JSON'
+          {
+            "mcpServers": {
+              "fuzz-target": {
+                "url": "http://127.0.0.1:4001/sse",
+                "transport": "sse"
+              }
+            }
+          }
+          JSON
           docker run -d --name mastyf-ai --no-healthcheck \
             -v "$PWD/fuzz-artifacts:/fuzz-artifacts" \
-            -e METRICS_ENABLED=true \
-            -e METRICS_PORT=9090 \
+            -v "$PWD/fuzz-mcp.json:/fuzz-mcp.json:ro" \
+            -e MASTYF_AI_CONFIG_PATH=/fuzz-mcp.json \
+            -e MASTYF_AI_BLOCKING_MODE=block \
             -e MASTYF_AI_DB_PATH=/data/history.db \
             mastyf-ai:fuzz \
             --expose-local-port 4000
