@@ -70,11 +70,27 @@ describe('guard evasion via omitted JSON-RPC id', () => {
    * the gauntlet for an id-less call and records the denial, while the
    * id-gated code skips the gauntlet entirely and records nothing at all.
    */
-  async function deniedRecords(): Promise<{ toolName: string; blocked: boolean; blockReason?: string }[]> {
-    // persistCallRecord is fire-and-forget; give it a beat to land.
-    await new Promise((r) => setTimeout(r, 300));
-    const rows = await db!.getCallRecordsForServer(SERVER);
-    return rows.filter((r) => r.blocked).map((r) => ({ toolName: r.toolName, blocked: r.blocked, blockReason: r.blockReason }));
+  type CallRecord = { toolName: string; blocked: boolean; blockReason?: string };
+
+  /**
+   * Poll for the expected record instead of sleeping a fixed interval.
+   *
+   * `persistCallRecord` is fire-and-forget, and a permitted call cannot have a
+   * record at all until the recorder child has booted and answered — so a fixed
+   * sleep is a race that the permitted case reliably loses, while the denial
+   * cases win only because the guard short-circuits before the child is
+   * involved. Polling makes the wait condition the thing actually being tested.
+   */
+  async function waitForRecord(
+    predicate: (r: CallRecord) => boolean,
+    timeoutMs = 10_000,
+  ): Promise<CallRecord[]> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const hit = (await db!.getCallRecordsForServer(SERVER)).filter(predicate);
+      if (hit.length > 0 || Date.now() >= deadline) return hit;
+      await new Promise((r) => setTimeout(r, 100));
+    }
   }
 
   it('runs the tool-call guard for a tools/call that omits its id', async () => {
@@ -90,11 +106,10 @@ describe('guard evasion via omitted JSON-RPC id', () => {
         params: { name: 'secret_tool', arguments: { path: '/etc/passwd' } },
       }),
     );
-    await new Promise((r) => setTimeout(r, 600));
 
-    const denied = await deniedRecords();
+    const denied = await waitForRecord((r) => r.blocked && r.toolName === 'secret_tool');
     expect(denied.map((d) => d.toolName)).toContain('secret_tool');
-  }, 15000);
+  }, 25000);
 
   it('emits no response body for a blocked notification', async () => {
     captureStdout();
@@ -107,11 +122,15 @@ describe('guard evasion via omitted JSON-RPC id', () => {
         params: { name: 'secret_tool', arguments: { path: '/etc/passwd' } },
       }),
     );
-    await new Promise((r) => setTimeout(r, 600));
+
+    // Establish the denial before asserting silence: otherwise this passes for
+    // the wrong reason — a request dropped before the guard also emits nothing.
+    const denied = await waitForRecord((r) => r.blocked && r.toolName === 'secret_tool');
+    expect(denied.map((d) => d.toolName)).toContain('secret_tool');
 
     // A notification must never be answered.
     expect(responses()).toHaveLength(0);
-  }, 15000);
+  }, 25000);
 
   it('still blocks the same call when an id is present', async () => {
     captureStdout();
@@ -125,12 +144,15 @@ describe('guard evasion via omitted JSON-RPC id', () => {
         params: { name: 'secret_tool', arguments: { path: '/etc/passwd' } },
       }),
     );
-    await new Promise((r) => setTimeout(r, 600));
+
+    // The denial record is written before the error frame is flushed, so waiting
+    // on the record makes the stdout assertion deterministic.
+    const denied = await waitForRecord((r) => r.blocked && r.toolName === 'secret_tool');
+    expect(denied.map((d) => d.toolName)).toContain('secret_tool');
 
     const err = responses().find((r) => r.id === 'with-id' && r.error);
     expect(err?.error?.code).toBe(-32001);
-    expect((await deniedRecords()).map((d) => d.toolName)).toContain('secret_tool');
-  }, 15000);
+  }, 25000);
 
   it('still allows an identified permitted call (harness sanity check)', async () => {
     captureStdout();
@@ -144,11 +166,12 @@ describe('guard evasion via omitted JSON-RPC id', () => {
         params: { name: 'echo', arguments: { text: 'hi' } },
       }),
     );
-    await new Promise((r) => setTimeout(r, 600));
 
-    const rows = await db!.getCallRecordsForServer(SERVER);
-    const allowed = rows.filter((r) => r.toolName === 'echo');
+    // Polls until the upstream has actually answered, which is the only moment a
+    // non-blocked record can exist. A fixed sleep here asserts nothing but the
+    // speed of the sandbox.
+    const allowed = await waitForRecord((r) => r.toolName === 'echo');
     expect(allowed.length).toBeGreaterThan(0);
     expect(allowed.every((r) => r.blocked === false)).toBe(true);
-  }, 15000);
+  }, 25000);
 });
