@@ -14,7 +14,7 @@ import yaml from 'js-yaml';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { scanToolResult } from '../scanners/result-injection-scanner.js';
 import { multiStageDecode } from '../scanners/multi-stage-decoder.js';
-import type { CallContext, PolicyConfig } from '../types.js';
+import type { CallContext, PolicyConfig } from '../policy/policy-types.js';
 
 const app = express();
 app.use(cors());
@@ -332,7 +332,7 @@ app.post('/v1/validate', authMiddleware, async (req: Request, res: Response): Pr
   // Step 1: Tier 0 Recursive Decoding & Destructive Signature Checks
   const stringifiedArgs = JSON.stringify(toolArgs);
   const decoded = multiStageDecode(stringifiedArgs);
-  const payloadToInspect = decoded.cleaned;
+  const payloadToInspect = decoded.final;
 
   const destructivePatterns = [
     { regex: /rm\s+-[a-zA-Z]*r[a-zA-Z]*f/i, cat: 'destructive_shell' },
@@ -383,7 +383,7 @@ app.post('/v1/validate', authMiddleware, async (req: Request, res: Response): Pr
         arguments: typeof toolArgs === 'object' && toolArgs !== null ? toolArgs : {},
         requestId,
         requestTokens: Math.ceil(stringifiedArgs.length / 4),
-        timestamp: Date.now()
+        timestamp: new Date().toISOString()
       };
       const evalResult = policyEngine.evaluate(callCtx);
       if (evalResult.action === 'block') {

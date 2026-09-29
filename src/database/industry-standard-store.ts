@@ -366,6 +366,20 @@ export class IndustryStandardStore {
     return row ? String(row.tier) : null;
   }
 
+  listSandboxTiers(): Array<{ scopeType: string; scopeId: string; tier: string }> {
+    const stmt = this.prep('SELECT scope_type, scope_id, tier FROM sandbox_tier_state');
+    if (!stmt) return [];
+    const rows = stmt.all() || [];
+    return rows.map((row) => {
+      const r = row as Record<string, unknown>;
+      return {
+        scopeType: String(r.scope_type || ''),
+        scopeId: String(r.scope_id || ''),
+        tier: String(r.tier || ''),
+      };
+    });
+  }
+
   saveFuzzRun(row: {
     id: string;
     serverName: string;

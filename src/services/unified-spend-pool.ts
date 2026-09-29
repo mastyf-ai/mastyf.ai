@@ -404,3 +404,84 @@ export function resetUnifiedSpendPoolForTests(): void {
   localUsdMin.clear();
   localReservations.clear();
 }
+
+export type SpendCapsStatus = {
+  source: 'live-spend-pool' | 'unavailable';
+  redis_configured: boolean;
+  caps: {
+    tokens_per_min: number | null;
+    usd_per_min: number | null;
+    usd_per_day: number | null;
+  };
+  utilization: {
+    tokens_per_min_used: number | null;
+    usd_per_day_used: number | null;
+  };
+  note: string;
+};
+
+/**
+ * Read-only spend cap status for Economics Caps panel.
+ * Never invents utilization — Redis peek only when configured.
+ */
+export async function getSpendCapsStatus(tenantId?: string): Promise<SpendCapsStatus> {
+  const tid = tenantId?.trim() || 'default';
+  const tokensCap = getTokensPerMinCap();
+  const usdMin = getUsdPerMinCap(tid);
+  const usdDay = getDailyBudgetCapUsd(tid);
+  const redisOk = isRedisConfigured();
+
+  const caps = {
+    tokens_per_min: tokensCap > 0 ? tokensCap : null,
+    usd_per_min: usdMin > 0 ? usdMin : null,
+    usd_per_day: usdDay > 0 ? usdDay : null,
+  };
+
+  let tokensUsed: number | null = null;
+  let usdDayUsed: number | null = null;
+
+  if (redisOk) {
+    try {
+      const redis = getSharedRedisClient();
+      const [tokRaw, dayRaw] = await Promise.all([
+        redis.get(tokensMinKey(tid)),
+        redis.get(dayKey(tid)),
+      ]);
+      if (tokRaw != null && tokRaw !== '') {
+        const n = parseInt(String(tokRaw), 10);
+        tokensUsed = Number.isFinite(n) ? n : null;
+      }
+      if (dayRaw != null && dayRaw !== '') {
+        const micro = parseInt(String(dayRaw), 10);
+        usdDayUsed = Number.isFinite(micro) ? micro / 1_000_000 : null;
+      }
+      return {
+        source: 'live-spend-pool',
+        redis_configured: true,
+        caps,
+        utilization: {
+          tokens_per_min_used: tokensUsed,
+          usd_per_day_used: usdDayUsed,
+        },
+        note: 'Utilization from Redis spend-pool keys; limits from env.',
+      };
+    } catch (err) {
+      return {
+        source: 'unavailable',
+        redis_configured: true,
+        caps,
+        utilization: { tokens_per_min_used: null, usd_per_day_used: null },
+        note: `Redis configured but unreadable: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
+  return {
+    source: 'unavailable',
+    redis_configured: false,
+    caps,
+    utilization: { tokens_per_min_used: null, usd_per_day_used: null },
+    note:
+      'Redis not configured — caps listed from env are not enforceable (enterprise spend pool requires Redis).',
+  };
+}

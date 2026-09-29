@@ -15,6 +15,8 @@ export type CostCoverage = {
   disclaimer: string;
 };
 
+export type SpendMethod = 'measured' | 'repriced' | 'unavailable';
+
 const COVERAGE_DISCLAIMER =
   'Spend is estimated from proxied MCP tool calls only. Direct IDE traffic without Mastyf AI is not tracked.';
 
@@ -79,4 +81,54 @@ export async function repriceRecordsForDisplay(
 
 export function shouldShowCostHeadline(coverage: CostCoverage, thresholdPct = 80): boolean {
   return coverage.coveragePct >= thresholdPct && coverage.measuredUsd > 0;
+}
+
+/** Allow repriced headlines only when explicitly opted in (env). */
+export function allowRepricedCostHeadline(): boolean {
+  return process.env['MASTYF_AI_COST_SHOW_REPRICED'] === 'true';
+}
+
+/**
+ * Resolve spendMethod + whether Security Center may show a USD headline.
+ * measured = stored costUsd on records; repriced = filled via model rates.
+ */
+export function resolveSpendHeadline(params: {
+  coverageBeforeReprice: CostCoverage;
+  coverageAfterReprice: CostCoverage;
+  repricedCount: number;
+  allowRepriced?: boolean;
+}): {
+  spendMethod: SpendMethod;
+  showHeadline: boolean;
+  headlineUsd: number | null;
+} {
+  const allowRepriced = params.allowRepriced ?? allowRepricedCostHeadline();
+  const before = params.coverageBeforeReprice;
+  const after = params.coverageAfterReprice;
+
+  if (shouldShowCostHeadline(before)) {
+    return {
+      spendMethod: 'measured',
+      showHeadline: true,
+      headlineUsd: before.measuredUsd,
+    };
+  }
+
+  if (params.repricedCount > 0 && shouldShowCostHeadline(after)) {
+    return {
+      spendMethod: 'repriced',
+      showHeadline: allowRepriced,
+      headlineUsd: allowRepriced ? after.measuredUsd : null,
+    };
+  }
+
+  if (after.totalCalls === 0 && before.totalCalls === 0) {
+    return { spendMethod: 'unavailable', showHeadline: false, headlineUsd: null };
+  }
+
+  return {
+    spendMethod: after.measuredUsd > 0 || before.measuredUsd > 0 ? 'repriced' : 'unavailable',
+    showHeadline: false,
+    headlineUsd: null,
+  };
 }

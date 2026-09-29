@@ -182,6 +182,14 @@ export const proxyLatencyMs = new Histogram({
   registers: [registry],
 });
 
+/** Authoritative /v1/decide latency (ms). Scraped on METRICS_PORT. */
+export const decideLatencyMs = new Histogram({
+  name: 'mastyf_ai_decide_latency_ms',
+  help: 'Authoritative /v1/decide latency in milliseconds',
+  buckets: [1, 5, 10, 25, 50, 100, 250, 500, 800, 2000, 8000],
+  registers: [registry],
+});
+
 export const authLatencyMs = new Histogram({
   name: 'mastyf_ai_auth_latency_ms',
   help: 'Authentication/JWT validation latency in milliseconds',
@@ -256,6 +264,42 @@ export const tracingConfigured = new Gauge({
   help: 'OpenTelemetry OTLP tracing active (1=yes, 0=no)',
   registers: [registry],
 });
+
+export const ledgerChainValid = new Gauge({
+  name: 'mastyf_ai_ledger_chain_valid',
+  help: 'Live ledger chain_integrity (1=valid, 0=fail, -1=UNAVAILABLE)',
+  registers: [registry],
+});
+
+export const escalateBacklog = new Gauge({
+  name: 'mastyf_ai_escalate_backlog',
+  help: 'Live ledger escalate count in the current window (UNAVAILABLE = not set)',
+  registers: [registry],
+});
+
+export const selfTestAgeSeconds = new Gauge({
+  name: 'mastyf_ai_self_test_age_seconds',
+  help: 'Seconds since last self-test verification (UNAVAILABLE until first sample)',
+  registers: [registry],
+});
+
+export function observePerimeterSloGauges(input: {
+  chainOk?: boolean | null;
+  escalated?: number | null;
+  selfTestUnixSec?: number | null;
+  nowUnixSec?: number;
+}): void {
+  if (input.chainOk === true) ledgerChainValid.set(1);
+  else if (input.chainOk === false) ledgerChainValid.set(0);
+  else ledgerChainValid.set(-1);
+  if (typeof input.escalated === 'number' && Number.isFinite(input.escalated)) {
+    escalateBacklog.set(Math.max(0, input.escalated));
+  }
+  if (typeof input.selfTestUnixSec === 'number' && Number.isFinite(input.selfTestUnixSec)) {
+    const now = input.nowUnixSec ?? Math.floor(Date.now() / 1000);
+    selfTestAgeSeconds.set(Math.max(0, now - input.selfTestUnixSec));
+  }
+}
 
 export const semanticScanDurationSeconds = new Histogram({
   name: 'mastyf_ai_semantic_scan_duration_seconds',
