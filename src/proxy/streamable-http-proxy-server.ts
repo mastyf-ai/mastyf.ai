@@ -189,10 +189,13 @@ export class StreamableHttpProxyServer {
       msg,
       serverName: this.opts.serverName,
       authenticated: Boolean(req.headers.authorization),
-    });
-    if (pre.blocked) return pre.response;
+      });
+      // A blocked request is never dispatched upstream. Without an id there is
+      // no JSON-RPC response to return (notification semantics), so this yields
+      // `undefined` and the batch loop drops it rather than serialising a null.
+      if (pre.blocked) return pre.response ?? undefined;
 
-    const blocked = await this.maybeBlockMessage(msg, req, {
+      const blocked = await this.maybeBlockMessage(msg, req, {
       mcpSessionId: pre.session.sessionId,
       agentId: pre.session.agentId !== 'unknown' ? pre.session.agentId : undefined,
     });

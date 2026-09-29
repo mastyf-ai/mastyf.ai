@@ -704,13 +704,11 @@ export class McpProxyServer {
         fallbackSessionKey: this.mcpSessionId ?? undefined,
       });
       if (pre.blocked) {
-        // `blocked` means stop, not merely "reply". A request without an id
-        // gets no response, but it must still not reach the upstream server.
+        // `blocked` means stop, not merely "reply". A blocked request must never
+        // be dispatched upstream, even when it carries no id. Notifications get
+        // no JSON-RPC response.
         if (hasJsonRpcId(msg.id)) {
-          const err = pre.response?.error as
-            | { code?: number; message?: string }
-            | undefined;
-          this.sendError(msg.id, err?.code ?? -32001, err?.message ?? 'MCP pre-pipeline blocked request');
+          this.sendError(msg.id, pre.code, pre.reason);
         }
         return;
       }
@@ -724,11 +722,15 @@ export class McpProxyServer {
         }
       }
 
-      if (
-        !pre.blocked
-        && pre.trackResponse
-        && hasJsonRpcId(msg.id)
-      ) {
+        if (
+          !pre.blocked
+          && pre.trackResponse
+          && pre.requestMethod
+          // Correlation is keyed by request id, so a response can only be
+          // attributed to a request that carries one. A spec-compliant server
+          // never answers a notification, so there is nothing to scan.
+          && hasJsonRpcId(msg.id)
+        ) {
         this.requestContexts.set(msg.id, {
           requestStartTime: proxyStartTime,
           createdAt: proxyStartTime,
@@ -746,7 +748,20 @@ export class McpProxyServer {
         this.pendingToolsListIds.add(msg.id);
       }
 
-      if (msg.method === 'tools/call' && hasJsonRpcId(msg.id)) {
+      if (msg.method === 'tools/call') {
+        // A tools/call without an "id" is a JSON-RPC notification, but it must
+        // still be held to exactly the same policy as an identified call: the
+        // entire guard gauntlet below runs unconditionally. Only the error
+        // frames stay silent, because a notification must not be answered.
+        // Previously this branch required an id, so dropping the id skipped
+        // every tool-call guard and forwarded the call straight upstream.
+        const respondError = (
+          code: number,
+          message: string,
+          data?: Record<string, unknown>,
+        ): void => {
+          if (hasJsonRpcId(msg.id)) this.sendError(msg.id, code, message, data);
+        };
         const maxInflightEarly = proxyMaxInflight();
         if (isProxyInflightExceeded(this.requestContexts.size)) {
           Metrics.proxyInflightRejectedTotal.inc(
@@ -755,9 +770,7 @@ export class McpProxyServer {
               this.defaultTenantId,
             ),
           );
-          this.sendError(
-            msg.id,
-            -32005,
+          respondError(-32005,
             `Mastyf AI: proxy overloaded (${this.requestContexts.size}/${maxInflightEarly} in flight)`,
             { rule: 'proxy-max-inflight' },
           );
@@ -787,7 +800,7 @@ export class McpProxyServer {
             'tool-fingerprint-mismatch',
             'Tool definitions changed mid-session (rug-pull detected)',
           );
-          this.sendError(msg.id, -32001, 'Blocked by MCP Mastyf AI policy: tool definitions changed mid-session (rug-pull)', {
+          respondError(-32001, 'Blocked by MCP Mastyf AI policy: tool definitions changed mid-session (rug-pull)', {
             rule: 'tool-fingerprint-mismatch',
             policy: this.policyEngine?.getMode() ?? 'block',
           });
@@ -810,7 +823,7 @@ export class McpProxyServer {
           requestTenantId = resolveTenantContext({ meta: msg.params?._meta }).tenantId;
         } catch (err) {
           if (err instanceof InvalidTenantIdError) {
-            this.sendError(msg.id, -32602, `Invalid tenant id: ${err.message}`);
+            respondError(-32602, `Invalid tenant id: ${err.message}`);
             return;
           }
           throw err;
@@ -852,7 +865,12 @@ export class McpProxyServer {
               msg.id,
             );
             const blockResp = toolCallGuardBlockResponse(msg.id, preGuard);
-            this.responseTracker.sendJson(this.stdoutWriter, blockResp as Record<string, unknown>);
+            if (hasJsonRpcId(msg.id)) {
+            this.responseTracker.sendJson(
+              this.stdoutWriter,
+              blockResp as Record<string, unknown>,
+            );
+          }
             return;
           }
           if (preGuard.arguments) {
@@ -875,7 +893,7 @@ export class McpProxyServer {
               requestTenantId,
               msg.id,
             );
-            this.sendError(msg.id, -32001, `Blocked by Mastyf AI: ${expandedGuard.reason}`, {
+            respondError(-32001, `Blocked by Mastyf AI: ${expandedGuard.reason}`, {
               rule: 'payload-expanded-limit',
             });
             return;
@@ -888,7 +906,7 @@ export class McpProxyServer {
           if (multimodalFindings.length > 0 && this.policyEngine?.getMode() === 'block') {
             const mmReason = multimodalFindings.map((f) => f.description).slice(0, 3).join('; ');
             this.recordDeniedCall(toolName, requestTokens, Date.now() - proxyStartTime, 'multimodal-injection', mmReason);
-            this.sendError(msg.id, -32001, `Blocked by MCP Mastyf AI policy: ${mmReason}`, {
+            respondError(-32001, `Blocked by MCP Mastyf AI policy: ${mmReason}`, {
               rule: 'multimodal-injection',
               policy: 'block',
             });
@@ -919,7 +937,7 @@ export class McpProxyServer {
               if (entropyFindings.length > 0) {
                 const entropyReason = `High-entropy encoded payload in '${toolName}' arguments (${entropyFindings[0].kind}, entropy=${entropyFindings[0].entropy.toFixed(2)})`;
                 this.recordDeniedCall(toolName, requestTokens, Date.now() - proxyStartTime, 'arg-entropy', entropyReason);
-                this.sendError(msg.id, -32001, `Blocked by MCP Mastyf AI policy: ${entropyReason}`, {
+                respondError(-32001, `Blocked by MCP Mastyf AI policy: ${entropyReason}`, {
                   rule: 'arg-entropy',
                   policy: 'block',
                 });
@@ -931,8 +949,7 @@ export class McpProxyServer {
             if (this.policyEngine?.getMode() === 'block') {
               const dlpReason = `${secretFindings.length} potential secret(s) detected in '${toolName}' arguments. Detected: ${secretSummary}`;
               this.recordDeniedCall(toolName, requestTokens, Date.now() - proxyStartTime, 'secret-scan', dlpReason);
-              this.sendError(
-                msg.id, -32001,
+              respondError(-32001,
                 `Blocked by MCP Mastyf AI policy: ${dlpReason}`,
                 { rule: 'secret-scan', policy: 'block' },
               );
@@ -983,7 +1000,7 @@ export class McpProxyServer {
                 toolName,
                 authnSuccess: false,
               });
-              this.sendError(msg.id, -32002, 'Authentication required. Provide a valid Bearer token in the Authorization header.');
+              respondError(-32002, 'Authentication required. Provide a valid Bearer token in the Authorization header.');
               return;
             }
           } else {
@@ -1009,7 +1026,7 @@ export class McpProxyServer {
               });
 
               if (this.authValidator.getConfig().required) {
-                this.sendError(msg.id, -32003, `Authentication failed: ${result.error}`);
+                respondError(-32003, `Authentication failed: ${result.error}`);
                 return;
               }
             } else {
@@ -1022,7 +1039,7 @@ export class McpProxyServer {
                 // tenant applied when context is registered after auth gates
               } catch (err) {
                 if (err instanceof JwtTenantRequiredError || err instanceof InvalidTenantIdError) {
-                  this.sendError(msg.id, -32003, err.message);
+                  respondError(-32003, err.message);
                   return;
                 }
                 throw err;
@@ -1042,7 +1059,7 @@ export class McpProxyServer {
                 this.policyEngine?.getMode(),
               );
               if (!dpopCheck.valid) {
-                this.sendError(msg.id, -32004, dpopCheck.error || 'DPoP validation failed');
+                respondError(-32004, dpopCheck.error || 'DPoP validation failed');
                 return;
               }
 
@@ -1085,7 +1102,7 @@ export class McpProxyServer {
             tenantId: requestTenantId,
             state: tenantBreaker.getState(),
           });
-          this.sendError(msg.id, -32005, `Upstream MCP server '${this.serverName}' unavailable — circuit breaker open`);
+          respondError(-32005, `Upstream MCP server '${this.serverName}' unavailable — circuit breaker open`);
           tenantBreaker.recordFailure();
           return;
         }
@@ -1183,7 +1200,7 @@ export class McpProxyServer {
               requestArguments,
               requestTenantId,
             );
-            this.sendError(msg.id, -32001, `Blocked by MCP Mastyf AI: ${defense.reason}`, {
+            respondError(-32001, `Blocked by MCP Mastyf AI: ${defense.reason}`, {
               rule: defense.rule,
               policy: engine.getMode(),
             });

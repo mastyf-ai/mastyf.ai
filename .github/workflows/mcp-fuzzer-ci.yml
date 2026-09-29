@@ -41,17 +41,19 @@ jobs:
           mkdir -p fuzz-artifacts
           chmod 777 fuzz-artifacts
           # `cli.js proxy` exits 1 when no MCP config exists (src/cli.ts:889),
-          # and deploy/mcp.json is not baked into the image, so the ingress
-          # would never start. Point the proxy at a loopback SSE upstream: the
-          # fuzzer only needs the gateway's own request path, and Mastyf
-          # decides before dispatch (src/proxy/mcp-request-pipeline.ts:29), so
-          # this upstream is never actually reached for blocked traffic.
+          # and deploy/mcp.json is not baked into the image, so the bridge would
+          # have no upstream. The dashboard MCP bridge relays to a stdio proxy
+          # (src/utils/mcp-http-relay.ts -> proxyManager.getProxies() returns
+          # stdio proxies only, src/proxy/proxy-manager.ts:148), so the upstream
+          # must be a stdio server. It is a fixture that returns fixed strings
+          # and never touches the filesystem, so payloads that Mastyf correctly
+          # allows reach a real server and return genuine successes.
           cat > fuzz-mcp.json <<'JSON'
           {
             "mcpServers": {
               "fuzz-target": {
-                "url": "http://127.0.0.1:4001/sse",
-                "transport": "sse"
+                "command": "node",
+                "args": ["/fuzz-upstream.mjs"]
               }
             }
           }
@@ -59,6 +61,7 @@ jobs:
           docker run -d --name mastyf-ai --no-healthcheck \
             -v "$PWD/fuzz-artifacts:/fuzz-artifacts" \
             -v "$PWD/fuzz-mcp.json:/fuzz-mcp.json:ro" \
+            -v "$PWD/.github/actions/mcp-fuzzer/fuzz-upstream.mjs:/fuzz-upstream.mjs:ro" \
             -e MASTYF_AI_CONFIG_PATH=/fuzz-mcp.json \
             -e MASTYF_AI_BLOCKING_MODE=block \
             -e DASHBOARD_ENABLED=true \
@@ -81,12 +84,33 @@ jobs:
           for i in $(seq 1 30); do
             if docker exec mastyf-ai node -e '
               const t = setTimeout(() => process.exit(1), 5000);
+              // A real JSON-RPC initialize: the bridge relays to the upstream, so
+              // a bare {} is not a meaningful readiness signal.
               fetch("http://127.0.0.1:4000/mcp", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: "{}",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json, text/event-stream",
+                },
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: 1,
+                  method: "initialize",
+                  params: {
+                    protocolVersion: "2024-11-05",
+                    capabilities: {},
+                    clientInfo: { name: "ci-readiness", version: "1.0.0" },
+                  },
+                }),
               })
-                .then(r => { clearTimeout(t); process.exit(r.status < 500 ? 0 : 1); })
+                .then(async r => {
+                  clearTimeout(t);
+                  const text = await r.text().catch(() => "");
+                  // Ready when the bridge is mounted and answering JSON-RPC.
+                  // 5xx means it is not ready; a JSON-RPC error is still ready.
+                  const ok = r.status < 500 && (text.includes("jsonrpc") || text.includes("result") || text.includes("error"));
+                  process.exit(ok ? 0 : 1);
+                })
                 .catch(() => { clearTimeout(t); process.exit(1); });
             ' 2>/dev/null; then
               echo "Mastyf AI is ready"
@@ -106,7 +130,7 @@ jobs:
           docker exec mastyf-ai node /tmp/fuzz.mjs \
             --target "${TARGET_URL:-http://127.0.0.1:4000/mcp}" \
             --min-block-rate '80' \
-            --timeout '10' \
+            --timeout '30' \
             --fail-on-bypass 'true' \
             --report /fuzz-artifacts/fuzz-report.json
         env:

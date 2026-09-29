@@ -21,7 +21,7 @@ export interface McpPipelineSession {
 
 export type McpPrePipelineResult =
   | { blocked: false; session: McpPipelineSession; trackResponse?: boolean; requestMethod?: string }
-  | { blocked: true; response?: Record<string, unknown> };
+  | { blocked: true; response?: Record<string, unknown>; code: number; reason: string };
 
 const RESPONSE_METHODS = new Set(['resources/read', 'resources/subscribe', 'prompts/get']);
 
@@ -81,10 +81,16 @@ export function runMcpPrePipeline(params: {
   fallbackSessionKey?: string;
 }): McpPrePipelineResult {
   const rpcCheck = validateMcpJsonRpcMessage(params.msg);
-  if (!rpcCheck.ok && hasJsonRpcId(params.msg.id)) {
+  if (!rpcCheck.ok) {
+    // Enforce regardless of `id`: a client that omits it must still be refused.
+    // The error *body* still needs an id, because a notification is never answered.
     return {
       blocked: true,
-      response: jsonRpcErrorBody(params.msg.id, rpcCheck.code, rpcCheck.message) as Record<string, unknown>,
+      code: rpcCheck.code,
+      reason: rpcCheck.message,
+      ...(hasJsonRpcId(params.msg.id)
+        ? { response: jsonRpcErrorBody(params.msg.id, rpcCheck.code, rpcCheck.message) as Record<string, unknown> }
+        : {}),
     };
   }
 
@@ -101,14 +107,16 @@ export function runMcpPrePipeline(params: {
     fallbackSessionKey: params.fallbackSessionKey,
   });
 
-  if (!lifecycle.allowed && hasJsonRpcId(params.msg.id)) {
+  if (!lifecycle.allowed) {
+    // Enforce regardless of `id`; only the response body requires one.
+    const lifecycleReason = lifecycle.reason ?? 'MCP lifecycle guard blocked request';
     return {
       blocked: true,
-      response: jsonRpcErrorBody(
-        params.msg.id,
-        -32001,
-        lifecycle.reason ?? 'MCP lifecycle guard blocked request',
-      ) as Record<string, unknown>,
+      code: -32001,
+      reason: lifecycleReason,
+      ...(hasJsonRpcId(params.msg.id)
+        ? { response: jsonRpcErrorBody(params.msg.id, -32001, lifecycleReason) as Record<string, unknown> }
+        : {}),
     };
   }
 
@@ -123,10 +131,12 @@ export function runMcpPrePipeline(params: {
         `[mcp-pre-pipeline:${params.serverName}] Blocked id-less ${method} ` +
           `(${authorization.reason}); no response is sent for a request without an id`,
       );
-      return { blocked: true };
+      return { blocked: true, code: authorization.code, reason: authorization.reason };
     }
     return {
       blocked: true,
+      code: authorization.code,
+      reason: authorization.reason,
       response: jsonRpcErrorBody(
         params.msg.id,
         authorization.code,
