@@ -7,17 +7,15 @@
  * - Phase 5: WebSocketStartupMutationTest (assertProductionSecurityInvariants parity)
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   parseCanonicalResource,
   authorizeResourceRead,
   authorizePromptGet,
 } from '../../src/security-os/canonical-resource-guard.js';
 import { runMcpPrePipeline } from '../../src/proxy/mcp-request-pipeline.js';
-  import { gateResourceOrPromptText } from '../../src/utils/resource-prompt-security-gate.js';
-  import { gateMcpMethodResponse } from '../../src/proxy/mcp-lifecycle-bridge.js';
-import { WebSocketProxyServer } from '../../src/proxy/websocket-proxy-server.js';
-import { PolicyEngine } from '../../src/policy/policy-engine.js';
+import { gateResourceOrPromptText } from '../../src/utils/resource-prompt-security-gate.js';
+import { gateMcpMethodResponse } from '../../src/proxy/mcp-lifecycle-bridge.js';
 
 describe('Phase 3: Tier 1A Resource & Prompt Pre-Dispatch Authorization', () => {
   describe('Canonical URI Parsing & Traversal Detection', () => {

@@ -90,4 +90,33 @@ describe('pre-dispatch target authorization', () => {
       spy.mockRestore();
     }
   });
+
+  it('refuses a target-requiring method whose target was omitted', () => {
+    // Omitting the target must not be a way to skip authorization. Returning
+    // "no verdict" here used to forward the request to the upstream untouched.
+    for (const [method, params] of [
+      ['resources/read', {}],
+      ['resources/read', { uri: '' }],
+      ['resources/read', { uri: 42 }],
+      ['resources/subscribe', {}],
+      ['prompts/get', {}],
+      ['prompts/get', { name: '' }],
+      ['prompts/get', { name: null }],
+    ] as [string, Record<string, unknown>][]) {
+      const r = run({ jsonrpc: '2.0', id: 6, method, params });
+      expect(r.blocked, `expected ${method} ${JSON.stringify(params)} to be refused`).toBe(true);
+      expect(
+        (r as { code?: number }).code,
+        `expected invalid-params for ${method} ${JSON.stringify(params)}`,
+      ).toBe(-32602);
+    }
+  });
+
+  it('refuses an omitted target even when the request omits its id', () => {
+    const r = run({ jsonrpc: '2.0', method: 'resources/read', params: {} });
+    expect(r.blocked).toBe(true);
+    expect((r as { code?: number }).code).toBe(-32602);
+    // No id means no response body is produced.
+    expect((r as { response?: unknown }).response).toBeUndefined();
+  });
 });

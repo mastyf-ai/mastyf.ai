@@ -45,8 +45,17 @@ function authorizeRequestTarget(
 ): { allowed: boolean; code: number; reason: string } | undefined {
   const requestParams = (msg.params ?? {}) as Record<string, unknown>;
   if (method === 'resources/read') {
-    if (requestParams.uri === undefined) return undefined;
-    const verdict = authorizeResourceRead(String(requestParams.uri));
+    // A target-requiring method with no target is malformed, and it must not be
+    // waved through as "no verdict": that would let a caller skip authorization
+    // simply by omitting the parameter the guard inspects. Reject instead.
+    if (typeof requestParams.uri !== 'string' || requestParams.uri.length === 0) {
+      return {
+        allowed: false,
+        code: -32602,
+        reason: 'resources/read requires a non-empty uri',
+      };
+    }
+    const verdict = authorizeResourceRead(requestParams.uri);
     return {
       allowed: verdict.allowed,
       code: verdict.code ?? -32001,
@@ -54,8 +63,14 @@ function authorizeRequestTarget(
     };
   }
   if (method === 'resources/subscribe') {
-    if (requestParams.uri === undefined) return undefined;
-    const verdict = authorizeResourceRead(String(requestParams.uri));
+    if (typeof requestParams.uri !== 'string' || requestParams.uri.length === 0) {
+      return {
+        allowed: false,
+        code: -32602,
+        reason: 'resources/subscribe requires a non-empty uri',
+      };
+    }
+    const verdict = authorizeResourceRead(requestParams.uri);
     return {
       allowed: verdict.allowed,
       code: verdict.code ?? -32001,
@@ -63,7 +78,13 @@ function authorizeRequestTarget(
     };
   }
   if (method === 'prompts/get') {
-    if (requestParams.name === undefined) return undefined;
+    if (typeof requestParams.name !== 'string' || requestParams.name.length === 0) {
+      return {
+        allowed: false,
+        code: -32602,
+        reason: 'prompts/get requires a non-empty name',
+      };
+    }
     const verdict = authorizePromptGet(requestParams.name, requestParams.arguments);
     return {
       allowed: verdict.allowed,

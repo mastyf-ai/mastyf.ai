@@ -1273,7 +1273,12 @@ export class McpProxyServer {
       // is not approval.
       try {
         const peek = JSON.parse(raw);
-        if (peek?.method === 'tools/call' && hasJsonRpcId(peek.id)) {
+        if (peek?.method === 'tools/call') {
+          if (!hasJsonRpcId(peek.id)) {
+            // No id means no error can be returned and no marker exists; fail
+            // closed by falling through to the forward guard, which drops it.
+            return;
+          }
           // The forward step is never reached on this path, so release the
           // authorisation marker here instead of leaking it for the process life.
           this.consumePolicyAuthorizedCall(peek.id);
@@ -1290,9 +1295,28 @@ export class McpProxyServer {
       }
     }
 
-    try {
+      try {
         const fwd = JSON.parse(raw);
-        if (fwd.method === 'tools/call' && hasJsonRpcId(fwd.id)) {
+        if (fwd?.method === 'tools/call') {
+          if (!hasJsonRpcId(fwd.id)) {
+            // Id-less tools/call: there is no response to send and no
+            // authorisation marker to consume, so the only safe outcome is to
+            // emit zero downstream bytes. Stated here rather than left to the
+            // fallthrough below so the fail-closed invariant is local and
+            // auditable.
+            Logger.error(
+              `[proxy:${this.serverName}] Refusing to forward unmediated id-less tools/call; no response is sent for a request without an id`,
+            );
+            StructuredLogger.logBlocked({
+              event: 'tool_blocked',
+              requestId: '-1',
+              serverName: this.serverName,
+              toolName: (fwd.params as { name?: string } | undefined)?.name || 'unknown',
+              reason: 'UNMEDIATED_TOOL_CALL',
+              rule: 'fail-closed-invariant',
+            });
+            return;
+          }
           // Only a request the policy engine allowed may reach the upstream
           // server. Consume the marker so it cannot authorise a second dispatch.
           if (!this.consumePolicyAuthorizedCall(fwd.id)) {

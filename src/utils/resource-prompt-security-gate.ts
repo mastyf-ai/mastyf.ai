@@ -10,7 +10,6 @@
 import { PROMPT_INJECTION_PATTERNS } from '../agentic/prompt-injection/payload-patterns.js';
 import {
   evaluateResponseDlp,
-  getResponseDlpMode,
   shouldBlockResponseDlp,
 } from '../policy/response-dlp.js';
 

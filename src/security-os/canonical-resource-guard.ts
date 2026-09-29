@@ -131,7 +131,6 @@ export function classifyNetworkHost(rawHost: string): ResolvedDestinationInfo {
   if (ipv4Num !== null) {
     const b0 = (ipv4Num >>> 24) & 0xff;
     const b1 = (ipv4Num >>> 16) & 0xff;
-    const b2 = (ipv4Num >>> 8) & 0xff;
 
     // 127.0.0.0/8 or 0.0.0.0/8 -> Loopback / local
     if (b0 === 127 || b0 === 0) {
@@ -215,18 +214,6 @@ const PROHIBITED_SYSTEM_PATHS = [
   '\\sam',
 ];
 
-// SSRF blacklisted targets (Cloud Metadata & Localhost)
-const SSRF_BLOCKED_HOSTS = new Set([
-  '169.254.169.254',
-  'metadata.google.internal',
-  'metadata.aws.internal',
-  '127.0.0.1',
-  'localhost',
-  '0.0.0.0',
-  '::1',
-  'instance-data',
-]);
-
 const DEFAULT_ALLOWED_SCHEMES = new Set([
   'file',
   'postgres',
@@ -275,7 +262,7 @@ export function parseCanonicalResource(rawUri: string): CanonicalParsedResource 
   }
 
   // Double URI decoding to catch %252e%252e obfuscations
-  let decoded = trimmed;
+  let decoded: string;
   try {
     decoded = decodeURIComponent(trimmed);
     if (decoded.includes('%')) {
@@ -319,7 +306,11 @@ export function parseCanonicalResource(rawUri: string): CanonicalParsedResource 
   let host: string | undefined;
   let port: number | undefined;
   let rawPath = restAfterScheme;
-  const query: Record<string, string> = {};
+  // Null prototype: a query key is attacker-controlled, and on a plain object
+  // literal a "__proto__" key would hit the inherited setter rather than
+  // creating an own property. The object is only ever read via Object.keys and
+  // computed reads, both of which behave identically without a prototype.
+  const query = Object.create(null) as Record<string, string>;
 
   // Extract query string if present
   const queryIdx = rawPath.indexOf('?');
