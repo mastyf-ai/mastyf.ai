@@ -22,10 +22,11 @@ const FuzzPayloads = [
 const argv = process.argv.slice(2);
 const getArg = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : null; };
 
-const target = getArg('--target') || 'http://localhost:4000/mcp';
+const target = getArg('--target') || 'http://127.0.0.1:4000/mcp';
 const minBlockRate = parseInt(getArg('--min-block-rate') || '80', 10);
 const timeoutMs = parseInt(getArg('--timeout') || '10', 10) * 1000;
 const failOnBypass = (getArg('--fail-on-bypass') || 'true') === 'true';
+const reportPath = getArg('--report');
 
 async function send(payload, id) {
   const start = Date.now();
@@ -69,6 +70,18 @@ async function main() {
   if (bypasses.length) {
     console.log('CRITICAL BYPASSES:');
     bypasses.forEach(b => console.log(`  [${b.id}] ${b.desc} — ${b.cat}`));
+  }
+
+  if (reportPath) {
+    const { writeFileSync } = await import('node:fs');
+    const report = {
+      target, total, blocked, passed, errors: errs,
+      block_rate: parseFloat(rate), min_block_rate: minBlockRate,
+      bypasses: bypasses.map(b => ({ id: b.id, desc: b.desc, cat: b.cat, status: b.status })),
+      results,
+    };
+    writeFileSync(reportPath, JSON.stringify(report, null, 2));
+    console.log(`Report written to ${reportPath}`);
   }
 
   if (failOnBypass && bypasses.length) { console.log('FAIL'); process.exit(1); }
