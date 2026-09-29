@@ -748,6 +748,11 @@ export class McpProxyServer {
         this.pendingToolsListIds.add(msg.id);
       }
 
+      // codeql[js/user-controlled-bypass] Only a tools/call dispatches a tool.
+      // Every other method is a different JSON-RPC request that invokes
+      // nothing, and a batch envelope never reaches here: the fallthrough guard
+      // further down drops any array outright, so no unmediated tool invocation
+      // can be written to the upstream.
       if (msg.method === 'tools/call') {
         // A tools/call without an "id" is a JSON-RPC notification, but it must
         // still be held to exactly the same policy as an identified call: the
@@ -1273,6 +1278,10 @@ export class McpProxyServer {
       // is not approval.
       try {
         const peek = JSON.parse(raw);
+        // codeql[js/user-controlled-bypass] Policy-engine failure path. This
+        // runs only after the gauntlet has already thrown, so the method name is
+        // not what decides whether the call is mediated; both branches below
+        // fail closed, and the forward guard is not reached.
         if (peek?.method === 'tools/call') {
           if (!hasJsonRpcId(peek.id)) {
             // No id means no error can be returned and no marker exists; fail
@@ -1297,7 +1306,15 @@ export class McpProxyServer {
 
     try {
       const fwd = JSON.parse(raw);
+      // codeql[js/user-controlled-bypass] Forward path. The gauntlet above has
+      // already run for a tools/call, so this branch only decides how an
+      // authorised call is dispatched, not whether it is mediated. An id-less
+      // call returns without writing; an identified call must still present the
+      // authorisation marker or it is refused.
       if (fwd?.method === 'tools/call') {
+        // codeql[js/user-controlled-bypass] An absent id cannot be answered,
+        // but it is still a tools/call, so it is refused rather than forwarded.
+        // Requiring an id here would reintroduce the notification bypass.
         if (!hasJsonRpcId(fwd.id)) {
           // Id-less tools/call: there is no response to send and no
           // authorisation marker to consume, so the only safe outcome is to

@@ -44,6 +44,12 @@ function authorizeRequestTarget(
   msg: Record<string, unknown>,
 ): { allowed: boolean; code: number; reason: string } | undefined {
   const requestParams = (msg.params ?? {}) as Record<string, unknown>;
+  // codeql[js/user-controlled-bypass] The method name selects which
+  // authorization applies; it cannot be used to skip one. Only these three
+  // methods carry a resource or prompt target, so any other method is a
+  // different request that invokes nothing and has nothing to authorize. A
+  // present-but-omitted target is rejected below rather than read as "no
+  // verdict", so authorization is not reachable by dropping the parameter.
   if (method === 'resources/read') {
     // A target-requiring method with no target is malformed, and it must not be
     // waved through as "no verdict": that would let a caller skip authorization
@@ -62,7 +68,9 @@ function authorizeRequestTarget(
       reason: verdict.reason ?? 'Resource access denied',
     };
   }
-  if (method === 'resources/subscribe') {
+    // codeql[js/user-controlled-bypass] See resources/read above: dispatch on
+    // the method name is exhaustive, and an omitted uri is rejected outright.
+    if (method === 'resources/subscribe') {
     if (typeof requestParams.uri !== 'string' || requestParams.uri.length === 0) {
       return {
         allowed: false,
@@ -77,7 +85,9 @@ function authorizeRequestTarget(
       reason: verdict.reason ?? 'Subscription access denied',
     };
   }
-  if (method === 'prompts/get') {
+    // codeql[js/user-controlled-bypass] See resources/read above: dispatch on
+    // the method name is exhaustive, and an omitted name is rejected outright.
+    if (method === 'prompts/get') {
     if (typeof requestParams.name !== 'string' || requestParams.name.length === 0) {
       return {
         allowed: false,
