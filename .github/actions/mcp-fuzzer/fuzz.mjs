@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+import { readFileSync } from 'node:fs';
+
 const FuzzPayloads = [
   { id: 'fuzz-001', cat: 'rpc-notification', desc: 'Guard evasion via omitted id (notification)', body: '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"read_file","arguments":{"path":"/etc/passwd"}}}', block: true },
   { id: 'fuzz-002', cat: 'rpc-injection', desc: 'Sensitive path', body: '{"jsonrpc":"2.0","id":"2","method":"tools/call","params":{"name":"read_file","arguments":{"path":"/etc/passwd"}}}', block: true },
@@ -40,9 +42,27 @@ const minBlockRate = parseInt(getArg('--min-block-rate') || '80', 10);
 const timeoutMs = parseInt(getArg('--timeout') || '30', 10) * 1000;
 const failOnBypass = (getArg('--fail-on-bypass') || 'true') === 'true';
 const reportPath = getArg('--report');
+const execLogPath = getArg('--exec-log') || '/fuzz-artifacts/executed.log';
+
+/**
+ * Number of tools/call requests the upstream fixture has actually executed.
+ *
+ * This is the primary bypass oracle. A response body cannot detect an id-less
+ * bypass, because a notification that is forwarded upstream is executed and
+ * then correctly answered with no body at all. The fixture's side-channel log
+ * makes upstream execution observable regardless of response framing.
+ */
+function execCount() {
+  try {
+    return readFileSync(execLogPath, 'utf8').split('\n').filter(Boolean).length;
+  } catch {
+    return 0;
+  }
+}
 
 async function send(payload, id) {
   const start = Date.now();
+  const execsBefore = execCount();
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -51,13 +71,13 @@ async function send(payload, id) {
     const dur = Date.now() - start;
     const body = await res.text().catch(() => '');
 
-    // Definitive execution oracle. The fixture upstream only echoes
-    // "fixture-ok:<tool>" when a tools/call actually reached it, so seeing
-    // this token proves the guard was evaded regardless of how the gateway
-    // framed the HTTP status. This is what catches an id-stripping bypass,
-    // where the request is forwarded and the response is simply never
-    // correlated back to the caller.
-    const executedUpstream = body.includes('fixture-ok:');
+    // Definitive execution oracle, from the upstream's side-channel log. A new
+    // entry proves a tools/call reached the upstream, i.e. the guard was
+    // evaded. This is the only signal that works for id-less payloads, whose
+    // replies are legitimately never framed back to the caller.
+    const execsAfter = execCount();
+    const executedViaLog = execsAfter > execsBefore;
+    const executedUpstream = body.includes('fixture-ok:') || executedViaLog;
 
     // A JSON-RPC error object means the gateway rejected the request at the
     // protocol layer. Blocked notifications are answered with no body at all,

@@ -15,8 +15,28 @@
  * the filesystem or the network.
  */
 import { createInterface } from 'node:readline';
+import { appendFileSync } from 'node:fs';
 
 const PROTOCOL_VERSION = '2024-11-05';
+
+/**
+ * Side-channel record of every tools/call that actually reached this upstream.
+ *
+ * A response body cannot serve as the bypass oracle for an id-less request: a
+ * notification is executed upstream and then correctly produces NO response, so
+ * a guard that is completely bypassed is indistinguishable from a guard that
+ * worked. The fuzzer therefore reads this log to decide whether a payload was
+ * executed, independent of how the gateway chose to frame (or drop) the reply.
+ */
+const EXEC_LOG = process.env['FUZZ_EXEC_LOG'] || '/fuzz-artifacts/executed.log';
+
+function recordExecution(tool) {
+  try {
+    appendFileSync(EXEC_LOG, `executed:${tool}\n`);
+  } catch {
+    // Never let canary bookkeeping break the fixture.
+  }
+}
 
 const TOOLS = [
   {
@@ -61,6 +81,7 @@ function handle(message) {
     case 'tools/list':
       return { jsonrpc: '2.0', id, result: { tools: TOOLS } };
     case 'tools/call':
+      recordExecution(params?.name ?? 'unknown');
       return toolResult(id, `fixture-ok:${params?.name ?? 'unknown'}`);
     case 'resources/read':
       return {

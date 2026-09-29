@@ -62,7 +62,9 @@ jobs:
             -v "$PWD/fuzz-artifacts:/fuzz-artifacts" \
             -v "$PWD/fuzz-mcp.json:/fuzz-mcp.json:ro" \
             -v "$PWD/.github/actions/mcp-fuzzer/fuzz-upstream.mjs:/fuzz-upstream.mjs:ro" \
+            -v "$PWD/.github/actions/mcp-fuzzer/fuzz-policy.yaml:/fuzz-policy.yaml:ro" \
             -e MASTYF_AI_CONFIG_PATH=/fuzz-mcp.json \
+            -e MASTYF_AI_POLICY_PATH=/fuzz-policy.yaml \
             -e MASTYF_AI_BLOCKING_MODE=block \
             -e DASHBOARD_ENABLED=true \
             -e DASHBOARD_PORT=4000 \
@@ -145,6 +147,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mcp-fuzz-report
-          path: fuzz-artifacts/fuzz-report.json
+          # The whole directory, not just the report: executed.log is the
+          # upstream's bypass canary and proves a payload actually ran.
+          path: fuzz-artifacts/
           if-no-files-found: warn
           retention-days: 30
