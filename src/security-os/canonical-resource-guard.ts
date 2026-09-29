@@ -321,12 +321,12 @@ export function parseCanonicalResource(rawUri: string): CanonicalParsedResource 
     for (const pair of pairs) {
       if (!pair) continue;
       const [k, v] = pair.split('=');
-      // codeql[js/remote-property-injection] The query key is attacker
-      // controlled, but `query` is created with a null prototype above, so a
-      // "__proto__" key becomes an own property and cannot reach Object.prototype
-      // or any setter. The map never escapes as a shared object: it is read only
-      // via Object.keys and computed reads, and callers receive it as data.
-      if (k) query[decodeURIComponent(k)] = v ? decodeURIComponent(v) : '';
+      // The query key is attacker controlled, but `query` is created with a null
+      // prototype above, so a "__proto__" key becomes an own property and cannot
+      // reach Object.prototype or any setter. The map never escapes as a shared
+      // object: it is read only via Object.keys and computed reads, and callers
+      // receive it as data.
+      if (k) query[decodeURIComponent(k)] = v ? decodeURIComponent(v) : ''; // codeql[js/remote-property-injection]
     }
   }
 
