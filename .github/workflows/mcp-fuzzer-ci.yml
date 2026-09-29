@@ -61,14 +61,21 @@ jobs:
             -v "$PWD/fuzz-mcp.json:/fuzz-mcp.json:ro" \
             -e MASTYF_AI_CONFIG_PATH=/fuzz-mcp.json \
             -e MASTYF_AI_BLOCKING_MODE=block \
+            -e DASHBOARD_ENABLED=true \
+            -e DASHBOARD_PORT=4000 \
+            -e DASHBOARD_AUTH_DISABLED=true \
             -e MASTYF_AI_DB_PATH=/data/history.db \
-            mastyf-ai:fuzz \
-            --expose-local-port 4000
+            mastyf-ai:fuzz
 
-      # The MCP ingress binds 127.0.0.1 *inside* the container and serves only
-      # POST /mcp (GET returns 404), so it is unreachable via -p and cannot be
-      # probed from the runner. Both the probe and the fuzzer therefore run
-      # through `docker exec`, sharing the container's network namespace.
+      # DASHBOARD_ENABLED=true makes the dashboard mount the MCP bridge at
+      # POST /mcp on DASHBOARD_PORT (src/cli.ts:1121-1133), which is the
+      # endpoint the fuzzer targets. --expose-local-port is deliberately NOT
+      # used: that ingress binds 127.0.0.1 on the same port (cli.ts:1140-1151)
+      # and would collide with the dashboard (EADDRINUSE).
+      #
+      # The probe and fuzzer run via `docker exec` so they share the
+      # container's network namespace: the bridge is only reachable there, and
+      # it answers POST only (GET /mcp returns 404).
       - name: Wait for Mastyf AI to be ready
         run: |
           for i in $(seq 1 30); do

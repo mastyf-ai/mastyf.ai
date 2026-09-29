@@ -38,9 +38,13 @@ async function send(payload, id) {
     const dur = Date.now() - start;
     const body = await res.text().catch(() => '');
     const blocked = res.status === 401 || res.status === 403 || body.includes('Blocked') || body.includes('blocked') || body.includes('denied');
-    return { id, blocked, status: res.status, dur, body: body.slice(0, 200) };
+    // A 401 means the auth layer rejected us, not that Mastyf judged the
+    // payload. Counting it as "blocked" would make every payload pass without
+    // ever reaching policy, so surface it separately and let the caller fail.
+    const authBlocked = res.status === 401;
+    return { id, blocked, authBlocked, status: res.status, dur, body: body.slice(0, 200) };
   } catch (e) {
-    return { id, blocked: false, status: 0, dur: Date.now() - start, body: e.message, err: true };
+    return { id, blocked: false, authBlocked: false, status: 0, dur: Date.now() - start, body: e.message, err: true };
   }
 }
 
@@ -62,11 +66,16 @@ async function main() {
   const blocked = results.filter(r => r.blocked).length;
   const passed = results.filter(r => !r.blocked && !r.err).length;
   const errs = results.filter(r => r.err).length;
+  const authBlocked = results.filter(r => r.authBlocked).length;
   const total = results.length;
   const rate = ((blocked / (total - errs)) * 100).toFixed(1);
   const bypasses = results.filter(r => !r.blocked && r.expBlock);
 
   console.log(`\nResults: ${blocked} blocked, ${passed} passed, ${errs} errors, ${rate}% block rate\n`);
+  if (authBlocked) {
+    console.log(`WARNING: ${authBlocked} request(s) rejected with 401 by the auth layer.`);
+    console.log('The target requires authentication; these were not policy decisions.');
+  }
   if (bypasses.length) {
     console.log('CRITICAL BYPASSES:');
     bypasses.forEach(b => console.log(`  [${b.id}] ${b.desc} — ${b.cat}`));
@@ -75,7 +84,7 @@ async function main() {
   if (reportPath) {
     const { writeFileSync } = await import('node:fs');
     const report = {
-      target, total, blocked, passed, errors: errs,
+      target, total, blocked, passed, errors: errs, auth_blocked: authBlocked,
       block_rate: parseFloat(rate), min_block_rate: minBlockRate,
       bypasses: bypasses.map(b => ({ id: b.id, desc: b.desc, cat: b.cat, status: b.status })),
       results,
@@ -84,6 +93,12 @@ async function main() {
     console.log(`Report written to ${reportPath}`);
   }
 
+  // Guard against a silently vacuous run: if every verdict came from the auth
+  // layer, the fuzzer proved nothing about policy.
+  if (total > 0 && authBlocked === total) {
+    console.log('FAIL: every request was rejected by auth (401), so no policy was exercised');
+    process.exit(1);
+  }
   if (failOnBypass && bypasses.length) { console.log('FAIL'); process.exit(1); }
   if (parseFloat(rate) < minBlockRate) { console.log('FAIL: block rate below minimum'); process.exit(1); }
   console.log('PASSED');
