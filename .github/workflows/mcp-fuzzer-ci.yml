@@ -27,26 +27,23 @@ jobs:
   fuzz-mcp-server:
     runs-on: ubuntu-latest
 
-    services:
-      mastyf:
-        image: ghcr.io/mastyf-ai/mastyf-ai:latest
-        ports:
-          - 4000:4000
-        env:
-          DASHBOARD_ENABLED: 'true'
-          DASHBOARD_PORT: '4000'
-          DASHBOARD_AUTH_DISABLED: 'true'
-          METRICS_ENABLED: 'true'
-          METRICS_PORT: '9090'
-          MASTYF_AI_DB_PATH: /data/history.db
-        options: >-
-          --health-cmd "curl -f http://localhost:4000/ || exit 1"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-
     steps:
       - uses: actions/checkout@v4
+
+      - name: Build Mastyf AI image
+        run: docker build -f deploy/Dockerfile -t mastyf-ai:fuzz .
+
+      - name: Start Mastyf AI
+        run: |
+          docker run -d --name mastyf-ai \
+            -p 4000:4000 -p 9090:9090 \
+            -e DASHBOARD_ENABLED=true \
+            -e DASHBOARD_PORT=4000 \
+            -e DASHBOARD_AUTH_DISABLED=true \
+            -e METRICS_ENABLED=true \
+            -e METRICS_PORT=9090 \
+            -e MASTYF_AI_DB_PATH=/data/history.db \
+            mastyf-ai:fuzz
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -62,6 +59,7 @@ jobs:
             fi
             if [ "$i" -eq 30 ]; then
               echo "Mastyf AI failed to start"
+              docker logs mastyf-ai || true
               exit 1
             fi
             sleep 2
@@ -74,6 +72,10 @@ jobs:
           min_block_rate: '80'
           timeout_seconds: '10'
           fail_on_bypass: 'true'
+
+      - name: Stop Mastyf AI
+        if: always()
+        run: docker rm -f mastyf-ai || true
 
       - name: Fuzz report artifact
         if: always()
