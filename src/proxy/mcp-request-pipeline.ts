@@ -3,6 +3,11 @@
  */
 import { hasJsonRpcId, jsonRpcErrorBody } from './json-rpc-utils.js';
 import { validateMcpJsonRpcMessage } from '../validation/mcp-jsonrpc.js';
+import { Logger } from '../utils/logger.js';
+import {
+  authorizePromptGet,
+  authorizeResourceRead,
+} from '../security-os/canonical-resource-guard.js';
 import {
   gateMcpMethodResponse,
   recordMcpLifecycleRequest,
@@ -16,9 +21,88 @@ export interface McpPipelineSession {
 
 export type McpPrePipelineResult =
   | { blocked: false; session: McpPipelineSession; trackResponse?: boolean; requestMethod?: string }
-  | { blocked: true; response: Record<string, unknown> };
+  | { blocked: true; response?: Record<string, unknown>; code: number; reason: string };
 
-const RESPONSE_METHODS = new Set(['resources/read', 'prompts/get']);
+const RESPONSE_METHODS = new Set(['resources/read', 'resources/subscribe', 'prompts/get']);
+
+/**
+ * Pre-dispatch authorization of the target a request names.
+ *
+ * `applyMcpResponsePipeline` gates what a server *returns*, but nothing gated
+ * what a client *asked for*: a traversal URI or prompt name was normalized and
+ * denied by `canonical-resource-guard` and then never consulted, so
+ * `resources/read`/`prompts/get` reached the upstream server regardless. The
+ * guard's own primitives are the authority here — this only routes them.
+ *
+ * `resources/subscribe` names a `uri` and was mediated and allow-listed without
+ * ever being routed here, so `SubscriptionLifecycleManager.authorizeSubscription`
+ * — a pure delegation to `authorizeResourceRead` — had no callers and a
+ * traversal subscribe was never consulted at all.
+ */
+function authorizeRequestTarget(
+  method: string,
+  msg: Record<string, unknown>,
+): { allowed: boolean; code: number; reason: string } | undefined {
+  const requestParams = (msg.params ?? {}) as Record<string, unknown>;
+  // The method name selects which authorization applies; it cannot be used to
+  // skip one. Only these three methods carry a resource or prompt target, so any
+  // other method is a different request that invokes nothing and has nothing to
+  // authorize. A present-but-omitted target is rejected below rather than read as
+  // "no verdict", so authorization is not reachable by dropping the parameter.
+  if (method === 'resources/read') {
+    // A target-requiring method with no target is malformed, and it must not be
+    // waved through as "no verdict": that would let a caller skip authorization
+    // simply by omitting the parameter the guard inspects. Reject instead.
+    if (typeof requestParams.uri !== 'string' || requestParams.uri.length === 0) {
+      return {
+        allowed: false,
+        code: -32602,
+        reason: 'resources/read requires a non-empty uri',
+      };
+    }
+    const verdict = authorizeResourceRead(requestParams.uri);
+    return {
+      allowed: verdict.allowed,
+      code: verdict.code ?? -32001,
+      reason: verdict.reason ?? 'Resource access denied',
+    };
+  }
+  // See resources/read above: dispatch on the method name is exhaustive, and an
+  // omitted uri is rejected outright.
+  if (method === 'resources/subscribe') {
+    if (typeof requestParams.uri !== 'string' || requestParams.uri.length === 0) {
+      return {
+        allowed: false,
+        code: -32602,
+        reason: 'resources/subscribe requires a non-empty uri',
+      };
+    }
+    const verdict = authorizeResourceRead(requestParams.uri);
+    return {
+      allowed: verdict.allowed,
+      code: verdict.code ?? -32001,
+      reason: verdict.reason ?? 'Subscription access denied',
+    };
+  }
+  // See resources/read above: dispatch on the method name is exhaustive, and an
+  // omitted name is rejected outright.
+  if (method === 'prompts/get') {
+    if (typeof requestParams.name !== 'string' || requestParams.name.length === 0) {
+      return {
+        allowed: false,
+        code: -32602,
+        reason: 'prompts/get requires a non-empty name',
+      };
+    }
+    const verdict = authorizePromptGet(requestParams.name, requestParams.arguments);
+    return {
+      allowed: verdict.allowed,
+      code: verdict.code ?? -32001,
+      reason: verdict.reason ?? 'Prompt access denied',
+    };
+  }
+  return undefined;
+}
 
 export function runMcpPrePipeline(params: {
   msg: Record<string, unknown>;
@@ -27,10 +111,16 @@ export function runMcpPrePipeline(params: {
   fallbackSessionKey?: string;
 }): McpPrePipelineResult {
   const rpcCheck = validateMcpJsonRpcMessage(params.msg);
-  if (!rpcCheck.ok && hasJsonRpcId(params.msg.id)) {
+  if (!rpcCheck.ok) {
+    // Enforce regardless of `id`: a client that omits it must still be refused.
+    // The error *body* still needs an id, because a notification is never answered.
     return {
       blocked: true,
-      response: jsonRpcErrorBody(params.msg.id, rpcCheck.code, rpcCheck.message) as Record<string, unknown>,
+      code: rpcCheck.code,
+      reason: rpcCheck.message,
+      ...(hasJsonRpcId(params.msg.id)
+        ? { response: jsonRpcErrorBody(params.msg.id, rpcCheck.code, rpcCheck.message) as Record<string, unknown> }
+        : {}),
     };
   }
 
@@ -47,13 +137,40 @@ export function runMcpPrePipeline(params: {
     fallbackSessionKey: params.fallbackSessionKey,
   });
 
-  if (!lifecycle.allowed && hasJsonRpcId(params.msg.id)) {
+  if (!lifecycle.allowed) {
+    // Enforce regardless of `id`; only the response body requires one.
+    const lifecycleReason = lifecycle.reason ?? 'MCP lifecycle guard blocked request';
     return {
       blocked: true,
+      code: -32001,
+      reason: lifecycleReason,
+      ...(hasJsonRpcId(params.msg.id)
+        ? { response: jsonRpcErrorBody(params.msg.id, -32001, lifecycleReason) as Record<string, unknown> }
+        : {}),
+    };
+  }
+
+  const authorization = authorizeRequestTarget(method, params.msg);
+  if (authorization && !authorization.allowed) {
+    // Block regardless of whether the request carries an id. `id` is optional in
+    // the JSON-RPC schema, and a client omitting it was previously forwarded to
+    // the upstream server with a traversal URI intact — the one shape the guard
+    // exists to stop. An id-less request gets no response, per JSON-RPC.
+    if (!hasJsonRpcId(params.msg.id)) {
+      Logger.error(
+        `[mcp-pre-pipeline:${params.serverName}] Blocked id-less ${method} ` +
+          `(${authorization.reason}); no response is sent for a request without an id`,
+      );
+      return { blocked: true, code: authorization.code, reason: authorization.reason };
+    }
+    return {
+      blocked: true,
+      code: authorization.code,
+      reason: authorization.reason,
       response: jsonRpcErrorBody(
         params.msg.id,
-        -32001,
-        lifecycle.reason ?? 'MCP lifecycle guard blocked request',
+        authorization.code,
+        authorization.reason,
       ) as Record<string, unknown>,
     };
   }

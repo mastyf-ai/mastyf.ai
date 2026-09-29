@@ -1,0 +1,47 @@
+# Policy for the MCP fuzz CI job.
+#
+# The gateway image sets NODE_ENV=production, which makes mediation mandatory:
+# `assertProductionSecurityInvariants` refuses to start a proxied server that
+# has no PolicyEngine. The fuzzer therefore has to supply a real policy.
+#
+# It is deliberately shaped so the fuzzer measures the security layers rather
+# than a blanket deny:
+#   - `read_file` is allowed, so the traversal/sensitive-path pre-forward guard
+#     is what refuses /etc/passwd, file:// URIs and the encoded variants. If the
+#     guard regresses, the request reaches the fixture, which records it in
+#     fuzz-artifacts/executed.log and the fuzzer reports a critical bypass.
+#   - `execute_command` is denied outright, so shell-exfil payloads are stopped
+#     by the policy engine instead of the path guard.
+#   - default_action is deliberately `pass`. A blanket `block` would make the
+#     fuzzer vacuous: the id-less request would still be refused by the policy
+#     engine, so a regression in the pre-forward guard would go undetected and
+#     the run would report 100% blocked on unpatched code. Permitting the
+#     default keeps the verdict tied to the guard this job actually tests.
+version: '1.0'
+policy:
+  mode: block
+  default_action: pass
+  default_sandbox_tier: shadow
+  rules:
+    - name: deny-shell-tools
+      description: Deny arbitrary command execution outright
+      action: block
+      tools:
+        deny:
+          - execute_command
+          - bash
+          - sh
+          - eval
+          - exec
+          - system
+          - spawn
+          - powershell
+    - name: allow-fixture-read
+      description: >-
+        Allow the fixture's read tool. Path-based refusals are the pre-forward
+        guard's job, which is precisely what this fuzzer is here to test.
+      action: pass
+      tools:
+        allow:
+          - read_file
+          - list_directory

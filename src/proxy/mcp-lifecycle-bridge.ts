@@ -106,8 +106,12 @@ export function gateMcpMethodResponse(params: {
   method: string;
   result: unknown;
 }): { blocked: boolean; reason?: string; sanitized?: unknown } {
-  if (params.method === 'resources/read' || params.method === 'prompts/get') {
-    return gateResourceOrPromptText(params.method, params.result);
-  }
+    if (
+      params.method === 'resources/read' ||
+      params.method === 'resources/subscribe' ||
+      params.method === 'prompts/get'
+    ) {
+      return gateResourceOrPromptText(params.method, params.result);
+    }
   return { blocked: false };
 }

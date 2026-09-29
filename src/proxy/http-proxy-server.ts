@@ -1,4 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { assertProductionSecurityInvariants } from './production-gate.js';
 import { createServer as createHttpsServer } from 'https';
 import { request as httpReq } from 'http';
 import { request as httpsReq, Agent as HttpsAgent } from 'https';
@@ -101,6 +102,10 @@ export class HttpProxyServer {
       );
     }
     this.policyEngine = policyEngine || null;
+    assertProductionSecurityInvariants({
+      serverName: this.serverName,
+      hasPolicy: Boolean(this.policyEngine),
+    });
     this.authValidator = authValidator || null;
     this.sessionCache = authValidator ? createSessionCache() : null;
     this.defaultTenantId = resolveTenantContext().tenantId;
@@ -330,9 +335,16 @@ export class HttpProxyServer {
           authenticated: authnSuccess,
           fallbackSessionKey: requestId,
         });
-        if (pre.blocked && hasJsonRpcId(msg.id)) {
-          res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(pre.response));
+        if (pre.blocked) {
+          // Drop whether or not the request carries an id; only the error body
+          // needs one.
+          if (hasJsonRpcId(msg.id) && pre.response) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(pre.response));
+          } else {
+            res.writeHead(204);
+            res.end();
+          }
           return;
         }
         if (!pre.blocked && pre.trackResponse && pre.requestMethod && msg.id != null) {

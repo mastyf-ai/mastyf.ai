@@ -11,6 +11,7 @@ import type { AgentIdentity } from '../auth/auth-types.js';
 import { applyGeoToCallContext } from '../utils/request-geo-context.js';
 import { auditPolicyDecision } from './audit-policy-decision.js';
 import { notifyToolBlock } from '../alerting/notify-tool-block.js';
+import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
 import {
@@ -247,9 +248,90 @@ export async function evaluateToolCallDefense(
     idempotencyKey: input.idempotencyKey,
   }, input.headers);
 
-  const decision = deps.evaluatePolicy
-    ? await deps.evaluatePolicy(context)
-    : await deps.policyEngine.evaluateAsync(context);
+    let decision: PolicyDecision;
+    try {
+      // Fail closed explicitly when no policy engine is available. Absent an
+      // engine, `deps.policyEngine.evaluateAsync` would throw a TypeError that
+      // the catch below reports as POLICY_ENGINE_ERROR — the same verdict, but
+      // reached by accident, and a single optional chain would silently reopen
+      // this path. State the intent instead of inheriting it.
+      const engine = deps.policyEngine as PolicyEngine | undefined;
+      if (!deps.evaluatePolicy && !engine) {
+        throw new Error('policy engine missing; failing closed');
+      }
+      const rawDecision = deps.evaluatePolicy
+        ? await deps.evaluatePolicy(context)
+        : await (engine as PolicyEngine).evaluateAsync(context);
+
+    // A decision that is missing its verdict is not a decision. Treating an
+    // unrecognised shape as anything other than an error would let a broken
+    // policy engine silently approve traffic.
+    if (
+      !rawDecision ||
+      typeof rawDecision !== 'object' ||
+      !('action' in rawDecision) ||
+      typeof rawDecision.action !== 'string'
+    ) {
+      throw new Error(`Malformed policy engine decision: ${JSON.stringify(rawDecision)}`);
+    }
+    decision = rawDecision;
+  } catch (error) {
+    Logger.error(
+      `[tool-call-defense] Policy engine evaluation error; failing closed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+
+    if (emitTelemetry) {
+      notifyToolBlock({
+        serverName: input.serverName,
+        toolName: input.toolName,
+        rule: 'policy-engine-failure-fail-closed',
+        reason: 'POLICY_ENGINE_ERROR',
+        requestId: input.requestId,
+        anomalyScore: 1.0,
+      });
+      StructuredLogger.logBlocked({
+        event: 'tool_blocked',
+        requestId: input.requestId,
+        serverName: input.serverName,
+        toolName: input.toolName,
+        reason: 'POLICY_ENGINE_ERROR',
+        rule: 'policy-engine-failure-fail-closed',
+      });
+      Metrics.recordProxyBlock({
+        server_name: input.serverName,
+        block_reason: 'POLICY_ENGINE_ERROR',
+        rule: 'policy-engine-failure-fail-closed',
+        tenant_id: input.tenantId,
+      });
+      Metrics.requestsTotal.inc({
+        server_name: input.serverName,
+        decision: 'block',
+        authn_success: 'true',
+      });
+    }
+
+    try {
+      const store = getPersistenceStore();
+      store.appendAuditEntry('tool_blocked', {
+        server: input.serverName,
+        tool: input.toolName,
+        rule: 'policy-engine-failure-fail-closed',
+        reason: 'POLICY_ENGINE_ERROR',
+        requestId: String(input.requestId),
+      });
+    } catch {
+      /* audit is best-effort; the block itself must still hold */
+    }
+
+    return {
+      allowed: false,
+      phase: 'policy',
+      code: -32001,
+      rule: 'policy-engine-failure-fail-closed',
+      reason: 'POLICY_ENGINE_ERROR',
+      httpStatus: 500,
+    };
+  }
   auditPolicyDecision(input.requestId, input.serverName, input.toolName, decision, context);
 
   const policyMode = deps.policyEngine.getMode();

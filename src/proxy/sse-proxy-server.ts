@@ -12,6 +12,7 @@ import { inspectToolResponse as sharedInspectToolResponse } from './response-ins
 import { TokenCounter, extractModelFromPayload } from '../utils/token-counter.js';
 import { Logger } from '../utils/logger.js';
 import { requireUpstreamTlsAllowed } from '../utils/upstream-tls.js';
+import { assertProductionSecurityInvariants } from './production-gate.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { notifyToolBlock } from '../alerting/notify-tool-block.js';
@@ -75,6 +76,10 @@ export class SseProxyServer extends EventEmitter {
   constructor(opts: SseProxyOptions) {
     super();
     requireUpstreamTlsAllowed(opts.upstreamUrl);
+    assertProductionSecurityInvariants({
+      serverName: opts.serverName,
+      hasPolicy: Boolean(opts.policy),
+    });
     this.opts = opts;
     this.tokenCounter = new TokenCounter();
     void opts.mtlsConfig;
@@ -300,6 +305,13 @@ export class SseProxyServer extends EventEmitter {
             ),
         ),
       );
+      // A blocked request without an id produces no response body; 204 keeps it
+      // from serialising an empty 200.
+      if (result === undefined) {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err: unknown) {
@@ -363,7 +375,7 @@ export class SseProxyServer extends EventEmitter {
     jsonRpcRequest: Record<string, unknown>,
     requestHeaders?: Record<string, string | string[] | undefined>,
     session?: SseSession,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<Record<string, unknown> | undefined> {
     const { runMcpPrePipeline, applyMcpResponsePipeline, mcpResponseBlockJson } = await import(
       './mcp-request-pipeline.js'
     );

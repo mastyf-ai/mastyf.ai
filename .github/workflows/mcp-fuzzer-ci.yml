@@ -19,9 +19,12 @@ on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: MCP server URL to fuzz
+        description: >-
+          MCP server URL to fuzz. Must be reachable from inside the
+          mastyf-ai container (default: its loopback MCP ingress). Supply a
+          host-reachable URL to fuzz a non-local target instead.
         required: false
-        default: 'http://localhost:4000/mcp'
+        default: 'http://127.0.0.1:4000/mcp'
 
 jobs:
   fuzz-mcp-server:
@@ -35,25 +38,83 @@ jobs:
 
       - name: Start Mastyf AI
         run: |
-          docker run -d --name mastyf-ai \
-            -p 4000:4000 -p 9090:9090 \
+          mkdir -p fuzz-artifacts
+          chmod 777 fuzz-artifacts
+          # `cli.js proxy` exits 1 when no MCP config exists (src/cli.ts:889),
+          # and deploy/mcp.json is not baked into the image, so the bridge would
+          # have no upstream. The dashboard MCP bridge relays to a stdio proxy
+          # (src/utils/mcp-http-relay.ts -> proxyManager.getProxies() returns
+          # stdio proxies only, src/proxy/proxy-manager.ts:148), so the upstream
+          # must be a stdio server. It is a fixture that returns fixed strings
+          # and never touches the filesystem, so payloads that Mastyf correctly
+          # allows reach a real server and return genuine successes.
+          cat > fuzz-mcp.json <<'JSON'
+          {
+            "mcpServers": {
+              "fuzz-target": {
+                "command": "node",
+                "args": ["/fuzz-upstream.mjs"]
+              }
+            }
+          }
+          JSON
+          docker run -d --name mastyf-ai --no-healthcheck \
+            -v "$PWD/fuzz-artifacts:/fuzz-artifacts" \
+            -v "$PWD/fuzz-mcp.json:/fuzz-mcp.json:ro" \
+            -v "$PWD/.github/actions/mcp-fuzzer/fuzz-upstream.mjs:/fuzz-upstream.mjs:ro" \
+            -v "$PWD/.github/actions/mcp-fuzzer/fuzz-policy.yaml:/fuzz-policy.yaml:ro" \
+            -e MASTYF_AI_CONFIG_PATH=/fuzz-mcp.json \
+            -e MASTYF_AI_POLICY_PATH=/fuzz-policy.yaml \
+            -e MASTYF_AI_BLOCKING_MODE=block \
             -e DASHBOARD_ENABLED=true \
             -e DASHBOARD_PORT=4000 \
             -e DASHBOARD_AUTH_DISABLED=true \
-            -e METRICS_ENABLED=true \
-            -e METRICS_PORT=9090 \
             -e MASTYF_AI_DB_PATH=/data/history.db \
             mastyf-ai:fuzz
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
+      # DASHBOARD_ENABLED=true makes the dashboard mount the MCP bridge at
+      # POST /mcp on DASHBOARD_PORT (src/cli.ts:1121-1133), which is the
+      # endpoint the fuzzer targets. --expose-local-port is deliberately NOT
+      # used: that ingress binds 127.0.0.1 on the same port (cli.ts:1140-1151)
+      # and would collide with the dashboard (EADDRINUSE).
+      #
+      # The probe and fuzzer run via `docker exec` so they share the
+      # container's network namespace: the bridge is only reachable there, and
+      # it answers POST only (GET /mcp returns 404).
       - name: Wait for Mastyf AI to be ready
         run: |
           for i in $(seq 1 30); do
-            if curl -s -f http://localhost:4000/ > /dev/null 2>&1; then
+            if docker exec mastyf-ai node -e '
+              const t = setTimeout(() => process.exit(1), 5000);
+              // A real JSON-RPC initialize: the bridge relays to the upstream, so
+              // a bare {} is not a meaningful readiness signal.
+              fetch("http://127.0.0.1:4000/mcp", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json, text/event-stream",
+                },
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: 1,
+                  method: "initialize",
+                  params: {
+                    protocolVersion: "2024-11-05",
+                    capabilities: {},
+                    clientInfo: { name: "ci-readiness", version: "1.0.0" },
+                  },
+                }),
+              })
+                .then(async r => {
+                  clearTimeout(t);
+                  const text = await r.text().catch(() => "");
+                  // Ready when the bridge is mounted and answering JSON-RPC.
+                  // 5xx means it is not ready; a JSON-RPC error is still ready.
+                  const ok = r.status < 500 && (text.includes("jsonrpc") || text.includes("result") || text.includes("error"));
+                  process.exit(ok ? 0 : 1);
+                })
+                .catch(() => { clearTimeout(t); process.exit(1); });
+            ' 2>/dev/null; then
               echo "Mastyf AI is ready"
               break
             fi
@@ -66,12 +127,16 @@ jobs:
           done
 
       - name: Run MCP Protocol Fuzzer
-        uses: ./.github/actions/mcp-fuzzer
-        with:
-          target_url: ${{ github.event.inputs.target_url || 'http://localhost:4000/mcp' }}
-          min_block_rate: '80'
-          timeout_seconds: '10'
-          fail_on_bypass: 'true'
+        run: |
+          docker cp .github/actions/mcp-fuzzer/fuzz.mjs mastyf-ai:/tmp/fuzz.mjs
+          docker exec mastyf-ai node /tmp/fuzz.mjs \
+            --target "${TARGET_URL:-http://127.0.0.1:4000/mcp}" \
+            --min-block-rate '80' \
+            --timeout '30' \
+            --fail-on-bypass 'true' \
+            --report /fuzz-artifacts/fuzz-report.json
+        env:
+          TARGET_URL: ${{ inputs.target_url || 'http://127.0.0.1:4000/mcp' }}
 
       - name: Stop Mastyf AI
         if: always()
@@ -82,6 +147,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mcp-fuzz-report
-          path: |
-            fuzz-report.json
+          # The whole directory, not just the report: executed.log is the
+          # upstream's bypass canary and proves a payload actually ran.
+          path: fuzz-artifacts/
+          if-no-files-found: warn
           retention-days: 30

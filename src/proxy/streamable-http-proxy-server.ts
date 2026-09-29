@@ -10,6 +10,7 @@ import { URL } from 'url';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { Logger } from '../utils/logger.js';
 import { requireUpstreamTlsAllowed } from '../utils/upstream-tls.js';
+import { assertProductionSecurityInvariants } from './production-gate.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { resolveTenantContext, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
 import { resolveProxyTenantId, JwtTenantRequiredError } from '../tenant/jwt-tenant-binding.js';
@@ -70,6 +71,10 @@ export class StreamableHttpProxyServer {
 
   constructor(opts: StreamableHttpProxyOptions) {
     requireUpstreamTlsAllowed(opts.upstreamBaseUrl);
+    assertProductionSecurityInvariants({
+      serverName: opts.serverName,
+      hasPolicy: Boolean(opts.policy),
+    });
     this.opts = opts;
     this.upstreamRelay = opts.upstreamRelay
       ?? process.env['MASTYF_AI_STREAMABLE_HTTP_UPSTREAM_RELAY'] === 'true';
@@ -154,7 +159,10 @@ export class StreamableHttpProxyServer {
 
         const responses: unknown[] = [];
         for (const msg of messages) {
-          responses.push(await this.processMessage(msg, req));
+          // A blocked request without an id yields no response body; drop it
+        // rather than serialising a null into the batch.
+        const processed = await this.processMessage(msg, req);
+        if (processed !== undefined) responses.push(processed);
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -181,10 +189,13 @@ export class StreamableHttpProxyServer {
       msg,
       serverName: this.opts.serverName,
       authenticated: Boolean(req.headers.authorization),
-    });
-    if (pre.blocked) return pre.response;
+      });
+      // A blocked request is never dispatched upstream. Without an id there is
+      // no JSON-RPC response to return (notification semantics), so this yields
+      // `undefined` and the batch loop drops it rather than serialising a null.
+      if (pre.blocked) return pre.response ?? undefined;
 
-    const blocked = await this.maybeBlockMessage(msg, req, {
+      const blocked = await this.maybeBlockMessage(msg, req, {
       mcpSessionId: pre.session.sessionId,
       agentId: pre.session.agentId !== 'unknown' ? pre.session.agentId : undefined,
     });
