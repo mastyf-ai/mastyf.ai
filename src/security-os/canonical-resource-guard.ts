@@ -326,7 +326,7 @@ export function parseCanonicalResource(rawUri: string): CanonicalParsedResource 
       // reach Object.prototype or any setter. The map never escapes as a shared
       // object: it is read only via Object.keys and computed reads, and callers
       // receive it as data.
-      if (k) query[decodeURIComponent(k)] = v ? decodeURIComponent(v) : ''; // codeql[js/remote-property-injection]
+      if (k) query[decodeURIComponent(k)] = v ? decodeURIComponent(v) : '';
     }
   }
 

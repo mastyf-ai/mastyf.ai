@@ -752,7 +752,7 @@ export class McpProxyServer {
       // JSON-RPC request that invokes nothing, and a batch envelope never reaches
       // here: the fallthrough guard further down drops any array outright, so no
       // unmediated tool invocation can be written to the upstream.
-      if (msg.method === 'tools/call') { // codeql[js/user-controlled-bypass]
+      if (msg.method === 'tools/call') {
         // A tools/call without an "id" is a JSON-RPC notification, but it must
         // still be held to exactly the same policy as an identified call: the
         // entire guard gauntlet below runs unconditionally. Only the error
@@ -1281,7 +1281,7 @@ export class McpProxyServer {
         // already thrown, so the method name is not what decides whether the call
         // is mediated; both branches below fail closed, and the forward guard is
         // not reached.
-        if (peek?.method === 'tools/call') { // codeql[js/user-controlled-bypass]
+        if (peek?.method === 'tools/call') {
           if (!hasJsonRpcId(peek.id)) {
             // No id means no error can be returned and no marker exists; fail
             // closed by falling through to the forward guard, which drops it.
@@ -1310,11 +1310,11 @@ export class McpProxyServer {
       // whether it is mediated. An id-less call returns without writing; an
       // identified call must still present the authorisation marker or it is
       // refused.
-      if (fwd?.method === 'tools/call') { // codeql[js/user-controlled-bypass]
+      if (fwd?.method === 'tools/call') {
         // An absent id cannot be answered, but it is still a tools/call, so it is
         // refused rather than forwarded. Requiring an id here would reintroduce
         // the notification bypass.
-        if (!hasJsonRpcId(fwd.id)) { // codeql[js/user-controlled-bypass]
+        if (!hasJsonRpcId(fwd.id)) {
           // Id-less tools/call: there is no response to send and no
           // authorisation marker to consume, so the only safe outcome is to
           // emit zero downstream bytes. Stated here rather than left to the
