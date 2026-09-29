@@ -1295,63 +1295,63 @@ export class McpProxyServer {
       }
     }
 
-      try {
-        const fwd = JSON.parse(raw);
-        if (fwd?.method === 'tools/call') {
-          if (!hasJsonRpcId(fwd.id)) {
-            // Id-less tools/call: there is no response to send and no
-            // authorisation marker to consume, so the only safe outcome is to
-            // emit zero downstream bytes. Stated here rather than left to the
-            // fallthrough below so the fail-closed invariant is local and
-            // auditable.
-            Logger.error(
-              `[proxy:${this.serverName}] Refusing to forward unmediated id-less tools/call; no response is sent for a request without an id`,
-            );
-            StructuredLogger.logBlocked({
-              event: 'tool_blocked',
-              requestId: '-1',
-              serverName: this.serverName,
-              toolName: (fwd.params as { name?: string } | undefined)?.name || 'unknown',
-              reason: 'UNMEDIATED_TOOL_CALL',
-              rule: 'fail-closed-invariant',
-            });
-            return;
-          }
-          // Only a request the policy engine allowed may reach the upstream
-          // server. Consume the marker so it cannot authorise a second dispatch.
-          if (!this.consumePolicyAuthorizedCall(fwd.id)) {
+    try {
+      const fwd = JSON.parse(raw);
+      if (fwd?.method === 'tools/call') {
+        if (!hasJsonRpcId(fwd.id)) {
+          // Id-less tools/call: there is no response to send and no
+          // authorisation marker to consume, so the only safe outcome is to
+          // emit zero downstream bytes. Stated here rather than left to the
+          // fallthrough below so the fail-closed invariant is local and
+          // auditable.
           Logger.error(
-            `[proxy:${this.serverName}] Refusing to forward unmediated tools/call ${String(fwd.id)}: no policy decision`,
+            `[proxy:${this.serverName}] Refusing to forward unmediated id-less tools/call; no response is sent for a request without an id`,
           );
           StructuredLogger.logBlocked({
             event: 'tool_blocked',
-            requestId: fwd.id,
+            requestId: '-1',
             serverName: this.serverName,
             toolName: (fwd.params as { name?: string } | undefined)?.name || 'unknown',
             reason: 'UNMEDIATED_TOOL_CALL',
             rule: 'fail-closed-invariant',
           });
-          this.sendError(
-            fwd.id,
-            -32001,
-            'Blocked by MCP Mastyf AI: policy engine missing; failing closed',
-            { rule: 'fail-closed-invariant', reason: 'UNMEDIATED_TOOL_CALL' },
-          );
           return;
         }
-        const ctx = this.requestContexts.get(fwd.id);
-        if (ctx) {
-          this.armRequestTimeout(fwd.id, ctx.requestToolName || 'unknown');
-        }
-        await withMcpToolCallSpan({
+        // Only a request the policy engine allowed may reach the upstream
+        // server. Consume the marker so it cannot authorise a second dispatch.
+        if (!this.consumePolicyAuthorizedCall(fwd.id)) {
+        Logger.error(
+          `[proxy:${this.serverName}] Refusing to forward unmediated tools/call ${String(fwd.id)}: no policy decision`,
+        );
+        StructuredLogger.logBlocked({
+          event: 'tool_blocked',
+          requestId: fwd.id,
           serverName: this.serverName,
-          toolName: ctx?.requestToolName || (fwd.params as { name?: string } | undefined)?.name || 'unknown',
-          tenantId: ctx?.tenantId,
-          transport: 'stdio',
-        }, async () => {
-          this.child.stdin?.write(raw + '\n');
+          toolName: (fwd.params as { name?: string } | undefined)?.name || 'unknown',
+          reason: 'UNMEDIATED_TOOL_CALL',
+          rule: 'fail-closed-invariant',
         });
+        this.sendError(
+          fwd.id,
+          -32001,
+          'Blocked by MCP Mastyf AI: policy engine missing; failing closed',
+          { rule: 'fail-closed-invariant', reason: 'UNMEDIATED_TOOL_CALL' },
+        );
         return;
+      }
+      const ctx = this.requestContexts.get(fwd.id);
+      if (ctx) {
+        this.armRequestTimeout(fwd.id, ctx.requestToolName || 'unknown');
+      }
+      await withMcpToolCallSpan({
+        serverName: this.serverName,
+        toolName: ctx?.requestToolName || (fwd.params as { name?: string } | undefined)?.name || 'unknown',
+        tenantId: ctx?.tenantId,
+        transport: 'stdio',
+      }, async () => {
+        this.child.stdin?.write(raw + '\n');
+      });
+      return;
       }
     } catch {
       // non-JSON — no timeout arm
