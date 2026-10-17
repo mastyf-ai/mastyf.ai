@@ -8,7 +8,7 @@
  * - API usage: prefers usage.input_tokens / output_tokens from responses
  */
 import { get_encoding, type TiktokenEncoding } from 'tiktoken';
-import { execSync, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import { createRequire } from 'module';
 import { Logger } from './logger.js';
@@ -460,19 +460,67 @@ export class TokenCounter {
     if (!apiKey) return null;
 
     try {
-      const result = execSync(
-        `curl -s --max-time 5 https://api.anthropic.com/v1/messages/count_tokens \\
-          -H "x-api-key: ${apiKey}" \\
-          -H "anthropic-version: 2023-06-01" \\
-          -H "content-type: application/json" \\
-          -d '${JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: text }],
-          }).replace(/'/g, "'\\''")}'`,
-        { encoding: 'utf-8', timeout: 6000 },
-      );
+      const payload = JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: text }],
+      });
 
-      const data = JSON.parse(result);
+      const workerScript = `
+const https = require('https');
+const payload = process.env.ANTHROPIC_PAYLOAD;
+const apiKey = process.env.ANTHROPIC_API_KEY;
+if (!payload || !apiKey) {
+  process.stderr.write('Missing payload or API key');
+  process.exit(1);
+}
+const req = https.request(
+  {
+    hostname: 'api.anthropic.com',
+    port: 443,
+    path: '/v1/messages/count_tokens',
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'content-length': Buffer.byteLength(payload),
+    },
+    timeout: 6000,
+  },
+  (res) => {
+    let data = '';
+    res.on('data', (chunk) => { data += chunk.toString('utf-8'); });
+    res.on('end', () => {
+      process.stdout.write(data);
+    });
+  }
+);
+req.on('timeout', () => {
+  req.destroy(new Error('timeout'));
+});
+req.on('error', (err) => {
+  process.stderr.write(String(err && err.message ? err.message : err));
+  process.exit(1);
+});
+req.write(payload);
+req.end();
+`;
+
+      const child = spawnSync(process.execPath, ['-e', workerScript], {
+        encoding: 'utf-8',
+        timeout: 6500,
+        env: {
+          ...process.env,
+          ANTHROPIC_API_KEY: apiKey,
+          ANTHROPIC_PAYLOAD: payload,
+        },
+      });
+
+      if (child.status !== 0) {
+        throw new Error(child.stderr || `anthropic counter subprocess failed with status ${String(child.status)}`);
+      }
+
+      const data = JSON.parse(child.stdout || '{}');
       if (data?.input_tokens !== undefined) {
         return {
           tokens: data.input_tokens,
