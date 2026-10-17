@@ -3,9 +3,23 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { McpProxyServer } from '../../src/proxy/proxy-server.js';
 import { HistoryDatabase } from '../../src/database/history-db.js';
+import { PolicyEngine } from '../../src/policy/policy-engine.js';
+import type { PolicyConfig } from '../../src/policy/policy-types.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const HUNG_SERVER = resolve(__dir, '../../benchmarks/fixtures/hung-server.cjs');
+
+// The proxy now refuses to dispatch a tools/call that no policy engine
+// authorised. To exercise timeout handling the call must be legitimately
+// forwarded, so allow the hung tool through explicitly.
+const allowHungPolicy: PolicyConfig = {
+  version: '1.0',
+  policy: {
+    mode: 'block',
+    rules: [{ name: 'allow-hang', action: 'pass', tools: { allow: ['hang'] } }],
+    default_action: 'block',
+  },
+};
 
 describe('Proxy request timeout', () => {
   let proxy: McpProxyServer | null = null;
@@ -27,7 +41,7 @@ describe('Proxy request timeout', () => {
     }) as typeof process.stdout.write;
 
     const db = new HistoryDatabase(':memory:');
-    proxy = new McpProxyServer('node', [HUNG_SERVER], {}, db, 'hung-test', undefined, undefined, 200);
+    proxy = new McpProxyServer('node', [HUNG_SERVER], {}, db, 'hung-test', new PolicyEngine(allowHungPolicy), undefined, 200);
     await new Promise((r) => setTimeout(r, 400));
 
     await proxy.handleClientInput(JSON.stringify({

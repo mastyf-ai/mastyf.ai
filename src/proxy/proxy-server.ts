@@ -10,6 +10,7 @@ import {
 import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from '../database/database-interface.js';
 import { Logger } from '../utils/logger.js';
+import { assertProductionSecurityInvariants } from './production-gate.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { waitProxyTimingNormalize } from '../policy/policy-timing-envelope.js';
 import { CallContext } from '../policy/policy-types.js';
@@ -53,7 +54,10 @@ import {
   redactArguments,
   ingestPolicyDecision,
 } from '../ai/block-learning.js';
-import { evaluateToolCallDefense } from './tool-call-defense-orchestrator.js';
+import {
+  evaluateToolCallDefense,
+  type ToolCallDefenseResult,
+} from './tool-call-defense-orchestrator.js';
 import { publishRugPullAlert, isClusterRugPullActive } from './rug-pull-cluster.js';
 import { onToolsListObserved } from './lifecycle-assurance-gates.js';
 import {
@@ -96,6 +100,25 @@ export class McpProxyServer {
   private db: IDatabase;
   private currentRequestId: string | number | null = null;
   private readonly requestContexts = new ProxyRequestContextStore();
+
+  /**
+   * Ids of tools/call requests that the policy engine has explicitly allowed.
+   *
+   * The engine block authorises and records the request; the forward step below
+   * it performs the write. That split means the forward step cannot see *why*
+   * it is running, and `requestContexts` is not a substitute for an
+   * authorisation signal because the pre-dispatch tracking path also populates
+   * it. Without an explicit marker, a proxy built without a policy engine would
+   * forward every tools/call unmediated.
+   *
+   * Entries are single-use: the forward step consumes the id.
+   *
+   * Keys are type-tagged (`typeof id` + value) rather than stringified. JSON-RPC
+   * ids may be numbers or strings, and a client that sends id 1 followed by "1"
+   * would otherwise share a key and inherit the first request's authorisation.
+   */
+  private readonly policyAuthorizedToolCalls = new Set<string>();
+  private static readonly MAX_UNCONSUMED_AUTHORISED_CALLS = 1024;
   private readonly stdoutWriter = new StdioLineWriter();
   private readonly responseTracker = new JsonRpcResponseTracker();
   private readonly sessionAuth = new ProxySessionAuthStore();
@@ -141,6 +164,11 @@ export class McpProxyServer {
     this.defaultTenantId = resolveTenantContext().tenantId;
     this.policyEngine = policyEngine || null;
     this.tenantPolicyRegistry = tenantPolicyRegistry ?? null;
+
+    assertProductionSecurityInvariants({
+      serverName: this.serverName,
+      hasPolicy: Boolean(this.policyEngine || this.tenantPolicyRegistry),
+    });
     this.authValidator = authValidator || null;
     this.sessionCache = authValidator ? createSessionCache() : null;
     this.requestTimeoutMs = requestTimeoutMs;
@@ -279,7 +307,11 @@ export class McpProxyServer {
           this.requestContexts.clearTimeout(msg.id);
           const proxyLatencyMs = Date.now() - reqCtx.requestStartTime;
 
-          if (reqCtx.requestMethod === 'resources/read' || reqCtx.requestMethod === 'prompts/get') {
+            if (
+              reqCtx.requestMethod === 'resources/read' ||
+              reqCtx.requestMethod === 'resources/subscribe' ||
+              reqCtx.requestMethod === 'prompts/get'
+            ) {
             const rp = applyMcpResponsePipeline({
               method: reqCtx.requestMethod,
               result: msg.result,
@@ -671,9 +703,13 @@ export class McpProxyServer {
           : true,
         fallbackSessionKey: this.mcpSessionId ?? undefined,
       });
-      if (pre.blocked && hasJsonRpcId(msg.id)) {
-        const err = pre.response.error as { code?: number; message?: string } | undefined;
-        this.sendError(msg.id, err?.code ?? -32001, err?.message ?? 'MCP pre-pipeline blocked request');
+      if (pre.blocked) {
+        // `blocked` means stop, not merely "reply". A blocked request must never
+        // be dispatched upstream, even when it carries no id. Notifications get
+        // no JSON-RPC response.
+        if (hasJsonRpcId(msg.id)) {
+          this.sendError(msg.id, pre.code, pre.reason);
+        }
         return;
       }
       if (!pre.blocked) {
@@ -686,11 +722,15 @@ export class McpProxyServer {
         }
       }
 
-      if (
-        !pre.blocked
-        && pre.trackResponse
-        && hasJsonRpcId(msg.id)
-      ) {
+        if (
+          !pre.blocked
+          && pre.trackResponse
+          && pre.requestMethod
+          // Correlation is keyed by request id, so a response can only be
+          // attributed to a request that carries one. A spec-compliant server
+          // never answers a notification, so there is nothing to scan.
+          && hasJsonRpcId(msg.id)
+        ) {
         this.requestContexts.set(msg.id, {
           requestStartTime: proxyStartTime,
           createdAt: proxyStartTime,
@@ -708,7 +748,24 @@ export class McpProxyServer {
         this.pendingToolsListIds.add(msg.id);
       }
 
-      if (msg.method === 'tools/call' && hasJsonRpcId(msg.id)) {
+      // Only a tools/call dispatches a tool. Every other method is a different
+      // JSON-RPC request that invokes nothing, and a batch envelope never reaches
+      // here: the fallthrough guard further down drops any array outright, so no
+      // unmediated tool invocation can be written to the upstream.
+      if (msg.method === 'tools/call') {
+        // A tools/call without an "id" is a JSON-RPC notification, but it must
+        // still be held to exactly the same policy as an identified call: the
+        // entire guard gauntlet below runs unconditionally. Only the error
+        // frames stay silent, because a notification must not be answered.
+        // Previously this branch required an id, so dropping the id skipped
+        // every tool-call guard and forwarded the call straight upstream.
+        const respondError = (
+          code: number,
+          message: string,
+          data?: Record<string, unknown>,
+        ): void => {
+          if (hasJsonRpcId(msg.id)) this.sendError(msg.id, code, message, data);
+        };
         const maxInflightEarly = proxyMaxInflight();
         if (isProxyInflightExceeded(this.requestContexts.size)) {
           Metrics.proxyInflightRejectedTotal.inc(
@@ -717,9 +774,7 @@ export class McpProxyServer {
               this.defaultTenantId,
             ),
           );
-          this.sendError(
-            msg.id,
-            -32005,
+          respondError(-32005,
             `Mastyf AI: proxy overloaded (${this.requestContexts.size}/${maxInflightEarly} in flight)`,
             { rule: 'proxy-max-inflight' },
           );
@@ -749,7 +804,7 @@ export class McpProxyServer {
             'tool-fingerprint-mismatch',
             'Tool definitions changed mid-session (rug-pull detected)',
           );
-          this.sendError(msg.id, -32001, 'Blocked by MCP Mastyf AI policy: tool definitions changed mid-session (rug-pull)', {
+          respondError(-32001, 'Blocked by MCP Mastyf AI policy: tool definitions changed mid-session (rug-pull)', {
             rule: 'tool-fingerprint-mismatch',
             policy: this.policyEngine?.getMode() ?? 'block',
           });
@@ -772,7 +827,7 @@ export class McpProxyServer {
           requestTenantId = resolveTenantContext({ meta: msg.params?._meta }).tenantId;
         } catch (err) {
           if (err instanceof InvalidTenantIdError) {
-            this.sendError(msg.id, -32602, `Invalid tenant id: ${err.message}`);
+            respondError(-32602, `Invalid tenant id: ${err.message}`);
             return;
           }
           throw err;
@@ -814,7 +869,12 @@ export class McpProxyServer {
               msg.id,
             );
             const blockResp = toolCallGuardBlockResponse(msg.id, preGuard);
-            this.responseTracker.sendJson(this.stdoutWriter, blockResp as Record<string, unknown>);
+            if (hasJsonRpcId(msg.id)) {
+            this.responseTracker.sendJson(
+              this.stdoutWriter,
+              blockResp as Record<string, unknown>,
+            );
+          }
             return;
           }
           if (preGuard.arguments) {
@@ -837,7 +897,7 @@ export class McpProxyServer {
               requestTenantId,
               msg.id,
             );
-            this.sendError(msg.id, -32001, `Blocked by Mastyf AI: ${expandedGuard.reason}`, {
+            respondError(-32001, `Blocked by Mastyf AI: ${expandedGuard.reason}`, {
               rule: 'payload-expanded-limit',
             });
             return;
@@ -850,7 +910,7 @@ export class McpProxyServer {
           if (multimodalFindings.length > 0 && this.policyEngine?.getMode() === 'block') {
             const mmReason = multimodalFindings.map((f) => f.description).slice(0, 3).join('; ');
             this.recordDeniedCall(toolName, requestTokens, Date.now() - proxyStartTime, 'multimodal-injection', mmReason);
-            this.sendError(msg.id, -32001, `Blocked by MCP Mastyf AI policy: ${mmReason}`, {
+            respondError(-32001, `Blocked by MCP Mastyf AI policy: ${mmReason}`, {
               rule: 'multimodal-injection',
               policy: 'block',
             });
@@ -881,7 +941,7 @@ export class McpProxyServer {
               if (entropyFindings.length > 0) {
                 const entropyReason = `High-entropy encoded payload in '${toolName}' arguments (${entropyFindings[0].kind}, entropy=${entropyFindings[0].entropy.toFixed(2)})`;
                 this.recordDeniedCall(toolName, requestTokens, Date.now() - proxyStartTime, 'arg-entropy', entropyReason);
-                this.sendError(msg.id, -32001, `Blocked by MCP Mastyf AI policy: ${entropyReason}`, {
+                respondError(-32001, `Blocked by MCP Mastyf AI policy: ${entropyReason}`, {
                   rule: 'arg-entropy',
                   policy: 'block',
                 });
@@ -893,8 +953,7 @@ export class McpProxyServer {
             if (this.policyEngine?.getMode() === 'block') {
               const dlpReason = `${secretFindings.length} potential secret(s) detected in '${toolName}' arguments. Detected: ${secretSummary}`;
               this.recordDeniedCall(toolName, requestTokens, Date.now() - proxyStartTime, 'secret-scan', dlpReason);
-              this.sendError(
-                msg.id, -32001,
+              respondError(-32001,
                 `Blocked by MCP Mastyf AI policy: ${dlpReason}`,
                 { rule: 'secret-scan', policy: 'block' },
               );
@@ -945,7 +1004,7 @@ export class McpProxyServer {
                 toolName,
                 authnSuccess: false,
               });
-              this.sendError(msg.id, -32002, 'Authentication required. Provide a valid Bearer token in the Authorization header.');
+              respondError(-32002, 'Authentication required. Provide a valid Bearer token in the Authorization header.');
               return;
             }
           } else {
@@ -971,7 +1030,7 @@ export class McpProxyServer {
               });
 
               if (this.authValidator.getConfig().required) {
-                this.sendError(msg.id, -32003, `Authentication failed: ${result.error}`);
+                respondError(-32003, `Authentication failed: ${result.error}`);
                 return;
               }
             } else {
@@ -984,7 +1043,7 @@ export class McpProxyServer {
                 // tenant applied when context is registered after auth gates
               } catch (err) {
                 if (err instanceof JwtTenantRequiredError || err instanceof InvalidTenantIdError) {
-                  this.sendError(msg.id, -32003, err.message);
+                  respondError(-32003, err.message);
                   return;
                 }
                 throw err;
@@ -1004,7 +1063,7 @@ export class McpProxyServer {
                 this.policyEngine?.getMode(),
               );
               if (!dpopCheck.valid) {
-                this.sendError(msg.id, -32004, dpopCheck.error || 'DPoP validation failed');
+                respondError(-32004, dpopCheck.error || 'DPoP validation failed');
                 return;
               }
 
@@ -1047,7 +1106,7 @@ export class McpProxyServer {
             tenantId: requestTenantId,
             state: tenantBreaker.getState(),
           });
-          this.sendError(msg.id, -32005, `Upstream MCP server '${this.serverName}' unavailable — circuit breaker open`);
+          respondError(-32005, `Upstream MCP server '${this.serverName}' unavailable — circuit breaker open`);
           tenantBreaker.recordFailure();
           return;
         }
@@ -1066,24 +1125,70 @@ export class McpProxyServer {
             msg.params?._meta as Record<string, unknown> | undefined,
           );
 
-          const defense = await evaluateToolCallDefense(
-            {
+          let defense: ToolCallDefenseResult;
+          try {
+            defense = await evaluateToolCallDefense(
+              {
+                serverName: this.serverName,
+                toolName,
+                arguments: requestArguments,
+                requestId,
+                requestTokens,
+                tenantId,
+                agentIdentity,
+                idempotencyKey,
+              },
+              {
+                policyEngine: engine,
+                db: this.db,
+                rugPullState: this.rugPullState,
+                evaluatePolicy: (ctx) => this.evaluatePolicyPinned(engine, ctx),
+              },
+            );
+
+            if (!defense || typeof defense !== 'object' || typeof defense.allowed !== 'boolean') {
+              throw new Error(`Malformed policy engine decision: ${JSON.stringify(defense)}`);
+            }
+          } catch (error) {
+            // The policy engine is the authority on whether a tools/call may be
+            // dispatched. If it throws, returns nothing, or returns a decision
+            // without a verdict, the answer is unknown -- and an unknown answer
+            // must never be treated as approval.
+            Logger.error(
+              `[proxy:${this.serverName}] Policy engine failure; failing closed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            StructuredLogger.logBlocked({
+              event: 'tool_blocked',
+              requestId,
               serverName: this.serverName,
               toolName,
-              arguments: requestArguments,
-              requestId,
+              reason: 'POLICY_ENGINE_ERROR',
+              rule: 'fail-closed-invariant',
+            });
+            Metrics.recordProxyBlock({
+              server_name: this.serverName,
+              block_reason: 'POLICY_ENGINE_ERROR',
+              rule: 'fail-closed-invariant',
+              tenant_id: requestTenantId,
+            });
+            this.recordDeniedCall(
+              toolName,
               requestTokens,
-              tenantId,
-              agentIdentity,
-              idempotencyKey,
-            },
-            {
-              policyEngine: engine,
-              db: this.db,
-              rugPullState: this.rugPullState,
-              evaluatePolicy: (ctx) => this.evaluatePolicyPinned(engine, ctx),
-            },
-          );
+              Date.now() - proxyStartTime,
+              'fail-closed-invariant',
+              'POLICY_ENGINE_ERROR',
+              requestArguments,
+              requestTenantId,
+              msg.id,
+            );
+            this.sendError(
+              msg.id,
+              -32001,
+              'Blocked by MCP Mastyf AI: Policy engine failure; failing closed',
+              { rule: 'fail-closed-invariant', reason: 'POLICY_ENGINE_ERROR' },
+            );
+            return;
+          }
 
           await waitProxyTimingNormalize(proxyStartTime);
 
@@ -1099,15 +1204,20 @@ export class McpProxyServer {
               requestArguments,
               requestTenantId,
             );
-            this.sendError(msg.id, -32001, `Blocked by MCP Mastyf AI: ${defense.reason}`, {
+            respondError(-32001, `Blocked by MCP Mastyf AI: ${defense.reason}`, {
               rule: defense.rule,
               policy: engine.getMode(),
             });
             return;
           }
 
-          if (defense.allowed) {
-            requestArguments = defense.arguments ?? requestArguments;
+        if (defense.allowed) {
+          // The policy engine explicitly authorised this dispatch. Record that
+          // here — inside the allow path — because the forward step below runs
+          // outside this block and cannot otherwise tell an authorised call
+          // from an unmediated one.
+            this.markPolicyAuthorizedCall(msg.id);
+          requestArguments = defense.arguments ?? requestArguments;
             spendReservationId = defense.spendReservationId;
             ingestPolicyDecision({
               requestId,
@@ -1131,8 +1241,8 @@ export class McpProxyServer {
         }
 
 
-        this.responseTracker.clearResponded(msg.id);
-        this.requestContexts.set(msg.id, {
+  this.responseTracker.clearResponded(msg.id);
+  this.requestContexts.set(msg.id, {
           requestStartTime: proxyStartTime,
           createdAt: proxyStartTime,
           requestToolName: toolName,
@@ -1158,29 +1268,122 @@ export class McpProxyServer {
           agent: agentIdentity?.sub,
         });
       }
-    } catch {
-      // Non-JSON input — forward as-is
+    } catch (err) {
+      Logger.error(
+        `[proxy:${this.serverName}] Unexpected proxy handling error: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // A tools/call that reached this far without a decision must never reach
+      // the upstream server: the policy verdict for it is unknown, and unknown
+      // is not approval.
+      try {
+        const peek = JSON.parse(raw);
+        // Policy-engine failure path. This runs only after the gauntlet has
+        // already thrown, so the method name is not what decides whether the call
+        // is mediated; both branches below fail closed, and the forward guard is
+        // not reached.
+        if (peek?.method === 'tools/call') {
+          if (!hasJsonRpcId(peek.id)) {
+            // No id means no error can be returned and no marker exists; fail
+            // closed by falling through to the forward guard, which drops it.
+            return;
+          }
+          // The forward step is never reached on this path, so release the
+          // authorisation marker here instead of leaking it for the process life.
+          this.consumePolicyAuthorizedCall(peek.id);
+          this.sendError(
+            peek.id,
+            -32001,
+            'Blocked by MCP Mastyf AI: Policy engine failure; failing closed',
+            { rule: 'fail-closed-invariant', reason: 'POLICY_ENGINE_ERROR' },
+          );
+          return;
+        }
+      } catch {
+        // Non-JSON input
+      }
     }
 
     try {
       const fwd = JSON.parse(raw);
-      if (fwd.method === 'tools/call' && fwd.id) {
-        const ctx = this.requestContexts.get(fwd.id);
-        if (ctx) {
-          this.armRequestTimeout(fwd.id, ctx.requestToolName || 'unknown');
+      // Forward path. The gauntlet above has already run for a tools/call, so
+      // this branch only decides how an authorised call is dispatched, not
+      // whether it is mediated. An id-less call returns without writing; an
+      // identified call must still present the authorisation marker or it is
+      // refused.
+      if (fwd?.method === 'tools/call') {
+        // An absent id cannot be answered, but it is still a tools/call, so it is
+        // refused rather than forwarded. Requiring an id here would reintroduce
+        // the notification bypass.
+        if (!hasJsonRpcId(fwd.id)) {
+          // Id-less tools/call: there is no response to send and no
+          // authorisation marker to consume, so the only safe outcome is to
+          // emit zero downstream bytes. Stated here rather than left to the
+          // fallthrough below so the fail-closed invariant is local and
+          // auditable.
+          Logger.error(
+            `[proxy:${this.serverName}] Refusing to forward unmediated id-less tools/call; no response is sent for a request without an id`,
+          );
+          StructuredLogger.logBlocked({
+            event: 'tool_blocked',
+            requestId: '-1',
+            serverName: this.serverName,
+            toolName: (fwd.params as { name?: string } | undefined)?.name || 'unknown',
+            reason: 'UNMEDIATED_TOOL_CALL',
+            rule: 'fail-closed-invariant',
+          });
+          return;
         }
-        await withMcpToolCallSpan({
+        // Only a request the policy engine allowed may reach the upstream
+        // server. Consume the marker so it cannot authorise a second dispatch.
+        if (!this.consumePolicyAuthorizedCall(fwd.id)) {
+        Logger.error(
+          `[proxy:${this.serverName}] Refusing to forward unmediated tools/call ${String(fwd.id)}: no policy decision`,
+        );
+        StructuredLogger.logBlocked({
+          event: 'tool_blocked',
+          requestId: fwd.id,
           serverName: this.serverName,
-          toolName: ctx?.requestToolName || (fwd.params as { name?: string } | undefined)?.name || 'unknown',
-          tenantId: ctx?.tenantId,
-          transport: 'stdio',
-        }, async () => {
-          this.child.stdin?.write(raw + '\n');
+          toolName: (fwd.params as { name?: string } | undefined)?.name || 'unknown',
+          reason: 'UNMEDIATED_TOOL_CALL',
+          rule: 'fail-closed-invariant',
         });
+        this.sendError(
+          fwd.id,
+          -32001,
+          'Blocked by MCP Mastyf AI: policy engine missing; failing closed',
+          { rule: 'fail-closed-invariant', reason: 'UNMEDIATED_TOOL_CALL' },
+        );
         return;
+      }
+      const ctx = this.requestContexts.get(fwd.id);
+      if (ctx) {
+        this.armRequestTimeout(fwd.id, ctx.requestToolName || 'unknown');
+      }
+      await withMcpToolCallSpan({
+        serverName: this.serverName,
+        toolName: ctx?.requestToolName || (fwd.params as { name?: string } | undefined)?.name || 'unknown',
+        tenantId: ctx?.tenantId,
+        transport: 'stdio',
+      }, async () => {
+        this.child.stdin?.write(raw + '\n');
+      });
+      return;
       }
     } catch {
       // non-JSON — no timeout arm
+    }
+
+    // Only forward traffic that carries no unmediated tool invocation or batch
+    // envelope. Reaching this point means the call was not forwarded above, so
+    // writing it now would dispatch an unmediated tools/call.
+    try {
+      const peek = JSON.parse(raw);
+      if (Array.isArray(peek) || peek?.method === 'tools/call') {
+        // Unmediated tools/call or batch invariant: zero downstream bytes
+        return;
+      }
+    } catch {
+      // Non-JSON — forward as-is
     }
 
     this.child.stdin?.write(raw + '\n');
@@ -1195,6 +1398,29 @@ export class McpProxyServer {
     }
     this.policyEngine = engine;
     Logger.info(`[proxy:${this.serverName}] Policy engine hot-swapped — mode: ${engine.getMode()}`);
+  }
+
+  private static authorizedCallKey(id: unknown): string {
+    return `${typeof id}:${String(id)}`;
+  }
+
+  /**
+   * Record an explicit policy allow for `id`. Bounded: a request that throws
+   * between the mark and the forward never reaches the consuming forward step,
+   * so without a cap the marker set would grow for the life of the process.
+   */
+  private markPolicyAuthorizedCall(id: unknown): void {
+    if (
+      this.policyAuthorizedToolCalls.size >= McpProxyServer.MAX_UNCONSUMED_AUTHORISED_CALLS
+    ) {
+      const oldest = this.policyAuthorizedToolCalls.values().next().value;
+      if (oldest !== undefined) this.policyAuthorizedToolCalls.delete(oldest);
+    }
+    this.policyAuthorizedToolCalls.add(McpProxyServer.authorizedCallKey(id));
+  }
+
+  private consumePolicyAuthorizedCall(id: unknown): boolean {
+    return this.policyAuthorizedToolCalls.delete(McpProxyServer.authorizedCallKey(id));
   }
 
   private async evaluatePolicyPinned(
