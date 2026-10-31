@@ -73,12 +73,17 @@ export function extractPathArgumentValues(args: Record<string, unknown> | undefi
   return values;
 }
 
+/**
+ * Normalized exactly like the paths they are compared with (workspacePath). They used to be
+ * left as given, so on Windows ("C:\Users\…" vs "/c:/users/…") and on macOS ("/Users/…" vs
+ * "/users/…") no path was ever inside the workspace and every file read was blocked.
+ */
 function allowedPathPrefixes(): string[] {
   const prefixes: string[] = [];
   const workspace = process.env.MASTYF_AI_WORKSPACE?.trim();
-  if (workspace) prefixes.push(translatePath(workspace));
+  if (workspace) prefixes.push(workspacePath(workspace));
   const list = process.env.MASTYF_AI_ALLOWED_PATH_PREFIXES?.split(',').map((s) => s.trim()).filter(Boolean);
-  if (list?.length) prefixes.push(...list.map(translatePath));
+  if (list?.length) prefixes.push(...list.map(workspacePath));
   return prefixes;
 }
 
@@ -96,7 +101,23 @@ export interface PathGuardResult {
 
 /** Lowercase, slash-normalize, and collapse `..` segments for consistent matching. */
 export function normalizePathForGuard(raw: string): string {
-  let path = translatePath(translateWslPath(raw)).replace(/\\/g, '/').toLowerCase();
+  return canonicalPath(raw).toLowerCase();
+}
+
+/**
+ * For the workspace check, letter case counts where the file system counts it: Windows and
+ * macOS ignore it, Linux does not (/home/u/APP is a different folder from /home/u/app).
+ */
+function workspacePath(raw: string): string {
+  const path = canonicalPath(raw);
+  const ignoresCase =
+    process.platform === 'win32' || process.platform === 'darwin' || /^\/[a-z]:(?:\/|$)/i.test(path);
+  return ignoresCase ? path.toLowerCase() : path;
+}
+
+/** Slash-normalize and collapse `..` segments, keeping letter case. */
+function canonicalPath(raw: string): string {
+  const path = translatePath(translateWslPath(raw)).replace(/\\/g, '/');
   const parts: string[] = [];
   for (const seg of path.split('/')) {
     if (!seg || seg === '.') continue;
@@ -123,10 +144,11 @@ export function evaluatePathGuard(paths: string[]): PathGuardResult {
     }
 
     const prefixes = allowedPathPrefixes();
-    if (prefixes.length > 0 && !prefixes.some((p) => isUnderPrefix(path, p))) {
+    const inWorkspace = workspacePath(raw);
+    if (prefixes.length > 0 && !prefixes.some((p) => isUnderPrefix(inWorkspace, p))) {
       return {
         block: true,
-        reason: `Path outside allowed workspace: ${path} (allowed: ${prefixes.join(', ')})`,
+        reason: `Path outside allowed workspace: ${inWorkspace} (allowed: ${prefixes.join(', ')})`,
       };
     }
   }
