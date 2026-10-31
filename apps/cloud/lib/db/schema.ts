@@ -84,9 +84,10 @@ export const apiKeys = pgTable('api_keys', {
     .notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
   keyHash: text('key_hash').notNull(),
+  hashScheme: text('hash_scheme').notNull().default('bcrypt'),
   prefix: text('prefix').notNull(),
   name: text('name').notNull().default('default'),
-  scopes: text('scopes').notNull().default('["badge:read","policy:read"]'),
+  scopes: text('scopes').notNull().default('["badge:read","policy:read","laya:classify"]'),
   revokedAt: timestamp('revoked_at', { mode: 'date', withTimezone: true }),
   lastUsedAt: timestamp('last_used_at', { mode: 'date', withTimezone: true }),
   createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
@@ -244,3 +245,18 @@ export const gcpMarketplaceEntitlements = pgTable('gcp_marketplace_entitlements'
 });
 
 
+
+/** Where a workspace's Laya calls go (migration 018). No row means the shared server. */
+export const layaDeployments = pgTable('laya_deployments', {
+  orgId: text('org_id')
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  mode: text('mode').notNull(),
+  endpoint: text('endpoint'),
+  secretRef: text('secret_ref'),
+  model: text('model'),
+  region: text('region'),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+});

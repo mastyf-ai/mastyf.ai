@@ -1,4 +1,4 @@
-import { eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getDb } from './db';
 import {
   apiKeys,
@@ -6,7 +6,7 @@ import {
   organizations,
   policies,
 } from './db/schema';
-import { verifyApiKey } from './api-keys';
+import { hashApiKey, isWellFormedApiKey, verifyApiKey, type ApiKeyHashScheme } from './api-keys';
 import { userCanManageOrg as rbacCanManage, parseApiKeyScopesDetailed, type ApiScope } from './org-rbac';
 
 export type UserOrgContext = {
@@ -38,18 +38,46 @@ export async function requireActiveUserOrg(userId: string): Promise<UserOrgConte
   return getUserOrg(userId);
 }
 
-export async function resolveOrgFromApiKey(bearerToken: string): Promise<{
+export type ApiKeyOrg = {
   org: typeof organizations.$inferSelect;
   apiKeyId: string;
   scopes: ApiScope[];
-} | null> {
+};
+
+const API_KEY_CACHE_TTL_MS = 60_000;
+const API_KEY_CACHE_MAX = 1_000;
+
+// Verified keys, keyed by the SHA-256 of the key so the plaintext is never held. Only hits are
+// cached; revocation paths call evictApiKeysForOrg so this instance stops accepting them at once.
+const apiKeyCache = new Map<string, { result: ApiKeyOrg; orgId: string; expiresAt: number }>();
+
+export function evictApiKeysForOrg(orgId: string): void {
+  for (const [k, entry] of apiKeyCache) {
+    if (entry.orgId === orgId) apiKeyCache.delete(k);
+  }
+}
+
+export function resetApiKeyCacheForTests(): void {
+  apiKeyCache.clear();
+}
+
+export async function resolveOrgFromApiKey(bearerToken: string): Promise<ApiKeyOrg | null> {
+  if (!isWellFormedApiKey(bearerToken)) return null;
+
+  const cacheKey = hashApiKey(bearerToken);
+  const cached = apiKeyCache.get(cacheKey);
+  if (cached) {
+    if (cached.expiresAt > Date.now()) return cached.result;
+    apiKeyCache.delete(cacheKey);
+  }
+
   const keys = await getDb()
     .select()
     .from(apiKeys)
-    .where(isNull(apiKeys.revokedAt));
+    .where(and(eq(apiKeys.prefix, bearerToken.slice(0, 12)), isNull(apiKeys.revokedAt)));
 
   for (const row of keys) {
-    if (verifyApiKey(bearerToken, row.keyHash)) {
+    if (verifyApiKey(bearerToken, row.keyHash, row.hashScheme as ApiKeyHashScheme)) {
       const org = await getDb().query.organizations.findFirst({
         where: eq(organizations.id, row.orgId),
       });
@@ -58,11 +86,17 @@ export async function resolveOrgFromApiKey(bearerToken: string): Promise<{
         .update(apiKeys)
         .set({ lastUsedAt: new Date() })
         .where(eq(apiKeys.id, row.id));
-      return {
+      const result: ApiKeyOrg = {
         org,
         apiKeyId: row.id,
         scopes: parseApiKeyScopesDetailed((row as { scopes?: string }).scopes).scopes,
       };
+      if (apiKeyCache.size >= API_KEY_CACHE_MAX) {
+        const oldest = apiKeyCache.keys().next().value;
+        if (oldest !== undefined) apiKeyCache.delete(oldest);
+      }
+      apiKeyCache.set(cacheKey, { result, orgId: row.orgId, expiresAt: Date.now() + API_KEY_CACHE_TTL_MS });
+      return result;
     }
   }
   return null;

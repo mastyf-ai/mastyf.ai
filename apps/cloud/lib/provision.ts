@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { and, eq, isNull } from 'drizzle-orm';
 import { generateApiKey } from './api-keys';
 import { getDefaultPolicyYaml } from './default-policy';
+import { evictApiKeysForOrg } from './org-context';
 import { getDb } from './db';
 import {
   apiKeys,
@@ -57,7 +58,7 @@ export async function provisionFreeOrganization(input: {
   const orgId = randomUUID();
   const slug = await uniqueSlug(input.email, input.name);
   const orgName = input.name?.trim() || slug;
-  const { plaintext, prefix, hash } = generateApiKey();
+  const { plaintext, prefix, hash, hashScheme } = generateApiKey();
 
   await getDb().transaction(async (tx) => {
     await tx.insert(organizations).values({
@@ -77,6 +78,7 @@ export async function provisionFreeOrganization(input: {
       id: randomUUID(),
       orgId,
       keyHash: hash,
+      hashScheme,
       prefix,
       name: 'default',
     });
@@ -97,4 +99,5 @@ export async function revokeOrgApiKeys(orgId: string): Promise<void> {
     .update(apiKeys)
     .set({ revokedAt: new Date() })
     .where(eq(apiKeys.orgId, orgId));
+  evictApiKeysForOrg(orgId);
 }

@@ -35,6 +35,11 @@ describe('org-rbac', () => {
     expect(userCanManageOrg({ role: 'owner' })).toBe(true);
   });
 
+  it('knows the laya:classify scope and grants it by default', () => {
+    expect(parseApiKeyScopesDetailed('["laya:classify"]').scopes).toEqual(['laya:classify']);
+    expect(parseApiKeyScopesDetailed(null).scopes).toContain('laya:classify');
+  });
+
   it('filters scopes to allowlist', () => {
     expect(parseApiKeyScopes(JSON.stringify(['policy:read', 'evil:admin']))).toEqual(['policy:read']);
   });

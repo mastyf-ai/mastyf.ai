@@ -12,6 +12,8 @@ let badgeLimiter: Ratelimit | null | undefined;
 let deepScanLimiter: Ratelimit | null | undefined;
 let reportsLimiter: Ratelimit | null | undefined;
 let certificationsLimiter: Ratelimit | null | undefined;
+let layaMinuteLimiter: Ratelimit | null | undefined;
+let layaDayLimiter: Ratelimit | null | undefined;
 let rateLimitUnavailableLogged = false;
 
 function getRedis(): Redis | null {
@@ -107,6 +109,35 @@ function getCertificationsLimiter(): Ratelimit | null {
     prefix: 'mastyf-ai:cloud:certifications',
   });
   return certificationsLimiter;
+}
+
+function positiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  const n = raw ? parseInt(raw, 10) : fallback;
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function getLayaLimiters(): { minute: Ratelimit; day: Ratelimit } | null {
+  if (layaMinuteLimiter === undefined || layaDayLimiter === undefined) {
+    const redis = getRedis();
+    layaMinuteLimiter = redis
+      ? new Ratelimit({
+          redis,
+          limiter: Ratelimit.slidingWindow(positiveIntEnv('LAYA_RATE_LIMIT_PER_MINUTE', 300), '1 m'),
+          prefix: 'mastyf-ai:cloud:laya:minute',
+        })
+      : null;
+    layaDayLimiter = redis
+      ? new Ratelimit({
+          redis,
+          limiter: Ratelimit.slidingWindow(positiveIntEnv('LAYA_DAILY_QUOTA', 50000), '1 d'),
+          prefix: 'mastyf-ai:cloud:laya:day',
+        })
+      : null;
+  }
+  return layaMinuteLimiter && layaDayLimiter
+    ? { minute: layaMinuteLimiter, day: layaDayLimiter }
+    : null;
 }
 
 type IpTrustMode = 'proxy-secret' | 'vercel' | 'cloudflare' | 'trusted-proxy' | 'untrusted';
@@ -212,6 +243,41 @@ function getLimiterForPath(pathname: string): Ratelimit | null {
   return getBadgeLimiter();
 }
 
+function rateLimiterUnavailable(): RateLimitResult {
+  if (isRateLimitRequired()) {
+    if (!rateLimitUnavailableLogged) {
+      rateLimitUnavailableLogged = true;
+      console.error(
+        '[rate-limit] UPSTASH_REDIS_REST_URL/TOKEN unset but rate limiting is required in production',
+      );
+    }
+    return { success: false, retryAfter: 60 };
+  }
+  return { success: true };
+}
+
+/**
+ * Per-workspace limits for /api/v1/laya/classify: a per-minute rate and a daily quota, both keyed
+ * by the workspace id. Without Redis, or when Redis fails, the usual missing-Redis rule applies.
+ */
+export async function checkLayaRateLimit(orgId: string): Promise<RateLimitResult> {
+  const limiters = getLayaLimiters();
+  if (!limiters) return rateLimiterUnavailable();
+
+  try {
+    for (const limiter of [limiters.minute, limiters.day]) {
+      const { success, reset } = await limiter.limit(`org:${orgId}`);
+      if (!success) {
+        return { success: false, retryAfter: Math.max(1, Math.ceil((reset - Date.now()) / 1000)) };
+      }
+    }
+    return { success: true };
+  } catch {
+    console.error('[rate-limit] Laya rate limiter unreachable');
+    return rateLimiterUnavailable();
+  }
+}
+
 export async function checkPublicApiRateLimit(
   request: NextRequest,
   pathname: string,
@@ -246,5 +312,7 @@ export function resetRateLimitClientsForTests(): void {
   deepScanLimiter = undefined;
   reportsLimiter = undefined;
   certificationsLimiter = undefined;
+  layaMinuteLimiter = undefined;
+  layaDayLimiter = undefined;
   rateLimitUnavailableLogged = false;
 }

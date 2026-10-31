@@ -37,7 +37,8 @@ export type ApiScope =
   | 'deep-scan:run'
   | 'policy:read'
   | 'policy:write'
-  | 'keys:manage';
+  | 'keys:manage'
+  | 'laya:classify';
 
 const ALLOWED_API_SCOPES: readonly ApiScope[] = [
   'badge:read',
@@ -45,9 +46,10 @@ const ALLOWED_API_SCOPES: readonly ApiScope[] = [
   'policy:read',
   'policy:write',
   'keys:manage',
+  'laya:classify',
 ];
 
-const DEFAULT_API_SCOPES: ApiScope[] = ['badge:read', 'policy:read'];
+const DEFAULT_API_SCOPES: ApiScope[] = ['badge:read', 'policy:read', 'laya:classify'];
 
 export type ParsedApiKeyScopes = {
   scopes: ApiScope[];

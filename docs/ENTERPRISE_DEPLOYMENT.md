@@ -68,6 +68,21 @@ Set `MASTYF_AI_SEMANTIC_PROFILE=balanced|max-security` or use Helm overlays `val
 | Hot-path block P99 target | Policy + local semantic ~50–100ms | Sync LLM gate ≤ 2500ms |
 | Async audit timeout metric | `mastyf_ai_semantic_async_timeout_total` | Same |
 
+### Laya verdicts for undecided calls
+
+When `MASTYF_AI_LAYA_URL` is set, calls the rules and the local scorer cannot decide get their verdict from Laya instead of the LLM.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MASTYF_AI_LAYA_URL` | unset (Laya off) | Full endpoint: `https://www.mastyf.ai/api/v1/laya/classify` for Mastyf's hosted Laya, or a self-hosted `laya-serve` such as `http://127.0.0.1:8077/v1/systemone` |
+| `MASTYF_AI_LAYA_API_KEY` | `MASTYF_AI_CLOUD_API_KEY`, for the hosted route only | Bearer key; for the hosted route, a workspace API key with the `laya:classify` scope. The workspace key is only ever sent to https on the Mastyf cloud's origin (`MASTYF_AI_CLOUD_URL`, default `https://www.mastyf.ai`); a self-hosted server gets a key only if this is set |
+| `MASTYF_AI_LAYA_TIMEOUT_MS` | `1500` | Time budget per verdict; on timeout the call is handled like an unavailable LLM |
+| `MASTYF_AI_LAYA_SURE_CONFIDENCE` | `0.9` | Below this confidence a verdict counts as unsure |
+| `MASTYF_AI_LAYA_UNSURE_ACTION` | `block` | `block` blocks unsure verdicts (rule `semantic-laya-unsure`); `allow` blocks only confident attacks (unsafe at confidence ≥ 0.6 by default) |
+| `MASTYF_AI_SEMANTIC_DECIDER` | `laya` when the URL is set | `llm` goes back to the LLM verdict |
+
+With the hosted URL, the tool name and arguments of undecided calls are sent to Mastyf's cloud for classification; they are not stored or logged there.
+
 ### Max-security semantic SLO (enterprise)
 
 Enterprise Helm sets `MASTYF_AI_SEMANTIC_STRICT=true`, `MASTYF_AI_SEMANTIC_SYNC_REQUEST_LLM=true`, and `MASTYF_AI_CORE_SEMANTIC_FAIL_CLOSED=true`. Sync request semantic scans are **bounded by design** (not sub-millisecond hot-path latency):

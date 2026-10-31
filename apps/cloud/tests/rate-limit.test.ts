@@ -1,5 +1,27 @@
 import { describe, expect, it, afterEach, vi } from 'vitest';
+
+// Each Ratelimit instance gets the limit function registered for its prefix.
+const limiters = vi.hoisted(() => ({
+  byPrefix: {} as Record<string, (key: string) => Promise<{ success: boolean; reset: number }>>,
+}));
+vi.mock('@upstash/ratelimit', () => {
+  class Ratelimit {
+    static slidingWindow = (tokens: number, window: string) => ({ tokens, window });
+    private prefix: string;
+    constructor(opts: { prefix: string }) {
+      this.prefix = opts.prefix;
+    }
+    limit(key: string) {
+      const fn = limiters.byPrefix[this.prefix];
+      return fn ? fn(key) : Promise.resolve({ success: true, reset: Date.now() });
+    }
+  }
+  return { Ratelimit };
+});
+vi.mock('@upstash/redis', () => ({ Redis: class {} }));
+
 import {
+  checkLayaRateLimit,
   clientIpFromRequest,
   checkPublicApiRateLimit,
   rateLimitKeyFromRequest,
@@ -136,5 +158,76 @@ describe('rate-limit', () => {
     vi.stubEnv('MASTYF_AI_CLOUD_DEEP_SCAN_RATE_LIMIT', '5');
     expect(process.env.MASTYF_AI_CLOUD_BADGE_RATE_LIMIT).toBe('42');
     expect(process.env.MASTYF_AI_CLOUD_DEEP_SCAN_RATE_LIMIT).toBe('5');
+  });
+
+  describe('checkLayaRateLimit', () => {
+    const MINUTE = 'mastyf-ai:cloud:laya:minute';
+    const DAY = 'mastyf-ai:cloud:laya:day';
+
+    function withRedis(): void {
+      vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://redis.example');
+      vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 't');
+    }
+
+    afterEach(() => {
+      limiters.byPrefix = {};
+    });
+
+    it('uses the workspace id as the limiter key', async () => {
+      withRedis();
+      const minute = vi.fn(async (_key: string) => ({ success: true, reset: Date.now() }));
+      const day = vi.fn(async (_key: string) => ({ success: true, reset: Date.now() }));
+      limiters.byPrefix = { [MINUTE]: minute, [DAY]: day };
+
+      expect(await checkLayaRateLimit('org-1')).toEqual({ success: true });
+      expect(minute.mock.calls[0][0]).toContain('org-1');
+      expect(day.mock.calls[0][0]).toContain('org-1');
+    });
+
+    it('reports when to retry once the per-minute limit is hit', async () => {
+      withRedis();
+      limiters.byPrefix = {
+        [MINUTE]: async () => ({ success: false, reset: Date.now() + 30_000 }),
+        [DAY]: async () => ({ success: true, reset: Date.now() }),
+      };
+      const out = await checkLayaRateLimit('org-1');
+      expect(out.success).toBe(false);
+      if (!out.success) {
+        expect(out.retryAfter).toBeGreaterThanOrEqual(29);
+        expect(out.retryAfter).toBeLessThanOrEqual(31);
+      }
+    });
+
+    it('refuses when only the daily quota is used up', async () => {
+      withRedis();
+      limiters.byPrefix = {
+        [MINUTE]: async () => ({ success: true, reset: Date.now() }),
+        [DAY]: async () => ({ success: false, reset: Date.now() + 7_200_000 }),
+      };
+      const out = await checkLayaRateLimit('org-1');
+      expect(out.success).toBe(false);
+      if (!out.success) expect(out.retryAfter).toBeGreaterThanOrEqual(7_199);
+    });
+
+    it('allows without Redis, refuses when rate limiting is required', async () => {
+      expect(await checkLayaRateLimit('org-1')).toEqual({ success: true });
+      resetRateLimitClientsForTests();
+      vi.stubEnv('MASTYF_AI_RATE_LIMIT_REQUIRED', 'true');
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(await checkLayaRateLimit('org-1')).toEqual({ success: false, retryAfter: 60 });
+    });
+
+    it('treats a failing Redis like a missing one', async () => {
+      withRedis();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const fail = async () => {
+        throw new Error('ECONNRESET');
+      };
+      limiters.byPrefix = { [MINUTE]: fail, [DAY]: fail };
+      expect(await checkLayaRateLimit('org-1')).toEqual({ success: true });
+
+      vi.stubEnv('MASTYF_AI_RATE_LIMIT_REQUIRED', 'true');
+      expect(await checkLayaRateLimit('org-1')).toEqual({ success: false, retryAfter: 60 });
+    });
   });
 });

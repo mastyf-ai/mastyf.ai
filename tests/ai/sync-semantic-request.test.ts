@@ -209,7 +209,7 @@ describe('sync-semantic-request', () => {
       const out = await call('search', { q: 'x' });
 
       expect(out.source).toBe('llm');
-      expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/v1/systemone'), expect.anything());
+      expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('127.0.0.1:8000'), expect.anything());
     });
   });
 });
