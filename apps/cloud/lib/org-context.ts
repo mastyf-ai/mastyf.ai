@@ -48,7 +48,8 @@ const API_KEY_CACHE_TTL_MS = 60_000;
 const API_KEY_CACHE_MAX = 1_000;
 
 // Verified keys, keyed by the SHA-256 of the key so the plaintext is never held. Only hits are
-// cached; revocation paths call evictApiKeysForOrg so this instance stops accepting them at once.
+// cached. The cache spares the hash check and the org lookup, never the revocation check: a hit
+// still reads the key's row, so a key revoked or narrowed on another server stops working at once.
 const apiKeyCache = new Map<string, { result: ApiKeyOrg; orgId: string; expiresAt: number }>();
 
 export function evictApiKeysForOrg(orgId: string): void {
@@ -66,10 +67,18 @@ export async function resolveOrgFromApiKey(bearerToken: string): Promise<ApiKeyO
 
   const cacheKey = hashApiKey(bearerToken);
   const cached = apiKeyCache.get(cacheKey);
-  if (cached) {
-    if (cached.expiresAt > Date.now()) return cached.result;
-    apiKeyCache.delete(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    const [live] = await getDb()
+      .select({ scopes: apiKeys.scopes })
+      .from(apiKeys)
+      .where(and(eq(apiKeys.id, cached.result.apiKeyId), isNull(apiKeys.revokedAt)));
+    if (!live) {
+      apiKeyCache.delete(cacheKey);
+      return null;
+    }
+    return { ...cached.result, scopes: parseApiKeyScopesDetailed(live.scopes).scopes };
   }
+  if (cached) apiKeyCache.delete(cacheKey);
 
   const keys = await getDb()
     .select()

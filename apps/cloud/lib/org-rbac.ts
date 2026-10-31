@@ -49,7 +49,9 @@ const ALLOWED_API_SCOPES: readonly ApiScope[] = [
   'laya:classify',
 ];
 
-const DEFAULT_API_SCOPES: ApiScope[] = ['badge:read', 'policy:read', 'laya:classify'];
+// For a missing or unreadable scope list only, so it stays read-only. New keys get their scopes
+// from the column default (badge:read, policy:read, laya:classify), not from here.
+const DEFAULT_API_SCOPES: ApiScope[] = ['badge:read', 'policy:read'];
 
 export type ParsedApiKeyScopes = {
   scopes: ApiScope[];

@@ -29,6 +29,7 @@ function matches(row: Row, cond: Cond): boolean {
   if (cond.op === 'and') return (cond.conditions ?? []).every((c) => matches(row, c));
   if (cond.op === 'isNull') return cond.column === 'revoked_at' ? row.revokedAt === null : true;
   if (cond.op === 'eq' && cond.column === 'prefix') return row.prefix === cond.value;
+  if (cond.op === 'eq' && cond.column === 'id') return row.id === cond.value;
   return true;
 }
 
@@ -105,19 +106,41 @@ describe('resolveOrgFromApiKey', () => {
     expect(verify).toHaveBeenCalledTimes(1);
   });
 
-  it('serves a repeat request from the cache for 60 s', async () => {
+  it('skips the hash check on a repeat request for 60 s', async () => {
     vi.useFakeTimers();
     const key = generateApiKey();
     state.rows = [rowFor(key)];
+    const verify = vi.spyOn(apiKeyLib, 'verifyApiKey');
 
     await resolveOrgFromApiKey(key.plaintext);
-    expect(state.selects).toBe(1);
     expect(await resolveOrgFromApiKey(key.plaintext)).not.toBeNull();
-    expect(state.selects).toBe(1);
+    expect(verify).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(61_000);
     await resolveOrgFromApiKey(key.plaintext);
-    expect(state.selects).toBe(2);
+    expect(verify).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a cached key as soon as it is revoked, even by another server', async () => {
+    const key = generateApiKey();
+    state.rows = [rowFor(key)];
+    expect(await resolveOrgFromApiKey(key.plaintext)).not.toBeNull();
+
+    state.rows[0].revokedAt = new Date(); // no evictApiKeysForOrg: revoked elsewhere
+
+    expect(await resolveOrgFromApiKey(key.plaintext)).toBeNull();
+    state.rows[0].revokedAt = null;
+    expect(await resolveOrgFromApiKey(key.plaintext)).not.toBeNull(); // looked up afresh
+  });
+
+  it('uses the current scopes of a cached key', async () => {
+    const key = generateApiKey();
+    state.rows = [rowFor(key)];
+    expect((await resolveOrgFromApiKey(key.plaintext))?.scopes).toContain('laya:classify');
+
+    state.rows[0].scopes = '["badge:read"]';
+
+    expect((await resolveOrgFromApiKey(key.plaintext))?.scopes).toEqual(['badge:read']);
   });
 
   it("stops accepting a workspace's keys once evicted", async () => {
@@ -134,10 +157,11 @@ describe('resolveOrgFromApiKey', () => {
   it('keeps other workspaces cached when one is evicted', async () => {
     const key = generateApiKey();
     state.rows = [rowFor(key, 'sha256', 'org-2')];
+    const verify = vi.spyOn(apiKeyLib, 'verifyApiKey');
     await resolveOrgFromApiKey(key.plaintext);
     evictApiKeysForOrg('org-1');
     await resolveOrgFromApiKey(key.plaintext);
-    expect(state.selects).toBe(1);
+    expect(verify).toHaveBeenCalledTimes(1);
   });
 
   it('accepts legacy bcrypt rows and sha256 rows', async () => {
