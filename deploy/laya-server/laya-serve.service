@@ -1,0 +1,21 @@
+[Unit]
+Description=Laya model server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=laya
+Group=laya
+EnvironmentFile=/etc/laya/env
+Environment=HOME=/opt/laya/home
+ExecStart=/opt/laya/venv/bin/laya-serve
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/laya/home
+
+[Install]
+WantedBy=multi-user.target

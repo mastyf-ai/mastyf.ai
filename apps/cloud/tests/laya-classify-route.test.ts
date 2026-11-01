@@ -53,9 +53,9 @@ describe('POST /api/v1/laya/classify', () => {
     vi.restoreAllMocks();
   });
 
-  it('runs on Node in iad1, never cached', () => {
+  it('runs on Node in Tokyo, next to the database and the Laya server, never cached', () => {
     expect(runtime).toBe('nodejs');
-    expect(preferredRegion).toBe('iad1');
+    expect(preferredRegion).toBe('hnd1');
     expect(dynamic).toBe('force-dynamic');
   });
 

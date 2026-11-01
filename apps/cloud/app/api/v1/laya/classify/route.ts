@@ -7,7 +7,7 @@ import { resolveOrgFromApiKey } from '@/lib/org-context';
 import { checkLayaRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
-export const preferredRegion = 'iad1';
+export const preferredRegion = 'hnd1';
 export const dynamic = 'force-dynamic';
 
 function error(status: number, message: string, headers?: Record<string, string>): NextResponse {
