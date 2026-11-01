@@ -1,0 +1,11 @@
+{
+	admin off
+}
+
+# No log directive: no access logs, so no request details are kept.
+laya-origin.mastyf.ai {
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy 127.0.0.1:8077
+}

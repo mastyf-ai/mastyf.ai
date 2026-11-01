@@ -1,0 +1,111 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Describe",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeAddresses",
+        "ec2:DescribeImages",
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeVpcs",
+        "ssm:DescribeInstanceInformation"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Build",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AssociateAddress",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:CreateSecurityGroup",
+        "ec2:RunInstances"
+      ],
+      "Resource": "*",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "ap-northeast-1" } }
+    },
+    {
+      "Sid": "TagOnlyWhatItCreates",
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "ap-northeast-1",
+          "ec2:CreateAction": ["RunInstances", "CreateSecurityGroup"]
+        }
+      }
+    },
+    {
+      "Sid": "InstanceRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:AddRoleToInstanceProfile",
+        "iam:CreateInstanceProfile",
+        "iam:CreateRole",
+        "iam:GetInstanceProfile",
+        "iam:GetRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/mastyf-laya-shared",
+        "arn:aws:iam::*:instance-profile/mastyf-laya-shared"
+      ]
+    },
+    {
+      "Sid": "AttachOnlyTheseTwoPolicies",
+      "Effect": "Allow",
+      "Action": "iam:AttachRolePolicy",
+      "Resource": "arn:aws:iam::*:role/mastyf-laya-shared",
+      "Condition": {
+        "ArnLike": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+            "arn:aws:iam::*:policy/mastyf-laya-read-parameters"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "PassInstanceRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/mastyf-laya-shared",
+      "Condition": { "StringEquals": { "iam:PassedToService": "ec2.amazonaws.com" } }
+    },
+    {
+      "Sid": "LayaParameters",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter", "ssm:PutParameter"],
+      "Resource": "arn:aws:ssm:ap-northeast-1:*:parameter/mastyf/laya/*"
+    },
+    {
+      "Sid": "PublicAmiParameter",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Resource": "arn:aws:ssm:ap-northeast-1::parameter/aws/service/ami-amazon-linux-latest/*"
+    },
+    {
+      "Sid": "RunChecksWithThisDocument",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ssm:ap-northeast-1::document/AWS-RunShellScript"
+    },
+    {
+      "Sid": "RunChecksOnTheLayaServerOnly",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ec2:ap-northeast-1:*:instance/*",
+      "Condition": { "StringEquals": { "ssm:resourceTag/Name": "mastyf-laya-shared" } }
+    },
+    {
+      "Sid": "ReadCheckResults",
+      "Effect": "Allow",
+      "Action": "ssm:GetCommandInvocation",
+      "Resource": "*"
+    }
+  ]
+}
