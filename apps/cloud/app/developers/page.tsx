@@ -29,7 +29,7 @@ export default async function DevelopersPage() {
     {
       num: '3',
       title: 'Route Your MCP Client through the Gateway',
-      code: '// /path/to/mastyf/github.json: your real server, in the usual format\n{\n  "mcpServers": {\n    "github": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-github"]\n    }\n  }\n}\n\n// claude_desktop_config.json or .cursor/mcp.json: start it through the gateway\n{\n  "mcpServers": {\n    "github": {\n      "command": "mastyf-ai",\n      "args": [\n        "proxy",\n        "--config", "/path/to/mastyf/github.json",\n        "--policy", "/path/to/mastyf/default-policy.yaml"\n      ]\n    }\n  }\n}',
+      code: '// /path/to/mastyf/github.json: your real server, in the usual format\n// On Windows, use "node" and the server\'s script path instead of npx\n{\n  "mcpServers": {\n    "github": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-github"]\n    }\n  }\n}\n\n// claude_desktop_config.json or .cursor/mcp.json: start it through the gateway\n{\n  "mcpServers": {\n    "github": {\n      "command": "mastyf-ai",\n      "args": [\n        "proxy",\n        "--config", "/path/to/mastyf/github.json",\n        "--policy", "/path/to/mastyf/default-policy.yaml"\n      ]\n    }\n  }\n}',
     },
     {
       num: '4',

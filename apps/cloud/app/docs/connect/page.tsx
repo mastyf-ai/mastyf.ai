@@ -310,7 +310,8 @@ export default function ConnectYourAgentPage() {
         <DocCode code={WRAP_APPLY} label="Apply the wrap" />
         <p className="doc-note">
           On Windows, <code>wrap</code> doesn&rsquo;t work in this version because a script it needs is missing from the
-          package. Use the manual setup in the <Link href="/developers">developer quickstart</Link> instead.
+          package. Use the manual setup in the <Link href="/developers">developer quickstart</Link> instead, and start
+          each server with <code>node</code> and its script path, because the gateway crashes on <code>npx</code> there.
         </p>
         <p>
           Use <code>--client cursor</code>, <code>windsurf</code>, <code>cline</code> or <code>auto</code> for the other
