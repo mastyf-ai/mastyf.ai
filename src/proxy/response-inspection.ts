@@ -10,7 +10,7 @@ import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
 import type { PolicyEngine } from '../policy/policy-engine.js';
-import { observeToolResult } from '../ai/causal-gate/index.js';
+import { observeToolResult, recordToolOutput } from '../extensions/index.js';
 
 /** Outcome returned to the transport layer after inspecting a tool response. */
 export interface ResponseInspectionResult {
@@ -196,18 +196,7 @@ export async function inspectToolResponse(params: {
     };
   }
 
-  // --- Ingest tool response into DIFC Session Taint Tracker ------------------
-  try {
-    const { globalSessionTaintTracker } = await import('../policy/difc/taint-tracker.js');
-    const sessionKey = `${tenantId || 'default'}:${serverName}`;
-    globalSessionTaintTracker.ingestToolResponse({
-      sessionKey,
-      toolName,
-      output: result,
-    });
-  } catch (err) {
-    Logger.debug(`[${transportLabel}] DIFC taint ingest error: ${String(err)}`);
-  }
+  recordToolOutput({ sessionKey: `${tenantId || 'default'}:${serverName}`, toolName, output: result });
 
   return { blocked: false, redacted: false };
 }

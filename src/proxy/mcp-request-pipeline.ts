@@ -1,7 +1,7 @@
 /**
  * Unified MCP lifecycle + resource/prompt gating for all proxy transports.
  */
-import { observePublishedContent } from '../ai/causal-gate/index.js';
+import { observePublishedContent } from '../extensions/index.js';
 import { hasJsonRpcId, jsonRpcErrorBody } from './json-rpc-utils.js';
 import { validateMcpJsonRpcMessage } from '../validation/mcp-jsonrpc.js';
 import {
