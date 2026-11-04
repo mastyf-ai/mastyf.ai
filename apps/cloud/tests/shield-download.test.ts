@@ -1,0 +1,121 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  safeAuth: vi.fn(),
+  customer: vi.fn(),
+  entitlements: vi.fn(),
+  entitlementByKey: vi.fn(),
+  validateLemonLicense: vi.fn(),
+  activateLemonLicense: vi.fn(),
+}));
+
+vi.mock('@/lib/safe-auth', () => ({ safeAuth: mocks.safeAuth }));
+vi.mock('@/lib/lemon-license-client', () => ({
+  validateLemonLicense: mocks.validateLemonLicense,
+  activateLemonLicense: mocks.activateLemonLicense,
+}));
+vi.mock('@/lib/pro-license-keys', () => ({ hashProLicenseKey: (k: string) => `hash:${k}` }));
+vi.mock('@/lib/billing/license-keys', () => ({
+  entitlementActive: (e: { status: string }) => e.status === 'active',
+}));
+vi.mock('@/lib/db/schema', () => ({ commercialEntitlements: {}, commercialCustomers: {} }));
+vi.mock('@/lib/db', () => ({
+  cloudDbAvailable: () => true,
+  getDb: () => ({
+    query: {
+      commercialCustomers: { findFirst: mocks.customer },
+      commercialEntitlements: { findMany: mocks.entitlements, findFirst: mocks.entitlementByKey },
+    },
+  }),
+}));
+
+import { GET } from '../app/api/v1/download/shield/route';
+import { presignShieldDownload, shieldObjectKey } from '../lib/billing/shield-storage';
+
+const get = (query = '', json = false) =>
+  GET(
+    new Request(`https://www.mastyf.ai/api/v1/download/shield${query}`, {
+      headers: json ? { accept: 'application/json' } : {},
+    }),
+  );
+
+describe('shield download', () => {
+  beforeEach(() => {
+    vi.stubEnv('SHIELD_S3_BUCKET', 'b');
+    vi.stubEnv('SHIELD_S3_REGION', 'ap-northeast-1');
+    vi.stubEnv('SHIELD_S3_ACCESS_KEY_ID', 'AKIDEXAMPLE');
+    vi.stubEnv('SHIELD_S3_SECRET_ACCESS_KEY', 'secret');
+    mocks.safeAuth.mockResolvedValue(null);
+    mocks.validateLemonLicense.mockResolvedValue({ valid: false });
+    mocks.activateLemonLicense.mockResolvedValue({ valid: false });
+    mocks.entitlementByKey.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetAllMocks();
+  });
+
+  it('sends a visitor with no subscription to checkout, with no file link', async () => {
+    const res = await get('?os=win');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/pricing');
+    expect(res.headers.get('location')).not.toContain('amazonaws');
+    expect(res.headers.get('location')).not.toContain('github.com');
+  });
+
+  it('answers 402 with no link to a JSON caller with no subscription', async () => {
+    const res = await get('?os=win', true);
+    expect(res.status).toBe(402);
+    expect(JSON.stringify(await res.json())).not.toContain('amazonaws');
+  });
+
+  it('refuses a signed-in user whose entitlement lapsed', async () => {
+    mocks.safeAuth.mockResolvedValue({ user: { email: 'a@b.c' } });
+    mocks.customer.mockResolvedValue({ id: 'c' });
+    mocks.entitlements.mockResolvedValue([{ status: 'expired' }]);
+    expect((await get('', true)).status).toBe(402);
+  });
+
+  it('gives a signed-in subscriber an expiring link', async () => {
+    mocks.safeAuth.mockResolvedValue({ user: { email: 'a@b.c' } });
+    mocks.customer.mockResolvedValue({ id: 'c' });
+    mocks.entitlements.mockResolvedValue([{ status: 'active' }]);
+    const res = await get('?os=linux&arch=deb');
+    expect(res.status).toBe(302);
+    const url = new URL(res.headers.get('location')!);
+    expect(url.host).toBe('b.s3.ap-northeast-1.amazonaws.com');
+    expect(url.pathname).toBe('/latest/Mastyf-Shield-latest.deb');
+    expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
+  });
+
+  it('accepts an active license key', async () => {
+    mocks.entitlementByKey.mockResolvedValue({ status: 'active' });
+    const body = await (await get('?key=MG-X&os=win', true)).json();
+    expect(body.downloadUrl).toContain('Mastyf-Shield-Setup-latest.exe');
+    expect(body.isLicensed).toBe(true);
+  });
+
+  it('answers 503, not a public link, when storage is not configured', async () => {
+    vi.stubEnv('SHIELD_S3_BUCKET', '');
+    mocks.entitlementByKey.mockResolvedValue({ status: 'active' });
+    expect((await get('?key=MG-X')).status).toBe(503);
+  });
+});
+
+describe('shieldObjectKey', () => {
+  it.each([
+    ['win', '', 'latest/Mastyf-Shield-Setup-latest.exe'],
+    ['windows', 'zip', 'latest/Mastyf-Shield-win-x64.zip'],
+    ['linux', '', 'latest/Mastyf-Shield-latest.AppImage'],
+    ['linux', 'deb', 'latest/Mastyf-Shield-latest.deb'],
+    ['mac', 'x64', 'latest/Mastyf-Shield-latest-x64.dmg'],
+    ['', '', 'latest/Mastyf-Shield-latest-arm64.dmg'],
+  ])('%s %s', (os, arch, key) => {
+    expect(shieldObjectKey(os, arch)).toBe(key);
+  });
+
+  it('ignores anything that tries to name another file', () => {
+    expect(shieldObjectKey('../../secret', '../other')).toBe('latest/Mastyf-Shield-latest-arm64.dmg');
+  });
+});

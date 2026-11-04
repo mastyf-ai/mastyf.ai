@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'crypto';
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
   activateLemonLicense,
@@ -9,9 +10,12 @@ import {
   verifyEntitlement,
   canonicalizeEntitlement,
   DEFAULT_KEY_ID,
-  PREVIOUS_KEY_ID,
   SignedEntitlement,
 } from '../lib/ed25519-signer';
+
+const testKeys = generateKeyPairSync('ed25519');
+process.env.MASTYF_ED25519_PRIVATE_KEY = testKeys.privateKey.export({ format: 'der', type: 'pkcs8' }).subarray(-32).toString('base64');
+process.env.MASTYF_ED25519_PUBLIC_KEY = testKeys.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64');
 
 describe('Phase 3: Activation, Lemon Squeezy Instances, and Ed25519 Cryptography', () => {
   describe('1. Lemon Squeezy License Instance API Client', () => {

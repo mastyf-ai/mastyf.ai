@@ -19,27 +19,16 @@ export type SignedEntitlement = UnsignedEntitlement & {
   signature: string;
 };
 
-// Default canonical keypair for testing/development; overridden by environment variables in production
-export const DEFAULT_KEY_ID = 'mastyf-prod-2026-01';
-export const PREVIOUS_KEY_ID = 'mastyf-prod-2025-04';
+export const DEFAULT_KEY_ID = 'mastyf-2026-11';
 
-// Base64 raw 32-byte Ed25519 keys
-export const KEY_REGISTRY: Record<
-  string,
-  { privateKeyRawB64?: string; publicKeyRawB64: string }
-> = {
-  'mastyf-prod-2026-01': {
-    privateKeyRawB64:
-      process.env.MASTYF_ED25519_PRIVATE_KEY ||
-      'Qio7zngIohWj2+qhZm5MBY9LNXKSIsA9E5LD4XwXHhs=',
-    publicKeyRawB64:
-      process.env.MASTYF_ED25519_PUBLIC_KEY ||
-      '32oq11SmArntsjpxVw0kihCFaQd7RVMEqouSR0C5LlY=',
-  },
-  'mastyf-prod-2025-04': {
-    publicKeyRawB64: 'JgC/Y8108j60V3u2R8hV9E9UjZ+o4g0tT7VnK2y6E1c=',
-  },
-};
+/** Base64 raw 32-byte Ed25519 keys, from the environment only. */
+function keyConfig(keyId: string): { privateKeyRawB64?: string; publicKeyRawB64?: string } | null {
+  if (keyId !== DEFAULT_KEY_ID) return null;
+  return {
+    privateKeyRawB64: process.env.MASTYF_ED25519_PRIVATE_KEY?.trim() || undefined,
+    publicKeyRawB64: process.env.MASTYF_ED25519_PUBLIC_KEY?.trim() || undefined,
+  };
+}
 
 /**
  * Creates canonical string representation of unsigned entitlement fields
@@ -62,8 +51,8 @@ export function signEntitlement(
   unsigned: Omit<UnsignedEntitlement, 'key_id'>,
   keyId: string = DEFAULT_KEY_ID,
 ): SignedEntitlement {
-  const keyConfig = KEY_REGISTRY[keyId];
-  if (!keyConfig || !keyConfig.privateKeyRawB64) {
+  const config = keyConfig(keyId);
+  if (!config?.privateKeyRawB64) {
     throw new Error(`Private key for key_id '${keyId}' is not available on this server`);
   }
 
@@ -76,7 +65,7 @@ export function signEntitlement(
   const data = Buffer.from(canonicalString, 'utf8');
 
   // Convert raw 32-byte private key into PKCS#8 DER for Node crypto
-  const privRaw = Buffer.from(keyConfig.privateKeyRawB64, 'base64');
+  const privRaw = Buffer.from(config.privateKeyRawB64, 'base64');
   const pkcs8Der = Buffer.concat([
     Buffer.from('302e020100300506032b657004220420', 'hex'),
     privRaw,
@@ -104,9 +93,9 @@ export function verifyEntitlement(
   token: SignedEntitlement,
 ): { valid: boolean; reason?: string } {
   const { signature, ...unsigned } = token;
-  const keyConfig = KEY_REGISTRY[token.key_id];
+  const config = keyConfig(token.key_id);
 
-  if (!keyConfig) {
+  if (!config?.publicKeyRawB64) {
     return {
       valid: false,
       reason: `Unknown or untrusted key_id: '${token.key_id}'`,
@@ -119,7 +108,7 @@ export function verifyEntitlement(
     const sigBytes = Buffer.from(signature, 'base64');
 
     // Convert raw 32-byte public key into SPKI DER for Node crypto
-    const pubRaw = Buffer.from(keyConfig.publicKeyRawB64, 'base64');
+    const pubRaw = Buffer.from(config.publicKeyRawB64, 'base64');
     const spkiDer = Buffer.concat([
       Buffer.from('302a300506032b6570032100', 'hex'),
       pubRaw,
