@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { safeAuth } from '@/lib/safe-auth';
-import { validateLemonLicense, activateLemonLicense } from '@/lib/lemon-license-client';
+import { validateLemonLicense } from '@/lib/lemon-license-client';
 import { getDb, cloudDbAvailable } from '@/lib/db';
 import { commercialEntitlements, commercialCustomers } from '@/lib/db/schema';
 import { hashProLicenseKey } from '@/lib/pro-license-keys';
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
 
   // 2. Check license key query param if not authorized by session
   if (!isAuthorized && licenseKey) {
+    let knownKey = false;
     if (cloudDbAvailable()) {
       try {
         const db = getDb();
@@ -53,6 +54,7 @@ export async function GET(request: Request) {
         const entitlement = await db.query.commercialEntitlements.findFirst({
           where: (fields, { eq }) => eq(fields.licenseKeyHash, keyHash),
         });
+        knownKey = Boolean(entitlement);
         if (entitlement && entitlementActive(entitlement)) {
           isAuthorized = true;
           authReason = 'database_license_key';
@@ -62,20 +64,14 @@ export async function GET(request: Request) {
       }
     }
 
-    if (!isAuthorized) {
-      const valRes = await validateLemonLicense({ licenseKey });
+    // A key we know about and have marked inactive stays inactive. Other keys must be from our own store.
+    const storeId = process.env.LEMONSQUEEZY_STORE_ID?.trim();
+    const productId = process.env.LEMONSQUEEZY_PRODUCT_ID?.trim();
+    if (!isAuthorized && !knownKey && storeId && productId) {
+      const valRes = await validateLemonLicense({ licenseKey, expectedStoreId: storeId, expectedProductId: productId });
       if (valRes.valid) {
         isAuthorized = true;
         authReason = 'lemon_validate';
-      } else {
-        const actRes = await activateLemonLicense({
-          licenseKey,
-          instanceName: 'mastyf-direct-download-instance',
-        });
-        if (actRes.valid) {
-          isAuthorized = true;
-          authReason = 'lemon_activate';
-        }
       }
     }
   }
