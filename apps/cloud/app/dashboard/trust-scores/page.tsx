@@ -74,8 +74,7 @@ export default async function TrustScoresPage() {
             ) : (
               <p className="empty">
                 <strong>No packages scored yet</strong>
-                Score one with <code>npx @mastyf/cli check &lt;package&gt;</code>, or look it up on the{' '}
-                <Link href="/certified">trust scores page</Link>.
+                Look one up on the <Link href="/certified">trust scores page</Link>.
               </p>
             )}
           </div>

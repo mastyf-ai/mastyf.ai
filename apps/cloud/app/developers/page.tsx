@@ -18,23 +18,23 @@ export default async function DevelopersPage() {
   const steps = [
     {
       num: '1',
-      title: 'Install or Run Mastyf Gateway',
-      code: '# Option A: Run via Docker\ndocker run -d -p 4000:4000 --name mastyf ghcr.io/mastyf-ai/gateway:latest\n\n# Option B: Run via npm\nnpm install -g @mastyf/gateway\nmastyf start --mode audit',
+      title: 'Install the Mastyf Gateway',
+      code: 'npm install -g @mastyf_ai/server@4.1.12\nmastyf-ai --version',
     },
     {
       num: '2',
-      title: 'Configure MCP Client to Route through Gateway',
-      code: '// claude_desktop_config.json or cursor.json\n{\n  "mcpServers": {\n    "github": {\n      "command": "mastyf-proxy",\n      "args": ["--upstream", "npx -y @modelcontextprotocol/server-github"]\n    }\n  }\n}',
+      title: 'Create a Policy',
+      code: "# default-policy.yaml\nversion: '1.0'\npolicy:\n  mode: block # audit, warn or block\n  rules: []   # built-in guards still apply",
     },
     {
       num: '3',
-      title: 'Define Execution Policies in YAML',
-      code: '# mastyf-policy.yaml\nversion: "1.0"\nmode: "warn" # audit -> warn -> block\nrules:\n  - tool: "filesystem.read_file"\n    invariants:\n      path_containment:\n        allowed_prefixes: ["./src", "./docs"]\n        denied_patterns: ["/etc/*", ".env", "*.pem"]\n  - tool: "payment_payout"\n    invariants:\n      monetary_clamping:\n        max_single_transaction_usd: 50.00',
+      title: 'Route Your MCP Client through the Gateway',
+      code: '// /path/to/mastyf/github.json: your real server, in the usual format\n// On Windows, use "node" and the server\'s script path instead of npx\n{\n  "mcpServers": {\n    "github": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-github"]\n    }\n  }\n}\n\n// claude_desktop_config.json or .cursor/mcp.json: start it through the gateway\n{\n  "mcpServers": {\n    "github": {\n      "command": "mastyf-ai",\n      "args": [\n        "proxy",\n        "--config", "/path/to/mastyf/github.json",\n        "--policy", "/path/to/mastyf/default-policy.yaml"\n      ]\n    }\n  }\n}',
     },
     {
       num: '4',
-      title: 'Run Adversarial CI Checks with Mastyf Swarm',
-      code: '# Probe your policies against multi-turn injections\nmastyf-swarm test --policy ./mastyf-policy.yaml --fixtures ./corpus\n# Output: 228/228 PASS (0 regressions)',
+      title: 'Test a Call Against Your Policy',
+      code: `mastyf-ai policy test --policy ./default-policy.yaml --tool read_file --args '{"path":"/etc/passwd"}'\n# "action": "block", "reason": "Sensitive path blocked: /etc/passwd"`,
     },
   ];
 
