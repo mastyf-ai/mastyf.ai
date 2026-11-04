@@ -271,46 +271,6 @@ describe('Phase 3: Activation, Lemon Squeezy Instances, and Ed25519 Cryptography
   });
 
   describe('3. Entitlement Renewal Endpoint Handler', () => {
-    it('renews an active license token', async () => {
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = async () =>
-        new Response(
-          JSON.stringify({
-            valid: true,
-            instance: { id: 'inst_abc123' },
-            license_key: { instances_count: 1 },
-          }),
-          { status: 200 },
-        );
-
-      try {
-        const { POST: renewPOST } = await import('../app/api/v1/license/renew/route');
-        const payload = {
-          licenseKey: 'MG-PRO-ACTIVE-KEY',
-          instanceId: 'inst_abc123',
-        };
-
-        const res = await renewPOST(
-          new Request('http://localhost/api/v1/license/renew', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          }),
-        );
-
-        expect(res.status).toBe(200);
-        const data = await res.json();
-        expect(data.success).toBe(true);
-        expect(data.entitlement).toBeTruthy();
-        expect(data.entitlement.key_id).toBe(DEFAULT_KEY_ID);
-
-        const verifyCheck = verifyEntitlement(data.entitlement);
-        expect(verifyCheck.valid).toBe(true);
-      } finally {
-        globalThis.fetch = originalFetch;
-      }
-    });
-
     it('rejects renewal request when licenseKey is missing', async () => {
       const { POST: renewPOST } = await import('../app/api/v1/license/renew/route');
       const res = await renewPOST(

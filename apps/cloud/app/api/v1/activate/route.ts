@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
-import { activateLemonLicense } from '@/lib/lemon-license-client';
 import { issuedLicenseActivation } from '@/lib/billing/license-keys';
 import { bindAndGrantHFAccess } from '@/lib/hf-binding-service';
 import { signEntitlement } from '@/lib/ed25519-signer';
@@ -31,32 +30,27 @@ export async function POST(request: Request) {
 
   // Shield-only activations omit hfUsername. Guard model bind still requires it.
 
-  // 1. Authoritative License Activation: keys issued for Razorpay payments are checked against
-  //    our own records; any other key goes to the Lemon Squeezy License API.
-  const lemonActivation =
-    (await issuedLicenseActivation(licenseKey)) ??
-    (await activateLemonLicense({
-      licenseKey,
-      instanceName,
-      expectedStoreId: process.env.LEMONSQUEEZY_STORE_ID,
-      expectedProductId: process.env.LEMONSQUEEZY_PRODUCT_ID,
-      expectedVariantId: process.env.LEMONSQUEEZY_VARIANT_ID,
-    }));
+  // 1. Only keys issued for Razorpay payments count, checked against our own records.
+  const activation = (await issuedLicenseActivation(licenseKey)) ?? {
+    valid: false as const,
+    status: 'inactive',
+    message: 'This license key was not accepted.',
+  };
 
-  if (!lemonActivation.valid) {
-    const statusCode = lemonActivation.status === 'rate_limited' ? 429 : 403;
+  if (!activation.valid) {
+    const statusCode = activation.status === 'rate_limited' ? 429 : 403;
     return NextResponse.json(
       {
         success: false,
-        error: lemonActivation.message,
-        status: lemonActivation.status,
+        error: activation.message,
+        status: activation.status,
       },
       { status: statusCode },
     );
   }
 
   const customerEmail =
-    lemonActivation.customerEmail ||
+    activation.customerEmail ||
     (typeof body.customerEmail === 'string' ? body.customerEmail.trim().toLowerCase() : '');
 
   // 2. Resolve Customer and Enforce Permanent HF Identity Binding
@@ -94,16 +88,16 @@ export async function POST(request: Request) {
         customerId: customer.id,
         licenseKeyHash: keyHash,
         licenseKeyPreview: licenseKey.length >= 8 ? `MG-****-${licenseKey.slice(-4).toUpperCase()}` : 'MG-****-PRO',
-        lemonLicenseId: lemonActivation.licenseKeyId,
-        lemonInstanceId: lemonActivation.instanceId,
+        lemonLicenseId: activation.licenseKeyId,
+        lemonInstanceId: activation.instanceId,
         status: 'active',
       });
-    } else if (lemonActivation.instanceId && entitlement.lemonInstanceId !== lemonActivation.instanceId) {
-      // Update the instance ID from Lemon Squeezy
+    } else if (activation.instanceId && entitlement.lemonInstanceId !== activation.instanceId) {
+      // Update the instance ID
       await db
         .update(commercialEntitlements)
         .set({
-          lemonInstanceId: lemonActivation.instanceId,
+          lemonInstanceId: activation.instanceId,
           updatedAt: new Date(),
         })
         .where(eq(commercialEntitlements.id, entitlement.id));
@@ -137,8 +131,8 @@ export async function POST(request: Request) {
   const issuedAt = now.toISOString();
 
   let expiresDate: Date;
-  if (lemonActivation.expiresAt) {
-    expiresDate = new Date(lemonActivation.expiresAt);
+  if (activation.expiresAt) {
+    expiresDate = new Date(activation.expiresAt);
   } else {
     // Default 30-day period if not explicit on license
     expiresDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -151,8 +145,8 @@ export async function POST(request: Request) {
   const signedToken = signEntitlement({
     schema: 1,
     product: 'mastyf-guard-pro',
-    license_id: lemonActivation.licenseKeyId || 'lic_active',
-    instance_id: lemonActivation.instanceId || 'inst_default',
+    license_id: activation.licenseKeyId || 'lic_active',
+    instance_id: activation.instanceId || 'inst_default',
     activation_id: activationId,
     model_repo: FROZEN_MODEL_REPO,
     model_revision: FROZEN_MODEL_REVISION,
@@ -166,6 +160,6 @@ export async function POST(request: Request) {
     success: true,
     message: 'Mastyf Guard Pro license successfully activated',
     entitlement: signedToken,
-    instanceId: lemonActivation.instanceId,
+    instanceId: activation.instanceId,
   });
 }

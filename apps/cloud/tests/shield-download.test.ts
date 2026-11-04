@@ -5,15 +5,9 @@ const mocks = vi.hoisted(() => ({
   customer: vi.fn(),
   entitlements: vi.fn(),
   entitlementByKey: vi.fn(),
-  validateLemonLicense: vi.fn(),
-  activateLemonLicense: vi.fn(),
 }));
 
 vi.mock('@/lib/safe-auth', () => ({ safeAuth: mocks.safeAuth }));
-vi.mock('@/lib/lemon-license-client', () => ({
-  validateLemonLicense: mocks.validateLemonLicense,
-  activateLemonLicense: mocks.activateLemonLicense,
-}));
 vi.mock('@/lib/pro-license-keys', () => ({ hashProLicenseKey: (k: string) => `hash:${k}` }));
 vi.mock('@/lib/billing/license-keys', () => ({
   entitlementActive: (e: { status: string }) => e.status === 'active',
@@ -46,8 +40,6 @@ describe('shield download', () => {
     vi.stubEnv('SHIELD_S3_ACCESS_KEY_ID', 'AKIDEXAMPLE');
     vi.stubEnv('SHIELD_S3_SECRET_ACCESS_KEY', 'secret');
     mocks.safeAuth.mockResolvedValue(null);
-    mocks.validateLemonLicense.mockResolvedValue({ valid: false });
-    mocks.activateLemonLicense.mockResolvedValue({ valid: false });
     mocks.entitlementByKey.mockResolvedValue(null);
   });
 
@@ -96,32 +88,13 @@ describe('shield download', () => {
     expect(body.isLicensed).toBe(true);
   });
 
-  it('refuses a known key that lapsed, without asking anyone else', async () => {
-    vi.stubEnv('LEMONSQUEEZY_STORE_ID', '1');
-    vi.stubEnv('LEMONSQUEEZY_PRODUCT_ID', '2');
+  it('refuses a key that lapsed', async () => {
     mocks.entitlementByKey.mockResolvedValue({ status: 'expired' });
-    mocks.validateLemonLicense.mockResolvedValue({ valid: true });
     expect((await get('?key=MG-X', true)).status).toBe(402);
-    expect(mocks.validateLemonLicense).not.toHaveBeenCalled();
   });
 
-  it('checks other keys against our own store and product', async () => {
-    vi.stubEnv('LEMONSQUEEZY_STORE_ID', '1');
-    vi.stubEnv('LEMONSQUEEZY_PRODUCT_ID', '2');
-    mocks.validateLemonLicense.mockResolvedValue({ valid: true });
-    expect((await get('?key=L', true)).status).toBe(200);
-    expect(mocks.validateLemonLicense).toHaveBeenCalledWith({ licenseKey: 'L', expectedStoreId: '1', expectedProductId: '2' });
-  });
-
-  it('refuses other keys when the store is not configured', async () => {
-    mocks.validateLemonLicense.mockResolvedValue({ valid: true });
-    expect((await get('?key=L', true)).status).toBe(402);
-    expect(mocks.validateLemonLicense).not.toHaveBeenCalled();
-  });
-
-  it('never activates a license from a download', async () => {
-    await get('?key=L');
-    expect(mocks.activateLemonLicense).not.toHaveBeenCalled();
+  it('refuses a key nobody issued', async () => {
+    expect((await get('?key=whatever', true)).status).toBe(402);
   });
 
   it('answers 503, not a public link, when storage is not configured', async () => {

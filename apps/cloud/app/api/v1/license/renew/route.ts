@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
-import { validateLemonLicense } from '@/lib/lemon-license-client';
 import { signEntitlement } from '@/lib/ed25519-signer';
-import { getDb, cloudDbAvailable } from '@/lib/db';
-import { commercialEntitlements, commercialSubscriptions } from '@/lib/db/schema';
-import { hashProLicenseKey } from '@/lib/pro-license-keys';
-import { isSubscriptionEntitled } from '@/lib/lemonsqueezy-webhook';
 import { entitlementActive, findIssuedEntitlement } from '@/lib/billing/license-keys';
 
 const FROZEN_MODEL_REPO = 'Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened';
@@ -73,81 +67,8 @@ export async function POST(request: Request) {
     return renewedEntitlement(issued.expiresAt, instanceId);
   }
 
-  // 1. Authoritative Instance Validation with Lemon Squeezy
-  const validation = await validateLemonLicense({
-    licenseKey,
-    instanceId,
-  });
-
-  if (!validation.valid) {
-    const statusCode = validation.status === 'rate_limited' ? 429 : 403;
-    return NextResponse.json(
-      {
-        success: false,
-        error: validation.message,
-        status: validation.status,
-      },
-      { status: statusCode },
-    );
-  }
-
-  // 2. Check Local Subscription Projection Lifecycle
-  let currentPeriodEnd: Date | undefined;
-  let endsAt: Date | undefined;
-
-  if (cloudDbAvailable()) {
-    const db = getDb();
-    const keyHash = hashProLicenseKey(licenseKey);
-    const entitlement = await db.query.commercialEntitlements.findFirst({
-      where: eq(commercialEntitlements.licenseKeyHash, keyHash),
-    });
-
-    if (entitlement?.subscriptionId) {
-      const sub = await db.query.commercialSubscriptions.findFirst({
-        where: eq(commercialSubscriptions.id, entitlement.subscriptionId),
-      });
-
-      if (sub) {
-        if (sub.status === 'expired') {
-          return NextResponse.json(
-            {
-              success: false,
-              error: 'Subscription has expired. Renewal not permitted.',
-              status: 'expired',
-            },
-            { status: 403 },
-          );
-        }
-
-        currentPeriodEnd = sub.currentPeriodEnd ?? undefined;
-        endsAt = sub.endsAt ?? undefined;
-
-        const isEntitled = isSubscriptionEntitled({
-          status: sub.status,
-          currentPeriodEnd,
-          endsAt,
-        });
-
-        if (!isEntitled) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: `Subscription status '${sub.status}' is not eligible for renewal`,
-              status: sub.status,
-            },
-            { status: 403 },
-          );
-        }
-      }
-    }
-  }
-
-  // 3. Mint Extended Signed Entitlement Token
-  const now = new Date();
-
-  // Extend 30 days from current period end or now
-  const baseDate = currentPeriodEnd && currentPeriodEnd.getTime() > now.getTime() ? currentPeriodEnd : now;
-  const expiresDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-  return renewedEntitlement(expiresDate, instanceId || validation.instanceId);
+  return NextResponse.json(
+    { success: false, error: 'This license key was not accepted.', status: 'inactive' },
+    { status: 403 },
+  );
 }

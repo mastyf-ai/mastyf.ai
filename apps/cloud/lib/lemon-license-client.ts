@@ -151,9 +151,6 @@ export async function activateLemonLicense(opts: {
 export async function validateLemonLicense(opts: {
   licenseKey: string;
   instanceId?: string;
-  /** When set, a key from another store or product is refused, as is a reply that doesn't say. */
-  expectedStoreId?: string;
-  expectedProductId?: string;
   fetchFn?: typeof fetch;
 }): Promise<LemonLicenseValidateResult> {
   const customFetch = opts.fetchFn || fetch;
@@ -190,14 +187,6 @@ export async function validateLemonLicense(opts: {
         status: err.toLowerCase().includes('expired') ? 'expired' : 'inactive',
         message: err,
       };
-    }
-
-    const meta = data.meta || {};
-    if (
-      (opts.expectedStoreId && String(meta.store_id ?? '') !== opts.expectedStoreId) ||
-      (opts.expectedProductId && String(meta.product_id ?? '') !== opts.expectedProductId)
-    ) {
-      return { valid: false, status: 'inactive', message: 'License key belongs to another product' };
     }
 
     return {
