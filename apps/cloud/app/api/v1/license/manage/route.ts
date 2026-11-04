@@ -28,24 +28,3 @@ export async function GET(req: Request) {
     expiresAt: lic?.expires_at || null,
   });
 }
-
-export async function POST(req: Request) {
-  const access: any = await resolveOrgAccess(req);
-  if (!access?.orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const body = await req.json();
-  const { tier, maxInstances, features } = body;
-  if (!tier) return NextResponse.json({ error: 'tier required' }, { status: 400 });
-
-  const db = getDb();
-  await db.execute(sql`
-    INSERT INTO licenses (org_id, tier, max_instances, features)
-    VALUES (${access.orgId}, ${tier}, ${maxInstances || 1}, ${JSON.stringify(features || [])})
-    ON CONFLICT (org_id) DO UPDATE SET
-      tier = ${tier}, max_instances = ${maxInstances || 1},
-      features = ${JSON.stringify(features || [])},
-      activated_at = NOW()
-  `);
-
-  return NextResponse.json({ ok: true, tier });
-}

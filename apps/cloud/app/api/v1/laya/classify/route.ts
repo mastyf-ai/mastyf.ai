@@ -3,6 +3,7 @@ import { extractBearerToken, isWellFormedApiKey } from '@/lib/api-keys';
 import { parseClassifyBody } from '@/lib/laya/classify-request';
 import { resolveLayaTarget } from '@/lib/laya/deployment';
 import { forwardToLaya } from '@/lib/laya/forward';
+import { workspaceHasProtocolX } from '@/lib/laya/plan';
 import { resolveOrgFromApiKey } from '@/lib/org-context';
 import { checkLayaRateLimit } from '@/lib/rate-limit';
 
@@ -28,6 +29,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (!resolved.scopes.includes('laya:classify')) return error(403, 'Forbidden');
 
     const orgId = resolved.org.id;
+    if (!(await workspaceHasProtocolX(orgId))) return error(402, 'Protocol X requires a paid plan');
+
     const limit = await checkLayaRateLimit(orgId);
     if (!limit.success) {
       return error(429, 'Rate limit exceeded', { 'Retry-After': String(limit.retryAfter) });
