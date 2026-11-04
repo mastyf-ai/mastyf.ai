@@ -81,6 +81,14 @@ function isMastyfCloudUrl(url: string): boolean {
   }
 }
 
+/**
+ * The checkpoint a self-hosted laya-serve should answer with. Left to itself the server picks by
+ * detected language, which sends most English text to its untrained base model.
+ */
+export function layaModelName(): string {
+  return process.env['MASTYF_AI_LAYA_MODEL']?.trim() || 'mastyf';
+}
+
 /** Laya's verdict on a tool call, or null if the service is unreachable, slow, or replies oddly. */
 export async function classifyRequestWithLaya(
   toolName: string,
@@ -106,6 +114,8 @@ export async function classifyRequestWithLaya(
       body: JSON.stringify({
         state: layaRequestState(toolName, args),
         questions: { verdict: LAYA_VERDICT_QUESTION },
+        // Mastyf's hosted route picks the model on its side and ignores this field.
+        ...(isMastyfCloudUrl(url) ? {} : { model: layaModelName() }),
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });

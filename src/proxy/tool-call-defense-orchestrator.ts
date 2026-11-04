@@ -3,6 +3,7 @@
  *
  * Phases: lifecycle → pre-guard → policy → post-policy (spend + semantic).
  */
+import { applyCausalMeta } from '../ai/causal-gate/index.js';
 import type { IncomingHttpHeaders } from 'http';
 import type { PolicyEngine } from '../policy/policy-engine.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
@@ -327,6 +328,7 @@ export async function evaluateToolCallDefense(
     };
   }
 
+  applyCausalMeta(context, input.meta);
   const gateOutcome = await runPostPolicyAllowGates(context, decision, input.serverName);
   if (isPostPolicyGateBlock(gateOutcome)) {
     if (emitTelemetry) {

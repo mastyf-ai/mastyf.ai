@@ -1650,4 +1650,27 @@ program.action(async () => {
   program.outputHelp();
 });
 
+program
+  .command('llm-gateway')
+  .description('Gateway in front of an OpenAI- or Anthropic-style API that stops tool calls caused by data the agent read')
+  .requiredOption('--upstream <url>', 'the model API, for example https://api.openai.com')
+  .option('--port <port>', 'port to listen on', '8088')
+  .option('--host <host>', 'address to bind; it does not authenticate callers, so keep it local', '127.0.0.1')
+  .option('--mode <mode>', 'enforce, or shadow to log only', 'enforce')
+  .action(async (opts: { upstream: string; port: string; host: string; mode: string }) => {
+    const { startLlmGateway } = await import('./llm-gateway/server.js');
+    if (opts.mode !== 'enforce' && opts.mode !== 'shadow') {
+      console.error('--mode must be enforce or shadow');
+      process.exit(2);
+    }
+    const server = await startLlmGateway({
+      upstream: opts.upstream,
+      port: Number(opts.port),
+      host: opts.host,
+      mode: opts.mode,
+    });
+    const address = server.address();
+    console.log(`LLM gateway (${opts.mode}) on ${opts.host}:${typeof address === 'object' && address ? address.port : opts.port}, forwarding to ${opts.upstream}`);
+  });
+
 program.parse();

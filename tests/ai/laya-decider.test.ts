@@ -99,6 +99,27 @@ describe('laya-decider', () => {
       expect('model' in JSON.parse(String(init.body))).toBe(false);
     });
 
+    // laya-serve picks a checkpoint by detected language unless told which one, and most English
+    // text then reaches the untrained base model (66% of the benchmark rows).
+    it('pins the fine-tuned model on a self-hosted laya-serve', async () => {
+      vi.stubEnv('MASTYF_AI_LAYA_URL', 'http://127.0.0.1:8077/v1/systemone');
+      const fetchMock = vi.fn(async () => layaReply('safe', 0.95));
+      vi.stubGlobal('fetch', fetchMock);
+      await classifyRequestWithLaya('t', {});
+      const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(JSON.parse(String(init.body)).model).toBe('mastyf');
+    });
+
+    it('lets MASTYF_AI_LAYA_MODEL name the self-hosted model', async () => {
+      vi.stubEnv('MASTYF_AI_LAYA_URL', 'http://127.0.0.1:8077/v1/systemone');
+      vi.stubEnv('MASTYF_AI_LAYA_MODEL', 'other');
+      const fetchMock = vi.fn(async () => layaReply('safe', 0.95));
+      vi.stubGlobal('fetch', fetchMock);
+      await classifyRequestWithLaya('t', {});
+      const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(JSON.parse(String(init.body)).model).toBe('other');
+    });
+
     it('posts to a self-hosted laya-serve URL unchanged', async () => {
       vi.stubEnv('MASTYF_AI_LAYA_URL', 'http://127.0.0.1:8077/v1/systemone');
       const fetchMock = vi.fn(async () => layaReply('safe', 0.95));

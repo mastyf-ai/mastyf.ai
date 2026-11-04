@@ -243,11 +243,14 @@ export class StreamableHttpProxyServer {
     if (msg.method === 'tools/call' && (upstream as { result?: unknown }).result != null) {
       const params = msg.params as { name?: string; arguments?: Record<string, unknown> } | undefined;
       const toolName = params?.name || 'unknown';
-      let tenantId = 'default';
+      // The tenant the defense layer checked this call under, so that the two see the same session.
+      let tenantId = (msg as { _defenseTenantId?: string })._defenseTenantId ?? 'default';
       try {
-        tenantId = resolveTenantContext({
-          headers: req.headers as Record<string, string | string[] | undefined>,
-        }).tenantId;
+        tenantId =
+          (msg as { _defenseTenantId?: string })._defenseTenantId ??
+          resolveTenantContext({
+            headers: req.headers as Record<string, string | string[] | undefined>,
+          }).tenantId;
       } catch {
         /* use default */
       }
@@ -260,6 +263,7 @@ export class StreamableHttpProxyServer {
         policyEngine: this.opts.policy,
         transportLabel: 'streamable-http',
         toolArguments: params?.arguments,
+        sessionId: pre.session.sessionId,
       });
       if (inspected.blocked && inspected.blockResponse) {
         return inspected.blockResponse;

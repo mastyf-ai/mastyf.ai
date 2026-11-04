@@ -100,15 +100,16 @@ export async function evaluateSyncSemanticRequest(
     }
   }
 
-  // Laya replaces the LLM verdict when its service is configured: 98.7% of held-out attacks
-  // caught against 5.3% for the LLM, in ~0.7 s on CPU where the LLM took ~3.5 s.
+  // Laya replaces the LLM verdict when its service is configured. On outside attack tool calls it
+  // catches 57-64% against 5.3% of our own held-out set for the LLM, in ~0.8 s on CPU where the LLM
+  // took ~3.5 s.
   if (isSyncSemanticRequestLlmEnabledForTenant(tenantId) && isLayaDeciderEnabled()) {
     const laya = await classifyRequestWithLaya(input.context.toolName, input.context.arguments ?? {});
     if (laya) {
       const confidentAttack = laya.unsafe && laya.confidence >= MIN_CONFIDENCE;
       // Failsafe: a call the heuristics passed and Laya is not sure about is unlike what it was
-      // trained on, so treat it as malicious. On the held-out set, blocking below 0.9 caught every
-      // attack with no extra false positives.
+      // trained on, so treat it as malicious. On outside tool calls this adds about 3.6 points of
+      // detection and 1.3 of false positives; it cannot help when the model is confidently wrong.
       // An "unsafe" too weak to count as an attack is unsure whatever the sure line is set to, so
       // lowering MASTYF_AI_LAYA_SURE_CONFIDENCE can never let an "unsafe" verdict through.
       const unsure =

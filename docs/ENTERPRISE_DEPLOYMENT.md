@@ -75,6 +75,7 @@ When `MASTYF_AI_LAYA_URL` is set, calls the rules and the local scorer cannot de
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `MASTYF_AI_LAYA_URL` | unset (Laya off) | Full endpoint: `https://www.mastyf.ai/api/v1/laya/classify` for Mastyf's hosted Laya, or a self-hosted `laya-serve` such as `http://127.0.0.1:8077/v1/systemone` |
+| `MASTYF_AI_LAYA_MODEL` | `mastyf` | Checkpoint name sent to a self-hosted `laya-serve`; must match its `LAYA_EXTRA_MODELS`. Without one, `laya-serve` picks by detected language and most text reaches its untrained base model. Not sent to the hosted route, which chooses on its side (`LAYA_MODEL` there) |
 | `MASTYF_AI_LAYA_API_KEY` | `MASTYF_AI_CLOUD_API_KEY`, for the hosted route only | Bearer key; for the hosted route, a workspace API key with the `laya:classify` scope. The workspace key is only ever sent to https on the Mastyf cloud's origin (`MASTYF_AI_CLOUD_URL`, default `https://www.mastyf.ai`); a self-hosted server gets a key only if this is set |
 | `MASTYF_AI_LAYA_TIMEOUT_MS` | `1500` | Time budget per verdict; on timeout the call is handled like an unavailable LLM |
 | `MASTYF_AI_LAYA_SURE_CONFIDENCE` | `0.9` | Below this confidence a verdict counts as unsure |
@@ -82,6 +83,10 @@ When `MASTYF_AI_LAYA_URL` is set, calls the rules and the local scorer cannot de
 | `MASTYF_AI_SEMANTIC_DECIDER` | `laya` when the URL is set | `llm` goes back to the LLM verdict |
 
 With the hosted URL, the tool name and arguments of undecided calls are sent to Mastyf's cloud for classification; they are not stored or logged there.
+
+### Causal gate
+
+Stops a risky call when its target only ever appeared in data an attacker could write. Off by default; set `MASTYF_AI_CAUSAL_GATE=shadow` to log what it would stop, or `enforce` to stop it. See [CAUSAL_GATE.md](CAUSAL_GATE.md) for the other settings, how to send it the user's request, and what it does not catch.
 
 ### Max-security semantic SLO (enterprise)
 

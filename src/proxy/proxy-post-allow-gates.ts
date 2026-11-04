@@ -9,6 +9,7 @@ import {
 } from '../tenant/tenant-semantic-config.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
 import { flowSessionKey } from '../policy/session-flow-guard.js';
+import { checkToolCall } from '../ai/causal-gate/index.js';
 import {
   runSemanticPipelineAfterPolicyAllow,
 } from './semantic-proxy-hooks.js';
@@ -44,6 +45,11 @@ export async function runPostPolicyAllowGates(
   decision: PolicyDecision,
   serverName: string,
 ): Promise<PostPolicyAllowGateOutcome | null> {
+  const causal = checkToolCall(context);
+  if (causal) {
+    return { block: true, rule: causal.rule, reason: causal.reason, metricCategory: 'semantic_sync_request' };
+  }
+
   const estimatedUsd = estimateUsd(context);
   const reserve = await tryReserveSpend({
     tenantId: context.tenantId,

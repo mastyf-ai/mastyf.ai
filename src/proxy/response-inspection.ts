@@ -10,6 +10,7 @@ import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
 import type { PolicyEngine } from '../policy/policy-engine.js';
+import { observeToolResult } from '../ai/causal-gate/index.js';
 
 /** Outcome returned to the transport layer after inspecting a tool response. */
 export interface ResponseInspectionResult {
@@ -39,11 +40,15 @@ export async function inspectToolResponse(params: {
   transportLabel: string;
   /** Original tools/call arguments (for live exploit tap). */
   toolArguments?: Record<string, unknown>;
+  /** The session id this transport gave the defense layer for the call, if any. */
+  sessionId?: string;
 }): Promise<ResponseInspectionResult> {
   const { response, toolName, serverName, requestId, tenantId, policyEngine, transportLabel } =
     params;
 
   const result = (response as { result?: unknown }).result;
+  // Before anything can return: a redacted reply still reaches the agent, and so does a skipped scan.
+  if (result != null) observeToolResult({ tenantId, sessionId: params.sessionId, serverName, toolName, result });
   if (result == null || isResponseScanSkipped()) {
     return { blocked: false, redacted: false };
   }

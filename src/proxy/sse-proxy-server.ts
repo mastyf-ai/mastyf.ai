@@ -378,6 +378,7 @@ export class SseProxyServer extends EventEmitter {
     const isToolCall = jsonRpcRequest.method === 'tools/call';
     let resolvedTenantId = 'default';
     let spendReservationId: string | undefined;
+    const toolSessionId = session?.id ?? pre.session.sessionId;
 
     if (isToolCall && this.opts.policy) {
       let tenantId: string;
@@ -420,7 +421,7 @@ export class SseProxyServer extends EventEmitter {
           tenantId,
           headers: requestHeaders,
           meta: (jsonRpcRequest.params as Record<string, unknown> | undefined)?._meta as Record<string, unknown> | undefined,
-          mcpSessionId: session?.id ?? pre.session.sessionId,
+          mcpSessionId: toolSessionId,
           agentId: pre.session.agentId !== 'unknown' ? pre.session.agentId : undefined,
         },
         {
@@ -502,6 +503,7 @@ export class SseProxyServer extends EventEmitter {
         policyEngine: this.opts.policy,
         transportLabel: 'sse-proxy',
         toolArguments: toolParams?.arguments,
+        sessionId: toolSessionId,
       });
       if (inspected.blocked && inspected.blockResponse) return inspected.blockResponse;
     }
