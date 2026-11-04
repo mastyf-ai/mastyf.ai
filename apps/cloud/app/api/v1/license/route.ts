@@ -1,4 +1,6 @@
 import { extractBearerToken, extractRawBearerToken, isCloudLicenseKey } from '@/lib/api-keys';
+import { isPaidTier } from '@/lib/billing/paid-tier';
+import { workspaceTier } from '@/lib/billing/workspace-tier';
 import { allLicensedFeatures } from '@/lib/entitlements';
 import { resolveOrgFromApiKey } from '@/lib/org-context';
 import { NextResponse } from 'next/server';
@@ -9,6 +11,7 @@ function licensePayload(opts: {
   orgId?: string;
   orgName?: string;
   status: string;
+  tier?: string;
 }) {
   return {
     licensed: opts.licensed,
@@ -16,6 +19,8 @@ function licensePayload(opts: {
     orgId: opts.orgId,
     orgName: opts.orgName,
     status: opts.status,
+    tier: opts.tier ?? 'free',
+    paid: opts.tier !== undefined && isPaidTier(opts.tier),
     features: opts.licensed ? [...allLicensedFeatures()] : [],
     expiresAt: null as string | null,
     graceUntil: null as string | null,
@@ -50,6 +55,14 @@ export async function GET(request: Request) {
     }), { status: 401 });
   }
 
+  let tier: string;
+  try {
+    tier = await workspaceTier(ctx.org.id);
+  } catch {
+    // The proxy keeps its last answer through a short outage, rather than reading this as free.
+    return NextResponse.json({ error: 'Plan unavailable' }, { status: 503 });
+  }
+
   return NextResponse.json(
     licensePayload({
       licensed: true,
@@ -57,6 +70,7 @@ export async function GET(request: Request) {
       orgId: ctx.org.id,
       orgName: ctx.org.name,
       status: 'active',
+      tier,
     }),
   );
 }

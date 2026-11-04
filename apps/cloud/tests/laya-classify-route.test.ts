@@ -5,8 +5,10 @@ const mocks = vi.hoisted(() => ({
   checkLayaRateLimit: vi.fn(),
   resolveLayaTarget: vi.fn(),
   forwardToLaya: vi.fn(),
+  workspaceHasProtocolX: vi.fn(),
 }));
 
+vi.mock('@/lib/laya/plan', () => ({ workspaceHasProtocolX: mocks.workspaceHasProtocolX }));
 vi.mock('@/lib/org-context', () => ({ resolveOrgFromApiKey: mocks.resolveOrgFromApiKey }));
 vi.mock('@/lib/rate-limit', () => ({ checkLayaRateLimit: mocks.checkLayaRateLimit }));
 vi.mock('@/lib/laya/deployment', () => ({ resolveLayaTarget: mocks.resolveLayaTarget }));
@@ -43,9 +45,37 @@ describe('POST /api/v1/laya/classify', () => {
     mocks.resolveOrgFromApiKey.mockImplementation(async (token: string) =>
       token === KEY ? { org: { id: 'org-A' }, apiKeyId: 'k1', scopes: ['badge:read', 'laya:classify'] } : null,
     );
+    mocks.workspaceHasProtocolX.mockResolvedValue(true);
     mocks.checkLayaRateLimit.mockResolvedValue({ success: true });
     mocks.resolveLayaTarget.mockResolvedValue(REMOTE);
     mocks.forwardToLaya.mockResolvedValue({ ok: true, choice: 'unsafe', confidence: 0.97 });
+  });
+
+  describe('paid plan', () => {
+    it('402 for a workspace without a paid plan, before anything reaches the model', async () => {
+      mocks.workspaceHasProtocolX.mockResolvedValue(false);
+      const res = await call();
+      expect(res.status).toBe(402);
+      expect(await res.json()).toEqual({ error: 'Protocol X requires a paid plan' });
+      expect(mocks.workspaceHasProtocolX).toHaveBeenCalledWith('org-A');
+      expect(mocks.checkLayaRateLimit).not.toHaveBeenCalled();
+      expect(mocks.resolveLayaTarget).not.toHaveBeenCalled();
+      expect(mocks.forwardToLaya).not.toHaveBeenCalled();
+    });
+
+    it('503, not a verdict, when the plan cannot be read', async () => {
+      mocks.workspaceHasProtocolX.mockRejectedValue(new Error('db down'));
+      const res = await call();
+      expect(res.status).toBe(503);
+      expect(mocks.forwardToLaya).not.toHaveBeenCalled();
+    });
+
+    it('does not read the plan for a key that lacks the scope', async () => {
+      mocks.resolveOrgFromApiKey.mockResolvedValue({ org: { id: 'org-A' }, apiKeyId: 'k1', scopes: ['badge:read'] });
+      const res = await call();
+      expect(res.status).toBe(403);
+      expect(mocks.workspaceHasProtocolX).not.toHaveBeenCalled();
+    });
   });
 
   afterEach(() => {
