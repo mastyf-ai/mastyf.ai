@@ -3,7 +3,7 @@
  * from attacker-writable data stay marked, across sessions and restarts, within the tenant. Everything
  * else read back from memory is treated as the agent's own, so normal memory use is not penalized.
  */
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { valueHash } from './ledger.js';
 import { nameWords } from './origins.js';
@@ -56,14 +56,19 @@ export class FileTaintStore implements TaintStore {
   constructor(private readonly path: string) {}
 
   private load(): void {
+    let fd: number | undefined;
     try {
-      const changed = statSync(this.path).mtimeMs;
+      // One handle, so that the time and the contents are of the same file.
+      fd = openSync(this.path, 'r');
+      const changed = fstatSync(fd).mtimeMs;
       if (changed === this.loadedAt) return;
-      const parsed = JSON.parse(readFileSync(this.path, 'utf8')) as Record<string, string[]>;
+      const parsed = JSON.parse(readFileSync(fd, 'utf8')) as Record<string, string[]>;
       this.tenants = new Map(Object.entries(parsed).map(([t, hashes]) => [t, new Set(hashes)]));
       this.loadedAt = changed;
     } catch {
       // no file yet, or unreadable: keep what is in memory
+    } finally {
+      if (fd !== undefined) closeSync(fd);
     }
   }
 
@@ -85,7 +90,8 @@ export class FileTaintStore implements TaintStore {
       const body = Object.fromEntries([...this.tenants].map(([t, hashes]) => [t, [...hashes]]));
       writeFileSync(tmp, JSON.stringify(body), { mode: 0o600 });
       renameSync(tmp, this.path);
-      this.loadedAt = statSync(this.path).mtimeMs;
+      // Another proxy may have written since the rename, so the time on the file now may not be ours.
+      this.loadedAt = -1;
     } catch {
       // keep going with what is in memory
     }
