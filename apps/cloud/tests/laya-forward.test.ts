@@ -26,9 +26,18 @@ describe('forwardToLaya', () => {
     expect(url).toBe(target.endpoint);
     expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer server-secret');
     const sent = JSON.parse(String(init.body));
-    expect(Object.keys(sent)).toEqual(['state', 'questions']);
-    expect(sent).toEqual({ state: STATE, questions: { verdict: LAYA_VERDICT_QUESTION } });
+    expect(Object.keys(sent).sort()).toEqual(['model', 'questions', 'state']);
+    expect(sent).toEqual({ state: STATE, questions: { verdict: LAYA_VERDICT_QUESTION }, model: 'mastyf' });
     expect(String(init.body)).not.toMatch(/org|workspace|tenant/i);
+  });
+
+  it('lets LAYA_MODEL name the model the server should use', async () => {
+    vi.stubEnv('LAYA_MODEL', 'other');
+    const fetchMock = vi.fn(async () => reply({ answers: { verdict: { choice: 'safe', answer_confidence: 0.9 } } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await forwardToLaya(target, STATE);
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).model).toBe('other');
   });
 
   it('reads the verdict', async () => {
