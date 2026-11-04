@@ -12,7 +12,7 @@ import {
 } from './session-flow-store.js';
 import { snapshotAuditArguments } from '../utils/audit-args-snapshot.js';
 import { fingerprintArguments } from './loop-anomaly-detector.js';
-import { globalSessionTaintTracker } from './difc/index.js';
+import { checkDataFlow } from '../extensions/index.js';
 import { classifyEgress } from './egress-classifier.js';
 import { Logger } from '../utils/logger.js';
 
@@ -118,23 +118,15 @@ export function recordSessionToolCall(ctx: CallContext): void {
 
 /**
  * Block when a prior sensitive read or response DLP hit is followed by an exfil-capable tool call,
- * or when DIFC dynamic taint tracking detects cross-tool data propagation to an egress sink.
+ * or when an extension's data-flow check objects.
  */
 export function evaluateSessionFlowGuard(ctx: CallContext): PolicyDecision | null {
   const key = flowSessionKey(ctx);
 
-  // 1. Precise DIFC dynamic taint evaluation
-  const difcResult = globalSessionTaintTracker.evaluateDIFC({
-    sessionKey: key,
-    toolName: ctx.toolName,
-    args: ctx.arguments,
-  });
-  if (!difcResult.allowed && difcResult.violation) {
-    return {
-      action: 'block',
-      rule: 'difc-exfiltration-prevented',
-      reason: difcResult.violation.reason,
-    };
+  // 1. Data-flow check from any extension
+  const flowBlock = checkDataFlow({ sessionKey: key, toolName: ctx.toolName, args: ctx.arguments });
+  if (flowBlock) {
+    return { action: 'block', rule: flowBlock.rule, reason: flowBlock.reason };
   }
 
   // 2. Heuristic multi-call sequence fallback
@@ -154,7 +146,7 @@ export function evaluateSessionFlowGuard(ctx: CallContext): PolicyDecision | nul
   if (egress === 'safe-read') return null;
 
   // Plain read followed by a message to a person/channel (no URL destination): allow but record it.
-  // Content scanning (secrets-in-args, response DLP, DIFC taint) still applies to the call itself.
+  // Content scanning (secrets-in-args, response DLP) still applies to the call itself.
   // Set MASTYF_AI_FLOW_STRICT_MESSAGING=true to restore the old block.
   if (!sensitivePrior && egress === 'messaging' && process.env['MASTYF_AI_FLOW_STRICT_MESSAGING'] !== 'true') {
     Logger.warn(

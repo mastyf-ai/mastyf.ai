@@ -357,7 +357,7 @@ export async function runEscapeSuite(
       networkBlocked: true,
       credentialDenied: true,
       result: 'PASS',
-      details: 'Mastyf CBAC and DIFC taint tracking prevents permitted tools from acting as proxies to forbidden tools.',
+      details: 'Mastyf CBAC prevents permitted tools from acting as proxies to forbidden tools.',
     });
   }
 

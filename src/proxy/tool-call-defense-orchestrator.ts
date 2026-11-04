@@ -3,7 +3,7 @@
  *
  * Phases: lifecycle → pre-guard → policy → post-policy (spend + semantic).
  */
-import { applyCausalMeta } from '../ai/causal-gate/index.js';
+import { applyExtensionMeta, checkDataFlow } from '../extensions/index.js';
 import type { IncomingHttpHeaders } from 'http';
 import type { PolicyEngine } from '../policy/policy-engine.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
@@ -30,7 +30,6 @@ import { getPersistenceStore } from '../utils/persistence-store.js';
 import { learningMode } from '../policy/learning-mode.js';
 import type { HookContext } from '../policy/tool-call-hooks.js';
 import { recursiveUnwrap } from '../scanners/recursive-arg-unwrap.js';
-import { globalSessionTaintTracker } from '../policy/difc/index.js';
 
 export interface ToolCallDefenseInput {
   serverName: string;
@@ -196,18 +195,14 @@ export async function evaluateToolCallDefense(
     ...unwrapInfo.flattenedArgs,
   };
 
-  // --- Phase 2.5: Decentralized Information Flow Control (DIFC) Gate ----------
-  const sessionKey = `${input.tenantId || 'default'}:${input.serverName}`;
-  const difcResult = globalSessionTaintTracker.evaluateDIFC({
-    sessionKey,
+  const flowBlock = checkDataFlow({
+    sessionKey: `${input.tenantId || 'default'}:${input.serverName}`,
     toolName: input.toolName,
     args: effectiveArgs,
   });
 
-  if (!difcResult.allowed) {
-    const violationReason =
-      difcResult.violation?.reason ??
-      'Blocked by Decentralized Information Flow Control (DIFC): unauthorized data flow to egress sink';
+  if (flowBlock) {
+    const violationReason = flowBlock.reason;
 
     if (emitTelemetry) {
       StructuredLogger.logBlocked({
@@ -216,12 +211,12 @@ export async function evaluateToolCallDefense(
         serverName: input.serverName,
         toolName: input.toolName,
         reason: violationReason,
-        rule: 'difc-exfiltration-prevented',
+        rule: flowBlock.rule,
       });
       Metrics.recordProxyBlock({
         server_name: input.serverName,
-        block_reason: 'difc_exfiltration',
-        rule: 'difc-exfiltration-prevented',
+        block_reason: 'data_flow',
+        rule: flowBlock.rule,
         tenant_id: input.tenantId,
       });
     }
@@ -230,7 +225,7 @@ export async function evaluateToolCallDefense(
       allowed: false,
       phase: 'policy',
       code: -32001,
-      rule: 'difc-exfiltration-prevented',
+      rule: flowBlock.rule,
       reason: violationReason,
       httpStatus: 403,
     };
@@ -328,7 +323,7 @@ export async function evaluateToolCallDefense(
     };
   }
 
-  applyCausalMeta(context, input.meta);
+  applyExtensionMeta(context, input.meta);
   const gateOutcome = await runPostPolicyAllowGates(context, decision, input.serverName);
   if (isPostPolicyGateBlock(gateOutcome)) {
     if (emitTelemetry) {

@@ -4,7 +4,7 @@
 import type { IDatabase } from '../database/database-interface.js';
 import type { ToolFingerprintState } from './tool-fingerprint.js';
 import type { ToolDefinition } from '@mastyf_ai/core';
-import { observeToolList } from '../ai/causal-gate/index.js';
+import { observeToolList } from '../extensions/index.js';
 import { evaluateCveGate } from '../utils/cve-gate.js';
 import { isRugPullBlockedForCall } from './rug-pull-transport.js';
 import {

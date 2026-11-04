@@ -30,7 +30,7 @@ import { RequestIdLock } from '../utils/request-id-lock.js';
 import { scanMultimodalContent } from '../scanners/multimodal-content-scanner.js';
 import type { TenantPolicyRegistry } from '../policy/tenant-policy-registry.js';
 import { isResponseScanSkipped } from '../utils/streaming-inspector.js';
-import { observeToolResult } from '../ai/causal-gate/index.js';
+import { observeToolResult } from '../extensions/index.js';
 import { inspectToolResponse as sharedInspectToolResponse } from './response-inspection.js';
 import {
   flowSessionKey,

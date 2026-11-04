@@ -18,6 +18,9 @@ export type LicenseState = {
   graceUntil: string | null;
   cloudBillingUrl: string;
   checkedAt: number;
+  /** Whether the workspace is on a paid plan. Absent from older control planes, which reads as no. */
+  paid?: boolean;
+  tier?: string;
 };
 
 export type LicenseClientConfig = {
@@ -32,6 +35,7 @@ export type LicenseClientConfig = {
 const GCP_PREFIX = 'gcp_';
 
 let singleton: LicenseClient | null = null;
+let paidPlanForTests: boolean | null = null;
 
 export function isCloudLicenseKey(key: string): boolean {
   return key.startsWith(GCP_PREFIX);
@@ -40,7 +44,7 @@ export function isCloudLicenseKey(key: string): boolean {
 export function loadLicenseClientConfig(): LicenseClientConfig {
   return {
     controlPlaneUrl: process.env['MASTYF_AI_CONTROL_PLANE_URL']?.replace(/\/$/, ''),
-    licenseKey: process.env['MASTYF_AI_LICENSE_KEY'],
+    licenseKey: process.env['MASTYF_AI_LICENSE_KEY']?.trim() || process.env['MASTYF_AI_CLOUD_API_KEY']?.trim(),
     requireLicense: process.env['MASTYF_AI_REQUIRE_LICENSE'] === 'true',
     refreshSeconds: parseInt(process.env['MASTYF_AI_LICENSE_REFRESH_SECONDS'] || '300', 10) || 300,
     graceSeconds: parseInt(process.env['MASTYF_AI_LICENSE_GRACE_SECONDS'] || '900', 10) || 900,
@@ -58,7 +62,13 @@ export function getLicenseClient(): LicenseClient {
   return singleton;
 }
 
+/** There is deliberately no setting that does this outside a test. */
+export function setPaidPlanForTests(paid: boolean | null): void {
+  paidPlanForTests = paid;
+}
+
 export function resetLicenseClientForTests(): void {
+  paidPlanForTests = null;
   if (singleton) {
     singleton.stop();
     singleton = null;
@@ -118,6 +128,35 @@ export class LicenseClient {
     return this.isLicensed();
   }
 
+  /**
+   * Only the control plane's answer counts; the bypass settings above don't apply. An outage never
+   * removes protection from a running proxy, so the last answer stands until the control plane gives
+   * a new one. Only a clear answer (not paid, or a rejected key) turns the paid layers off.
+   */
+  hasPaidPlan(): boolean {
+    if (paidPlanForTests !== null) return paidPlanForTests;
+    if (!this.controlPlaneIsSecure()) return false;
+    if (this.state?.status === 'unreachable') return this.lastGoodState?.paid === true;
+    return this.state?.paid === true;
+  }
+
+  /**
+   * Over plain HTTP, anyone on the network could answer "not paid" and turn a customer's protection
+   * off, so the plan is only read over HTTPS or from this machine.
+   */
+  controlPlaneIsSecure(): boolean {
+    try {
+      const url = new URL(this.config.controlPlaneUrl ?? '');
+      return url.protocol === 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    } catch {
+      return false;
+    }
+  }
+
+  controlPlaneUnreachable(): boolean {
+    return this.state?.status === 'unreachable';
+  }
+
   getTenantSlug(): string | undefined {
     return this.state?.tenantSlug ?? this.lastGoodState?.tenantSlug;
   }
@@ -145,6 +184,15 @@ export class LicenseClient {
   }
 
   async refresh(): Promise<LicenseState | null> {
+    const wasPaid = this.hasPaidPlan();
+    const state = await this.fetchState();
+    if (wasPaid && !this.hasPaidPlan()) {
+      Logger.error('[license] This workspace is no longer on a paid plan. Paid features are now off.');
+    }
+    return state;
+  }
+
+  private async fetchState(): Promise<LicenseState | null> {
     if (!this.isEnabled()) {
       this.state = null;
       this.notify();
@@ -158,6 +206,26 @@ export class LicenseClient {
         signal: AbortSignal.timeout(15000),
       });
 
+      // Only the control plane's own rejection counts as one. A CDN or firewall can also send a bare
+      // 401 or 403 during an incident, and that must not turn off a customer's protection.
+      const rejection = res.status === 401 ? ((await res.clone().json().catch(() => null)) as Partial<LicenseState> | null) : null;
+      if (rejection?.status === 'invalid_key' && rejection.licensed === false) {
+        Logger.warn('[license] Control plane rejected the key');
+        this.lastGoodState = null;
+        this.state = {
+          licensed: false,
+          tenantSlug: 'default',
+          status: 'invalid_key',
+          features: [],
+          expiresAt: null,
+          graceUntil: null,
+          cloudBillingUrl: '',
+          checkedAt: Date.now(),
+        };
+        this.notify();
+        return this.state;
+      }
+
       if (!res.ok) {
         Logger.warn(`[license] Control plane returned ${res.status}`);
         this.applyFailedCheck();
@@ -165,6 +233,12 @@ export class LicenseClient {
       }
 
       const data = (await res.json()) as Omit<LicenseState, 'checkedAt'>;
+      // Something that isn't a real answer about the plan can't end a paid plan either.
+      if (this.lastGoodState?.paid === true && typeof data.paid !== 'boolean') {
+        Logger.warn('[license] Control plane reply did not say whether the plan is paid');
+        this.applyFailedCheck();
+        return this.state;
+      }
       this.state = { ...data, checkedAt: Date.now() };
       if (this.state.licensed) {
         this.lastGoodState = this.state;
@@ -226,6 +300,7 @@ export class LicenseClient {
     this.refreshTimer = setInterval(() => {
       void this.refresh();
     }, this.config.refreshSeconds * 1000);
+    this.refreshTimer.unref?.();
 
     return true;
   }
