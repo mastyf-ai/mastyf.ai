@@ -30,6 +30,7 @@ import { RequestIdLock } from '../utils/request-id-lock.js';
 import { scanMultimodalContent } from '../scanners/multimodal-content-scanner.js';
 import type { TenantPolicyRegistry } from '../policy/tenant-policy-registry.js';
 import { isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { observeToolResult } from '../ai/causal-gate/index.js';
 import { inspectToolResponse as sharedInspectToolResponse } from './response-inspection.js';
 import {
   flowSessionKey,
@@ -325,6 +326,14 @@ export class McpProxyServer {
             spendReservationId: reqCtx.spendReservationId,
           };
 
+          if (msg?.result && isResponseScanSkipped()) {
+            observeToolResult({
+              tenantId: reqCtx.tenantId,
+              serverName: this.serverName,
+              toolName: reqCtx.requestToolName || 'unknown',
+              result: msg.result,
+            });
+          }
           if (msg?.result && !isResponseScanSkipped()) {
             const inspected = await sharedInspectToolResponse({
               response: msg as Record<string, unknown>,
@@ -1101,6 +1110,7 @@ export class McpProxyServer {
               tenantId,
               agentIdentity,
               idempotencyKey,
+              meta: msg.params?._meta as Record<string, unknown> | undefined,
             },
             {
               policyEngine: engine,

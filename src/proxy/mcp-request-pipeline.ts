@@ -1,6 +1,7 @@
 /**
  * Unified MCP lifecycle + resource/prompt gating for all proxy transports.
  */
+import { observePublishedContent } from '../ai/causal-gate/index.js';
 import { hasJsonRpcId, jsonRpcErrorBody } from './json-rpc-utils.js';
 import { validateMcpJsonRpcMessage } from '../validation/mcp-jsonrpc.js';
 import {
@@ -72,6 +73,7 @@ export function applyMcpResponsePipeline(params: {
   sessionId: string;
   latencyMs?: number;
 }): { blocked: boolean; reason?: string; result?: unknown } {
+  observePublishedContent(params.method, params.result);
   const gate = gateMcpMethodResponse({ method: params.method, result: params.result });
   recordMcpLifecycleRequest({
     sessionId: params.sessionId,
