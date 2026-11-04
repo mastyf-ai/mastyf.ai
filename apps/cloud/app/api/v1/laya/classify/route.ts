@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { extractBearerToken, isWellFormedApiKey } from '@/lib/api-keys';
+import { extractBearerToken, extractRawBearerToken, isWellFormedApiKey } from '@/lib/api-keys';
+import { entitlementActive, findIssuedEntitlement } from '@/lib/billing/license-keys';
 import { parseClassifyBody } from '@/lib/laya/classify-request';
-import { resolveLayaTarget } from '@/lib/laya/deployment';
+import { resolveLayaTarget, sharedTarget, type LayaTarget } from '@/lib/laya/deployment';
 import { forwardToLaya } from '@/lib/laya/forward';
 import { workspaceHasProtocolX } from '@/lib/laya/plan';
 import { resolveOrgFromApiKey } from '@/lib/org-context';
@@ -10,6 +11,8 @@ import { checkLayaRateLimit } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
 export const preferredRegion = 'hnd1';
 export const dynamic = 'force-dynamic';
+
+const LICENSE_KEY_PREFIX = 'MG-';
 
 function error(status: number, message: string, headers?: Record<string, string>): NextResponse {
   return NextResponse.json({ error: message }, { status, headers });
@@ -22,21 +25,39 @@ function error(status: number, message: string, headers?: Record<string, string>
  */
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    const token = extractBearerToken(request.headers.get('authorization'));
-    if (!token || !isWellFormedApiKey(token)) return error(401, 'Unauthorized');
-    const resolved = await resolveOrgFromApiKey(token);
-    if (!resolved) return error(401, 'Unauthorized');
-    if (!resolved.scopes.includes('laya:classify')) return error(403, 'Forbidden');
+    const authorization = request.headers.get('authorization');
+    const raw = extractRawBearerToken(authorization);
+    let limitKey: string;
+    let target: LayaTarget;
 
-    const orgId = resolved.org.id;
-    if (!(await workspaceHasProtocolX(orgId))) return error(402, 'Protocol X requires a paid plan');
+    if (raw?.startsWith(LICENSE_KEY_PREFIX)) {
+      // The desktop app holds a license key rather than a workspace key.
+      const entitlement = await findIssuedEntitlement(raw);
+      if (!entitlement) return error(401, 'Unauthorized');
+      if (!entitlementActive(entitlement)) return error(402, 'Protocol X requires a paid plan');
+      limitKey = `license-${entitlement.id}`;
+      const limit = await checkLayaRateLimit(limitKey);
+      if (!limit.success) {
+        return error(429, 'Rate limit exceeded', { 'Retry-After': String(limit.retryAfter) });
+      }
+      target = sharedTarget();
+    } else {
+      const token = extractBearerToken(authorization);
+      if (!token || !isWellFormedApiKey(token)) return error(401, 'Unauthorized');
+      const resolved = await resolveOrgFromApiKey(token);
+      if (!resolved) return error(401, 'Unauthorized');
+      if (!resolved.scopes.includes('laya:classify')) return error(403, 'Forbidden');
 
-    const limit = await checkLayaRateLimit(orgId);
-    if (!limit.success) {
-      return error(429, 'Rate limit exceeded', { 'Retry-After': String(limit.retryAfter) });
+      const orgId = resolved.org.id;
+      if (!(await workspaceHasProtocolX(orgId))) return error(402, 'Protocol X requires a paid plan');
+
+      const limit = await checkLayaRateLimit(orgId);
+      if (!limit.success) {
+        return error(429, 'Rate limit exceeded', { 'Retry-After': String(limit.retryAfter) });
+      }
+
+      target = await resolveLayaTarget(orgId);
     }
-
-    const target = await resolveLayaTarget(orgId);
     if (target.kind === 'self_hosted') {
       return error(403, 'This workspace runs Laya on its own infrastructure');
     }

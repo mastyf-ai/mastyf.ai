@@ -6,12 +6,18 @@ const mocks = vi.hoisted(() => ({
   resolveLayaTarget: vi.fn(),
   forwardToLaya: vi.fn(),
   workspaceHasProtocolX: vi.fn(),
+  findIssuedEntitlement: vi.fn(),
+  sharedTarget: vi.fn(),
 }));
 
 vi.mock('@/lib/laya/plan', () => ({ workspaceHasProtocolX: mocks.workspaceHasProtocolX }));
 vi.mock('@/lib/org-context', () => ({ resolveOrgFromApiKey: mocks.resolveOrgFromApiKey }));
 vi.mock('@/lib/rate-limit', () => ({ checkLayaRateLimit: mocks.checkLayaRateLimit }));
-vi.mock('@/lib/laya/deployment', () => ({ resolveLayaTarget: mocks.resolveLayaTarget }));
+vi.mock('@/lib/laya/deployment', () => ({ resolveLayaTarget: mocks.resolveLayaTarget, sharedTarget: mocks.sharedTarget }));
+vi.mock('@/lib/billing/license-keys', () => ({
+  findIssuedEntitlement: mocks.findIssuedEntitlement,
+  entitlementActive: (e: { status: string }) => e.status === 'active',
+}));
 vi.mock('@/lib/laya/forward', () => ({ forwardToLaya: mocks.forwardToLaya }));
 
 import { POST, dynamic, preferredRegion, runtime } from '../app/api/v1/laya/classify/route';
@@ -49,6 +55,48 @@ describe('POST /api/v1/laya/classify', () => {
     mocks.checkLayaRateLimit.mockResolvedValue({ success: true });
     mocks.resolveLayaTarget.mockResolvedValue(REMOTE);
     mocks.forwardToLaya.mockResolvedValue({ ok: true, choice: 'unsafe', confidence: 0.97 });
+  });
+
+  describe('license keys from the desktop app', () => {
+    const LICENSE = 'MG-AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG';
+
+    beforeEach(() => {
+      mocks.sharedTarget.mockReturnValue(REMOTE);
+    });
+
+    it('gives an active license a verdict from the shared server', async () => {
+      mocks.findIssuedEntitlement.mockResolvedValue({ id: 'ent1', status: 'active' });
+      const res = await call({ key: LICENSE });
+      expect(res.status).toBe(200);
+      expect(mocks.findIssuedEntitlement).toHaveBeenCalledWith(LICENSE);
+      expect(mocks.checkLayaRateLimit).toHaveBeenCalledWith('license-ent1');
+      expect(mocks.resolveOrgFromApiKey).not.toHaveBeenCalled();
+    });
+
+    it('401 for a key nobody issued', async () => {
+      mocks.findIssuedEntitlement.mockResolvedValue(null);
+      expect((await call({ key: LICENSE })).status).toBe(401);
+      expect(mocks.forwardToLaya).not.toHaveBeenCalled();
+    });
+
+    it('402 for a lapsed license', async () => {
+      mocks.findIssuedEntitlement.mockResolvedValue({ id: 'ent1', status: 'expired' });
+      expect((await call({ key: LICENSE })).status).toBe(402);
+      expect(mocks.forwardToLaya).not.toHaveBeenCalled();
+    });
+
+    it('limits each license separately', async () => {
+      mocks.findIssuedEntitlement.mockResolvedValue({ id: 'ent1', status: 'active' });
+      mocks.checkLayaRateLimit.mockResolvedValue({ success: false, retryAfter: 7 });
+      const res = await call({ key: LICENSE });
+      expect(res.status).toBe(429);
+      expect(mocks.forwardToLaya).not.toHaveBeenCalled();
+    });
+
+    it('503, not a verdict, when the lookup fails', async () => {
+      mocks.findIssuedEntitlement.mockRejectedValue(new Error('db down'));
+      expect((await call({ key: LICENSE })).status).toBe(503);
+    });
   });
 
   describe('paid plan', () => {

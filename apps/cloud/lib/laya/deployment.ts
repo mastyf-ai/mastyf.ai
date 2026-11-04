@@ -29,7 +29,7 @@ function isLocalDevHttp(url: string): boolean {
   }
 }
 
-function sharedTarget(): LayaTarget {
+export function sharedTarget(): LayaTarget {
   const endpoint = process.env.LAYA_SHARED_URL?.trim();
   const secret = process.env.LAYA_SHARED_SECRET;
   if (!endpoint || !secret) return { kind: 'unavailable' };
