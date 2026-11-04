@@ -23,28 +23,16 @@ const CLIENTS: Record<ClientPlatform, ClientConfig> = {
     icon: '🤖',
     filename: '~/Library/Application Support/Claude/claude_desktop_config.json',
     lang: 'json',
-    description: 'Intercepts tool calls dispatched by Anthropic Claude Desktop before execution by local MCP servers.',
+    description: 'Starts each MCP server through the gateway. filesystem.json lists the real server in the usual mcpServers format.',
     code: `{
   "mcpServers": {
     "filesystem": {
-      "command": "mastyf-proxy",
+      "command": "mastyf-ai",
       "args": [
-        "--policy", "~/.mastyf/policy.yaml",
-        "--upstream", "npx",
-        "-y", "@modelcontextprotocol/server-filesystem",
-        "/Users/username/Projects"
+        "proxy",
+        "--config", "/Users/you/mastyf/filesystem.json",
+        "--policy", "/Users/you/mastyf/default-policy.yaml"
       ]
-    },
-    "github": {
-      "command": "mastyf-proxy",
-      "args": [
-        "--policy", "~/.mastyf/policy.yaml",
-        "--upstream", "npx",
-        "-y", "@modelcontextprotocol/server-github"
-      ],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_..."
-      }
     }
   }
 }`,
@@ -56,15 +44,16 @@ const CLIENTS: Record<ClientPlatform, ClientConfig> = {
     icon: '⚡',
     filename: '.cursor/mcp.json',
     lang: 'json',
-    description: 'Protects Cursor Agent mode and Composer by routing tool calls through the fail-closed Mastyf boundary.',
+    description: 'Routes Cursor tool calls through the gateway. --blocking-mode warn reports violations while you tune the policy.',
     code: `{
   "mcpServers": {
-    "mastyf-perimeter": {
-      "command": "mastyf-proxy",
+    "my-tools": {
+      "command": "mastyf-ai",
       "args": [
-        "--mode", "warn",
-        "--upstream", "node",
-        "./tools/mcp-server.js"
+        "proxy",
+        "--config", "/Users/you/mastyf/my-tools.json",
+        "--policy", "/Users/you/mastyf/default-policy.yaml",
+        "--blocking-mode", "warn"
       ]
     }
   }
@@ -77,15 +66,15 @@ const CLIENTS: Record<ClientPlatform, ClientConfig> = {
     icon: '🌊',
     filename: '~/.codeium/windsurf/mcp_config.json',
     lang: 'json',
-    description: 'Enforces complete mediation on Windsurf Cascade workflows executing terminal commands and edits.',
+    description: 'Routes Windsurf Cascade tool calls through the gateway before they reach the MCP server.',
     code: `{
   "mcpServers": {
-    "terminal-guard": {
-      "command": "mastyf-proxy",
+    "my-tools": {
+      "command": "mastyf-ai",
       "args": [
-        "--policy", "./security/mastyf.yaml",
-        "--upstream", "npx",
-        "-y", "@modelcontextprotocol/server-terminal"
+        "proxy",
+        "--config", "/Users/you/mastyf/my-tools.json",
+        "--policy", "/Users/you/mastyf/default-policy.yaml"
       ]
     }
   }
@@ -93,86 +82,70 @@ const CLIENTS: Record<ClientPlatform, ClientConfig> = {
   },
   python: {
     id: 'python',
-    title: 'Python SDK / LangGraph',
+    title: 'Python (HTTP check)',
     badge: 'Agent Framework',
     icon: '🐍',
-    filename: 'agent_runner.py',
+    filename: 'guard.py',
     lang: 'python',
-    description: 'Direct Python SDK binding with asynchronous invariant validation and taint tracking for LangChain and CrewAI.',
-    code: `import asyncio
-from mastyf import MastyfGateway, PolicyInvariantException
+    description: 'Asks a running gateway about a tool call before your agent runs it. Start the gateway in the folder holding default-policy.yaml.',
+    code: `import httpx
 
-# Initialize Gateway reference monitor on local socket
-gateway = MastyfGateway(socket_path="/var/run/mastyf/shield.sock")
-
-async def execute_agent_tool(tool_name: str, arguments: dict):
+def mastyf_allows(tool: str, arguments: dict) -> bool:
+    """Anything but a clear "pass", including an error, counts as a no."""
     try:
-        # Evaluates CBAC + DIFC invariants (<4.8µs overhead)
-        receipt = await gateway.mediate(
-            client_id="langchain-agent-core",
-            tool=tool_name,
-            payload=arguments
+        reply = httpx.post(
+            "http://localhost:4000/api/policy/test",
+            json={"tool": tool, "server": "my-agent", "arguments": arguments},
+            timeout=10,
         )
-        print(f"✓ Dispatched! Cryptographic Receipt: {receipt.signature[:16]}...")
-        return await dispatch_upstream(tool_name, arguments)
-    except PolicyInvariantException as e:
-        # Zero bytes transmitted upstream
-        print(f"✕ WIRE SEVERED: {e.violated_rule}")
-        return {"error": "ExecutionBlockedByPolicy", "code": 403}`,
+        return reply.status_code == 200 and reply.json().get("action") == "pass"
+    except httpx.HTTPError:
+        return False`,
   },
   node: {
     id: 'node',
-    title: 'TypeScript / Node SDK',
+    title: 'TypeScript / OpenAI Agents',
     badge: 'Library Client',
     icon: '☕',
     filename: 'agent-security.ts',
     lang: 'typescript',
-    description: 'Type-safe TypeScript client for Model Context Protocol middleware and Autonomous Agent runtimes.',
-    code: `import { MastyfClient } from '@mastyf/client';
+    description: 'Wraps OpenAI Agents SDK tool definitions so a denied call throws instead of running. Install @mastyf_ai/openai-agents-middleware.',
+    code: `import { Agent, tool } from '@openai/agents';
+import { z } from 'zod';
+import { wrapToolsWithMastyfGuard } from '@mastyf_ai/openai-agents-middleware';
 
-const mastyf = new MastyfClient({
-  socketPath: process.env.MASTYF_SOCKET ?? '/tmp/mastyf.sock',
-  failClosed: true, // Default: drop on timeout
-});
+const definitions = wrapToolsWithMastyfGuard(
+  [
+    {
+      name: 'read_file',
+      description: 'Read a file from the project',
+      parameters: z.object({ path: z.string() }),
+      execute: async ({ path }) => readFile(path, 'utf8'),
+    },
+  ],
+  { proxyUrl: 'http://localhost:4000' },
+);
 
-export async function guardToolCall(tool: string, args: Record<string, unknown>) {
-  const verdict = await mastyf.evaluate({
-    invokingClient: 'claude-agent-v1',
-    toolName: tool,
-    arguments: args,
-  });
-
-  if (verdict.decision === 'BLOCKED') {
-    throw new Error(\`Wire Severed: \${verdict.rule} (\${verdict.reason})\`);
-  }
-
-  return verdict.receipt;
-}`,
+const agent = new Agent({ name: 'assistant', tools: definitions.map((d) => tool(d)) });`,
   },
   docker: {
     id: 'docker',
     title: 'Kubernetes / Docker',
-    badge: 'Container Sidecar',
+    badge: 'Container',
     icon: '🐳',
     filename: 'docker-compose.yml',
     lang: 'yaml',
-    description: 'Production sidecar proxy deployment pattern for multi-agent clusters and cloud-hosted workflows.',
-    code: `version: "3.8"
-services:
-  agent-runner:
-    image: mycompany/autonomous-coder:latest
-    environment:
-      - MCP_PROXY_URL=http://mastyf-gateway:4000
-    depends_on:
-      - mastyf-gateway
-
+    description: 'Runs the published gateway image with your policy and server list mounted into it.',
+    code: `services:
   mastyf-gateway:
-    image: ghcr.io/mastyf-ai/gateway:latest
+    image: ghcr.io/mastyf-ai/mastyf.ai:latest
     ports:
       - "4000:4000"
+    environment:
+      - MASTYF_AI_CONFIG_PATH=/etc/mastyf-ai/servers.json
     volumes:
-      - ./security/mastyf-policy.yaml:/etc/mastyf/policy.yaml:ro
-    command: ["mastyf", "start", "--config", "/etc/mastyf/policy.yaml", "--mode", "block"]`,
+      - ./default-policy.yaml:/etc/mastyf-ai/policy.yaml:ro
+      - ./servers.json:/etc/mastyf-ai/servers.json:ro`,
   },
 };
 

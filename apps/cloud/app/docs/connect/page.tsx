@@ -10,14 +10,14 @@ export const metadata: Metadata = {
     'Put Mastyf between your agent and its tools: Claude Desktop, Cursor, Windsurf, Cline, the OpenAI Agents SDK, LangChain, or your own code calling the Claude or OpenAI API.',
 };
 
-const INSTALL = `npm install -g @mastyf_ai/server
-mastyf-ai start --policy ./policy.yaml`;
+const INSTALL = `npm install -g @mastyf_ai/server@4.1.12
+mastyf-ai start --policy ./default-policy.yaml`;
 
 const WRAP_PREVIEW = `# See what would change (writes per-server configs, leaves the app's config alone)
-mastyf-ai wrap --client claude-desktop --policy ./policy.yaml`;
+mastyf-ai wrap --client claude-desktop --policy "$PWD/default-policy.yaml"`;
 
 const WRAP_APPLY = `# Apply it (backs up the app's config first)
-mastyf-ai wrap --client claude-desktop --policy ./policy.yaml --apply`;
+mastyf-ai wrap --client claude-desktop --policy "$PWD/default-policy.yaml" --apply`;
 
 const WRAP_BEFORE = `"filesystem": {
   "command": "npx",
@@ -26,7 +26,7 @@ const WRAP_BEFORE = `"filesystem": {
 
 const WRAP_AFTER = `"filesystem": {
   "command": "<mastyf proxy wrapper>",
-  "args": ["--config", "mastyf-ai-configs/filesystem.json", "--policy", "./policy.yaml"]
+  "args": ["--config", "mastyf-ai-configs/filesystem.json", "--policy", "/path/to/default-policy.yaml"]
 }`;
 
 const OPENAI_INSTALL = 'npm install @mastyf_ai/openai-agents-middleware';
@@ -308,6 +308,10 @@ export default function ConnectYourAgentPage() {
         </p>
         <DocCode code={WRAP_PREVIEW} label="Preview the wrap" />
         <DocCode code={WRAP_APPLY} label="Apply the wrap" />
+        <p className="doc-note">
+          On Windows, <code>wrap</code> doesn&rsquo;t work in this version because a script it needs is missing from the
+          package. Use the manual setup in the <Link href="/developers">developer quickstart</Link> instead.
+        </p>
         <p>
           Use <code>--client cursor</code>, <code>windsurf</code>, <code>cline</code> or <code>auto</code> for the other
           apps, then <strong>restart the app</strong>. Each server entry changes like this:
