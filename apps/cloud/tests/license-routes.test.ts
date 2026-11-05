@@ -7,6 +7,7 @@ vi.mock('@/lib/billing/license-keys', () => ({
   issuedLicenseActivation: mocks.issuedLicenseActivation,
   findIssuedEntitlement: mocks.findIssuedEntitlement,
   entitlementActive: (e: { status: string }) => e.status === 'active',
+  ISSUED_SOURCE: 'razorpay',
 }));
 vi.mock('@/lib/hf-binding-service', () => ({ bindAndGrantHFAccess: vi.fn() }));
 vi.mock('@/lib/pro-license-keys', () => ({ hashProLicenseKey: (k: string) => `hash:${k}` }));
@@ -81,7 +82,7 @@ describe('POST /api/v1/license/renew', () => {
 
 describe('POST /api/v1/license/verify', () => {
   it('accepts an active key', async () => {
-    mocks.byHash.mockResolvedValue({ status: 'active' });
+    mocks.byHash.mockResolvedValue({ status: 'active', source: 'razorpay' });
     const res = await check(post({ licenseKey: 'MG-X' }));
     expect(res.status).toBe(200);
     expect((await res.json()).valid).toBe(true);
@@ -90,6 +91,8 @@ describe('POST /api/v1/license/verify', () => {
   it('refuses anything else', async () => {
     mocks.byHash.mockResolvedValue(null);
     expect((await check(post({ licenseKey: 'other' }))).status).toBe(403);
+    mocks.byHash.mockResolvedValue({ status: 'active', source: 'lemonsqueezy' });
+    expect((await check(post({ licenseKey: 'old' }))).status).toBe(403);
   });
 
   it('says so when it cannot check', async () => {

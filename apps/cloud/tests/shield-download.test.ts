@@ -11,6 +11,7 @@ vi.mock('@/lib/safe-auth', () => ({ safeAuth: mocks.safeAuth }));
 vi.mock('@/lib/pro-license-keys', () => ({ hashProLicenseKey: (k: string) => `hash:${k}` }));
 vi.mock('@/lib/billing/license-keys', () => ({
   entitlementActive: (e: { status: string }) => e.status === 'active',
+  ISSUED_SOURCE: 'razorpay',
 }));
 vi.mock('@/lib/db/schema', () => ({ commercialEntitlements: {}, commercialCustomers: {} }));
 vi.mock('@/lib/db', () => ({
@@ -65,14 +66,14 @@ describe('shield download', () => {
   it('refuses a signed-in user whose entitlement lapsed', async () => {
     mocks.safeAuth.mockResolvedValue({ user: { email: 'a@b.c' } });
     mocks.customer.mockResolvedValue({ id: 'c' });
-    mocks.entitlements.mockResolvedValue([{ status: 'expired' }]);
+    mocks.entitlements.mockResolvedValue([{ status: 'expired', source: 'razorpay' }]);
     expect((await get('', true)).status).toBe(402);
   });
 
   it('gives a signed-in subscriber an expiring link', async () => {
     mocks.safeAuth.mockResolvedValue({ user: { email: 'a@b.c' } });
     mocks.customer.mockResolvedValue({ id: 'c' });
-    mocks.entitlements.mockResolvedValue([{ status: 'active' }]);
+    mocks.entitlements.mockResolvedValue([{ status: 'active', source: 'razorpay' }]);
     const res = await get('?os=linux&arch=deb');
     expect(res.status).toBe(302);
     const url = new URL(res.headers.get('location')!);
@@ -82,15 +83,24 @@ describe('shield download', () => {
   });
 
   it('accepts an active license key', async () => {
-    mocks.entitlementByKey.mockResolvedValue({ status: 'active' });
+    mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'razorpay' });
     const body = await (await get('?key=MG-X&os=win', true)).json();
     expect(body.downloadUrl).toContain('Mastyf-Shield-Setup-latest.exe');
     expect(body.isLicensed).toBe(true);
   });
 
   it('refuses a key that lapsed', async () => {
-    mocks.entitlementByKey.mockResolvedValue({ status: 'expired' });
+    mocks.entitlementByKey.mockResolvedValue({ status: 'expired', source: 'razorpay' });
     expect((await get('?key=MG-X', true)).status).toBe(402);
+  });
+
+  it('counts only keys issued at checkout', async () => {
+    mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'lemonsqueezy' });
+    expect((await get('?key=OLD', true)).status).toBe(402);
+    mocks.safeAuth.mockResolvedValue({ user: { email: 'a@b.c' } });
+    mocks.customer.mockResolvedValue({ id: 'c' });
+    mocks.entitlements.mockResolvedValue([{ status: 'active', source: 'lemonsqueezy' }]);
+    expect((await get('', true)).status).toBe(402);
   });
 
   it('refuses a key nobody issued', async () => {
@@ -99,7 +109,7 @@ describe('shield download', () => {
 
   it('answers 503, not a public link, when storage is not configured', async () => {
     vi.stubEnv('SHIELD_S3_BUCKET', '');
-    mocks.entitlementByKey.mockResolvedValue({ status: 'active' });
+    mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'razorpay' });
     expect((await get('?key=MG-X')).status).toBe(503);
   });
 });
