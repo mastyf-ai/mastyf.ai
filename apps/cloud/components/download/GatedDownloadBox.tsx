@@ -3,61 +3,24 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, Check, Copy, Download } from 'lucide-react';
 import { formatPlanPrice } from '@/lib/billing/plans';
+import {
+  SHIELD_PLATFORM_ORDER,
+  SHIELD_PLATFORMS,
+  SHIELD_VERSION,
+  type ShieldBuild,
+  type ShieldPlatform,
+  shieldDownloadPath,
+  shieldPlatformAvailable,
+} from '@/lib/billing/shield-builds';
 
 type Props = {
-  initialSession: boolean;
-  version: string;
-  sha256: string;
+  /** Signed in with an active plan: downloads need nothing else. */
+  entitled: boolean;
+  signedIn: boolean;
   checkoutUrl: string;
 };
 
-type OperatingSystem = 'mac' | 'windows' | 'linux';
-
-type Build = { arch: string; label: string };
-
-interface OSDetails {
-  id: OperatingSystem;
-  name: string;
-  archs: string;
-  filename: string;
-  notes: string;
-  primary: Build;
-  secondary: Build;
-}
-
-const OS_OPTIONS: Record<OperatingSystem, OSDetails> = {
-  mac: {
-    id: 'mac',
-    name: 'macOS',
-    archs: 'Apple Silicon (M1–M4) and Intel',
-    filename: 'Mastyf-Shield-latest.dmg',
-    notes: 'macOS 12 Monterey or newer. Works with Claude Desktop, Cursor, and Windsurf.',
-    primary: { arch: 'arm64', label: 'Download for Apple Silicon (.dmg)' },
-    secondary: { arch: 'x64', label: 'Intel Mac (.dmg)' },
-  },
-  windows: {
-    id: 'windows',
-    name: 'Windows',
-    archs: 'Windows 10 and 11, x64 and ARM64',
-    filename: 'Mastyf-Shield-Setup-latest.exe',
-    notes: 'Installs a background service that mediates MCP traffic on port 4000.',
-    primary: { arch: 'x64', label: 'Download installer (.exe)' },
-    secondary: { arch: 'zip', label: 'Portable (.zip)' },
-  },
-  linux: {
-    id: 'linux',
-    name: 'Linux',
-    archs: 'glibc 2.28+, x86_64 and arm64',
-    filename: 'Mastyf-Shield-latest.AppImage',
-    notes: 'Standalone AppImage, or a .deb package with a systemd user service.',
-    primary: { arch: 'appimage', label: 'Download AppImage' },
-    secondary: { arch: 'deb', label: 'Debian / Ubuntu (.deb)' },
-  },
-};
-
-const OS_ORDER: OperatingSystem[] = ['mac', 'windows', 'linux'];
-
-function detectOs(): OperatingSystem {
+function detectPlatform(): ShieldPlatform {
   const ua = window.navigator.userAgent.toLowerCase();
   if (ua.includes('win')) return 'windows';
   if (ua.includes('linux') && !ua.includes('android')) return 'linux';
@@ -65,47 +28,45 @@ function detectOs(): OperatingSystem {
 }
 
 /**
- * Platform picker, download buttons, optional license check, and the release checksum.
- * Downloads are never gated: Shield asks for the key on first launch.
+ * Platform picker and downloads, for paid plans only. A signed-in subscriber gets plain links; anyone
+ * else signs in, buys, or enters a key, which is sent in a request body and never put in a URL.
  */
-export function GatedDownloadBox({ version, sha256, checkoutUrl }: Props) {
-  const [selectedOs, setSelectedOs] = useState<OperatingSystem>('mac');
-  const [detectedOs, setDetectedOs] = useState<OperatingSystem | null>(null);
+export function GatedDownloadBox({ entitled, signedIn, checkoutUrl }: Props) {
+  const [selected, setSelected] = useState<ShieldPlatform>('windows');
+  const [detected, setDetected] = useState<ShieldPlatform | null>(null);
   const [licenseKey, setLicenseKey] = useState('');
-  const [status, setStatus] = useState<'idle' | 'verifying' | 'verified' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'verifying' | 'verified' | 'downloading' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
-  const [verifiedPlan, setVerifiedPlan] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Pick the visitor's platform on mount.
   useEffect(() => {
-    const os = detectOs();
-    setSelectedOs(os);
-    setDetectedOs(os);
+    const platform = detectPlatform();
+    setSelected(platform);
+    setDetected(platform);
   }, []);
 
-  const handleVerify = async (e: React.FormEvent) => {
+  const platform = SHIELD_PLATFORMS[selected];
+  const available = shieldPlatformAvailable(selected);
+  const keyVerified = status === 'verified' || status === 'downloading';
+
+  const verifyKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!licenseKey.trim()) {
       setStatus('error');
       setErrorMessage('Enter your license key.');
       return;
     }
-
     setStatus('verifying');
     setErrorMessage('');
-
     try {
       const res = await fetch('/api/v1/license/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licenseKey: licenseKey.trim() }),
       });
-
       const data = await res.json();
       if (res.ok && data.valid) {
         setStatus('verified');
-        setVerifiedPlan(data.plan || 'Mastyf Developer Pro');
       } else {
         setStatus('error');
         setErrorMessage(data.message || 'This key is invalid or has expired. Check it and try again.');
@@ -116,7 +77,31 @@ export function GatedDownloadBox({ version, sha256, checkoutUrl }: Props) {
     }
   };
 
-  const copyChecksum = async () => {
+  /** Asks for a short-lived link with the key in the body, then starts the download. */
+  const downloadWithKey = async (build: ShieldBuild) => {
+    setStatus('downloading');
+    setErrorMessage('');
+    try {
+      const res = await fetch('/api/v1/download/shield', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licenseKey: licenseKey.trim(), os: selected, arch: build.arch }),
+      });
+      const data = await res.json();
+      if (res.ok && data.downloadUrl) {
+        window.location.assign(data.downloadUrl);
+        setStatus('verified');
+      } else {
+        setStatus('error');
+        setErrorMessage(data.error || 'Could not start the download. Try again.');
+      }
+    } catch {
+      setStatus('error');
+      setErrorMessage('Could not reach Mastyf. Check your connection and try again.');
+    }
+  };
+
+  const copyChecksum = async (sha256: string) => {
     try {
       await navigator.clipboard.writeText(sha256);
       setCopied(true);
@@ -126,22 +111,32 @@ export function GatedDownloadBox({ version, sha256, checkoutUrl }: Props) {
     }
   };
 
-  const os = OS_OPTIONS[selectedOs];
-  const downloadUrl = `/api/v1/download/shield?key=${encodeURIComponent(licenseKey.trim())}&os=${selectedOs}`;
+  const downloadButton = (build: ShieldBuild, primary: boolean) => {
+    const className = primary ? 'btn btn-primary' : 'btn';
+    const icon = primary ? <Download size={15} strokeWidth={2} aria-hidden="true" /> : null;
+    if (entitled) {
+      return (
+        <a className={className} href={shieldDownloadPath(selected, build.arch)}>
+          {icon}
+          {build.label}
+        </a>
+      );
+    }
+    return (
+      <button type="button" className={className} onClick={() => downloadWithKey(build)} disabled={status === 'downloading'}>
+        {icon}
+        {build.label}
+      </button>
+    );
+  };
 
   return (
     <div className="dl">
       <div className="dl__os" role="radiogroup" aria-label="Platform">
-        {OS_ORDER.map((id) => (
-          <button
-            key={id}
-            type="button"
-            role="radio"
-            aria-checked={selectedOs === id}
-            onClick={() => setSelectedOs(id)}
-          >
-            {OS_OPTIONS[id].name}
-            {detectedOs === id ? (
+        {SHIELD_PLATFORM_ORDER.map((id) => (
+          <button key={id} type="button" role="radio" aria-checked={selected === id} onClick={() => setSelected(id)}>
+            {SHIELD_PLATFORMS[id].name}
+            {detected === id ? (
               <span className="dl__detected" title="Detected from your browser">
                 <span className="sr-only"> (detected)</span>
               </span>
@@ -152,35 +147,57 @@ export function GatedDownloadBox({ version, sha256, checkoutUrl }: Props) {
 
       <div className="dl__body">
         <p className="dl__name">
-          Mastyf Shield {version} for {os.name}
+          Mastyf Shield {SHIELD_VERSION} for {platform.name}
         </p>
-        <p className="dl__meta">{os.archs}</p>
+        <p className="dl__meta">{platform.requirements}</p>
         <div className="dl__buttons">
-          <a className="btn btn-primary" href={`${downloadUrl}&arch=${os.primary.arch}`}>
-            <Download size={15} strokeWidth={2} aria-hidden="true" />
-            {os.primary.label}
-          </a>
-          <a className="btn" href={`${downloadUrl}&arch=${os.secondary.arch}`}>
-            {os.secondary.label}
-          </a>
+          {!available ? (
+            <span className="btn" aria-disabled="true">
+              Coming soon
+            </span>
+          ) : entitled || keyVerified ? (
+            <>
+              {downloadButton(platform.primary, true)}
+              {downloadButton(platform.secondary, false)}
+            </>
+          ) : signedIn ? (
+            <a className="btn btn-primary" href={checkoutUrl}>
+              Get a plan to download
+            </a>
+          ) : (
+            <a className="btn btn-primary" href="/login?callbackUrl=%2Fdownload">
+              Sign in to download
+            </a>
+          )}
         </div>
-        <p className="dl__note">{os.notes}</p>
+        <p className="dl__note">
+          {available
+            ? platform.install
+            : `Shield for ${platform.name} is on its way. Your plan will cover it when it ships.`}
+        </p>
       </div>
 
       <div className="dl__key">
-        {status === 'verified' ? (
+        {entitled ? (
           <p className="dl__ok" role="status">
             <Check size={16} strokeWidth={2} aria-hidden="true" />
             <span>
-              <strong>License active: {verifiedPlan}.</strong> It covers macOS, Windows and Linux. Install{' '}
-              <code>{os.filename}</code> and paste the same key on first launch.
+              <strong>Your plan is active.</strong> Shield asks for your license key on first launch. It is on your{' '}
+              <a href="/dashboard/license">License page</a>.
+            </span>
+          </p>
+        ) : keyVerified ? (
+          <p className="dl__ok" role="status">
+            <Check size={16} strokeWidth={2} aria-hidden="true" />
+            <span>
+              <strong>License active.</strong> Download above, then paste the same key on first launch.
             </span>
           </p>
         ) : (
-          <form onSubmit={handleVerify} noValidate>
-            <label htmlFor="dl-key">License key</label>
+          <form onSubmit={verifyKey} noValidate>
+            <label htmlFor="dl-key">Have a license key?</label>
             <p className="dl__key-hint" id="dl-key-hint">
-              Optional here. Shield asks for it on first launch, then works offline for 14 days between checks.
+              Enter it to download without signing in, for example on another computer.
             </p>
             <div className="dl__key-row">
               <input
@@ -198,34 +215,30 @@ export function GatedDownloadBox({ version, sha256, checkoutUrl }: Props) {
                 {status === 'verifying' ? 'Verifying…' : 'Verify'}
               </button>
             </div>
-            {status === 'error' ? (
-              <p className="dl__msg dl__msg--error" role="alert">
-                {errorMessage}
-              </p>
-            ) : null}
             <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="link-icon dl__buy">
               No key yet? Get Developer Pro, {formatPlanPrice('developer')} for 30 days
               <ArrowUpRight size={13} strokeWidth={1.75} aria-hidden="true" />
             </a>
           </form>
         )}
+        {status === 'error' ? (
+          <p className="dl__msg dl__msg--error" role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
       </div>
 
-      {sha256 ? (
+      {available && platform.primary.sha256 ? (
         <div className="dl__sum">
-          <span>SHA-256, Apple Silicon</span>
-          <code title={sha256}>{sha256}</code>
+          <span>SHA-256, {platform.primary.label}</span>
+          <code title={platform.primary.sha256}>{platform.primary.sha256}</code>
           <button
             type="button"
             className="icon-btn"
-            onClick={copyChecksum}
+            onClick={() => copyChecksum(platform.primary.sha256!)}
             aria-label={copied ? 'Checksum copied' : 'Copy checksum'}
           >
-            {copied ? (
-              <Check size={14} strokeWidth={2} aria-hidden="true" />
-            ) : (
-              <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
-            )}
+            {copied ? <Check size={14} strokeWidth={2} aria-hidden="true" /> : <Copy size={14} strokeWidth={1.75} aria-hidden="true" />}
           </button>
         </div>
       ) : null}

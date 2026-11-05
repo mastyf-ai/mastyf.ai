@@ -24,7 +24,7 @@ vi.mock('@/lib/db', () => ({
   }),
 }));
 
-import { GET } from '../app/api/v1/download/shield/route';
+import { GET, POST } from '../app/api/v1/download/shield/route';
 import { presignShieldDownload, shieldObjectKey } from '../lib/billing/shield-storage';
 
 const get = (query = '', json = false) =>
@@ -34,12 +34,22 @@ const get = (query = '', json = false) =>
     }),
   );
 
+const post = (body: unknown) =>
+  POST(
+    new Request('https://www.mastyf.ai/api/v1/download/shield', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  );
+
 describe('shield download', () => {
   beforeEach(() => {
     vi.stubEnv('SHIELD_S3_BUCKET', 'b');
     vi.stubEnv('SHIELD_S3_REGION', 'ap-northeast-1');
     vi.stubEnv('SHIELD_S3_ACCESS_KEY_ID', 'AKIDEXAMPLE');
     vi.stubEnv('SHIELD_S3_SECRET_ACCESS_KEY', 'secret');
+    vi.stubEnv('NEXT_PUBLIC_SHIELD_PLATFORMS', 'windows,mac,linux');
     mocks.safeAuth.mockResolvedValue(null);
     mocks.entitlementByKey.mockResolvedValue(null);
   });
@@ -101,6 +111,34 @@ describe('shield download', () => {
     mocks.customer.mockResolvedValue({ id: 'c' });
     mocks.entitlements.mockResolvedValue([{ status: 'active', source: 'lemonsqueezy' }]);
     expect((await get('', true)).status).toBe(402);
+  });
+
+  it('takes a key in the body, so it stays out of the URL', async () => {
+    mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'razorpay' });
+    const res = await post({ licenseKey: 'MG-X', os: 'windows', arch: 'zip' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.downloadUrl).toContain('/latest/Mastyf-Shield-win-x64.zip');
+    expect(body.platform).toBe('windows');
+  });
+
+  it('refuses a body key that lapsed, and a body that is not JSON', async () => {
+    mocks.entitlementByKey.mockResolvedValue({ status: 'expired', source: 'razorpay' });
+    expect((await post({ licenseKey: 'MG-X', os: 'windows' })).status).toBe(402);
+    const res = await POST(new Request('https://www.mastyf.ai/api/v1/download/shield', { method: 'POST', body: 'no' }));
+    expect(res.status).toBe(402);
+  });
+
+  it('gives no link for a platform that has no build yet', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SHIELD_PLATFORMS', 'windows');
+    mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'razorpay' });
+    const json = await post({ licenseKey: 'MG-X', os: 'mac' });
+    expect(json.status).toBe(404);
+    expect(JSON.stringify(await json.json())).not.toContain('amazonaws');
+    const link = await get('?key=MG-X&os=mac');
+    expect(link.status).toBe(302);
+    expect(link.headers.get('location')).toBe('https://www.mastyf.ai/download');
+    expect((await post({ licenseKey: 'MG-X', os: 'windows' })).status).toBe(200);
   });
 
   it('refuses a key nobody issued', async () => {
