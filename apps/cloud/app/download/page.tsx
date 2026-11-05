@@ -4,13 +4,30 @@ import { SiteFooter } from '@/components/SiteFooter';
 import { SiteNav } from '@/components/SiteNav';
 import { GatedDownloadBox } from '@/components/download/GatedDownloadBox';
 import { formatPlanPrice } from '@/lib/billing/plans';
+import { issuedLicenseSummary } from '@/lib/billing/license-keys';
+import { SHIELD_PLATFORM_ORDER, SHIELD_PLATFORMS, SHIELD_VERSION, shieldPlatformAvailable } from '@/lib/billing/shield-builds';
+import { cloudDbAvailable } from '@/lib/db';
 import { CONTACT_EMAIL } from '@/lib/product-links';
 import { GITHUB_REPO_URL } from '@/lib/github-links';
 import { safeAuth } from '@/lib/safe-auth';
 
-const DMG_SHA = process.env.NEXT_PUBLIC_SHIELD_DMG_SHA256 || '9a48d91c89f02c91a0f837eb5f0821d3f94a81e9b2071d02c46f8812c9b10492';
-const VERSION = process.env.NEXT_PUBLIC_SHIELD_VERSION || '0.2.2';
 const CHECKOUT_URL = '/pricing';
+
+/** Whether the signed-in visitor's plan covers Shield. Any failure reads as no, which only hides buttons. */
+async function hasShieldPlan(email: string | null | undefined): Promise<boolean> {
+  if (!email || !cloudDbAvailable()) return false;
+  try {
+    return (await issuedLicenseSummary(email))?.active ?? false;
+  } catch {
+    return false;
+  }
+}
+
+function platformsLabel(): string {
+  const names = SHIELD_PLATFORM_ORDER.filter(shieldPlatformAvailable).map((id) => SHIELD_PLATFORMS[id].name);
+  const soon = SHIELD_PLATFORM_ORDER.filter((id) => !shieldPlatformAvailable(id)).map((id) => SHIELD_PLATFORMS[id].name);
+  return soon.length ? `${names.join(', ')} (${soon.join(' and ')} soon)` : names.join(', ');
+}
 
 export const metadata = {
   title: 'Download Mastyf Shield — Mastyf',
@@ -52,6 +69,7 @@ const REQUIREMENTS = [
 
 export default async function DownloadPage() {
   const session = await safeAuth();
+  const entitled = await hasShieldPlan(session?.user?.email);
 
   return (
     <>
@@ -67,11 +85,11 @@ export default async function DownloadPage() {
             <dl className="facts">
               <div>
                 <dt>Version</dt>
-                <dd>{VERSION}</dd>
+                <dd>{SHIELD_VERSION}</dd>
               </div>
               <div>
                 <dt>Platforms</dt>
-                <dd>macOS, Windows, Linux</dd>
+                <dd>{platformsLabel()}</dd>
               </div>
               <div>
                 <dt>Decision</dt>
@@ -80,7 +98,7 @@ export default async function DownloadPage() {
             </dl>
           </div>
 
-          <GatedDownloadBox initialSession={!!session} version={VERSION} sha256={DMG_SHA} checkoutUrl={CHECKOUT_URL} />
+          <GatedDownloadBox entitled={entitled} signedIn={!!session} checkoutUrl={CHECKOUT_URL} />
         </header>
 
         <section className="section" aria-labelledby="setup-title">

@@ -4,6 +4,7 @@ import { PLAN_FOR_TIER } from '@/components/dashboard/plans';
 import { PRICING_TIERS } from '@/components/landing/stats';
 import { NewLicenseKeyButton } from '@/components/billing/NewLicenseKeyButton';
 import { RazorpayCheckoutButton } from '@/components/billing/RazorpayCheckoutButton';
+import { ShieldDownloadButtons } from '@/components/download/ShieldDownloadButtons';
 import { issuedLicenseSummary } from '@/lib/billing/license-keys';
 import { isPaidPlanId } from '@/lib/billing/plans';
 import { activeLicense, listInstances, listTeams, requireDashboard } from '@/lib/dashboard-data';
@@ -120,6 +121,19 @@ export default async function LicensePage() {
             )}
           </div>
         </section>
+
+        {licenseKey?.active ? (
+          <section className="panel" aria-labelledby="download-shield">
+            <div className="panel__head">
+              <h2 id="download-shield" className="panel__title">
+                Download Shield
+              </h2>
+            </div>
+            <div className="panel__body">
+              <ShieldDownloadButtons />
+            </div>
+          </section>
+        ) : null}
 
         <section className="panel" aria-labelledby="plans">
           <div className="panel__head">
