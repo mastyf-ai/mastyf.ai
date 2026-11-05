@@ -1,39 +1,12 @@
 import { NextResponse } from 'next/server';
 import { safeAuth } from '@/lib/safe-auth';
-import { validateLemonLicense, activateLemonLicense } from '@/lib/lemon-license-client';
 import { getDb, cloudDbAvailable } from '@/lib/db';
 import { commercialEntitlements, commercialCustomers } from '@/lib/db/schema';
 import { hashProLicenseKey } from '@/lib/pro-license-keys';
-import { entitlementActive } from '@/lib/billing/license-keys';
-
-const BASE_STORAGE_URL =
-  process.env.SHIELD_STORAGE_DOWNLOAD_URL?.replace(/\/$/, '') ||
-  'https://github.com/mastyf-ai/mastyf.ai/releases/latest/download';
-
-const DEFAULT_SHIELD_DOWNLOAD_URL =
-  process.env.NEXT_PUBLIC_SHIELD_DMG_URL ||
-  `${BASE_STORAGE_URL}/Mastyf-Shield-latest-arm64.dmg`;
+import { entitlementActive, ISSUED_SOURCE } from '@/lib/billing/license-keys';
+import { presignShieldDownload, shieldObjectKey } from '@/lib/billing/shield-storage';
 
 const CHECKOUT_URL = `${(process.env.NEXT_PUBLIC_APP_URL || 'https://www.mastyf.ai').replace(/\/$/, '')}/pricing`;
-
-function resolveReleaseUrl(os?: string, arch?: string): string {
-  const normOs = (os || '').toLowerCase();
-  const normArch = (arch || '').toLowerCase();
-
-  if (normOs === 'win' || normOs === 'windows') {
-    if (normArch === 'zip') return `${BASE_STORAGE_URL}/Mastyf-Shield-win-x64.zip`;
-    return `${BASE_STORAGE_URL}/Mastyf-Shield-Setup-latest.exe`;
-  }
-  if (normOs === 'linux') {
-    if (normArch === 'deb') return `${BASE_STORAGE_URL}/Mastyf-Shield-latest.deb`;
-    return `${BASE_STORAGE_URL}/Mastyf-Shield-latest.AppImage`;
-  }
-  // macOS default
-  if (normArch === 'x64' || normArch === 'intel') {
-    return `${BASE_STORAGE_URL}/Mastyf-Shield-latest-x64.dmg`;
-  }
-  return `${BASE_STORAGE_URL}/Mastyf-Shield-latest-arm64.dmg`;
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -42,8 +15,6 @@ export async function GET(request: Request) {
   const arch = searchParams.get('arch')?.trim() || '';
   const format = searchParams.get('format')?.trim() || '';
   const isJson = format === 'json' || request.headers.get('accept')?.includes('application/json');
-
-  const targetReleaseUrl = resolveReleaseUrl(os, arch);
 
   let isAuthorized = false;
   let authReason = '';
@@ -62,7 +33,7 @@ export async function GET(request: Request) {
           where: (fields, { eq }) => eq(fields.customerId, customer.id),
         });
 
-        if (entitlements.some((e) => entitlementActive(e))) {
+        if (entitlements.some((e) => e.source === ISSUED_SOURCE && entitlementActive(e))) {
           isAuthorized = true;
           authReason = 'session_entitlement';
         }
@@ -81,7 +52,7 @@ export async function GET(request: Request) {
         const entitlement = await db.query.commercialEntitlements.findFirst({
           where: (fields, { eq }) => eq(fields.licenseKeyHash, keyHash),
         });
-        if (entitlement && entitlementActive(entitlement)) {
+        if (entitlement?.source === ISSUED_SOURCE && entitlementActive(entitlement)) {
           isAuthorized = true;
           authReason = 'database_license_key';
         }
@@ -89,38 +60,34 @@ export async function GET(request: Request) {
         console.warn('[download/shield] Key hash lookup error:', err);
       }
     }
-
-    if (!isAuthorized) {
-      const valRes = await validateLemonLicense({ licenseKey });
-      if (valRes.valid) {
-        isAuthorized = true;
-        authReason = 'lemon_validate';
-      } else {
-        const actRes = await activateLemonLicense({
-          licenseKey,
-          instanceName: 'mastyf-direct-download-instance',
-        });
-        if (actRes.valid) {
-          isAuthorized = true;
-          authReason = 'lemon_activate';
-        }
-      }
-    }
   }
 
-  // Under Approach A: The binary is freely downloadable, and the app enforces activation on first boot
+  if (!isAuthorized) {
+    if (isJson) {
+      return NextResponse.json(
+        { success: false, error: 'An active subscription is required', isLicensed: false, checkoutUrl: CHECKOUT_URL },
+        { status: 402 },
+      );
+    }
+    return NextResponse.redirect(CHECKOUT_URL, 302);
+  }
+
+  const downloadUrl = presignShieldDownload(shieldObjectKey(os, arch));
+  if (!downloadUrl) {
+    return NextResponse.json({ success: false, error: 'Downloads are unavailable' }, { status: 503 });
+  }
+
   if (isJson) {
     return NextResponse.json({
       success: true,
-      downloadUrl: targetReleaseUrl,
-      version: process.env.NEXT_PUBLIC_SHIELD_VERSION || '0.2.2',
+      downloadUrl,
+      version: process.env.NEXT_PUBLIC_SHIELD_VERSION || null,
       checksum: process.env.NEXT_PUBLIC_SHIELD_DMG_SHA256 || null,
-      authorizedVia: isAuthorized ? authReason : 'public_desktop_binary',
-      isLicensed: isAuthorized,
+      authorizedVia: authReason,
+      isLicensed: true,
       platform: os || 'mac',
-      checkoutUrl: CHECKOUT_URL,
     });
   }
 
-  return NextResponse.redirect(targetReleaseUrl, 302);
+  return NextResponse.redirect(downloadUrl, 302);
 }

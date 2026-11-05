@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import { validateLemonLicense, activateLemonLicense } from '@/lib/lemon-license-client';
 import { getDb, cloudDbAvailable } from '@/lib/db';
-import { commercialEntitlements } from '@/lib/db/schema';
 import { hashProLicenseKey } from '@/lib/pro-license-keys';
-import { entitlementActive } from '@/lib/billing/license-keys';
+import { entitlementActive, ISSUED_SOURCE } from '@/lib/billing/license-keys';
 
 export async function POST(request: Request) {
   let body: any = {};
@@ -18,63 +16,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'licenseKey is required' }, { status: 400 });
   }
 
-  // 1. Check local database projection first if available
-  if (cloudDbAvailable()) {
-    try {
-      const db = getDb();
-      const keyHash = hashProLicenseKey(licenseKey);
-      const entitlement = await db.query.commercialEntitlements.findFirst({
-        where: (fields, { eq }) => eq(fields.licenseKeyHash, keyHash),
+  if (!cloudDbAvailable()) {
+    return NextResponse.json({ valid: false, status: 'unavailable', message: 'Please try again shortly.' }, { status: 503 });
+  }
+
+  try {
+    const entitlement = await getDb().query.commercialEntitlements.findFirst({
+      where: (fields, { eq }) => eq(fields.licenseKeyHash, hashProLicenseKey(licenseKey)),
+    });
+    if (entitlement?.source === ISSUED_SOURCE && entitlementActive(entitlement)) {
+      return NextResponse.json({
+        valid: true,
+        status: 'active',
+        message: 'License key is active',
+        plan: 'Mastyf Developer Pro',
+        source: 'local_db',
       });
-
-      if (entitlement && entitlementActive(entitlement)) {
-        return NextResponse.json({
-          valid: true,
-          status: 'active',
-          message: 'License key is active in database',
-          plan: 'Mastyf Developer Pro',
-          source: 'local_db',
-        });
-      }
-    } catch (dbErr) {
-      console.warn('[license/verify] Local db lookup failed, falling back to Lemon API:', dbErr);
     }
-  }
-
-  // 2. Validate against Lemon Squeezy License API
-  const res = await validateLemonLicense({ licenseKey });
-  if (res.valid) {
-    return NextResponse.json({
-      valid: true,
-      status: res.status,
-      message: res.message,
-      plan: 'Mastyf Developer Pro',
-      instancesCount: res.instancesCount,
-    });
-  }
-
-  // 3. If validate returned false because it was never activated yet, try activate check
-  const actRes = await activateLemonLicense({
-    licenseKey,
-    instanceName: 'mastyf-web-download-verifier',
-  });
-
-  if (actRes.valid) {
-    return NextResponse.json({
-      valid: true,
-      status: actRes.status,
-      message: 'License key verified and activated',
-      plan: 'Mastyf Developer Pro',
-      expiresAt: actRes.expiresAt,
-    });
+  } catch (err) {
+    console.warn('[license/verify] lookup failed:', err);
+    return NextResponse.json({ valid: false, status: 'unavailable', message: 'Please try again shortly.' }, { status: 503 });
   }
 
   return NextResponse.json(
-    {
-      valid: false,
-      status: actRes.status || 'invalid',
-      message: actRes.message || 'Invalid or expired license key',
-    },
+    { valid: false, status: 'invalid', message: 'Invalid or expired license key' },
     { status: 403 },
   );
 }

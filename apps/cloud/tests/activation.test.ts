@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'crypto';
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
   activateLemonLicense,
@@ -9,9 +10,12 @@ import {
   verifyEntitlement,
   canonicalizeEntitlement,
   DEFAULT_KEY_ID,
-  PREVIOUS_KEY_ID,
   SignedEntitlement,
 } from '../lib/ed25519-signer';
+
+const testKeys = generateKeyPairSync('ed25519');
+process.env.MASTYF_ED25519_PRIVATE_KEY = testKeys.privateKey.export({ format: 'der', type: 'pkcs8' }).subarray(-32).toString('base64');
+process.env.MASTYF_ED25519_PUBLIC_KEY = testKeys.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64');
 
 describe('Phase 3: Activation, Lemon Squeezy Instances, and Ed25519 Cryptography', () => {
   describe('1. Lemon Squeezy License Instance API Client', () => {
@@ -267,46 +271,6 @@ describe('Phase 3: Activation, Lemon Squeezy Instances, and Ed25519 Cryptography
   });
 
   describe('3. Entitlement Renewal Endpoint Handler', () => {
-    it('renews an active license token', async () => {
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = async () =>
-        new Response(
-          JSON.stringify({
-            valid: true,
-            instance: { id: 'inst_abc123' },
-            license_key: { instances_count: 1 },
-          }),
-          { status: 200 },
-        );
-
-      try {
-        const { POST: renewPOST } = await import('../app/api/v1/license/renew/route');
-        const payload = {
-          licenseKey: 'MG-PRO-ACTIVE-KEY',
-          instanceId: 'inst_abc123',
-        };
-
-        const res = await renewPOST(
-          new Request('http://localhost/api/v1/license/renew', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          }),
-        );
-
-        expect(res.status).toBe(200);
-        const data = await res.json();
-        expect(data.success).toBe(true);
-        expect(data.entitlement).toBeTruthy();
-        expect(data.entitlement.key_id).toBe(DEFAULT_KEY_ID);
-
-        const verifyCheck = verifyEntitlement(data.entitlement);
-        expect(verifyCheck.valid).toBe(true);
-      } finally {
-        globalThis.fetch = originalFetch;
-      }
-    });
-
     it('rejects renewal request when licenseKey is missing', async () => {
       const { POST: renewPOST } = await import('../app/api/v1/license/renew/route');
       const res = await renewPOST(

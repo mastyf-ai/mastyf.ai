@@ -186,7 +186,7 @@ export function GatedDownloadBox({ version, sha256, checkoutUrl }: Props) {
               <input
                 id="dl-key"
                 type="text"
-                placeholder="MSH1-… or 49323daa-…"
+                placeholder="MG-…"
                 value={licenseKey}
                 onChange={(e) => setLicenseKey(e.target.value)}
                 aria-describedby="dl-key-hint"
