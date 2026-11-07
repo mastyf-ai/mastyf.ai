@@ -20,6 +20,7 @@ const NAV_LINKS = [
   { href: '/docs', label: 'Docs' },
   { href: '/certified', label: 'Certified' },
   { href: '/research', label: 'Research' },
+  { href: '/attack-lab', label: 'Attack Lab' },
   { href: '/pricing', label: 'Pricing' },
 ];
 
