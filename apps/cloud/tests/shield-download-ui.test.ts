@@ -14,7 +14,9 @@ describe('Shield download UI', () => {
   it('gives a subscriber plain download links with no key in them', () => {
     const html = box(true, true);
     expect(html).toContain('href="/api/v1/download/shield?os=windows&amp;arch=x64"');
-    expect(html).toContain('href="/api/v1/download/shield?os=windows&amp;arch=zip"');
+    // Windows is the installer only.
+    expect(html).not.toContain('arch=zip');
+    expect(html).not.toContain('.zip');
     expect(html).not.toContain('key=');
   });
 

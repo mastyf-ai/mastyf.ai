@@ -8,7 +8,8 @@ export function shieldObjectKey(os?: string, arch?: string): string {
   const platform = (os || '').toLowerCase();
   const variant = (arch || '').toLowerCase();
   if (platform === 'win' || platform === 'windows') {
-    return variant === 'zip' ? 'latest/Mastyf-Shield-win-x64.zip' : 'latest/Mastyf-Shield-Setup-latest.exe';
+    // The installer is the only Windows download.
+    return 'latest/Mastyf-Shield-Setup-latest.exe';
   }
   if (platform === 'linux') {
     return variant === 'deb' ? 'latest/Mastyf-Shield-latest.deb' : 'latest/Mastyf-Shield-latest.AppImage';

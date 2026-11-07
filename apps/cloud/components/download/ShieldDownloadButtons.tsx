@@ -29,9 +29,11 @@ export function ShieldDownloadButtons() {
                     <Download size={14} strokeWidth={2} aria-hidden="true" />
                     {platform.primary.label}
                   </a>
-                  <a className="btn btn-sm" href={shieldDownloadPath(id, platform.secondary.arch)}>
-                    {platform.secondary.label}
-                  </a>
+                  {platform.secondary ? (
+                    <a className="btn btn-sm" href={shieldDownloadPath(id, platform.secondary.arch)}>
+                      {platform.secondary.label}
+                    </a>
+                  ) : null}
                 </div>
                 <p className="panel__text dim" style={{ margin: '6px 0 0' }}>
                   {platform.install}

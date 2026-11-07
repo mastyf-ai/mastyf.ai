@@ -158,7 +158,7 @@ export function GatedDownloadBox({ entitled, signedIn, checkoutUrl }: Props) {
           ) : entitled || keyVerified ? (
             <>
               {downloadButton(platform.primary, true)}
-              {downloadButton(platform.secondary, false)}
+              {platform.secondary ? downloadButton(platform.secondary, false) : null}
             </>
           ) : signedIn ? (
             <a className="btn btn-primary" href={checkoutUrl}>
