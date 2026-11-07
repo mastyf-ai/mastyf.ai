@@ -28,6 +28,8 @@ export default async function ObservatoryPage() {
         <Link href="/">← {CLOUD_NAME}</Link>
         {' · '}
         <Link href="/benchmarks">Benchmarks</Link>
+        {' · '}
+        <Link href="/attack-lab">Attack Lab</Link>
       </p>
       <h1 style={{ margin: '0 0 0.5rem' }}>MCP Ecosystem Observatory</h1>
       <p style={{ color: 'var(--ink-2)', marginBottom: '1.5rem' }}>
