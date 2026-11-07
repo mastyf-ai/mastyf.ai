@@ -12,10 +12,11 @@ export type ShieldPlatformInfo = {
   requirements: string;
   install: string;
   primary: ShieldBuild;
-  secondary: ShieldBuild;
+  /** A second file for the platform, when there is one. Windows ships the installer only. */
+  secondary?: ShieldBuild;
 };
 
-export const SHIELD_VERSION = process.env.NEXT_PUBLIC_SHIELD_VERSION || '0.3.0';
+export const SHIELD_VERSION = process.env.NEXT_PUBLIC_SHIELD_VERSION || '0.3.1';
 
 export const SHIELD_PLATFORM_ORDER: ShieldPlatform[] = ['windows', 'mac', 'linux'];
 
@@ -29,12 +30,7 @@ export const SHIELD_PLATFORMS: Record<ShieldPlatform, ShieldPlatformInfo> = {
     primary: {
       arch: 'x64',
       label: 'Installer (.exe)',
-      sha256: 'a5e9395a54e139cce6d43727c5da9ecffd38224595e9d424ad5c4d254e03bc51',
-    },
-    secondary: {
-      arch: 'zip',
-      label: 'Portable (.zip)',
-      sha256: '500016931b782ac793403d38c28ccb85173e4152c5145eac3c808cde297afcae',
+      sha256: 'd6d124777dd5c58e4d41a19b60d1aeaa2e12757032effc93873e6cebf3b8444b',
     },
   },
   mac: {

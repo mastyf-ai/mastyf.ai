@@ -115,10 +115,11 @@ describe('shield download', () => {
 
   it('takes a key in the body, so it stays out of the URL', async () => {
     mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'razorpay' });
+    // An old link that still asks for the zip gets the installer: it is the only Windows file.
     const res = await post({ licenseKey: 'MG-X', os: 'windows', arch: 'zip' });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.downloadUrl).toContain('/latest/Mastyf-Shield-win-x64.zip');
+    expect(body.downloadUrl).toContain('/latest/Mastyf-Shield-Setup-latest.exe');
     expect(body.platform).toBe('windows');
   });
 
@@ -155,7 +156,7 @@ describe('shield download', () => {
 describe('shieldObjectKey', () => {
   it.each([
     ['win', '', 'latest/Mastyf-Shield-Setup-latest.exe'],
-    ['windows', 'zip', 'latest/Mastyf-Shield-win-x64.zip'],
+    ['windows', 'zip', 'latest/Mastyf-Shield-Setup-latest.exe'],
     ['linux', '', 'latest/Mastyf-Shield-latest.AppImage'],
     ['linux', 'deb', 'latest/Mastyf-Shield-latest.deb'],
     ['mac', 'x64', 'latest/Mastyf-Shield-latest-x64.dmg'],
