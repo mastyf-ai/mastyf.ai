@@ -27,6 +27,8 @@ export default async function BenchmarksPage() {
         <Link href="/">← {CLOUD_NAME}</Link>
         {' · '}
         <Link href="/observatory">Ecosystem observatory →</Link>
+        {' · '}
+        <Link href="/attack-lab">Attack Lab →</Link>
       </p>
       <h1 style={{ margin: '0 0 0.5rem' }}>Public benchmark leaderboard</h1>
       <p style={{ color: 'var(--ink-2)', marginBottom: '1.5rem' }}>

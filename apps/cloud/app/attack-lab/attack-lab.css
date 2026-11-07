@@ -1,0 +1,180 @@
+/* Attack Lab — uses the global Mastyf tokens (app/design/tokens.css via globals.css), so it follows
+   the site's dark/light theme automatically. Semantic colour: a blocked threat reads as critical (red),
+   the gold accent marks model confidence, and a green check marks the stop. */
+
+.alab-main {
+  max-width: var(--content-max, 1240px);
+  margin: 0 auto;
+  padding-left: max(var(--gutter, 24px), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--gutter, 24px), env(safe-area-inset-right, 0px));
+  padding-block: clamp(32px, 6vw, 72px) 0;
+}
+
+/* header */
+.alab-crumbs { font: 500 var(--fs-meta, 13px) / 1.4 var(--font-code); color: var(--ink-2); margin: 0 0 var(--s-8, 32px); }
+.alab-crumbs a { color: var(--ink-2); text-decoration: none; }
+.alab-crumbs a:hover { color: var(--accent); }
+.alab-eyebrow {
+  font: 600 var(--fs-label, 11.5px) / 1 var(--font-code);
+  letter-spacing: var(--track-eyebrow, 0.2em); text-transform: uppercase; color: var(--accent);
+}
+.alab-h1 {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: var(--fs-h1, clamp(2.5rem, 1.6rem + 3vw, 3.75rem)); line-height: var(--lh-tight, 1.04);
+  letter-spacing: var(--track-display, -0.035em); text-wrap: balance; margin: var(--s-4, 16px) 0 var(--s-4, 16px);
+}
+.alab-lead { max-width: 60ch; color: var(--ink-2); font-size: var(--fs-lead, 18px); line-height: var(--lh-snug, 1.3); margin: 0; }
+.alab-underline { color: var(--ink); border-bottom: 3px solid var(--ok-line); }
+
+.alab-ledger {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); border-radius: var(--r-lg, 14px);
+  overflow: hidden; margin-top: var(--s-10, 40px);
+}
+.alab-ledger > div { background: var(--surface); padding: var(--s-5, 20px); min-width: 0; }
+.alab-n {
+  font: 800 clamp(1.5rem, 1rem + 2.2vw, 2.2rem) / 1 var(--font-display);
+  font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 0.3rem; color: var(--ink-strong);
+}
+.alab-n .alab-to { color: var(--ok); }
+.alab-n .alab-from { color: var(--critical); text-decoration: line-through; text-decoration-thickness: 2px; opacity: 0.85; }
+.alab-ledger small { color: var(--ink-2); font-size: 0.76rem; display: block; margin-top: 0.5rem; line-height: 1.4; }
+
+/* decks */
+.alab-deck { padding-block: clamp(32px, 5vw, 56px) 0; }
+.alab-deckhead { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; margin-bottom: var(--s-6, 24px); }
+.alab-deckhead h2 {
+  font-family: var(--font-display); font-weight: 800; font-size: var(--fs-h3, 1.375rem);
+  letter-spacing: -0.02em; margin: 0; color: var(--ink-strong);
+}
+.alab-k {
+  font: 600 var(--fs-label, 11.5px) / 1 var(--font-code); letter-spacing: var(--track-label, 0.08em);
+  text-transform: uppercase; color: var(--ink-2); border: 1px solid var(--line); border-radius: var(--r-pill, 999px);
+  padding: 0.3rem 0.6rem;
+}
+.alab-deckhead p { color: var(--ink-2); font-size: var(--fs-meta, 13px); margin: 0; flex-basis: 100%; max-width: 72ch; line-height: 1.5; }
+
+.alab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--s-4, 16px); }
+
+/* card */
+.alab-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg, 14px);
+  padding: var(--s-5, 20px) var(--s-5, 20px) var(--s-4, 16px); box-shadow: var(--shadow);
+  text-align: left; cursor: pointer; color: inherit; font: inherit; display: flex; flex-direction: column;
+  gap: 0.55rem; min-width: 0; transition: transform var(--t, 200ms) var(--ease), border-color var(--t, 200ms) var(--ease);
+}
+.alab-card:hover, .alab-card:focus-visible { transform: translateY(-3px); border-color: var(--accent-line); outline: none; }
+.alab-card:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); }
+.alab-card__top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.alab-card__title { font-family: var(--font-display); font-weight: 700; font-size: 1.02rem; color: var(--ink-strong); }
+.alab-chip {
+  font: 600 10px / 1 var(--font-code); letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 0.3rem 0.45rem; border-radius: var(--r-sm, 4px); flex: none;
+}
+.alab-chip--novel { color: var(--accent); background: var(--accent-soft); }
+.alab-chip--common { color: var(--ink-2); background: var(--neutral-soft); }
+.alab-card__how { margin: 0; color: var(--ink-2); font-size: 0.86rem; line-height: 1.45; min-width: 0; }
+.alab-card__meta {
+  display: flex; gap: 0.5rem; align-items: center; margin-top: auto; padding-top: 0.6rem;
+  border-top: 1px dashed var(--line); font: 600 11px / 1 var(--font-code);
+}
+.alab-dot { color: var(--critical); display: inline-flex; align-items: center; gap: 0.3rem; }
+.alab-dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--critical); }
+.alab-catch { color: var(--ok); }
+.alab-lat { color: var(--ink-3); margin-left: auto; }
+
+/* simulator */
+.alab-sim {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 7, 11, 0.62); backdrop-filter: blur(3px);
+  padding: max(14px, env(safe-area-inset-top, 0px)) 14px 14px;
+}
+.alab-panel {
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-xl, 20px);
+  width: min(680px, 100%); max-height: 92vh; overflow: auto; box-shadow: var(--shadow);
+}
+.alab-phead {
+  position: sticky; top: 0; background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: var(--s-5, 20px); display: flex; align-items: flex-start; gap: 0.7rem; z-index: 2;
+}
+.alab-phead__text { min-width: 0; }
+.alab-phead h3 { font-family: var(--font-display); font-weight: 800; font-size: 1.2rem; margin: 0; color: var(--ink-strong); }
+.alab-phead p { color: var(--ink-2); font-size: 0.85rem; margin: 0.3rem 0 0; line-height: 1.45; }
+.alab-x {
+  margin-left: auto; flex: none; background: var(--surface-raised); border: 1px solid var(--line); color: var(--ink);
+  width: 32px; height: 32px; border-radius: var(--r, 8px); cursor: pointer; font-size: 1.2rem; line-height: 1;
+}
+.alab-x:hover { border-color: var(--line-strong); }
+.alab-pbody { padding: var(--s-5, 20px); display: flex; flex-direction: column; gap: var(--s-4, 16px); }
+
+.alab-stage { display: flex; gap: 0.5rem; }
+.alab-step {
+  flex: 1; text-align: center; font: 600 10px / 1.3 var(--font-code); letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--ink-3); padding: 0.5rem 0.3rem; border-radius: var(--r, 8px); background: var(--surface-raised);
+  border: 1px solid transparent; transition: all var(--t, 200ms) var(--ease); min-width: 0;
+}
+.alab-step.on { color: var(--accent); border-color: var(--accent-line); }
+.alab-step.done { color: var(--ok); }
+
+.alab-term { background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--r-lg, 14px); overflow: hidden; position: relative; }
+.alab-tbar {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line);
+  font: 600 11px / 1 var(--font-code); color: var(--ink-3);
+}
+.alab-dir { color: var(--ink); }
+.alab-term pre {
+  margin: 0; padding: 0.9rem 1rem; font: 500 12.5px / 1.6 var(--font-code); color: var(--ink);
+  white-space: pre-wrap; word-break: break-word; overflow-x: auto; min-width: 0;
+}
+.alab-term mark {
+  background: var(--critical-soft); color: inherit; border-radius: 3px; padding: 0.05em 0.1em;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone; transition: background var(--t, 200ms);
+}
+.alab-term.revealed mark { background: var(--critical-soft); outline: 1px solid var(--critical-line); }
+.alab-scan {
+  position: absolute; left: 0; right: 0; height: 40%; top: -40%; pointer-events: none; opacity: 0;
+  background: linear-gradient(180deg, transparent, var(--accent-soft), transparent);
+}
+.alab-term.scanning .alab-scan { animation: alab-sweep 1.1s var(--ease); opacity: 1; }
+@keyframes alab-sweep { from { top: -40%; } to { top: 100%; } }
+
+.alab-verdict {
+  display: none; gap: 0.9rem; align-items: center; background: var(--critical-soft);
+  border: 1px solid var(--critical-line); border-radius: var(--r-lg, 14px); padding: var(--s-4, 16px);
+}
+.alab-verdict.show { display: flex; animation: alab-pop var(--t-slow, 320ms) var(--ease); }
+@keyframes alab-pop { from { transform: scale(0.97); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.alab-badge {
+  font: 800 13px / 1 var(--font-display); letter-spacing: 0.06em; color: #fff; background: var(--critical);
+  padding: 0.5rem 0.7rem; border-radius: var(--r, 8px); flex: none;
+}
+.alab-vdetail { min-width: 0; }
+.alab-vhead { font-weight: 700; color: var(--ink-strong); font-size: 0.92rem; }
+.alab-meter { height: 7px; border-radius: var(--r-pill, 999px); background: var(--surface-raised); overflow: hidden; margin: 0.45rem 0 0.35rem; }
+.alab-meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.9s var(--ease); }
+.alab-nums { font: 600 12px / 1.4 var(--font-code); color: var(--ink-2); display: flex; gap: 1rem; flex-wrap: wrap; }
+.alab-nums b { color: var(--ink); }
+.alab-conf { color: var(--accent); }
+.alab-conf b { color: var(--accent); }
+
+.alab-controls { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.alab-btn {
+  font: 600 13px / 1 var(--font); padding: 0.6rem 0.9rem; border-radius: var(--r, 8px);
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer;
+}
+.alab-btn--ghost { background: transparent; color: var(--accent); }
+.alab-src { font: 500 11px / 1.4 var(--font-code); color: var(--ink-3); margin-left: auto; word-break: break-all; min-width: 0; }
+
+.alab-foot { padding-block: var(--s-16, 64px) var(--s-24, 96px); }
+.alab-foot p { max-width: 78ch; color: var(--ink-3); font-size: 0.82rem; line-height: 1.6; margin: 0; padding-top: var(--s-6, 24px); border-top: 1px solid var(--line); }
+
+@media (max-width: 560px) {
+  .alab-ledger { grid-template-columns: repeat(2, 1fr); }
+  .alab-step { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .alab-term.scanning .alab-scan { animation: none; }
+  .alab-meter i { transition: none; }
+  .alab-verdict.show { animation: none; }
+  .alab-card { transition: none; }
+}
