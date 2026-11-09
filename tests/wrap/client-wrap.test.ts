@@ -21,7 +21,7 @@ describe('client-wrap', () => {
       'utf-8',
     );
     fs.writeFileSync(
-      path.join(projectRoot, 'mastyf-ai-proxy.ps1'),
+      path.join(projectRoot, 'scripts/mastyf-ai-proxy.ps1'),
       '& node "$cliPath" proxy @args\n',
       'utf-8',
     );
@@ -58,25 +58,31 @@ describe('client-wrap', () => {
   });
 
   it('writes per-server mastyf-ai-configs and example wrapped JSON', () => {
-    const result = runWrap({
-      client: 'auto',
-      configPath: clientConfig,
-      projectRoot,
-      policyPath: 'policy-audit.yaml',
-      apply: false,
-    });
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    try {
+      const result = runWrap({
+        client: 'auto',
+        configPath: clientConfig,
+        projectRoot,
+        policyPath: 'policy-audit.yaml',
+        apply: false,
+      });
 
-    expect(result.wrapped).toEqual(['github']);
-    expect(result.skipped.some((s) => s.includes('mastyf-ai'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'mastyf-ai-configs/github.json'))).toBe(true);
+      expect(result.wrapped).toEqual(['github']);
+      expect(result.skipped.some((s) => s.includes('mastyf-ai'))).toBe(true);
+      expect(fs.existsSync(path.join(projectRoot, 'mastyf-ai-configs/github.json'))).toBe(true);
 
-    const example = JSON.parse(
-      fs.readFileSync(
-        path.join(projectRoot, 'examples/cline_mcp_settings.wrapped.json'),
-        'utf-8',
-      ),
-    );
-    expect(example.mcpServers.github.command).toContain('mastyf-ai-proxy.sh');
+      const example = JSON.parse(
+        fs.readFileSync(
+          path.join(projectRoot, 'examples/cline_mcp_settings.wrapped.json'),
+          'utf-8',
+        ),
+      );
+      expect(example.mcpServers.github.command).toContain('mastyf-ai-proxy.sh');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original });
+    }
   });
 
   it('uses mastyf-ai-proxy.ps1 via powershell on win32', () => {
@@ -100,16 +106,69 @@ describe('client-wrap', () => {
   });
 
   it('applies patch with backup when --apply', () => {
-    const result = runWrap({
-      client: 'auto',
-      configPath: clientConfig,
-      projectRoot,
-      policyPath: 'policy-audit.yaml',
-      apply: true,
-    });
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    try {
+      const result = runWrap({
+        client: 'auto',
+        configPath: clientConfig,
+        projectRoot,
+        policyPath: 'policy-audit.yaml',
+        apply: true,
+      });
 
-    expect(result.backupPath).toBeDefined();
-    const live = JSON.parse(fs.readFileSync(clientConfig, 'utf-8'));
-    expect(live.mcpServers.github.args[0]).toBe('--config');
+      expect(result.backupPath).toBeDefined();
+      const live = JSON.parse(fs.readFileSync(clientConfig, 'utf-8'));
+      expect(live.mcpServers.github.args[0]).toBe('--config');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original });
+    }
+  });
+
+  it('finds a relative policy in the folder the command runs from', () => {
+    const workdir = path.join(tmp, 'work');
+    fs.mkdirSync(workdir);
+    const mine = path.join(workdir, 'my-policy.yaml');
+    fs.writeFileSync(mine, "version: '1.0'\npolicy:\n  mode: block\n  rules: []\n", 'utf-8');
+    const originalCwd = process.cwd();
+    process.chdir(workdir);
+    try {
+      const result = runWrap({
+        client: 'auto',
+        configPath: clientConfig,
+        projectRoot,
+        policyPath: './my-policy.yaml',
+        apply: true,
+      });
+      expect(result.wrapped).toEqual(['github']);
+      const live = JSON.parse(fs.readFileSync(clientConfig, 'utf-8'));
+      const args: string[] = live.mcpServers.github.args;
+      expect(fs.realpathSync(args[args.indexOf('--policy') + 1])).toBe(fs.realpathSync(mine));
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it('prefers a policy in the current folder over one of the same name in the install', () => {
+    const workdir = path.join(tmp, 'work');
+    fs.mkdirSync(workdir);
+    const mine = path.join(workdir, 'policy-audit.yaml');
+    fs.writeFileSync(mine, "version: '1.0'\npolicy:\n  mode: block\n  rules: []\n", 'utf-8');
+    const originalCwd = process.cwd();
+    process.chdir(workdir);
+    try {
+      runWrap({
+        client: 'auto',
+        configPath: clientConfig,
+        projectRoot,
+        policyPath: 'policy-audit.yaml',
+        apply: true,
+      });
+      const live = JSON.parse(fs.readFileSync(clientConfig, 'utf-8'));
+      const args: string[] = live.mcpServers.github.args;
+      expect(fs.realpathSync(args[args.indexOf('--policy') + 1])).toBe(fs.realpathSync(mine));
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 });

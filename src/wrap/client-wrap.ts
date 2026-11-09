@@ -121,6 +121,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
   const policyCandidates = path.isAbsolute(opts.policyPath)
     ? [opts.policyPath]
     : [
+        path.resolve(opts.policyPath),
         path.join(installRoot, opts.policyPath),
         path.join(installRoot, 'default-policy.yaml'),
       ];

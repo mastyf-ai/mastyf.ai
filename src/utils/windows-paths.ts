@@ -9,7 +9,7 @@ export function quotePathForPowerShell(filePath: string): string {
 /** Mastyf AI proxy wrapper script for the current platform. */
 export function resolveMastyfAiProxyWrapper(projectRoot: string): string {
   if (process.platform === 'win32') {
-    return path.join(projectRoot, 'mastyf-ai-proxy.ps1');
+    return path.join(projectRoot, 'scripts', 'mastyf-ai-proxy.ps1');
   }
   return path.join(projectRoot, 'scripts', 'mastyf-ai-proxy.sh');
 }

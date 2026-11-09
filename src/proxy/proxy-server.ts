@@ -1,4 +1,5 @@
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
+import { spawnUpstream } from '../utils/spawn-upstream.js';
 import { createInterface } from 'readline';
 import { randomUUID } from 'crypto';
 import {
@@ -196,13 +197,29 @@ export class McpProxyServer {
   }
 
   private spawnChild(): void {
-    this.child = spawn(this.spawnCommand, this.spawnArgs, {
+    const child = spawnUpstream(this.spawnCommand, this.spawnArgs, {
       env: this.spawnEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    this.child = child;
 
     this.child.on('spawn', () => {
       this.restartCount = 0; // reset after successful start
+    });
+
+    // Without a listener, a command that can't start takes the whole proxy down.
+    child.on('error', (err: NodeJS.ErrnoException) => {
+      if (child.pid !== undefined && err.code !== 'ENOENT') {
+        Logger.warn(`[proxy:${this.serverName}] Child process error: ${err.message}`);
+        return;
+      }
+      const message = `Upstream MCP server '${this.serverName}' could not start: ${err.message}`;
+      this.failAllPendingRequests(-32005, message);
+      Logger.error(`[proxy:${this.serverName}] ${message}`);
+      StructuredLogger.logError({ event: 'proxy_error' as const, serverName: this.serverName, error: message });
+    });
+    child.stdin?.on('error', (err: Error) => {
+      Logger.debug(`[proxy:${this.serverName}] child stdin error: ${err.message}`);
     });
 
     this.child.on('exit', (code, signal) => {

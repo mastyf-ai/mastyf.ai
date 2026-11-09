@@ -34,10 +34,10 @@ describe('windows-paths', () => {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
 
-    it('returns mastyf-ai-proxy.ps1 on win32', () => {
+    it('returns scripts/mastyf-ai-proxy.ps1 on win32', () => {
       Object.defineProperty(process, 'platform', { value: 'win32' });
       expect(resolveMastyfAiProxyWrapper(projectRoot)).toBe(
-        path.join(projectRoot, 'mastyf-ai-proxy.ps1'),
+        path.join(projectRoot, 'scripts', 'mastyf-ai-proxy.ps1'),
       );
     });
 
@@ -62,7 +62,7 @@ describe('windows-paths', () => {
       expect(entry.command).toMatch(/powershell/i);
       expect(entry.args[0]).toBe('-NoProfile');
       expect(entry.args).toContain('-File');
-      expect(entry.args).toContain(path.join(projectRoot, 'mastyf-ai-proxy.ps1'));
+      expect(entry.args).toContain(path.join(projectRoot, 'scripts', 'mastyf-ai-proxy.ps1'));
       expect(entry.args).toContain(configPath);
       expect(entry.args).toContain(policyPath);
     });
@@ -88,6 +88,23 @@ describe('windows-paths', () => {
       expect(content).toMatch(/try \{/);
       expect(content).toMatch(/MASTYF_AI_DB_PATH/);
       expect(content).toMatch(/DASHBOARD_ENABLED/);
+    });
+
+    it('starts with its param block, as PowerShell requires', () => {
+      const content = fs.readFileSync(path.join(repoRoot, 'scripts', 'mastyf-ai-proxy.ps1'), 'utf-8');
+      const firstCode = content
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line && !line.startsWith('#'));
+      expect(firstCode).toBe('param(');
+    });
+
+    it('ships the wrapper scripts and a default policy in the npm package', () => {
+      const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf-8')) as { files: string[] };
+      for (const file of ['scripts/mastyf-ai-proxy.sh', 'scripts/mastyf-ai-proxy.ps1', 'default-policy.yaml']) {
+        expect(pkg.files).toContain(file);
+        expect(fs.existsSync(path.join(repoRoot, file))).toBe(true);
+      }
     });
   });
 });

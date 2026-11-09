@@ -1011,6 +1011,9 @@ program
     let policyWatcher: PolicyWatcher | undefined;
     let useWatcherForManager = false;
     if (opts.policy) {
+      // The dashboard's policy routes read this. Without it they ignore --policy and open
+      // default-policy.yaml in the current folder.
+      process.env['MASTYF_AI_POLICY_PATH'] = path.resolve(opts.policy);
       try {
         // Use PolicyWatcher for hot-reload + actual policy object for dashboard
         policyWatcher = new PolicyWatcher(opts.policy);
