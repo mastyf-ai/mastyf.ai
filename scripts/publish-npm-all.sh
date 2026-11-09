@@ -10,6 +10,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# The build scripts use POSIX commands, which cmd.exe can't run.
+if [[ "${OS:-}" == "Windows_NT" ]]; then
+  npm_config_script_shell="$(cygpath -w "$BASH")"
+  export npm_config_script_shell
+fi
+
 PUBLISH_ARGS=(--access public)
 if [[ -n "${NPM_AUTH_TYPE:-}" ]]; then
   PUBLISH_ARGS+=(--auth-type="$NPM_AUTH_TYPE")

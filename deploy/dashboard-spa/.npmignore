@@ -1,3 +1,5 @@
 # Static export (out/) is gitignored but must ship in @mastyf_ai/server npm tarball.
 !out/
 !out/**
+.next/
+node_modules/

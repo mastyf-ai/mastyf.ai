@@ -43,6 +43,10 @@ describe('the published npm package', () => {
     expect(script.indexOf('Publishing @mastyf_ai/server@')).toBeLessThan(script.indexOf('packages/mastyf'));
   });
 
+  it('leaves the dashboard build cache and dependencies out', () => {
+    expect(files.filter((f) => /deploy\/dashboard-spa\/(\.next|node_modules)\//.test(f))).toEqual([]);
+  });
+
   it('ships nothing on the pack denylist', () => {
     const denied = new RegExp(process.env.MASTYF_PACK_DENYLIST || '^$', 'i');
     expect(files.filter((f) => denied.test(f))).toEqual([]);

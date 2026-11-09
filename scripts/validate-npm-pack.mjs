@@ -9,7 +9,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const cwd = process.cwd();
-const raw = execSync('npm pack --silent 2>/dev/null', { cwd, encoding: 'utf8' });
+const raw = execSync('npm pack --silent', { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 const tgzName = raw
   .split('\n')
   .map((l) => l.trim())
