@@ -25,6 +25,8 @@ export interface WrapOptions {
   policyPath: string;
   apply: boolean;
   skipNames?: string[];
+  /** Run the proxy with this node binary directly, for agents launched with no usable PATH. */
+  nodeCommand?: string;
 }
 
 export interface WrapResult {
@@ -88,7 +90,7 @@ function readClientJson(filePath: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
 }
 
-function extractServers(raw: Record<string, unknown>): Record<string, Record<string, unknown>> {
+export function extractServers(raw: Record<string, unknown>): Record<string, Record<string, unknown>> {
   if (raw.mcpServers && typeof raw.mcpServers === 'object') {
     return raw.mcpServers as Record<string, Record<string, unknown>>;
   }
@@ -98,7 +100,7 @@ function extractServers(raw: Record<string, unknown>): Record<string, Record<str
   return raw as Record<string, Record<string, unknown>>;
 }
 
-function setServers(raw: Record<string, unknown>, servers: Record<string, Record<string, unknown>>): void {
+export function setServers(raw: Record<string, unknown>, servers: Record<string, Record<string, unknown>>): void {
   if ('mcpServers' in raw || !('servers' in raw)) {
     raw.mcpServers = servers;
   } else {
@@ -203,6 +205,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
       singleConfigPath,
       policyPath,
       remoteEnv,
+      opts.nodeCommand,
     ) as unknown as Record<string, unknown>;
 
     wrapped.push(server.name);
@@ -232,6 +235,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
       singleConfigPath,
       policyPath,
       remoteEnv,
+      opts.nodeCommand,
     ) as unknown as Record<string, unknown>;
   }
   setServers(exampleRaw, exampleMap);

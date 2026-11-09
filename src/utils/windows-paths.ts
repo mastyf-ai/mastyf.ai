@@ -15,6 +15,8 @@ export function resolveMastyfAiProxyWrapper(projectRoot: string): string {
 }
 
 export interface WrappedMcpServerEntry {
+  /** VS Code requires this; other clients ignore it. */
+  type?: 'stdio';
   command: string;
   args: string[];
   transport: 'stdio';
@@ -27,10 +29,21 @@ export function buildWrappedMcpServerEntry(
   singleConfigPath: string,
   policyPath: string,
   extraEnv?: Record<string, string>,
+  nodeCommand?: string,
 ): WrappedMcpServerEntry {
   const wrapperScript = resolveMastyfAiProxyWrapper(projectRoot);
   const proxyArgs = ['--config', singleConfigPath, '--policy', policyPath];
   const env = extraEnv && Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {};
+
+  if (nodeCommand) {
+    return {
+      command: nodeCommand,
+      args: [path.join(projectRoot, 'dist', 'cli.js'), 'proxy', ...proxyArgs, '--blocking-mode', 'block'],
+      transport: 'stdio',
+      type: 'stdio',
+      ...env,
+    };
+  }
 
   if (process.platform === 'win32') {
     return {
