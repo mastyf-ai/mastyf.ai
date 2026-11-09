@@ -105,6 +105,15 @@ describe('connect', () => {
     expect(call?.[2]).toMatchObject({ mode: 0o600 });
   });
 
+  it('tightens a per-server config that already existed', () => {
+    write('.cursor/mcp.json', { mcpServers: { a: { command: 'x', env: { API_KEY: 'sk-1' } } } });
+    const spy = vi.spyOn(fs, 'chmodSync');
+    run();
+    const call = spy.mock.calls.find(([file]) => String(file).endsWith(path.join('mastyf-ai-configs', 'a.json')));
+    spy.mockRestore();
+    expect(call?.[1]).toBe(0o600);
+  });
+
   it('does not write an example copy of the whole agent config', () => {
     write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd') } });
     run();

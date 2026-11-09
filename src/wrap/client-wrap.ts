@@ -201,6 +201,8 @@ export function runWrap(opts: WrapOptions): WrapResult {
       JSON.stringify({ mcpServers: { [server.name]: upstream } }, null, 2) + '\n',
       managed ? { encoding: 'utf-8', mode: 0o600 } : 'utf-8',
     );
+    // The mode above only applies to a new file.
+    if (managed) fs.chmodSync(singleConfigPath, 0o600);
 
     serverMap[server.name] = buildWrappedMcpServerEntry(
       installRoot,
