@@ -34,6 +34,15 @@ describe('the published npm package', () => {
     expect(packed.dependencies['@mastyf_ai/server']).toMatch(/^\^\d/);
   });
 
+  it('publishes from a freshly built dist and includes the mastyf command', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/publish-npm-all.sh'), 'utf8');
+    expect(script.indexOf('rm -rf dist')).toBeGreaterThan(-1);
+    expect(script.indexOf('rm -rf dist')).toBeLessThan(script.indexOf('pnpm run build'));
+    expect(script).toContain('publish_tgz_pkg packages/server');
+    expect(script.indexOf('publish_tgz_pkg packages/server')).toBeLessThan(script.indexOf('Publishing @mastyf_ai/server@'));
+    expect(script.indexOf('Publishing @mastyf_ai/server@')).toBeLessThan(script.indexOf('packages/mastyf'));
+  });
+
   it('ships nothing on the pack denylist', () => {
     const denied = new RegExp(process.env.MASTYF_PACK_DENYLIST || '^$', 'i');
     expect(files.filter((f) => denied.test(f))).toEqual([]);

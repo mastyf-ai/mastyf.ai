@@ -57,6 +57,8 @@ SERVER_VERSION=$(node -p "require('./package.json').version")
 if ! npm view "@mastyf_ai/server@${SERVER_VERSION}" version &>/dev/null; then
   echo "Building @mastyf_ai/server (full monorepo build)..."
   pnpm install --no-frozen-lockfile
+  # tsc never removes output whose source is gone, so build from empty.
+  rm -rf dist
   pnpm run build
   echo "Building dashboard SPA for npm tarball..."
   sh "$ROOT/scripts/build-dashboard-spa.sh"
@@ -81,8 +83,27 @@ publish_pkg() {
   (cd "$dir" && npm publish "${PUBLISH_ARGS[@]}")
 }
 
+# Packed first so workspace: dependencies become real versions in the published manifest.
+publish_tgz_pkg() {
+  local dir="$1"
+  local name version tgz
+  name=$(node -p "require('./${dir}/package.json').name")
+  version=$(node -p "require('./${dir}/package.json').version")
+  if npm view "${name}@${version}" version &>/dev/null; then
+    echo ""
+    echo "=== Skip ${name}@${version} (already on npm) ==="
+    return 0
+  fi
+  echo ""
+  echo "=== Publishing ${name}@${version} from tarball ==="
+  tgz=$(cd "$dir" && pack_tgz)
+  (cd "$dir" && publish_from_tgz "$name" "$version" "$tgz")
+  rm -f "$dir/$tgz"
+}
+
 publish_pkg packages/plugin-sdk
 publish_pkg packages/core
+publish_tgz_pkg packages/server
 
 # After publishing deps, wait for registry replication then confirm chain
 for dep in core plugin-sdk; do
@@ -109,6 +130,8 @@ else
   node scripts/postpack-npm-deps.mjs
   rm -f "$SERVER_TGZ"
 fi
+
+publish_tgz_pkg packages/mastyf
 
 CLI_VERSION=$(node -p "require('./packages/cli/package.json').version")
 if npm view "@mastyf_ai/cli@${CLI_VERSION}" version &>/dev/null; then
