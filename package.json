@@ -20,6 +20,7 @@
   },
   "main": "./dist/index.js",
   "exports": {
+    "./cli": "./dist/cli.js",
     ".": "./dist/index.js",
     "./package-scorer": {
       "types": "./dist/agentic/trust-score/score-package-by-name.d.ts",

@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -15,6 +16,12 @@ describe('the published npm package', () => {
     for (const f of ['dist/cli.js', 'default-policy.yaml', 'scripts/mastyf-ai-proxy.sh', 'scripts/mastyf-ai-proxy.ps1']) {
       expect(files).toContain(f);
     }
+  });
+
+  it('lets the mastyf command find the CLI through the exports map', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { exports: Record<string, unknown> };
+    expect(pkg.exports['./cli']).toBe('./dist/cli.js');
+    expect(fs.readFileSync(path.join(ROOT, 'packages/mastyf/bin.cjs'), 'utf8')).toContain("require.resolve('@mastyf_ai/server/cli')");
   });
 
   it('ships nothing on the pack denylist', () => {
