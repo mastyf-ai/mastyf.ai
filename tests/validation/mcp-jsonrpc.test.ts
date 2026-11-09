@@ -8,15 +8,26 @@ describe('validateMcpJsonRpcMessage', () => {
     if (!result.ok) expect(result.code).toBe(-32600);
   });
 
-  it('rejects initialize with unsupported protocolVersion', () => {
+  it.each(['not-a-version', '2025', '', undefined])('rejects initialize with malformed protocolVersion %s', (protocolVersion) => {
     const result = validateMcpJsonRpcMessage({
       jsonrpc: '2.0',
       id: 1,
       method: 'initialize',
-      params: { protocolVersion: '2099-01-01', capabilities: {} },
+      params: { protocolVersion, capabilities: {} },
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe(-32602);
+  });
+
+  // The upstream server does the negotiating; a new date must not lock current agents out.
+  it.each(['2025-06-18', '2025-11-25', '2099-01-01'])('accepts initialize with %s', (protocolVersion) => {
+    const result = validateMcpJsonRpcMessage({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: { protocolVersion, capabilities: {} },
+    });
+    expect(result.ok).toBe(true);
   });
 
   it('accepts initialize with 2024-11-05', () => {

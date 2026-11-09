@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-const ALLOWED_PROTOCOL_VERSIONS = new Set(['2024-11-05', '2025-03-26']);
+// MCP versions are dates. The upstream negotiates; the proxy only insists the value is well formed,
+// so a new protocol release can't lock every current agent out.
+const PROTOCOL_VERSION_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
 
 const JsonRpcMessageSchema = z.object({
   jsonrpc: z.literal('2.0'),
@@ -35,11 +37,11 @@ export function validateMcpJsonRpcMessage(
   if (method === 'initialize') {
     const params = parsed.data.params as { protocolVersion?: unknown } | undefined;
     const version = typeof params?.protocolVersion === 'string' ? params.protocolVersion : '';
-    if (!ALLOWED_PROTOCOL_VERSIONS.has(version)) {
+    if (!PROTOCOL_VERSION_FORMAT.test(version)) {
       return {
         ok: false,
         code: -32602,
-        message: `Unsupported or missing MCP protocolVersion (allowed: ${[...ALLOWED_PROTOCOL_VERSIONS].join(', ')})`,
+        message: 'Unsupported or missing MCP protocolVersion (expected YYYY-MM-DD)',
       };
     }
   }
