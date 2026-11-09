@@ -121,5 +121,6 @@ describe('proxy command', () => {
     expect(exited).toBe(false);
     expect(await isUp(port)).toBe(true);
     expect(stdout()).not.toContain('"result"');
-  }, 70_000);
+    expect(await waitFor(() => stdout().includes('-32005'), 15_000)).toBe(true);
+  }, 90_000);
 });

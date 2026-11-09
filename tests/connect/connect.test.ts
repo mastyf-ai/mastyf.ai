@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { announce, connect, disconnect, printableConfig } from '../../src/connect/connect.js';
 import { ensureRuntime } from '../../src/connect/runtime.js';
+import { managedConfigFileName } from '../../src/wrap/client-wrap.js';
 
 let home: string;
 let root: string;
@@ -100,7 +101,7 @@ describe('connect', () => {
     write('.cursor/mcp.json', { mcpServers: { a: { command: 'x', env: { API_KEY: 'sk-1' } } } });
     const spy = vi.spyOn(fs, 'writeFileSync');
     run();
-    const call = spy.mock.calls.find(([file]) => String(file).endsWith(path.join('mastyf-ai-configs', 'a.json')));
+    const call = spy.mock.calls.find(([file]) => String(file).endsWith(managedConfigFileName('cursor', 'a')));
     spy.mockRestore();
     expect(call?.[2]).toMatchObject({ mode: 0o600 });
   });
@@ -109,7 +110,7 @@ describe('connect', () => {
     write('.cursor/mcp.json', { mcpServers: { a: { command: 'x', env: { API_KEY: 'sk-1' } } } });
     const spy = vi.spyOn(fs, 'chmodSync');
     run();
-    const call = spy.mock.calls.find(([file]) => String(file).endsWith(path.join('mastyf-ai-configs', 'a.json')));
+    const call = spy.mock.calls.find(([file]) => String(file).endsWith(managedConfigFileName('cursor', 'a')));
     spy.mockRestore();
     expect(call?.[1]).toBe(0o600);
   });
@@ -155,7 +156,7 @@ describe('disconnect', () => {
   it('deletes the per-server configs it generated', () => {
     write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd') } });
     run();
-    const file = path.join(home, '.mastyf-ai', 'mastyf-ai-configs', 'a.json');
+    const file = path.join(home, '.mastyf-ai', 'mastyf-ai-configs', managedConfigFileName('cursor', 'a'));
     expect(fs.existsSync(file)).toBe(true);
     disconnect({ home });
     expect(fs.existsSync(file)).toBe(false);

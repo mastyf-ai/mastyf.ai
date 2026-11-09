@@ -41,7 +41,8 @@ export function buildWrappedMcpServerEntry(
       args: [path.join(projectRoot, 'dist', 'cli.js'), 'proxy', ...proxyArgs, '--blocking-mode', 'block'],
       transport: 'stdio',
       type: 'stdio',
-      ...env,
+      // One proxy per server: without this, UI-managed servers get merged in and the start fails.
+      env: { ...extraEnv, MASTYF_AI_FLEET_CHILD: 'true' },
     };
   }
 

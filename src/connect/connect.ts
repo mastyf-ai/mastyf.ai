@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildWrappedMcpServerEntry } from '../utils/windows-paths.js';
-import { extractServers, runWrap, sanitizeFileName, setServers } from '../wrap/client-wrap.js';
+import { extractServers, managedConfigFileName, runWrap, sanitizeFileName, setServers } from '../wrap/client-wrap.js';
 import { findAgents } from './agents.js';
 
 type ServerMap = Record<string, Record<string, unknown>>;
@@ -58,14 +58,28 @@ export function connect(opts: { home: string; projectRoot: string; nodeCommand: 
   const result: ConnectResult = { connected: [], failed: [], notProtected: [] };
 
   for (const { agent, configPath } of findAgents(opts.home)) {
+    let entry: ConnectedAgent | undefined;
+    let pending: string[] = [];
     try {
       // Strict JSON on purpose: rewriting a file with comments would destroy them.
       const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
-      if (!raw.mcpServers && !raw.servers) continue;
-      const before = structuredClone(extractServers(raw));
-      for (const [server, cfg] of Object.entries(before)) {
-        if (cfg.url && !cfg.command) result.notProtected.push({ id: agent.id, server });
+      for (const project of Object.values((raw.projects ?? {}) as Record<string, { mcpServers?: object }>)) {
+        for (const server of Object.keys(project?.mcpServers ?? {})) result.notProtected.push({ id: agent.id, server });
       }
+      if (!raw.mcpServers && !raw.servers) continue;
+      const before = structuredClone(extractServers(raw)) as ServerMap;
+
+      entry = state.agents.find((a) => a.configPath === configPath);
+      const isNew = !entry;
+      if (!entry) {
+        entry = { id: agent.id, configPath, originals: {} };
+        state.agents.push(entry);
+      }
+      // On disk before the agent's file changes, so a crash part-way can still be undone.
+      pending = Object.keys(before).filter((name) => !isOurEntry(before[name]) && !entry!.originals[name]);
+      for (const name of pending) entry.originals[name] = before[name]!;
+      writeState(opts.home, state);
+
       const wrap = runWrap({
         client: 'auto',
         configPath,
@@ -74,24 +88,31 @@ export function connect(opts: { home: string; projectRoot: string; nodeCommand: 
         policyPath: path.join(opts.projectRoot, 'default-policy.yaml'),
         apply: true,
         nodeCommand: opts.nodeCommand,
+        fileKey: agent.id,
       });
-      for (const [server, cfg] of Object.entries(before)) {
-        const args = cfg.args as unknown;
-        const looksWrapped = Array.isArray(args) && args.includes('proxy') && !isOurEntry(cfg);
-        if (looksWrapped && !wrap.wrapped.includes(server)) result.notProtected.push({ id: agent.id, server });
-      }
-      if (wrap.wrapped.length === 0) continue;
 
-      let entry = state.agents.find((a) => a.configPath === configPath);
-      if (!entry) {
-        entry = { id: agent.id, configPath, originals: {}, backupPath: wrap.backupPath, wrappedSha: sha(configPath) };
-        state.agents.push(entry);
-      } else {
-        entry.wrappedSha = undefined; // wrapped again later, so the first backup is no longer the whole story
+      for (const name of pending) if (!wrap.wrapped.includes(name)) delete entry.originals[name];
+      for (const name of Object.keys(before)) {
+        if (!wrap.wrapped.includes(name) && !isOurEntry(before[name]) && name !== 'mastyf-ai') {
+          result.notProtected.push({ id: agent.id, server: name });
+        }
       }
-      for (const name of wrap.wrapped) entry.originals[name] = before[name]!;
-      result.connected.push({ id: agent.id, wrapped: wrap.wrapped });
+      if (wrap.wrapped.length > 0) {
+        if (isNew) {
+          entry.backupPath = wrap.backupPath;
+          entry.wrappedSha = sha(configPath);
+        } else {
+          entry.wrappedSha = undefined; // wrapped again later, so the first backup is no longer the whole story
+        }
+        result.connected.push({ id: agent.id, wrapped: wrap.wrapped });
+      }
+      if (Object.keys(entry.originals).length === 0) state.agents = state.agents.filter((a) => a !== entry);
+      writeState(opts.home, state);
     } catch (err) {
+      if (entry) {
+        for (const name of pending) delete entry.originals[name];
+        if (Object.keys(entry.originals).length === 0) state.agents = state.agents.filter((a) => a !== entry);
+      }
       result.failed.push({ id: agent.id, reason: err instanceof Error ? err.message : String(err) });
     }
   }
@@ -105,45 +126,52 @@ function isOurEntry(entry: Record<string, unknown> | undefined): boolean {
   return Array.isArray(args) && args.includes('proxy') && args.includes('--config') && args.includes('--policy');
 }
 
-function removeGenerated(home: string, names: string[]): void {
+function removeGenerated(home: string, agentId: string, names: string[]): void {
   for (const name of names) {
-    fs.rmSync(path.join(mastyfDir(home), 'mastyf-ai-configs', `${sanitizeFileName(name)}.json`), { force: true });
+    fs.rmSync(path.join(mastyfDir(home), 'mastyf-ai-configs', managedConfigFileName(agentId, name)), { force: true });
   }
 }
 
-export function disconnect(opts: { home: string }): { restored: string[]; left: string[] } {
+export function disconnect(opts: { home: string }): { restored: string[]; left: string[]; failed: string[] } {
   const state = readConnectState(opts.home);
-  const out = { restored: [] as string[], left: [] as string[] };
+  const out = { restored: [] as string[], left: [] as string[], failed: [] as string[] };
   if (!state) return out;
+  const unfinished: ConnectedAgent[] = [];
 
   for (const agent of state.agents) {
     const names = Object.keys(agent.originals);
     try {
-      if (agent.backupPath && agent.wrappedSha && sha(agent.configPath) === agent.wrappedSha) {
+      if (agent.backupPath && agent.wrappedSha && fs.existsSync(agent.backupPath) && sha(agent.configPath) === agent.wrappedSha) {
         fs.copyFileSync(agent.backupPath, agent.configPath);
         out.restored.push(...names);
-        removeGenerated(opts.home, names);
+        removeGenerated(opts.home, agent.id, names);
         continue;
       }
       const raw = JSON.parse(fs.readFileSync(agent.configPath, 'utf8')) as Record<string, unknown>;
       const servers = extractServers(raw) as ServerMap;
+      const restored: string[] = [];
+      const left: string[] = [];
       for (const name of names) {
         if (isOurEntry(servers[name])) {
           servers[name] = agent.originals[name]!;
-          out.restored.push(name);
-          removeGenerated(opts.home, [name]);
+          restored.push(name);
         } else {
-          out.left.push(name); // the user changed or removed it since; theirs to keep
+          left.push(name); // the user changed or removed it since; theirs to keep
         }
       }
       setServers(raw, servers);
       fs.writeFileSync(agent.configPath, JSON.stringify(raw, null, 2) + '\n', 'utf8');
+      out.restored.push(...restored);
+      out.left.push(...left);
+      removeGenerated(opts.home, agent.id, restored);
     } catch {
-      out.left.push(...names);
+      out.failed.push(...names);
+      unfinished.push(agent); // keep the undo record so it can be retried
     }
   }
 
-  fs.rmSync(statePath(opts.home), { force: true });
+  if (unfinished.length > 0) writeState(opts.home, { ...state, agents: unfinished });
+  else fs.rmSync(statePath(opts.home), { force: true });
   return out;
 }
 
@@ -155,6 +183,8 @@ export function printableConfig(opts: {
   server: string;
   upstream: { command: string; args?: string[] } | { url: string };
 }): string {
+  // The stdio proxy can't front a URL yet: give the working direct entry instead of one that hangs.
+  if ('url' in opts.upstream) return JSON.stringify({ mcpServers: { [opts.server]: { url: opts.upstream.url } } }, null, 2);
   const configsDir = path.join(mastyfDir(opts.home), 'mastyf-ai-configs');
   fs.mkdirSync(configsDir, { recursive: true, mode: 0o700 });
   const file = path.join(configsDir, `${sanitizeFileName(opts.server)}.json`);

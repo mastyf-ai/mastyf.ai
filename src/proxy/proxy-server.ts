@@ -196,6 +196,8 @@ export class McpProxyServer {
     return getCircuitBreaker(tenantId || this.defaultTenantId, this.serverName);
   }
 
+  private spawnFailure: string | null = null;
+
   private spawnChild(): void {
     const child = spawnUpstream(this.spawnCommand, this.spawnArgs, {
       env: this.spawnEnv,
@@ -204,6 +206,7 @@ export class McpProxyServer {
     this.child = child;
 
     this.child.on('spawn', () => {
+      this.spawnFailure = null;
       this.restartCount = 0; // reset after successful start
     });
 
@@ -214,6 +217,7 @@ export class McpProxyServer {
         return;
       }
       const message = `Upstream MCP server '${this.serverName}' could not start: ${err.message}`;
+      this.spawnFailure = message;
       this.failAllPendingRequests(-32005, message);
       Logger.error(`[proxy:${this.serverName}] ${message}`);
       StructuredLogger.logError({ event: 'proxy_error' as const, serverName: this.serverName, error: message });
@@ -636,7 +640,8 @@ export class McpProxyServer {
    * Called when the AI client writes a request to be proxied.
    * Pipeline: Payload guard → Auth → Circuit Breaker → Policy + RBAC → Forward.
    */
-  async handleClientInput(raw: string): Promise<void> {
+  /** `localStdio` is passed only by the reader of this process's stdin, never by the HTTP relays. */
+  async handleClientInput(raw: string, source?: { localStdio?: boolean }): Promise<void> {
     let requestKey: string | undefined;
     try {
       const peek = JSON.parse(raw) as { id?: string | number; method?: string };
@@ -654,12 +659,22 @@ export class McpProxyServer {
         } catch {
           // non-JSON handled in processClientInput
         }
-        return runWithExtractedTraceAsync(traceHeaders, () => this.processClientInput(raw));
+        return runWithExtractedTraceAsync(traceHeaders, () => this.processClientInput(raw, source?.localStdio === true));
       }),
     );
   }
 
-  private async processClientInput(inboundRaw: string): Promise<void> {
+  private async processClientInput(inboundRaw: string, localStdio = false): Promise<void> {
+    if (this.spawnFailure) {
+      // Answer rather than leave the agent waiting on a server that never started.
+      try {
+        const msg = JSON.parse(inboundRaw);
+        if (hasJsonRpcId(msg.id)) this.sendError(msg.id, -32005, this.spawnFailure);
+      } catch {
+        // Non-JSON has nothing to answer
+      }
+      return;
+    }
     let raw = inboundRaw;
     // ── Payload size guard ──────────────────────────────────
     const rawGuard = checkRawPayloadSize(raw);
@@ -1128,7 +1143,7 @@ export class McpProxyServer {
               agentIdentity,
               idempotencyKey,
               meta: msg.params?._meta as Record<string, unknown> | undefined,
-              localStdio: true,
+              localStdio,
             },
             {
               policyEngine: engine,

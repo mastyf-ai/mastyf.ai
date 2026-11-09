@@ -34,8 +34,8 @@ export const zeroTrustStrategy: PolicyStrategy = {
       dataSensitivity: /read|list|search|get/i.test(normalized.toolName) ? 'medium' : 'low',
     });
 
-    // A low score for a caller with no identity says nothing about the server.
-    if (container?.sandboxEnforcer && raw.agentIdentity) {
+    // A low score for the local client with no identity says nothing about the server.
+    if (container?.sandboxEnforcer && stepUpPossibleFor(raw)) {
       adjustSandboxTierForZeroTrust(container.sandboxEnforcer, {
         serverName: normalized.serverName,
         agentId: raw.agentIdentity?.sub,

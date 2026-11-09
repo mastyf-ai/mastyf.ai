@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 /**
  * Generate per-server mastyf-ai-configs and optional patched client MCP JSON.
  */
@@ -27,6 +28,8 @@ export interface WrapOptions {
   skipNames?: string[];
   /** Run the proxy with this node binary directly, for agents launched with no usable PATH. */
   nodeCommand?: string;
+  /** With nodeCommand: makes per-server file names unique per agent. */
+  fileKey?: string;
 }
 
 export interface WrapResult {
@@ -80,6 +83,17 @@ function isAlreadyWrapped(server: McpServerConfig): boolean {
   if (args.includes('proxy')) return true;
   const cmd = server.command ?? '';
   return isMastyfAiProxyCommand(cmd);
+}
+
+/** Per-server config name for `connect`: agents can share a server name, and names can sanitise alike. */
+export function managedConfigFileName(agentKey: string, serverName: string): string {
+  const hash = createHash('sha256').update(serverName).digest('hex').slice(0, 8);
+  return `${sanitizeFileName(agentKey)}-${sanitizeFileName(serverName)}-${hash}.json`;
+}
+
+/** Agent-expanded placeholders such as ${workspaceFolder}: the wrapped copy would hold them literally. */
+function usesAgentVariables(server: McpServerConfig): boolean {
+  return /\$\{[^}]+\}/.test(JSON.stringify([server.command, server.args, server.env]));
 }
 
 export function sanitizeFileName(name: string): string {
@@ -184,8 +198,13 @@ export function runWrap(opts: WrapOptions): WrapResult {
       continue;
     }
 
-    const safeName = sanitizeFileName(server.name);
-    const singleConfigPath = path.join(configsDir, `${safeName}.json`);
+    if (managed && usesAgentVariables(server)) {
+      skipped.push(`${server.name} (agent variables)`);
+      continue;
+    }
+
+    const fileName = managed && opts.fileKey ? managedConfigFileName(opts.fileKey, server.name) : `${sanitizeFileName(server.name)}.json`;
+    const singleConfigPath = path.join(configsDir, fileName);
     const upstream: Record<string, unknown> = {
       command: server.command,
       args: server.args ?? [],
@@ -204,13 +223,12 @@ export function runWrap(opts: WrapOptions): WrapResult {
     // The mode above only applies to a new file.
     if (managed) fs.chmodSync(singleConfigPath, 0o600);
 
-    serverMap[server.name] = buildWrappedMcpServerEntry(
-      installRoot,
-      singleConfigPath,
-      policyPath,
-      remoteEnv,
-      opts.nodeCommand,
-    ) as unknown as Record<string, unknown>;
+    // Settings the agent reads for itself (disabled, autoApprove, cwd, ...) stay on the entry.
+    const { command: _c, args: _a, env: _e, transport: _t, type: _y, url: _u, ...agentSettings } = serverMap[server.name] ?? {};
+    serverMap[server.name] = {
+      ...(managed ? agentSettings : {}),
+      ...buildWrappedMcpServerEntry(installRoot, singleConfigPath, policyPath, remoteEnv, opts.nodeCommand),
+    } as unknown as Record<string, unknown>;
 
     wrapped.push(server.name);
   }

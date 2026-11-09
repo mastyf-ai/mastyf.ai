@@ -155,11 +155,11 @@ export class ProxyManager {
   /** Primary stdio handler — pool round-robin or single proxy. */
   async dispatchStdioInput(raw: string): Promise<void> {
     if (this.stdioPools.length === 1) {
-      await this.stdioPools[0]!.handleClientInput(raw);
+      await this.stdioPools[0]!.handleClientInput(raw, { localStdio: true });
       return;
     }
     if (this.stdioProxies.length === 1) {
-      await this.stdioProxies[0]!.handleClientInput(raw);
+      await this.stdioProxies[0]!.handleClientInput(raw, { localStdio: true });
     }
   }
 

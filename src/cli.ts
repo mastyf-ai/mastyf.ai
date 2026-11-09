@@ -594,13 +594,14 @@ program
         if (!opts.command && !opts.url) throw new Error('--print-config needs --command or --url');
         const [command, ...args] = (opts.command ?? '').trim().split(/\s+/);
         const upstream = opts.url ? { url: opts.url } : { command: command!, args };
+        if (opts.url) console.error(chalk.yellow('URL-based servers are NOT protected yet; this is the direct entry.'));
         console.log(printableConfig({ projectRoot, nodeCommand: process.execPath, home, server: opts.printConfig, upstream }));
         return;
       }
       const result = connect({ home, projectRoot, nodeCommand: process.execPath, key: opts.key });
       for (const c of result.connected) console.error(chalk.green(`${c.id}: protected ${c.wrapped.join(', ')}`));
       for (const f of result.failed) console.error(chalk.yellow(`${f.id}: skipped, file left unchanged (${f.reason})`));
-      for (const n of result.notProtected) console.error(chalk.yellow(`${n.id}: ${n.server} is a URL-based server and is NOT protected yet`));
+      for (const n of result.notProtected) console.error(chalk.yellow(`${n.id}: ${n.server} is NOT protected: it can\'t be routed through Mastyf AI yet`));
       if (result.connected.length === 0 && result.failed.length === 0) {
         console.error(chalk.yellow('Nothing new to protect. For other agents, use: connect --print-config <name> --command "<cmd>"'));
       } else {
@@ -624,9 +625,10 @@ program
   .action(async () => {
     const os = await import('node:os');
     const { disconnect } = await import('./connect/connect.js');
-    const { restored, left } = disconnect({ home: os.homedir() });
+    const { restored, left, failed } = disconnect({ home: os.homedir() });
     console.error(chalk.green(`Restored: ${restored.join(', ') || '(none)'}`));
     if (left.length) console.error(chalk.yellow(`Left as they are, changed since connect: ${left.join(', ')}`));
+    if (failed.length) console.error(chalk.red(`Could not restore (run disconnect again once the file is readable): ${failed.join(', ')}`));
   });
 
 const aiCmd = program
