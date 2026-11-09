@@ -96,6 +96,26 @@ describe('connect', () => {
     expect(read(cursor).mcpServers.remote).toEqual(remote);
   });
 
+  it('writes per-server configs privately, since they can hold API keys', () => {
+    write('.cursor/mcp.json', { mcpServers: { a: { command: 'x', env: { API_KEY: 'sk-1' } } } });
+    const spy = vi.spyOn(fs, 'writeFileSync');
+    run();
+    const call = spy.mock.calls.find(([file]) => String(file).endsWith(path.join('mastyf-ai-configs', 'a.json')));
+    spy.mockRestore();
+    expect(call?.[2]).toMatchObject({ mode: 0o600 });
+  });
+
+  it('does not write an example copy of the whole agent config', () => {
+    write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd') } });
+    run();
+    expect(fs.existsSync(path.join(home, '.mastyf-ai', 'examples'))).toBe(false);
+  });
+
+  it('says so when a server only looks already wrapped', () => {
+    write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd'), lookalike: { command: 'tool', args: ['proxy', '--port', '1'] } } });
+    expect(run().notProtected).toEqual([{ id: 'cursor', server: 'lookalike' }]);
+  });
+
   it('keeps the key out of agent configs', () => {
     const cursor = write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd') } });
     connect({ home, projectRoot: root, nodeCommand: NODE, key: 'mk_secret' });
@@ -121,6 +141,15 @@ describe('disconnect', () => {
     fs.writeFileSync(cursor, JSON.stringify(raw));
     disconnect({ home });
     expect(read(cursor).mcpServers).toEqual({ a: stdio('a-cmd'), added: stdio('later') });
+  });
+
+  it('deletes the per-server configs it generated', () => {
+    write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd') } });
+    run();
+    const file = path.join(home, '.mastyf-ai', 'mastyf-ai-configs', 'a.json');
+    expect(fs.existsSync(file)).toBe(true);
+    disconnect({ home });
+    expect(fs.existsSync(file)).toBe(false);
   });
 
   it('leaves a server the user changed after connect', () => {
