@@ -27,6 +27,8 @@ export interface ConnectState {
 export interface ConnectResult {
   connected: { id: string; wrapped: string[] }[];
   failed: { id: string; reason: string }[];
+  /** URL-based servers: the stdio proxy can't front these yet, so they stay direct. */
+  notProtected: { id: string; server: string }[];
 }
 
 const mastyfDir = (home: string) => path.join(home, '.mastyf-ai');
@@ -53,7 +55,7 @@ export function connect(opts: { home: string; projectRoot: string; nodeCommand: 
     agents: [],
   };
   if (opts.key) state.key = opts.key;
-  const result: ConnectResult = { connected: [], failed: [] };
+  const result: ConnectResult = { connected: [], failed: [], notProtected: [] };
 
   for (const { agent, configPath } of findAgents(opts.home)) {
     try {
@@ -61,6 +63,9 @@ export function connect(opts: { home: string; projectRoot: string; nodeCommand: 
       const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
       if (!raw.mcpServers && !raw.servers) continue;
       const before = structuredClone(extractServers(raw));
+      for (const [server, cfg] of Object.entries(before)) {
+        if (cfg.url && !cfg.command) result.notProtected.push({ id: agent.id, server });
+      }
       const wrap = runWrap({
         client: 'auto',
         configPath,

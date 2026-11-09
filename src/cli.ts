@@ -600,6 +600,7 @@ program
       const result = connect({ home, projectRoot, nodeCommand: process.execPath, key: opts.key });
       for (const c of result.connected) console.error(chalk.green(`${c.id}: protected ${c.wrapped.join(', ')}`));
       for (const f of result.failed) console.error(chalk.yellow(`${f.id}: skipped, file left unchanged (${f.reason})`));
+      for (const n of result.notProtected) console.error(chalk.yellow(`${n.id}: ${n.server} is a URL-based server and is NOT protected yet`));
       if (result.connected.length === 0 && result.failed.length === 0) {
         console.error(chalk.yellow('Nothing new to protect. For other agents, use: connect --print-config <name> --command "<cmd>"'));
       } else {

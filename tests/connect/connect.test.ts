@@ -88,6 +88,14 @@ describe('connect', () => {
     expect(fs.readFileSync(claude, 'utf8')).toBe(text);
   });
 
+  it('leaves a URL server alone and says it is not protected', () => {
+    const remote = { url: 'https://tools.example/mcp' };
+    const cursor = write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd'), remote } });
+    const res = run();
+    expect(res.notProtected).toEqual([{ id: 'cursor', server: 'remote' }]);
+    expect(read(cursor).mcpServers.remote).toEqual(remote);
+  });
+
   it('keeps the key out of agent configs', () => {
     const cursor = write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd') } });
     connect({ home, projectRoot: root, nodeCommand: NODE, key: 'mk_secret' });
