@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildWrappedMcpServerEntry } from '../utils/windows-paths.js';
-import { extractServers, runWrap, setServers } from '../wrap/client-wrap.js';
+import { extractServers, runWrap, sanitizeFileName, setServers } from '../wrap/client-wrap.js';
 import { findAgents } from './agents.js';
 
 type ServerMap = Record<string, Record<string, unknown>>;
@@ -27,7 +27,7 @@ export interface ConnectState {
 export interface ConnectResult {
   connected: { id: string; wrapped: string[] }[];
   failed: { id: string; reason: string }[];
-  /** URL-based servers: the stdio proxy can't front these yet, so they stay direct. */
+  /** Servers left direct: URL-based ones the stdio proxy can't front yet, and ones that only look wrapped. */
   notProtected: { id: string; server: string }[];
 }
 
@@ -44,7 +44,7 @@ export function readConnectState(home: string): ConnectState | null {
 }
 
 function writeState(home: string, state: ConnectState): void {
-  fs.mkdirSync(mastyfDir(home), { recursive: true });
+  fs.mkdirSync(mastyfDir(home), { recursive: true, mode: 0o700 });
   fs.writeFileSync(statePath(home), JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
 }
 
@@ -75,6 +75,11 @@ export function connect(opts: { home: string; projectRoot: string; nodeCommand: 
         apply: true,
         nodeCommand: opts.nodeCommand,
       });
+      for (const [server, cfg] of Object.entries(before)) {
+        const args = cfg.args as unknown;
+        const looksWrapped = Array.isArray(args) && args.includes('proxy') && !isOurEntry(cfg);
+        if (looksWrapped && !wrap.wrapped.includes(server)) result.notProtected.push({ id: agent.id, server });
+      }
       if (wrap.wrapped.length === 0) continue;
 
       let entry = state.agents.find((a) => a.configPath === configPath);
@@ -97,7 +102,13 @@ export function connect(opts: { home: string; projectRoot: string; nodeCommand: 
 
 function isOurEntry(entry: Record<string, unknown> | undefined): boolean {
   const args = entry?.args;
-  return Array.isArray(args) && args.includes('proxy') && args.includes('--config');
+  return Array.isArray(args) && args.includes('proxy') && args.includes('--config') && args.includes('--policy');
+}
+
+function removeGenerated(home: string, names: string[]): void {
+  for (const name of names) {
+    fs.rmSync(path.join(mastyfDir(home), 'mastyf-ai-configs', `${sanitizeFileName(name)}.json`), { force: true });
+  }
 }
 
 export function disconnect(opts: { home: string }): { restored: string[]; left: string[] } {
@@ -111,6 +122,7 @@ export function disconnect(opts: { home: string }): { restored: string[]; left: 
       if (agent.backupPath && agent.wrappedSha && sha(agent.configPath) === agent.wrappedSha) {
         fs.copyFileSync(agent.backupPath, agent.configPath);
         out.restored.push(...names);
+        removeGenerated(opts.home, names);
         continue;
       }
       const raw = JSON.parse(fs.readFileSync(agent.configPath, 'utf8')) as Record<string, unknown>;
@@ -119,6 +131,7 @@ export function disconnect(opts: { home: string }): { restored: string[]; left: 
         if (isOurEntry(servers[name])) {
           servers[name] = agent.originals[name]!;
           out.restored.push(name);
+          removeGenerated(opts.home, [name]);
         } else {
           out.left.push(name); // the user changed or removed it since; theirs to keep
         }
@@ -143,9 +156,9 @@ export function printableConfig(opts: {
   upstream: { command: string; args?: string[] } | { url: string };
 }): string {
   const configsDir = path.join(mastyfDir(opts.home), 'mastyf-ai-configs');
-  fs.mkdirSync(configsDir, { recursive: true });
-  const file = path.join(configsDir, `${opts.server.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
-  fs.writeFileSync(file, JSON.stringify({ mcpServers: { [opts.server]: opts.upstream } }, null, 2) + '\n', 'utf8');
+  fs.mkdirSync(configsDir, { recursive: true, mode: 0o700 });
+  const file = path.join(configsDir, `${sanitizeFileName(opts.server)}.json`);
+  fs.writeFileSync(file, JSON.stringify({ mcpServers: { [opts.server]: opts.upstream } }, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
   const entry = buildWrappedMcpServerEntry(
     opts.projectRoot,
     file,

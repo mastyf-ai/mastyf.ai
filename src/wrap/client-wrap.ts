@@ -82,7 +82,7 @@ function isAlreadyWrapped(server: McpServerConfig): boolean {
   return isMastyfAiProxyCommand(cmd);
 }
 
-function sanitizeFileName(name: string): string {
+export function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
@@ -151,7 +151,9 @@ export function runWrap(opts: WrapOptions): WrapResult {
   const raw = readClientJson(clientPath);
   const serverMap = extractServers(raw);
 
-  fs.mkdirSync(configsDir, { recursive: true });
+  // Setup through `connect` owns these files; they can carry API keys from the agent's env block.
+  const managed = Boolean(opts.nodeCommand);
+  fs.mkdirSync(configsDir, { recursive: true, ...(managed ? { mode: 0o700 } : {}) });
 
   const remoteEnv: Record<string, string> | undefined = (() => {
     if (!isRemoteSshEnabled()) return undefined;
@@ -197,7 +199,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
     fs.writeFileSync(
       singleConfigPath,
       JSON.stringify({ mcpServers: { [server.name]: upstream } }, null, 2) + '\n',
-      'utf-8',
+      managed ? { encoding: 'utf-8', mode: 0o600 } : 'utf-8',
     );
 
     serverMap[server.name] = buildWrappedMcpServerEntry(
@@ -219,27 +221,29 @@ export function runWrap(opts: WrapOptions): WrapResult {
     fs.writeFileSync(clientPath, JSON.stringify(raw, null, 2) + '\n', 'utf-8');
   }
 
-  const examplePath = path.join(
-    workspaceRoot,
-    'examples',
-    `${path.basename(clientPath, '.json')}.wrapped.json`,
-  );
-  fs.mkdirSync(path.dirname(examplePath), { recursive: true });
-  const exampleRaw = readClientJson(clientPath);
-  const exampleMap = extractServers(exampleRaw);
-  for (const name of wrapped) {
-    const safeName = sanitizeFileName(name);
-    const singleConfigPath = path.join(configsDir, `${safeName}.json`);
-    exampleMap[name] = buildWrappedMcpServerEntry(
-      installRoot,
-      singleConfigPath,
-      policyPath,
-      remoteEnv,
-      opts.nodeCommand,
-    ) as unknown as Record<string, unknown>;
+  if (!managed) {
+    const examplePath = path.join(
+      workspaceRoot,
+      'examples',
+      `${path.basename(clientPath, '.json')}.wrapped.json`,
+    );
+    fs.mkdirSync(path.dirname(examplePath), { recursive: true });
+    const exampleRaw = readClientJson(clientPath);
+    const exampleMap = extractServers(exampleRaw);
+    for (const name of wrapped) {
+      const safeName = sanitizeFileName(name);
+      const singleConfigPath = path.join(configsDir, `${safeName}.json`);
+      exampleMap[name] = buildWrappedMcpServerEntry(
+        installRoot,
+        singleConfigPath,
+        policyPath,
+        remoteEnv,
+        opts.nodeCommand,
+      ) as unknown as Record<string, unknown>;
+    }
+    setServers(exampleRaw, exampleMap);
+    fs.writeFileSync(examplePath, JSON.stringify(exampleRaw, null, 2) + '\n', 'utf-8');
   }
-  setServers(exampleRaw, exampleMap);
-  fs.writeFileSync(examplePath, JSON.stringify(exampleRaw, null, 2) + '\n', 'utf-8');
 
   return {
     clientConfigPath: clientPath,
