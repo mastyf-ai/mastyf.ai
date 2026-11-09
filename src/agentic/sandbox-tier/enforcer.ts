@@ -7,6 +7,19 @@ import { Logger } from '../../utils/logger.js';
 
 export type SandboxTier = 'shadow' | 'redact' | 'allow';
 
+/**
+ * The tier a server starts in. New servers forward with protection on; shadow, which forwards
+ * nothing, is opt-in through MASTYF_AI_DEFAULT_SANDBOX_TIER.
+ */
+export function resolveDefaultSandboxTier(env: NodeJS.ProcessEnv = process.env): SandboxTier {
+  const value = env.MASTYF_AI_DEFAULT_SANDBOX_TIER?.trim();
+  if (!value) return 'allow';
+  if (value === 'shadow' || value === 'redact' || value === 'allow') return value;
+  // Someone asked for a tier and mistyped it, so take the strictest reading.
+  Logger.warn(`[Sandbox] Unknown MASTYF_AI_DEFAULT_SANDBOX_TIER "${value}"; using shadow`);
+  return 'shadow';
+}
+
 export interface SandboxScope {
   scopeType: 'agent' | 'tool' | 'server';
   scopeId: string;
@@ -70,8 +83,8 @@ export class SandboxTierEnforcer {
       const scope = { scopeType: 'server' as const, scopeId: server };
       const cert = container.certifier.getCertification(server);
       if (!cert?.certified) {
-        const defaultTier = (process.env.MASTYF_AI_DEFAULT_SANDBOX_TIER || 'shadow') as SandboxTier;
-        this.setTier(scope, defaultTier);
+        // The default never loosens a tier something stricter has already set.
+        if (this.getTier(scope) === 'allow') this.setTier(scope, resolveDefaultSandboxTier());
         continue;
       }
 
@@ -90,8 +103,7 @@ export class SandboxTierEnforcer {
 
   ensureDefaultTierForServer(serverName: string, certified: boolean): SandboxTier {
     if (certified) return this.getTier({ scopeType: 'server', scopeId: serverName });
-    const envTier = process.env.MASTYF_AI_DEFAULT_SANDBOX_TIER as SandboxTier | undefined;
-    const tier: SandboxTier = envTier ?? 'shadow';
+    const tier = resolveDefaultSandboxTier();
     const scope = { scopeType: 'server' as const, scopeId: serverName };
     if (this.getTier(scope) === 'allow') {
       this.setTier(scope, tier);

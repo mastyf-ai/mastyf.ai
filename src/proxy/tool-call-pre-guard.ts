@@ -20,6 +20,7 @@ export async function runToolCallPreForwardGuard(
   args: Record<string, unknown> | undefined,
   requestId: string,
   opts?: {
+    localStdio?: boolean;
     agentId?: string;
     mcpSessionId?: string;
     meta?: Record<string, unknown>;
@@ -43,6 +44,7 @@ export async function runToolCallPreForwardGuard(
       mcpSessionId: opts?.mcpSessionId,
       meta: opts?.meta ?? (args._meta as Record<string, unknown> | undefined),
       headers: opts?.headers,
+      localStdio: opts?.localStdio,
     });
     const agentic = await agenticPreForwardToolCall(serverName, toolName, args, ctx);
     if (agentic.blocked) {

@@ -29,6 +29,7 @@ const STRIP_SCRIPT_KEYS = new Set([
 function loadWorkspaceVersionMap() {
   const map = {};
   for (const rel of [
+    'package.json', // @mastyf_ai/server itself, which packages/mastyf depends on
     'packages/core/package.json',
     'packages/plugin-sdk/package.json',
     'packages/cli/package.json',

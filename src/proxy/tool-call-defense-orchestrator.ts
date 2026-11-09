@@ -45,6 +45,8 @@ export interface ToolCallDefenseInput {
   mcpSessionId?: string;
   agentId?: string;
   idempotencyKey?: string;
+  /** Set by the stdio proxy only, never from client input. */
+  localStdio?: boolean;
 }
 
 export type ToolCallDefenseBlocked = {
@@ -138,6 +140,7 @@ export async function evaluateToolCallDefense(
     input.arguments,
     input.requestId,
     {
+      localStdio: input.localStdio,
       agentId: input.agentId,
       mcpSessionId: input.mcpSessionId,
       meta: input.meta,
@@ -242,6 +245,7 @@ export async function evaluateToolCallDefense(
     agentIdentity: input.agentIdentity,
     idempotencyKey: input.idempotencyKey,
     sessionId: input.mcpSessionId,
+    localStdio: input.localStdio,
   }, input.headers);
 
   const decision = deps.evaluatePolicy

@@ -1,10 +1,10 @@
 # MCP Mastyf AI stdio proxy launcher (Windows)
-$ErrorActionPreference = 'Stop'
-
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$ProxyArgs
 )
+
+$ErrorActionPreference = 'Stop'
 
 try {
     $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path

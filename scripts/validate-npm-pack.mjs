@@ -9,7 +9,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const cwd = process.cwd();
-const raw = execSync('npm pack --silent 2>/dev/null', { cwd, encoding: 'utf8' });
+const raw = execSync('npm pack --silent', { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 const tgzName = raw
   .split('\n')
   .map((l) => l.trim())
@@ -22,7 +22,9 @@ if (!tgzName) {
 const tgzPath = join(cwd, tgzName);
 
 try {
-  const raw = execSync(`tar -xOf ${JSON.stringify(tgzPath)} package/package.json`, {
+  // A relative name: GNU tar reads the colon in "E:\..." as a remote host.
+  const raw = execSync(`tar -xOf ${JSON.stringify(tgzName)} package/package.json`, {
+    cwd,
     encoding: 'utf8',
   });
   const pkg = JSON.parse(raw);
@@ -50,8 +52,8 @@ try {
   if (pkg.name === '@mastyf_ai/server') {
     try {
       execSync(
-        `tar -xOf ${JSON.stringify(tgzPath)} package/deploy/dashboard-spa/out/index.html`,
-        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
+        `tar -xOf ${JSON.stringify(tgzName)} package/deploy/dashboard-spa/out/index.html`,
+        { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
       );
     } catch {
       errors.push(
