@@ -1128,6 +1128,7 @@ export class McpProxyServer {
               agentIdentity,
               idempotencyKey,
               meta: msg.params?._meta as Record<string, unknown> | undefined,
+              localStdio: true,
             },
             {
               policyEngine: engine,

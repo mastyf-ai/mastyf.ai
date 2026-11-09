@@ -112,6 +112,8 @@ export interface CallContext {
   tenantId?: string;
   /** v0.5.1: Agent identity from OAuth (for RBAC) */
   agentIdentity?: import('../auth/auth-types.js').AgentIdentity;
+  /** Set by the stdio proxy only, never from client input. */
+  localStdio?: boolean;
   /** Optional idempotency key from params._meta or HTTP header */
   idempotencyKey?: string;
   /** Transport/conversation session id (e.g. MCP `mcp-session-id`) used to scope session-flow history. */

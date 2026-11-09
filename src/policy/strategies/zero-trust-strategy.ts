@@ -2,9 +2,15 @@
  * C3 — Policy strategy: zero-trust composite score gate.
  */
 import type { PolicyStrategy } from './types.js';
+import type { CallContext } from '../policy-types.js';
 import { getAgenticContainer, isAgenticEnabled } from '../../utils/agentic-container.js';
 import { getActiveSpiffeId } from '../../utils/mtls-config.js';
 import { adjustSandboxTierForZeroTrust } from '../../agentic/zero-trust/tier-adjuster.js';
+
+/** Only a local stdio client with no identity has nobody to ask. Anything else fails closed. */
+export function stepUpPossibleFor(raw: Pick<CallContext, 'agentIdentity' | 'localStdio'>): boolean {
+  return Boolean(raw.agentIdentity) || raw.localStdio !== true;
+}
 
 export const zeroTrustStrategy: PolicyStrategy = {
   name: 'zero-trust-score',
@@ -20,7 +26,7 @@ export const zeroTrustStrategy: PolicyStrategy = {
       serverName: normalized.serverName,
       toolName: normalized.toolName,
       authenticated: Boolean(raw.agentIdentity),
-      stepUpPossible: Boolean(raw.agentIdentity),
+      stepUpPossible: stepUpPossibleFor(raw),
       spiffeId: getActiveSpiffeId(),
       credentialIdentity: raw.agentIdentity?.sub,
       geoRegion: raw.geoRegion,

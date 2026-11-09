@@ -13,7 +13,11 @@ export type SandboxTier = 'shadow' | 'redact' | 'allow';
  */
 export function resolveDefaultSandboxTier(env: NodeJS.ProcessEnv = process.env): SandboxTier {
   const value = env.MASTYF_AI_DEFAULT_SANDBOX_TIER?.trim();
-  return value === 'shadow' || value === 'redact' || value === 'allow' ? value : 'allow';
+  if (!value) return 'allow';
+  if (value === 'shadow' || value === 'redact' || value === 'allow') return value;
+  // Someone asked for a tier and mistyped it, so take the strictest reading.
+  Logger.warn(`[Sandbox] Unknown MASTYF_AI_DEFAULT_SANDBOX_TIER "${value}"; using shadow`);
+  return 'shadow';
 }
 
 export interface SandboxScope {
@@ -79,8 +83,8 @@ export class SandboxTierEnforcer {
       const scope = { scopeType: 'server' as const, scopeId: server };
       const cert = container.certifier.getCertification(server);
       if (!cert?.certified) {
-        const defaultTier = resolveDefaultSandboxTier();
-        this.setTier(scope, defaultTier);
+        // The default never loosens a tier something stricter has already set.
+        if (this.getTier(scope) === 'allow') this.setTier(scope, resolveDefaultSandboxTier());
         continue;
       }
 

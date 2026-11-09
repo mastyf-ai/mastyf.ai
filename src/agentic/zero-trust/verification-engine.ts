@@ -27,7 +27,7 @@ export interface VerificationContext {
   /** SPIFFE ID from workload API / mTLS cert when available */
   spiffeId?: string;
   credentialIdentity?: string;
-  /** False when there is no caller to ask or session for an approval to apply to. */
+  /** False only for a local stdio caller with no identity; see stepUpPossibleFor. */
   stepUpPossible?: boolean;
 }
 
@@ -92,8 +92,8 @@ export class ZeroTrustVerificationEngine {
       action = 'block';
       reason = 'Composite zero-trust score below block threshold';
     } else if (composite < 0.55 && ctx.stepUpPossible === false) {
-      // A step-up needs a caller who can be asked and a session it can apply to. A local stdio
-      // agent has neither, so demanding one would block it forever. Every other layer still runs.
+      // A local stdio agent has no caller to ask and no session an approval could apply to, so
+      // demanding one would block it forever. Network callers never get here. Other layers still run.
       reason = 'No caller identity to step up';
     } else if (composite < 0.55) {
       if (hasPendingStepUp(sessionKey)) {

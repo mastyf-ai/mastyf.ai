@@ -12,8 +12,17 @@ describe('default sandbox tier', () => {
     expect(resolveDefaultSandboxTier({ MASTYF_AI_DEFAULT_SANDBOX_TIER: 'shadow' })).toBe('shadow');
   });
 
-  it('treats an invalid value as unset', () => {
-    expect(resolveDefaultSandboxTier({ MASTYF_AI_DEFAULT_SANDBOX_TIER: 'nope' })).toBe('allow');
+  it('fails closed on a mistyped operator setting', () => {
+    expect(resolveDefaultSandboxTier({ MASTYF_AI_DEFAULT_SANDBOX_TIER: 'nope' })).toBe('shadow');
+  });
+
+  it('does not loosen a stricter tier during the scheduled sync', () => {
+    vi.stubEnv('MASTYF_AI_DEFAULT_SANDBOX_TIER', undefined);
+    const enforcer = new SandboxTierEnforcer();
+    enforcer.setTier({ scopeType: 'server', scopeId: 's' }, 'shadow');
+    const container = { certifier: { listCertified: () => [{ serverName: 's' }], getCertification: () => ({ certified: false }) } };
+    enforcer.syncFromReputationAndRl(container as never);
+    expect(enforcer.getTier({ scopeType: 'server', scopeId: 's' })).toBe('shadow');
   });
 
   it('leaves an uncertified server forwarding', () => {

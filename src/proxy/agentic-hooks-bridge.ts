@@ -97,6 +97,7 @@ export function buildAgenticToolCallContext(params: {
   mcpSessionId?: string;
   meta?: Record<string, unknown>;
   headers?: IncomingHttpHeaders | Record<string, string | string[] | undefined>;
+  localStdio?: boolean;
 }): AgenticToolCallContext {
   return {
     requestId: params.requestId,
@@ -104,5 +105,6 @@ export function buildAgenticToolCallContext(params: {
     mcpSessionId: params.mcpSessionId,
     meta: params.meta,
     headers: params.headers,
+    localStdio: params.localStdio,
   };
 }

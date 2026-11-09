@@ -312,7 +312,8 @@ export async function runAgenticPreForwardHooks(
 
   container.capabilityGraph.recordObservedCall(serverName, toolName, toolName, { argsKeys: Object.keys(args) });
 
-  const collusionAgent = collusionIdentity(agentId, globalSessionId);
+  const localStdio = typeof sessionCtx === 'object' && sessionCtx.localStdio === true;
+  const collusionAgent = collusionIdentity(agentId, globalSessionId, localStdio);
   const collusion = collusionAgent
     ? container.collusionDetector.record(collusionAgent, serverName, toolName, { sessionId: globalSessionId })
     : null;

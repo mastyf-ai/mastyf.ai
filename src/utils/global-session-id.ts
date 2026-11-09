@@ -9,6 +9,8 @@ export interface GlobalSessionInput {
   requestId: string;
   meta?: Record<string, unknown>;
   headers?: IncomingHttpHeaders | Record<string, string | string[] | undefined>;
+  /** Set by the stdio proxy only, never from client input: one local client on this process's stdin. */
+  localStdio?: boolean;
 }
 
 function headerOne(
@@ -64,12 +66,17 @@ export function isEphemeralRequestSession(globalSessionId: string): boolean {
 }
 
 /**
- * Who the collusion detector should attribute a call to, or null when nobody can be identified.
- * A per-request id is a different "agent" on every call, which reads as many agents colluding.
+ * Who the collusion detector should attribute a call to, or null to skip it. A local stdio proxy
+ * serves one client, so its per-request ids would read as many agents colluding. Anonymous network
+ * callers stay tracked.
  */
-export function collusionIdentity(agentId: string | undefined, globalSessionId: string): string | null {
+export function collusionIdentity(
+  agentId: string | undefined,
+  globalSessionId: string,
+  localStdio = false,
+): string | null {
   if (agentId?.trim()) return agentId.trim();
-  return isEphemeralRequestSession(globalSessionId) ? null : globalSessionId;
+  return localStdio && isEphemeralRequestSession(globalSessionId) ? null : globalSessionId;
 }
 
 /** Derive agent id for fleet chain events when JWT sub is absent. */
