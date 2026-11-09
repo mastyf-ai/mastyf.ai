@@ -10,7 +10,7 @@ describe('clients with no identity (a local stdio agent)', () => {
   it('is not asked for a step-up nobody can ever clear', () => {
     let submitted = 0;
     const gate = { submit: () => { submitted++; return 'a1'; } };
-    const score = new ZeroTrustVerificationEngine(undefined, undefined, undefined, undefined, gate as never).score(ctx());
+    const score = new ZeroTrustVerificationEngine(undefined, undefined, undefined, undefined, gate as never).score(ctx({ stepUpPossible: false }));
     expect(score.composite).toBeLessThan(0.55);
     expect(score.action).toBe('allow');
     expect(submitted).toBe(0);

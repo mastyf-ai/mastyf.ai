@@ -20,6 +20,7 @@ export const zeroTrustStrategy: PolicyStrategy = {
       serverName: normalized.serverName,
       toolName: normalized.toolName,
       authenticated: Boolean(raw.agentIdentity),
+      stepUpPossible: Boolean(raw.agentIdentity),
       spiffeId: getActiveSpiffeId(),
       credentialIdentity: raw.agentIdentity?.sub,
       geoRegion: raw.geoRegion,
