@@ -89,6 +89,10 @@ export class ZeroTrustVerificationEngine {
     if (composite < 0.35) {
       action = 'block';
       reason = 'Composite zero-trust score below block threshold';
+    } else if (composite < 0.55 && !ctx.authenticated) {
+      // A step-up needs a caller who can be asked and a session it can apply to. A local stdio
+      // agent has neither, so demanding one would block it forever. Every other layer still runs.
+      reason = 'No caller identity to step up';
     } else if (composite < 0.55) {
       if (hasPendingStepUp(sessionKey)) {
         action = 'block';

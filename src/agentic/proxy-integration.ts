@@ -21,6 +21,7 @@ import {
   isEphemeralRequestSession,
   deriveAgentIdForFleetChain,
   type GlobalSessionInput,
+  collusionIdentity,
 } from '../utils/global-session-id.js';
 
 export type AgenticToolCallContext = GlobalSessionInput;
@@ -311,12 +312,10 @@ export async function runAgenticPreForwardHooks(
 
   container.capabilityGraph.recordObservedCall(serverName, toolName, toolName, { argsKeys: Object.keys(args) });
 
-  const collusion = container.collusionDetector.record(
-    agentId ?? globalSessionId,
-    serverName,
-    toolName,
-    { sessionId: globalSessionId },
-  );
+  const collusionAgent = collusionIdentity(agentId, globalSessionId);
+  const collusion = collusionAgent
+    ? container.collusionDetector.record(collusionAgent, serverName, toolName, { sessionId: globalSessionId })
+    : null;
   if (collusion && collusion.confidence >= 0.65) {
     return { blocked: true, reason: collusion.description };
   }

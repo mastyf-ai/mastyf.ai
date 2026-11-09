@@ -63,6 +63,15 @@ export function isEphemeralRequestSession(globalSessionId: string): boolean {
   return globalSessionId.startsWith('req:');
 }
 
+/**
+ * Who the collusion detector should attribute a call to, or null when nobody can be identified.
+ * A per-request id is a different "agent" on every call, which reads as many agents colluding.
+ */
+export function collusionIdentity(agentId: string | undefined, globalSessionId: string): string | null {
+  if (agentId?.trim()) return agentId.trim();
+  return isEphemeralRequestSession(globalSessionId) ? null : globalSessionId;
+}
+
 /** Derive agent id for fleet chain events when JWT sub is absent. */
 export function deriveAgentIdForFleetChain(globalSessionId: string, agentId?: string): string {
   if (agentId?.trim()) return agentId.trim();
