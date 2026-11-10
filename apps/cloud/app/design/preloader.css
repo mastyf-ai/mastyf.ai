@@ -16,7 +16,7 @@ html[data-intro='done'] .preloader {
   --pl-dim: #8a857b;
   --pl-ok: #7fd28e;
   --pl-bad: #ef6b5b;
-  --pl-gold: #e3b453;
+  --pl-gold: #e5cb6c;
   position: fixed;
   inset: 0;
   z-index: 900;

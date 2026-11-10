@@ -200,7 +200,7 @@ export function DogFace({ active }: { active: boolean }) {
         </linearGradient>
         <radialGradient id="df-iris-fill" cx="0.42" cy="0.38" r="0.7">
           <stop offset="0" stopColor="#fff1c4" />
-          <stop offset="0.45" stopColor="#e3b453" />
+          <stop offset="0.45" stopColor="#e5cb6c" />
           <stop offset="1" stopColor="#8a5f1c" />
         </radialGradient>
         <radialGradient id="df-nose-fill" cx="0.4" cy="0.3" r="0.8">
