@@ -25,6 +25,8 @@ export const NO_DEVICE_LIMIT = 2;
 export const DEVICE_LIMIT_MESSAGE =
   'This license key is already active on another device. Developer Pro covers one person on one device. To move it here, create a new key on the License page of your Mastyf dashboard.';
 
+export const DEVICE_NOT_ACTIVATED_MESSAGE = 'Activate this license key on this device before renewing it.';
+
 const MAX_DEVICE_NAME = 128;
 
 const KEY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 symbols, no 0/O or 1/I
@@ -47,13 +49,14 @@ export function entitlementActive(e: Pick<Entitlement, 'status' | 'expiresAt'>, 
   return e.status === 'active' && (!e.expiresAt || e.expiresAt.getTime() > now.getTime());
 }
 
-/** Whether a device may use a key: `claim` means no device holds it yet. */
+/** Whether a device may use a key: `claim` means no device holds it yet. One-device keys need a device name. */
 export function deviceDecision(
   e: Pick<Entitlement, 'activationLimit' | 'lemonInstanceId'>,
   device: string,
 ): 'allow' | 'claim' | 'refuse' {
   if (e.activationLimit !== ONE_DEVICE) return 'allow';
-  if (!e.lemonInstanceId) return 'claim';
+  if (!device) return 'refuse';
+  if (e.lemonInstanceId == null) return 'claim';
   return e.lemonInstanceId === device ? 'allow' : 'refuse';
 }
 

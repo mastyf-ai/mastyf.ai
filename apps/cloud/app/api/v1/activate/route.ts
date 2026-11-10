@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   const licenseKey = typeof body.licenseKey === 'string' ? body.licenseKey.trim() : '';
   const hfUsername = typeof body.hfUsername === 'string' ? body.hfUsername.trim() : '';
-  const instanceName = typeof body.instanceName === 'string' ? body.instanceName.trim() : 'default-gateway-instance';
+  const instanceName = typeof body.instanceName === 'string' ? body.instanceName.trim() : '';
 
   if (!licenseKey) {
     return NextResponse.json({ error: 'licenseKey is required' }, { status: 400 });

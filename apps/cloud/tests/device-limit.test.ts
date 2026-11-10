@@ -79,6 +79,11 @@ describe('activating a one-device key', () => {
     expect(db.entitlement!.lemonInstanceId).toBe('shield-a');
   });
 
+  it('refuses a blank device name and ties the key to nothing', async () => {
+    expect(await issuedLicenseActivation('MG-X', '')).toMatchObject({ valid: false, status: 'device_limit' });
+    expect(db.entitlement!.lemonInstanceId).toBeNull();
+  });
+
   it('refuses when another device claims the key first', async () => {
     db.beforeClaim = () => {
       db.entitlement!.lemonInstanceId = 'shield-a';

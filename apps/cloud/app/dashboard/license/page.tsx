@@ -114,7 +114,7 @@ export default async function LicensePage() {
                   Shield and the gateway check this key with Mastyf Cloud and stay unlocked until the date above.
                   Buying again extends it; the key itself does not change.
                   {licenseKey.oneDevice
-                    ? ' This key works on one device. To move it to another device, create a new key; the old device stops working.'
+                    ? ' This key works on one device. To move it to another device, create a new key; the old device stops working at its next license check.'
                     : null}
                 </p>
                 <NewLicenseKeyButton />

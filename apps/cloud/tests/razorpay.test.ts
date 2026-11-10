@@ -202,6 +202,12 @@ describe('one device per Developer Pro key', () => {
 
   it('does not limit keys sold without a device limit', () => {
     expect(deviceDecision({ activationLimit: 2, lemonInstanceId: 'shield-a' }, 'shield-b')).toBe('allow');
+    expect(deviceDecision({ activationLimit: 2, lemonInstanceId: null }, '')).toBe('allow');
+  });
+
+  it('refuses a blank device name on a one-device key', () => {
+    expect(deviceDecision({ activationLimit: 1, lemonInstanceId: null }, '')).toBe('refuse');
+    expect(deviceDecision({ activationLimit: 1, lemonInstanceId: 'shield-a' }, '')).toBe('refuse');
   });
 });
 

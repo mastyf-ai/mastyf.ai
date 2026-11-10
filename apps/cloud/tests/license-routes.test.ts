@@ -57,6 +57,12 @@ describe('POST /api/v1/activate', () => {
     expect(mocks.issuedLicenseActivation).toHaveBeenCalledWith('MG-X', 'shield-abc');
   });
 
+  it('does not invent a device name when none is sent', async () => {
+    mocks.issuedLicenseActivation.mockResolvedValue({ valid: false, status: 'device_limit', message: 'x' });
+    await activate(post({ licenseKey: 'MG-X' }));
+    expect(mocks.issuedLicenseActivation).toHaveBeenCalledWith('MG-X', '');
+  });
+
   it('refuses a key already on another device, with a status Shield treats as a denial', async () => {
     mocks.issuedLicenseActivation.mockResolvedValue({ valid: false, status: 'device_limit', message: 'On another device.' });
     const res = await activate(post({ licenseKey: 'MG-X', instanceName: 'shield-b' }));
@@ -97,9 +103,13 @@ describe('POST /api/v1/license/renew', () => {
     expect((await renew(post({ licenseKey: 'MG-X', instanceId: 'shield-a' }))).status).toBe(200);
   });
 
-  it('renews a one-device key that no device has claimed yet', async () => {
+  it('will not renew a one-device key that was never activated', async () => {
     mocks.findIssuedEntitlement.mockResolvedValue(oneDevice(null));
-    expect((await renew(post({ licenseKey: 'MG-X', instanceId: 'inst_default' }))).status).toBe(200);
+    const res = await renew(post({ licenseKey: 'MG-X', instanceId: 'shield-a' }));
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.status).toBe('not_activated');
+    expect(body).not.toHaveProperty('entitlement');
   });
 
   it.each([['another device', 'shield-b'], ['no device', undefined]])('refuses a one-device key from %s', async (_label, instanceId) => {
