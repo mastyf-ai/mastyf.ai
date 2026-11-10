@@ -343,7 +343,7 @@ export const PRICING_TIERS = [
     billing: `a month, or ${formatPlanPrice('team', 'yearly')} a year`,
     description: 'For fast-moving AI engineering teams deploying customer-facing autonomous agents.',
     bullets: [
-      'Up to 10 people in one workspace',
+      'Up to 10 people in one workspace, one device each',
       'Up to 15 protected agent environments',
       PROTOCOL_X_CHECKS,
       'Cloud Control Plane with team RBAC',

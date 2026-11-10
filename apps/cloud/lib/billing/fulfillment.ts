@@ -3,7 +3,7 @@ import { getDb } from '../db';
 import { razorpayOrders, users } from '../db/schema';
 import { rowsOf } from '../dashboard-shared';
 import { LICENSE_TIERS } from '../license-tiers';
-import { extendIssuedEntitlement, NO_DEVICE_LIMIT, ONE_DEVICE } from './license-keys';
+import { extendIssuedEntitlement, ONE_DEVICE } from './license-keys';
 import {
   daysWorthOf,
   DEVELOPER_OFFER_CODES,
@@ -15,6 +15,7 @@ import {
   purchaseCode,
   type Purchase,
 } from './plans';
+import { extendSeatsTo } from './workspace-seats';
 
 /**
  * Turning a paid Razorpay order into access. Called from the checkout's verify step and from
@@ -110,10 +111,9 @@ export async function developerOfferFor(
   };
 }
 
-/** The device limit a purchase puts on the key. Older orders were sold without one. */
+/** The device limit a purchase puts on the buyer's key. Older orders were sold without one. */
 function deviceLimitFor(purchase: Purchase): number | undefined {
-  if (purchase.legacy) return undefined;
-  return purchase.plan === 'developer' ? ONE_DEVICE : NO_DEVICE_LIMIT;
+  return purchase.legacy ? undefined : ONE_DEVICE;
 }
 
 export async function recordOrder(order: typeof razorpayOrders.$inferInsert): Promise<void> {
@@ -206,6 +206,7 @@ export async function fulfillOrder(orderId: string, paymentId: string): Promise<
     const user = await tx.query.users.findFirst({ where: eq(users.id, order.userId) });
     if (!user) throw new Error(`Order ${order.id} belongs to a user that no longer exists`);
     const { licenseKey } = await extendIssuedEntitlement(tx, user.email, expiresAt, deviceLimitFor(purchase));
+    if (purchase.plan === 'team') await extendSeatsTo(tx, order.orgId, expiresAt);
 
     return { status: 'paid', order, expiresAt, licenseKey, offerEnded, days };
   });

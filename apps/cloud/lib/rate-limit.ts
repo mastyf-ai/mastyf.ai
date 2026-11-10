@@ -14,6 +14,8 @@ let reportsLimiter: Ratelimit | null | undefined;
 let certificationsLimiter: Ratelimit | null | undefined;
 let layaMinuteLimiter: Ratelimit | null | undefined;
 let layaDayLimiter: Ratelimit | null | undefined;
+let teamJoinLimiter: Ratelimit | null | undefined;
+let teamInviteLimiter: Ratelimit | null | undefined;
 let rateLimitUnavailableLogged = false;
 
 function getRedis(): Redis | null {
@@ -278,6 +280,45 @@ export async function checkLayaRateLimit(orgId: string): Promise<RateLimitResult
   }
 }
 
+function getTeamJoinLimiter(): Ratelimit | null {
+  if (teamJoinLimiter !== undefined) return teamJoinLimiter;
+  const redis = getRedis();
+  teamJoinLimiter = redis
+    ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, '10 m'), prefix: 'mastyf-ai:cloud:team-join' })
+    : null;
+  return teamJoinLimiter;
+}
+
+function getTeamInviteLimiter(): Ratelimit | null {
+  if (teamInviteLimiter !== undefined) return teamInviteLimiter;
+  const redis = getRedis();
+  teamInviteLimiter = redis
+    ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(30, '1 h'), prefix: 'mastyf-ai:cloud:team-invite' })
+    : null;
+  return teamInviteLimiter;
+}
+
+async function limitWith(limiter: Ratelimit | null, key: string): Promise<RateLimitResult> {
+  if (!limiter) return rateLimiterUnavailable();
+  try {
+    const { success, reset } = await limiter.limit(key);
+    return success ? { success: true } : { success: false, retryAfter: Math.max(1, Math.ceil((reset - Date.now()) / 1000)) };
+  } catch {
+    console.error('[rate-limit] team rate limiter unreachable');
+    return rateLimiterUnavailable();
+  }
+}
+
+/** Tries at a team join code, per client IP. The code's own try limit is the main defence. */
+export function checkTeamJoinRateLimit(request: NextRequest): Promise<RateLimitResult> {
+  return limitWith(getTeamJoinLimiter(), `ip:${clientIpFromRequest(request)}`);
+}
+
+/** Invitation emails sent per workspace, so the form can't be used to flood someone's inbox. */
+export function checkTeamInviteRateLimit(orgId: string): Promise<RateLimitResult> {
+  return limitWith(getTeamInviteLimiter(), `org:${orgId}`);
+}
+
 export async function checkPublicApiRateLimit(
   request: NextRequest,
   pathname: string,
@@ -312,6 +353,8 @@ export function resetRateLimitClientsForTests(): void {
   deepScanLimiter = undefined;
   reportsLimiter = undefined;
   certificationsLimiter = undefined;
+  teamJoinLimiter = undefined;
+  teamInviteLimiter = undefined;
   layaMinuteLimiter = undefined;
   layaDayLimiter = undefined;
   rateLimitUnavailableLogged = false;

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb, cloudDbAvailable } from '@/lib/db';
 import { hashProLicenseKey } from '@/lib/pro-license-keys';
-import { entitlementActive, ISSUED_SOURCE } from '@/lib/billing/license-keys';
+import { entitlementActive, ISSUED_SOURCES } from '@/lib/billing/license-keys';
 
 export async function POST(request: Request) {
   let body: any = {};
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const entitlement = await getDb().query.commercialEntitlements.findFirst({
       where: (fields, { eq }) => eq(fields.licenseKeyHash, hashProLicenseKey(licenseKey)),
     });
-    if (entitlement?.source === ISSUED_SOURCE && entitlementActive(entitlement)) {
+    if (entitlement && ISSUED_SOURCES.includes(entitlement.source) && entitlementActive(entitlement)) {
       return NextResponse.json({
         valid: true,
         status: 'active',

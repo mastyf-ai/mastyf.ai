@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   customer: vi.fn(),
   entitlements: vi.fn(),
   entitlementByKey: vi.fn(),
+  verifySeatCode: vi.fn(),
+  joinLimit: vi.fn(),
 }));
 
 vi.mock('@/lib/safe-auth', () => ({ safeAuth: mocks.safeAuth }));
@@ -12,7 +14,13 @@ vi.mock('@/lib/pro-license-keys', () => ({ hashProLicenseKey: (k: string) => `ha
 vi.mock('@/lib/billing/license-keys', () => ({
   entitlementActive: (e: { status: string }) => e.status === 'active',
   ISSUED_SOURCE: 'razorpay',
+  ISSUED_SOURCES: ['razorpay', 'team-seat'],
 }));
+vi.mock('@/lib/billing/workspace-seats', () => ({
+  normalizeEmail: (e: string) => e.trim().toLowerCase(),
+  verifySeatCode: mocks.verifySeatCode,
+}));
+vi.mock('@/lib/rate-limit', () => ({ checkTeamJoinRateLimit: mocks.joinLimit }));
 vi.mock('@/lib/db/schema', () => ({ commercialEntitlements: {}, commercialCustomers: {} }));
 vi.mock('@/lib/db', () => ({
   cloudDbAvailable: () => true,
@@ -140,6 +148,34 @@ describe('shield download', () => {
     expect(link.status).toBe(302);
     expect(link.headers.get('location')).toBe('https://www.mastyf.ai/download');
     expect((await post({ licenseKey: 'MG-X', os: 'windows' })).status).toBe(200);
+  });
+
+  describe('someone a Team lead invited', () => {
+    beforeEach(() => mocks.joinLimit.mockResolvedValue({ success: true }));
+
+    it('can download with their email and code', async () => {
+      mocks.verifySeatCode.mockResolvedValue(true);
+      const res = await post({ email: ' P@Example.com ', code: 'ABCD-2345', os: 'windows' });
+      expect(res.status).toBe(200);
+      expect((await res.json()).authorizedVia).toBe('team_invite');
+      expect(mocks.verifySeatCode).toHaveBeenCalledWith('p@example.com', 'ABCD-2345');
+    });
+
+    it('is refused with a wrong code', async () => {
+      mocks.verifySeatCode.mockResolvedValue(false);
+      expect((await post({ email: 'p@example.com', code: 'NOPE', os: 'windows' })).status).toBe(402);
+    });
+
+    it('is rate limited before the code is checked', async () => {
+      mocks.joinLimit.mockResolvedValue({ success: false, retryAfter: 60 });
+      expect((await post({ email: 'p@example.com', code: 'NOPE', os: 'windows' })).status).toBe(429);
+      expect(mocks.verifySeatCode).not.toHaveBeenCalled();
+    });
+
+    it('needs both the email and the code', async () => {
+      expect((await post({ code: 'ABCD-2345', os: 'windows' })).status).toBe(402);
+      expect(mocks.verifySeatCode).not.toHaveBeenCalled();
+    });
   });
 
   it('refuses a key nobody issued', async () => {

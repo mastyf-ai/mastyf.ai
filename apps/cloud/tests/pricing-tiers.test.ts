@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PLAN_FOR_TIER } from '@/components/dashboard/plans';
 import { PRICING_TIERS } from '@/components/landing/stats';
@@ -49,6 +51,20 @@ describe('the plans on the site', () => {
   it('promise Shield only on platforms with a current build', () => {
     expect(text('developer')).toContain('Windows');
     expect(text('developer')).not.toMatch(/macOS|Linux/);
+  });
+});
+
+describe('the website stays out of team management', () => {
+  const file = (name: string) => readFileSync(join(process.cwd(), name), 'utf8');
+
+  it('has no Members page or menu item, because that lives in Shield', () => {
+    expect(existsSync(join(process.cwd(), 'app/dashboard/members'))).toBe(false);
+    expect(file('components/DashboardNav.tsx')).not.toContain('/dashboard/members');
+  });
+
+  it('does not explain adding members in the plan text or docs', () => {
+    expect(text('team')).not.toMatch(/Add people|join code|Members page/i);
+    expect(file('components/docs/Plans.tsx')).not.toMatch(/Members page|adds people/i);
   });
 });
 

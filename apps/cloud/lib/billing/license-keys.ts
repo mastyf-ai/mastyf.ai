@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'crypto';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { cloudDbAvailable, getDb } from '../db';
 import { commercialCustomers, commercialEntitlements } from '../db/schema';
 import type { LemonLicenseActivateResult } from '../lemon-license-client';
@@ -17,13 +17,16 @@ export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type Entitlement = typeof commercialEntitlements.$inferSelect;
 
 export const ISSUED_SOURCE = 'razorpay';
+/** A key given to someone a Team lead added, paid through the lead's plan. */
+export const SEAT_SOURCE = 'team-seat';
+export const ISSUED_SOURCES: readonly string[] = [ISSUED_SOURCE, SEAT_SOURCE];
 
 /** activation_limit on a key we issued. The column predates us and defaults to 2. */
 export const ONE_DEVICE = 1;
 export const NO_DEVICE_LIMIT = 2;
 
 export const DEVICE_LIMIT_MESSAGE =
-  'This license key is already active on another device. Developer Pro covers one person on one device. To move it here, create a new key on the License page of your Mastyf dashboard.';
+  'This license key is already active on another device. Each key covers one person on one device. To move it here, create a new key on the License page of your Mastyf dashboard, or ask your team lead to send a new code.';
 
 export const DEVICE_NOT_ACTIVATED_MESSAGE = 'Activate this license key on this device before renewing it.';
 
@@ -173,7 +176,7 @@ export async function findIssuedEntitlement(licenseKey: string): Promise<Entitle
       (await getDb().query.commercialEntitlements.findFirst({
         where: and(
           eq(commercialEntitlements.licenseKeyHash, hashProLicenseKey(licenseKey)),
-          eq(commercialEntitlements.source, ISSUED_SOURCE),
+          inArray(commercialEntitlements.source, [...ISSUED_SOURCES]),
         ),
       })) ?? null
     );

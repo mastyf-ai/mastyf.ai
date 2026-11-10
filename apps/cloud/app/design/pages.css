@@ -494,6 +494,10 @@
   min-height: 3.2em;
 }
 
+.join-panel {
+  max-width: 34rem;
+}
+
 .billing-switch {
   display: flex;
   justify-content: center;
