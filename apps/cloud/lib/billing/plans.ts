@@ -60,6 +60,11 @@ export function planAmount(plan: PaidPlanId, period: BillingPeriod, offer = fals
   return (offer && offerAmounts ? offerAmounts : amounts)[period];
 }
 
+/** The days an amount buys at the normal price: what a payment gets when its offer has gone. */
+export function daysWorthOf(plan: PaidPlanId, period: BillingPeriod, paidAmount: number): number {
+  return Math.max(1, Math.floor((PERIOD_DAYS[period] * paidAmount) / planAmount(plan, period, false)));
+}
+
 const INR = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
 /** Whole rupees in Indian grouping: 104999 → "₹1,04,999". */

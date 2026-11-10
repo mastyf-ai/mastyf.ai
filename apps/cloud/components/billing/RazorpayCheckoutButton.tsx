@@ -27,7 +27,7 @@ type OrderResponse = {
   plan: { id: PaidPlanId; name: string; period: BillingPeriod };
   prefill: { name: string; email: string };
 };
-type VerifyResponse = { paid: true; expiresAt?: string; licenseKey: string | null };
+type VerifyResponse = { paid: true; expiresAt?: string; licenseKey: string | null; offerEndedDays?: number };
 
 type Status =
   | { kind: 'idle' }
@@ -35,7 +35,7 @@ type Status =
   | { kind: 'verifying' }
   | { kind: 'cancelled' }
   | { kind: 'error'; message: string }
-  | { kind: 'paid'; expiresAt: string | null; licenseKey: string | null };
+  | { kind: 'paid'; expiresAt: string | null; licenseKey: string | null; offerEndedDays: number | null };
 
 let checkoutScript: Promise<void> | null = null;
 
@@ -103,7 +103,12 @@ export function RazorpayCheckoutButton({
     setStatus({ kind: 'verifying' });
     try {
       const result = await postJson<VerifyResponse>('/api/billing/verify-payment', response);
-      setStatus({ kind: 'paid', expiresAt: result.expiresAt ?? null, licenseKey: result.licenseKey });
+      setStatus({
+        kind: 'paid',
+        expiresAt: result.expiresAt ?? null,
+        licenseKey: result.licenseKey,
+        offerEndedDays: result.offerEndedDays ?? null,
+      });
       router.refresh();
     } catch (error) {
       setStatus({ kind: 'error', message: messageOf(error) });
@@ -174,6 +179,12 @@ export function RazorpayCheckoutButton({
             {status.expiresAt ? `Your plan is active until ${formatDate(status.expiresAt)}.` : 'Your plan is active.'}{' '}
             <Link href="/dashboard/license">View license</Link>
           </p>
+          {status.offerEndedDays ? (
+            <p className="checkout__done">
+              The launch offer ended before this payment went through, so it bought {status.offerEndedDays} days at the
+              normal price.
+            </p>
+          ) : null}
           {status.licenseKey ? (
             <LicenseKeyReveal licenseKey={status.licenseKey} />
           ) : (

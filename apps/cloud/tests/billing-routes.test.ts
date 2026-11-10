@@ -207,6 +207,19 @@ describe('POST /api/billing/verify-payment', () => {
     });
   });
 
+  it('tells the buyer when the offer ended before their payment arrived', async () => {
+    findOrder.mockResolvedValue(ORDER);
+    fulfillOrder.mockResolvedValue({
+      status: 'paid',
+      order: ORDER,
+      expiresAt: new Date('2026-11-24T00:00:00Z'),
+      licenseKey: null,
+      offerEnded: true,
+      days: 14,
+    });
+    expect((await (await verifyPayment(post(paid()))).json()).offerEndedDays).toBe(14);
+  });
+
   it('is idempotent when the webhook got there first', async () => {
     findOrder.mockResolvedValue({ ...ORDER, status: 'paid' });
     fulfillOrder.mockResolvedValue({ status: 'already_paid', order: { ...ORDER, status: 'paid' } });

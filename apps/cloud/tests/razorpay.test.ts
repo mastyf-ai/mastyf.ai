@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { blockedByHigherPlan, nextPeriodEnd, offerStillApplies } from '@/lib/billing/fulfillment';
 import { deviceDecision, entitlementActive, generateLicenseKey, licenseKeyPreview } from '@/lib/billing/license-keys';
 import {
+  daysWorthOf,
   formatPlanPrice,
   isBillingPeriod,
   isPaidPlanId,
@@ -187,6 +188,17 @@ describe('the first-100 Developer Pro offer', () => {
   it('cannot be stretched past the 12 months by paying far ahead', () => {
     const paidThrough = new Date(first.getTime() + 366 * DAY);
     expect(offerStillApplies({ taken: 5, firstPaidAt: first, paidThrough }, now)).toBe(false);
+  });
+});
+
+describe('a payment that arrives after the offer has gone', () => {
+  it('buys the days its amount is worth at the normal price', () => {
+    expect(daysWorthOf('developer', 'monthly', 99_900)).toBe(14);
+    expect(daysWorthOf('developer', 'yearly', 899_900)).toBe(156);
+  });
+
+  it('never buys less than a day', () => {
+    expect(daysWorthOf('developer', 'yearly', 100)).toBe(1);
   });
 });
 

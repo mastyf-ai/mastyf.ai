@@ -59,6 +59,7 @@ export async function POST(request: Request) {
         plan: result.order.plan,
         expiresAt: result.expiresAt.toISOString(),
         licenseKey: result.licenseKey,
+        offerEndedDays: result.offerEnded ? result.days : undefined,
       },
       { headers: NO_STORE },
     );

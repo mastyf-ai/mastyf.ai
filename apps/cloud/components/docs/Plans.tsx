@@ -70,7 +70,8 @@ export function Plans() {
       <p>
         A Developer Pro key works on one device. To move it to another device, create a new key on the License page; the
         old device stops working at its next license check. The first 100 Developer Pro customers keep the launch price
-        for 12 months from their first payment, then move to the normal price.
+        for 12 months from their first payment, then move to the normal price. Only completed payments take a place. A
+        payment that arrives after the offer has gone buys the days it is worth at the normal price.
       </p>
       <Link href="/pricing" className="link-icon">
         See plans and buy
