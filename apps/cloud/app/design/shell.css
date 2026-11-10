@@ -62,11 +62,18 @@ html.lenis body {
   align-items: center;
   height: var(--nav-h);
   padding: 0 var(--s-2) 0 var(--s-5);
-  background: color-mix(in srgb, var(--surface) 55%, transparent);
-  border: 1px solid var(--line);
+  /* The bar's contents read the frame's ink instead of the page's. */
+  --ink: var(--frame-ink);
+  --ink-strong: var(--frame-ink);
+  --ink-2: var(--frame-ink-2);
+  --ink-3: var(--frame-ink-2);
+  --line: var(--frame-line);
+  --line-strong: var(--frame-line);
+  --tint: var(--frame-tint);
+  --accent: var(--frame-ink);
+  background: var(--frame-bg);
+  border: 1px solid transparent;
   border-radius: var(--r-pill);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
-  backdrop-filter: blur(24px) saturate(140%);
   pointer-events: auto;
   /* `translate`, not `transform`: the entrance animation below holds the transform. */
   translate: var(--dog-x) 0;
@@ -80,10 +87,6 @@ html.lenis body {
 
 .nav.is-scrolled .nav__bar {
   height: 50px;
-  background: color-mix(in srgb, var(--surface) 66%, transparent);
-  border-color: var(--line-strong);
-  -webkit-backdrop-filter: blur(28px) saturate(140%);
-  backdrop-filter: blur(28px) saturate(140%);
 }
 
 /* While rolled up (or rolling), GSAP owns the bar's size and its contents are clipped. */
@@ -130,7 +133,9 @@ html.lenis body {
 
 /* The logo is light line art; on the light theme it is inverted with its hues kept,
    so the lines turn ink and the gold check stays gold. */
-:root[data-theme='light'] .brand-mark {
+:root[data-theme='light'] .brand-mark,
+.nav__bar .brand-mark,
+.app__side .brand-mark {
   filter: invert(1) hue-rotate(180deg);
 }
 
@@ -252,18 +257,8 @@ html.lenis body {
 }
 
 .nav__link.is-active {
-  background: rgb(var(--tint) / 0.06);
-  border-color: var(--line-strong);
-  color: var(--ink-strong);
-}
-
-.nav__link.is-active::before {
-  content: '';
-  width: 5px;
-  height: 5px;
-  margin-right: 4px;
-  border-radius: 50%;
-  background: var(--accent);
+  background: var(--frame-ink);
+  color: var(--frame-bg);
 }
 
 .nav__actions {
@@ -663,4 +658,18 @@ html.lenis body {
 
 .cursor-ring.is-pressed .cursor-ring__shape {
   transform: scale(0.85);
+}
+
+/* On the yellow or beige bar, the main button is the frame's dark ink, as in the app. */
+.nav__bar .btn-primary {
+  background: var(--frame-ink);
+  border-color: var(--frame-ink);
+  color: var(--frame-bg);
+}
+
+.nav__bar .btn-primary:hover {
+  background: var(--frame-ink);
+  border-color: var(--frame-ink);
+  color: var(--frame-bg);
+  opacity: 0.88;
 }

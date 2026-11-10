@@ -59,7 +59,7 @@ try{var d=document.documentElement,p=location.pathname==='/',r=matchMedia('(pref
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#efe5d3' },
+    { media: '(prefers-color-scheme: light)', color: '#f7f2ec' },
     { media: '(prefers-color-scheme: dark)', color: '#0a0a0b' },
   ],
 };

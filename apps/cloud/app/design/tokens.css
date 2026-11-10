@@ -8,18 +8,18 @@
   /* Surfaces: near-black with a warm cast */
   --bg: #0a0a0b;
   --bg-sunken: #070708;
-  --surface: #111113;
-  --surface-raised: #18181b;
-  --surface-hover: #1f1f23;
-  --glass: rgba(17, 17, 19, 0.6);
-  --glass-strong: rgba(17, 17, 19, 0.8);
+  --surface: #151518;
+  --surface-raised: #1b1b1f;
+  --surface-hover: #222226;
+  --glass: rgba(21, 21, 24, 0.6);
+  --glass-strong: rgba(21, 21, 24, 0.8);
   /* Channel triplet for translucent overlays: rgb(var(--tint) / 0.04) */
   --tint: 255 255 255;
 
   /* Lines */
-  --line: #222225;
+  --line: #26262a;
   --line-strong: #303035;
-  --line-focus: #e3b453;
+  --line-focus: #e5cb6c;
 
   /* Text: warm off-white and warm greys */
   --ink: #ededea;
@@ -27,12 +27,19 @@
   --ink-2: #a3a39b;
   --ink-3: #74746d;
 
-  /* Brand accent: the gold of the Mastyf check */
-  --accent: #e3b453;
-  --accent-hover: #efc56f;
+  /* Brand accent: the same yellow as the Shield app */
+  --accent: #e5cb6c;
+  --accent-hover: #edd98e;
   --accent-ink: #0a0a0b;
-  --accent-soft: rgba(227, 180, 83, 0.12);
-  --accent-line: rgba(227, 180, 83, 0.4);
+  --accent-soft: rgba(229, 203, 108, 0.12);
+  --accent-line: rgba(229, 203, 108, 0.4);
+
+  /* The navbar and dashboard sidebar, coloured like the Shield app's frame */
+  --frame-bg: #e5cb6c;
+  --frame-ink: #0a0a0b;
+  --frame-ink-2: rgba(10, 10, 11, 0.68);
+  --frame-line: rgba(10, 10, 11, 0.16);
+  --frame-tint: 10 10 11;
 
   /* Meaning: allowed / held / blocked */
   --ok: #7fd28e;
@@ -105,38 +112,43 @@
 }
 
 /*
- * Light theme: warm parchment rather than white paper (nothing lighter than #f8f1e4,
- * so it doesn't glare), warm brown-black ink at ~11:1 instead of ~14:1, and a deeper
- * bronze gold so gold text keeps its contrast. Every text colour stays at or above
- * WCAG AA (4.5:1) on bg, surface and surface-raised. Chosen before first paint by
- * the script in app/layout.tsx (saved choice, else the system setting).
+ * Light theme: the Shield app's white and brown. A soft off-white page, white cards, brown-black
+ * ink and a bronze accent. Every text colour stays at or above WCAG AA (4.5:1) on bg, surface and
+ * surface-raised. Chosen before first paint by the script in app/layout.tsx (saved choice, else
+ * the system setting).
  */
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --bg: #efe5d3;
-  --bg-sunken: #e7dcc7;
-  --surface: #f4ecdd;
-  --surface-raised: #f8f1e4;
-  --surface-hover: #eadfcb;
-  --glass: rgba(244, 236, 221, 0.68);
-  --glass-strong: rgba(244, 236, 221, 0.9);
-  --tint: 92 64 30;
+  --bg: #f7f2ec;
+  --bg-sunken: #efe8df;
+  --surface: #ffffff;
+  --surface-raised: #fbf8f4;
+  --surface-hover: #f1eae1;
+  --glass: rgba(255, 255, 255, 0.68);
+  --glass-strong: rgba(255, 255, 255, 0.9);
+  --tint: 96 61 32;
 
-  --line: #e0d3bc;
-  --line-strong: #cdbd9f;
-  --line-focus: #8a5a0c;
+  --line: #eee5d9;
+  --line-strong: #dccfbd;
+  --line-focus: #603d20;
 
-  --ink: #3a2f24;
-  --ink-strong: #2a2119;
-  --ink-2: #5f5242;
-  --ink-3: #76685a;
+  --ink: #3a2a1c;
+  --ink-strong: #2b1f14;
+  --ink-2: #5f4d3b;
+  --ink-3: #75634f;
 
-  --accent: #8a5a0c;
-  --accent-hover: #714907;
-  --accent-ink: #f8f1e4;
-  --accent-soft: rgba(168, 112, 20, 0.13);
-  --accent-line: rgba(138, 90, 12, 0.4);
+  --accent: #603d20;
+  --accent-hover: #4a2e17;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(96, 61, 32, 0.1);
+  --accent-line: rgba(96, 61, 32, 0.4);
+
+  --frame-bg: #e4d7c5;
+  --frame-ink: #2b1f14;
+  --frame-ink-2: rgba(43, 31, 20, 0.68);
+  --frame-line: rgba(43, 31, 20, 0.16);
+  --frame-tint: 43 31 20;
 
   --ok: #2a7340;
   --ok-soft: rgba(42, 115, 64, 0.11);
@@ -151,6 +163,6 @@
   --info: #2a628a;
   --info-soft: rgba(42, 98, 138, 0.1);
 
-  --shadow: 0 12px 32px rgba(92, 64, 30, 0.14);
+  --shadow: 0 12px 32px rgba(96, 61, 32, 0.12);
   --grid-tile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cpath d='M72 0H0V72' fill='none' stroke='%234a3a20' stroke-opacity='0.08'/%3E%3C/svg%3E");
 }

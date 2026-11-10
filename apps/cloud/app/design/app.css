@@ -30,8 +30,18 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: var(--surface);
-  border-right: 1px solid var(--line);
+  /* The sidebar's contents read the frame's ink instead of the page's. */
+  --ink: var(--frame-ink);
+  --ink-strong: var(--frame-ink);
+  --ink-2: var(--frame-ink-2);
+  --ink-3: var(--frame-ink-2);
+  --line: var(--frame-line);
+  --line-strong: var(--frame-line);
+  --tint: var(--frame-tint);
+  --accent: var(--frame-ink);
+  --bg: transparent;
+  background: var(--frame-bg);
+  border-right: 0;
 }
 
 .app__brand {
@@ -115,13 +125,13 @@
 }
 
 .app__nav a[aria-current='page'] {
-  color: var(--ink-strong);
+  color: var(--frame-bg);
   font-weight: 600;
-  background: rgb(var(--tint) / 0.07);
+  background: var(--frame-ink);
 }
 
 .app__nav a[aria-current='page'] svg {
-  color: var(--accent);
+  color: var(--frame-bg);
 }
 
 .app__foot {
