@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, Check, Copy, Download } from 'lucide-react';
-import { formatPlanPrice } from '@/lib/billing/plans';
 import {
   SHIELD_PLATFORM_ORDER,
   SHIELD_PLATFORMS,
@@ -216,7 +215,7 @@ export function GatedDownloadBox({ entitled, signedIn, checkoutUrl }: Props) {
               </button>
             </div>
             <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="link-icon dl__buy">
-              No key yet? Get Developer Pro, {formatPlanPrice('developer')} for 30 days
+              No key yet? See the plans
               <ArrowUpRight size={13} strokeWidth={1.75} aria-hidden="true" />
             </a>
           </form>

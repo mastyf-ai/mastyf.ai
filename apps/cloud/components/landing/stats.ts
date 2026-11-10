@@ -1,4 +1,5 @@
-import { formatInr, formatPlanPrice } from '@/lib/billing/plans';
+import { DEVELOPER_OFFER_PLACES, formatPlanPrice } from '@/lib/billing/plans';
+import { SHIELD_PLATFORM_ORDER, SHIELD_PLATFORMS, shieldPlatformAvailable } from '@/lib/billing/shield-builds';
 import { SITE_NAME, ZENODO_DOI } from '@/lib/product-links';
 
 export const HERO_HEADLINE = {
@@ -278,7 +279,13 @@ export const GUARANTEES_AND_LIMITATIONS = {
   ],
 } as const;
 
-/** 5-Tier Commercial Pricing Model */
+const SHIELD_PLATFORM_NAMES = SHIELD_PLATFORM_ORDER.filter(shieldPlatformAvailable)
+  .map((id) => SHIELD_PLATFORMS[id].name)
+  .join(', ');
+
+const PROTOCOL_X_CHECKS = 'Protocol X model checks on tool calls the rules allow';
+
+/** The plans on the pricing page, docs and dashboard. Checkout prices live in lib/billing/plans.ts. */
 export const PRICING_TIERS = [
   {
     id: 'community',
@@ -286,7 +293,7 @@ export const PRICING_TIERS = [
     highlights: ['Self-hosted Gateway', 'YAML policy engine', 'Public MCP trust scores'],
     shortCta: 'Get it on GitHub',
     name: 'Community',
-    price: '$0',
+    price: '₹0',
     billing: 'Free forever · AGPL-3.0',
     description: 'For individual developers, hobbyists, and researchers securing local agents.',
     bullets: [
@@ -304,22 +311,23 @@ export const PRICING_TIERS = [
   },
   {
     id: 'developer',
-    audience: 'Developers using Claude Desktop, Cursor or Windsurf',
-    highlights: ['Shield desktop app', 'Decisions in under 4.8µs', 'Live MCP CVE feed'],
+    audience: 'One developer using Claude Desktop, Cursor or Windsurf',
+    highlights: ['One person on one device', 'Shield desktop app', 'Protocol X model checks'],
     shortCta: 'Buy',
     name: 'Developer Pro',
-    price: formatPlanPrice('developer'),
-    billing: 'per 30 days',
+    price: formatPlanPrice('developer', 'monthly', true),
+    billing: `a month for the first ${DEVELOPER_OFFER_PLACES} customers, then ${formatPlanPrice('developer')}. Or ${formatPlanPrice('developer', 'yearly', true)} a year, then ${formatPlanPrice('developer', 'yearly')}.`,
     description: 'For engineers securing local coding assistants (Claude Desktop, Cursor, Windsurf).',
     bullets: [
+      'One person on one device',
       'Commercial development runtime license',
-      'Mastyf Shield Desktop for macOS, Windows & Linux',
-      'Hardware-grade reference monitor (<4.8µs latency)',
+      `Mastyf Shield Desktop for ${SHIELD_PLATFORM_NAMES}`,
+      PROTOCOL_X_CHECKS,
       'Automated DIFC taint tracking & wire severance',
       'Continuous streaming MCP CVE threat intelligence',
       'License key the moment your payment clears',
     ],
-    cta: `Buy Developer Pro (${formatPlanPrice('developer')} / 30 days)`,
+    cta: 'Buy Developer Pro',
     // Checkout opens from the pricing page and the dashboard (RazorpayCheckoutButton); links land here.
     href: '/dashboard/license',
     featured: true,
@@ -328,14 +336,16 @@ export const PRICING_TIERS = [
   {
     id: 'team',
     audience: 'Teams shipping agents to customers',
-    highlights: ['Up to 15 agent environments', 'Cloud Control Plane with roles', 'Attack tests in CI'],
+    highlights: ['Up to 10 people in one workspace', 'Up to 15 agent environments', 'Attack tests in CI'],
     shortCta: 'Buy',
     name: 'Team',
     price: formatPlanPrice('team'),
-    billing: 'per 30 days',
+    billing: `a month, or ${formatPlanPrice('team', 'yearly')} a year`,
     description: 'For fast-moving AI engineering teams deploying customer-facing autonomous agents.',
     bullets: [
+      'Up to 10 people in one workspace',
       'Up to 15 protected agent environments',
+      PROTOCOL_X_CHECKS,
       'Cloud Control Plane with team RBAC',
       'Mastyf Swarm CI/CD automated regression runner',
       'Threat Lab mutation review queue',
@@ -343,54 +353,26 @@ export const PRICING_TIERS = [
       'SIEM webhook and telemetry export',
       'Priority email and Slack support',
     ],
-    cta: `Buy Team (${formatPlanPrice('team')} / 30 days)`,
+    cta: 'Buy Team',
     href: '/dashboard/license',
     featured: false,
     external: false,
   },
   {
-    id: 'business',
-    audience: 'Companies running agents in production',
-    highlights: ['Up to 50 agent environments', 'Private VPC and Kubernetes', '99.9% uptime SLA'],
-    shortCta: 'Start a 30-day pilot',
-    name: 'Business',
-    // $1,999 at ~₹95/$, like the Razorpay plans (lib/billing/plans.ts); sold through a pilot, not checkout.
-    price: formatInr(189_899),
-    billing: 'per month',
-    description: 'For mid-market companies scaling multi-agent production infrastructure.',
-    bullets: [
-      'Up to 50 protected agent environments',
-      'Multi-cluster fleet management and policy sync',
-      'Stateful workflow constraints & DIFC taint tracking',
-      'Private VPC and Kubernetes deployment support',
-      '1-year tamper-evident audit log retention',
-      '99.9% gateway uptime SLA',
-      'Dedicated security engineer onboarding',
-    ],
-    cta: 'Start 30-Day Pilot',
-    href: '/pilot',
-    featured: false,
-    external: false,
-  },
-  {
-    id: 'enterprise',
-    audience: 'Regulated and mission-critical systems',
-    highlights: ['Unlimited environments', 'On-prem or air-gapped', 'Compliance evidence packs'],
-    shortCta: 'Request a pilot',
-    name: 'Enterprise',
+    id: 'custom',
+    audience: 'Larger teams and regulated systems',
+    highlights: ['More people and environments', 'Private or on-premises deployment', 'Terms agreed with you'],
+    shortCta: 'Contact us',
+    name: 'Custom',
     price: 'Custom',
-    billing: 'Starts ~₹33 lakh a year', // ~$35k ARR
-    description: 'For regulated enterprises, financial institutions, and mission-critical systems.',
+    billing: 'Priced for your setup',
+    description: 'For organizations that need more than 10 people, a private deployment, or their own terms.',
     bullets: [
-      'Unlimited protected agent environments',
-      'Full on-premises, air-gapped, or sovereign cloud deployment',
-      'Production Mastyf Guard enterprise weights & domain fine-tuning',
-      'Cryptographic Ed25519 verifiable execution receipts',
-      'Compliance evidence packs (OWASP, NIST, SOC 2, HIPAA)',
-      'Custom SLA, 24/7 emergency incident response',
-      'Direct security architecture consultation',
+      'More than 10 people or 15 agent environments',
+      'Private VPC, on-premises or air-gapped deployment',
+      'Support and terms agreed with you',
     ],
-    cta: 'Request 30-Day Pilot',
+    cta: 'Contact us',
     href: '/pilot',
     featured: false,
     external: false,

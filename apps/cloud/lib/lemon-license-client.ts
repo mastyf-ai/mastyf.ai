@@ -1,6 +1,6 @@
 export type LemonLicenseActivateResult = {
   valid: boolean;
-  status: 'active' | 'inactive' | 'expired' | 'disabled' | 'rate_limited' | 'network_error' | 'mismatch';
+  status: 'active' | 'inactive' | 'expired' | 'disabled' | 'rate_limited' | 'network_error' | 'mismatch' | 'device_limit';
   message: string;
   licenseKeyId?: string;
   instanceId?: string;

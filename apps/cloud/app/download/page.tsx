@@ -1,17 +1,26 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
 import { SiteFooter } from '@/components/SiteFooter';
 import { SiteNav } from '@/components/SiteNav';
 import { GatedDownloadBox } from '@/components/download/GatedDownloadBox';
-import { formatPlanPrice } from '@/lib/billing/plans';
 import { issuedLicenseSummary } from '@/lib/billing/license-keys';
-import { SHIELD_PLATFORM_ORDER, SHIELD_PLATFORMS, SHIELD_VERSION, shieldPlatformAvailable } from '@/lib/billing/shield-builds';
+import {
+  SHIELD_PLATFORM_ORDER,
+  SHIELD_PLATFORMS,
+  SHIELD_VERSION,
+  shieldPlatformAvailable,
+  type ShieldPlatform,
+} from '@/lib/billing/shield-builds';
 import { cloudDbAvailable } from '@/lib/db';
 import { CONTACT_EMAIL } from '@/lib/product-links';
 import { GITHUB_REPO_URL } from '@/lib/github-links';
 import { safeAuth } from '@/lib/safe-auth';
 
 const CHECKOUT_URL = '/pricing';
+
+const AVAILABLE_PLATFORMS = SHIELD_PLATFORM_ORDER.filter(shieldPlatformAvailable);
+const AVAILABLE_NAMES = AVAILABLE_PLATFORMS.map((id) => SHIELD_PLATFORMS[id].name);
 
 /** Whether the signed-in visitor's plan covers Shield. Any failure reads as no, which only hides buttons. */
 async function hasShieldPlan(email: string | null | undefined): Promise<boolean> {
@@ -24,15 +33,32 @@ async function hasShieldPlan(email: string | null | undefined): Promise<boolean>
 }
 
 function platformsLabel(): string {
-  const names = SHIELD_PLATFORM_ORDER.filter(shieldPlatformAvailable).map((id) => SHIELD_PLATFORMS[id].name);
   const soon = SHIELD_PLATFORM_ORDER.filter((id) => !shieldPlatformAvailable(id)).map((id) => SHIELD_PLATFORMS[id].name);
-  return soon.length ? `${names.join(', ')} (${soon.join(' and ')} soon)` : names.join(', ');
+  return soon.length ? `${AVAILABLE_NAMES.join(', ')} (${soon.join(' and ')} soon)` : AVAILABLE_NAMES.join(', ');
 }
 
 export const metadata = {
   title: 'Download Mastyf Shield — Mastyf',
   description:
-    'Download Mastyf Shield for macOS, Windows, and Linux: a desktop app that checks every tool call Claude Desktop, Cursor, and other local agents make before it runs.',
+    `Download Mastyf Shield for ${AVAILABLE_NAMES.join(', ')}: a desktop app that checks every tool call Claude Desktop, Cursor, and other local agents make before it runs.`,
+};
+
+const INSTALL_STEP: Record<ShieldPlatform, ReactNode> = {
+  windows: (
+    <>
+      Windows: run the <code>.exe</code>.
+    </>
+  ),
+  mac: (
+    <>
+      macOS: drag the <code>.dmg</code> to Applications.
+    </>
+  ),
+  linux: (
+    <>
+      Linux: run the <code>.AppImage</code> or install the <code>.deb</code>.
+    </>
+  ),
 };
 
 const STEPS = [
@@ -40,7 +66,7 @@ const STEPS = [
     title: 'Get a license key',
     body: (
       <>
-        Buy Developer Pro ({formatPlanPrice('developer')} for 30 days) on the <Link href="/pricing">pricing page</Link>.
+        Buy Developer Pro on the <Link href="/pricing">pricing page</Link>.
         The key appears right after payment and stays on your dashboard.
       </>
     ),
@@ -49,8 +75,9 @@ const STEPS = [
     title: 'Install',
     body: (
       <>
-        macOS: drag the <code>.dmg</code> to Applications. Windows: run the <code>.exe</code>. Linux: run the{' '}
-        <code>.AppImage</code> or install the <code>.deb</code>.
+        {AVAILABLE_PLATFORMS.map((id) => (
+          <span key={id}>{INSTALL_STEP[id]} </span>
+        ))}
       </>
     ),
   },
@@ -65,7 +92,7 @@ const REQUIREMENTS = [
   { os: 'Windows', need: 'Windows 10 (build 19041+) or Windows 11, x64 or ARM64.' },
   { os: 'Linux', need: 'glibc 2.28+: Ubuntu 20.04+, Debian 11+, Fedora 34+, Arch.' },
   { os: 'Works with', need: 'Claude Desktop, Cursor, Windsurf, VS Code, and any Model Context Protocol client.' },
-];
+].filter((row) => row.os === 'Works with' || AVAILABLE_NAMES.includes(row.os));
 
 export default async function DownloadPage() {
   const session = await safeAuth();
@@ -92,8 +119,8 @@ export default async function DownloadPage() {
                 <dd>{platformsLabel()}</dd>
               </div>
               <div>
-                <dt>Decision</dt>
-                <dd>Under 4.8 µs, on device</dd>
+                <dt>Checks</dt>
+                <dd>Rules on your device, Protocol X hosted</dd>
               </div>
             </dl>
           </div>

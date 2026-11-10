@@ -1,34 +1,87 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Check } from 'lucide-react';
 import { RazorpayCheckoutButton } from '@/components/billing/RazorpayCheckoutButton';
 import { Flip } from '@/components/ui/Flip';
-import { isPaidPlanId } from '@/lib/billing/plans';
+import type { DeveloperOffer } from '@/lib/billing/fulfillment';
+import { DEVELOPER_OFFER_PLACES, formatPlanPrice, isPaidPlanId, type BillingPeriod } from '@/lib/billing/plans';
 import { PRICING_TIERS } from './stats';
 
-/** The five plans at a glance. Full feature lists live in the docs (#plans). */
-export function PricingSection({ signedIn = false }: { signedIn?: boolean }) {
+const PERIODS: { id: BillingPeriod; label: string; per: string }[] = [
+  { id: 'monthly', label: 'Monthly', per: 'per month' },
+  { id: 'yearly', label: 'Yearly', per: 'per year' },
+];
+
+function placesText(places: number | null): string {
+  if (places === null) return `First ${DEVELOPER_OFFER_PLACES} customers.`;
+  return `First ${DEVELOPER_OFFER_PLACES} customers, ${places} ${places === 1 ? 'place' : 'places'} left.`;
+}
+
+/**
+ * The plans at a glance. Full feature lists live in the docs (#plans). `offer` comes from real
+ * payments; null means it couldn't be read, so the count is left out rather than guessed.
+ */
+export function PricingSection({
+  signedIn = false,
+  offer = null,
+}: {
+  signedIn?: boolean;
+  offer?: Pick<DeveloperOffer, 'open' | 'placesLeft'> | null;
+}) {
+  const [period, setPeriod] = useState<BillingPeriod>('monthly');
+  const per = PERIODS.find((p) => p.id === period)!.per;
+  const offerOpen = offer?.open ?? true;
+  const places = offer?.open && offer.placesLeft > 0 ? offer.placesLeft : null;
+
   return (
     <section className="section section--flush-top" id="pricing" aria-label="Plans">
+      <div className="billing-switch">
+        <div className="tablist tablist--boxed" role="group" aria-label="Billing period">
+          {PERIODS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="tab"
+              aria-pressed={period === p.id}
+              onClick={() => setPeriod(p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="tiers tiers--crisp" data-reveal>
         {PRICING_TIERS.map((tier) => {
           const buttonClass = `btn ${tier.featured ? 'btn-primary' : 'btn-secondary'}`;
+          const paid = isPaidPlanId(tier.id);
+          const showOffer = tier.id === 'developer' && offerOpen;
           return (
             <article key={tier.id} className={`tier${tier.featured ? ' tier--featured' : ''}`}>
               <div className="tier__head">
                 <h2 className="tier__name">
                   <Flip light="var(--accent)">{tier.name}</Flip>
                 </h2>
-                {tier.featured ? (
+                {showOffer ? (
                   <span className="status status--active">
                     <span className="status__mark" aria-hidden="true">●</span>
-                    Most popular
+                    Launch offer
                   </span>
                 ) : null}
               </div>
               <p className="tier__price">
-                <span className="tier__amount">{tier.price}</span>
-                <span className="tier__billing">{tier.billing}</span>
+                <span className="tier__amount">
+                  {isPaidPlanId(tier.id) ? formatPlanPrice(tier.id, period, showOffer) : tier.price}
+                </span>
+                <span className="tier__billing">{paid ? per : tier.billing}</span>
               </p>
+              {showOffer ? (
+                <p className="tier__offer">
+                  {placesText(places)} Then {formatPlanPrice('developer', period)} {per}.
+                </p>
+              ) : null}
               <p className="tier__desc">{tier.audience}</p>
 
               <ul className="tier__list">
@@ -44,6 +97,7 @@ export function PricingSection({ signedIn = false }: { signedIn?: boolean }) {
                 {isPaidPlanId(tier.id) ? (
                   <RazorpayCheckoutButton
                     plan={tier.id}
+                    period={period}
                     signedIn={signedIn}
                     label={signedIn ? tier.shortCta : `Sign in to buy`}
                     className={buttonClass}

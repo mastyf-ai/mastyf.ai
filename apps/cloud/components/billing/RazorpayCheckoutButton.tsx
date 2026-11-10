@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { PaidPlanId } from '@/lib/billing/plans';
+import type { BillingPeriod, PaidPlanId } from '@/lib/billing/plans';
 import { formatDate } from '@/lib/format';
 import { LicenseKeyReveal } from './LicenseKeyReveal';
 
@@ -24,7 +24,7 @@ type OrderResponse = {
   amount: number;
   currency: string;
   keyId: string;
-  plan: { id: PaidPlanId; name: string };
+  plan: { id: PaidPlanId; name: string; period: BillingPeriod };
   prefill: { name: string; email: string };
 };
 type VerifyResponse = { paid: true; expiresAt?: string; licenseKey: string | null };
@@ -80,16 +80,18 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * Buys 30 days of a plan with Razorpay Standard Checkout: create the order on our server, open
- * the payment modal, then have the server verify the signature before anything is unlocked.
+ * Buys a month or a year of a plan with Razorpay Standard Checkout: create the order on our server,
+ * open the payment modal, then have the server verify the signature before anything is unlocked.
  */
 export function RazorpayCheckoutButton({
   plan,
+  period = 'monthly',
   label,
   signedIn,
   className = 'btn',
 }: {
   plan: PaidPlanId;
+  period?: BillingPeriod;
   label: string;
   signedIn: boolean;
   className?: string;
@@ -116,7 +118,7 @@ export function RazorpayCheckoutButton({
     setStatus({ kind: 'opening' });
     try {
       const [order] = await Promise.all([
-        postJson<OrderResponse>('/api/billing/create-order', { plan }),
+        postJson<OrderResponse>('/api/billing/create-order', { plan, period }),
         loadCheckout(),
       ]);
       if (!window.Razorpay) throw new Error('Razorpay Checkout did not load. Try again.');
@@ -127,7 +129,7 @@ export function RazorpayCheckoutButton({
         amount: order.amount,
         currency: order.currency,
         name: 'Mastyf',
-        description: `${order.plan.name}, 30 days`,
+        description: `${order.plan.name}, ${order.plan.period === 'yearly' ? '1 year' : '30 days'}`,
         prefill: order.prefill,
         handler: verify,
         modal: {

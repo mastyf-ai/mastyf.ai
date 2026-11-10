@@ -5,5 +5,5 @@ export const PLAN_FOR_TIER: Record<LicenseTier, { name: string; pricingId: strin
   free: { name: 'Community', pricingId: 'community' },
   pro: { name: 'Developer Pro', pricingId: 'developer' },
   team: { name: 'Team', pricingId: 'team' },
-  enterprise: { name: 'Enterprise', pricingId: 'enterprise' },
+  enterprise: { name: 'Custom', pricingId: 'custom' },
 };

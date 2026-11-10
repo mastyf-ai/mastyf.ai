@@ -62,9 +62,15 @@ export function Plans() {
 
       <h3 className="doc-subhead">Payment</h3>
       <p>
-        Payments are processed by Razorpay in Indian rupees (UPI, cards, netbanking and wallets). Each payment buys 30
-        days of the plan for your workspace, and paying again extends it. Your license key for Shield and the gateway
-        appears right after the first payment and stays on the License page of your dashboard.
+        Payments are processed by Razorpay in Indian rupees (UPI, cards, netbanking and wallets). A monthly payment buys
+        30 days of the plan for your workspace and a yearly payment buys 365, and paying again extends it. Plans do not
+        renew by themselves. Your license key for Shield and the gateway appears right after the first payment and stays
+        on the License page of your dashboard.
+      </p>
+      <p>
+        A Developer Pro key works on one device. To move it to another device, create a new key on the License page; the
+        old device stops working. The first 100 Developer Pro customers keep the launch price for 12 months from their
+        first payment, then move to the normal price.
       </p>
       <Link href="/pricing" className="link-icon">
         See plans and buy

@@ -494,6 +494,25 @@
   min-height: 3.2em;
 }
 
+.billing-switch {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--s-5);
+}
+
+.tier__offer {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+
+.plan-buy {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
 .pricing-foot {
   display: flex;
   flex-wrap: wrap;

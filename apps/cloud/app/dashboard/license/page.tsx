@@ -6,7 +6,8 @@ import { NewLicenseKeyButton } from '@/components/billing/NewLicenseKeyButton';
 import { RazorpayCheckoutButton } from '@/components/billing/RazorpayCheckoutButton';
 import { ShieldDownloadButtons } from '@/components/download/ShieldDownloadButtons';
 import { issuedLicenseSummary } from '@/lib/billing/license-keys';
-import { isPaidPlanId } from '@/lib/billing/plans';
+import { developerOfferFor } from '@/lib/billing/fulfillment';
+import { formatPlanPrice, isPaidPlanId } from '@/lib/billing/plans';
 import { activeLicense, listInstances, listTeams, requireDashboard } from '@/lib/dashboard-data';
 import { formatCount, formatDate } from '@/lib/format';
 
@@ -19,11 +20,12 @@ export default async function LicensePage() {
   const { session, ctx } = await requireDashboard();
   const orgId = ctx.org.id;
   const email = session.user.email;
-  const [license, instances, teams, licenseKey] = await Promise.all([
+  const [license, instances, teams, licenseKey, developerOffer] = await Promise.all([
     activeLicense(orgId),
     listInstances(orgId),
     listTeams(orgId),
     email ? issuedLicenseSummary(email) : null,
+    developerOfferFor(orgId).catch(() => null),
   ]);
 
   const plan = PLAN_FOR_TIER[license.tier];
@@ -111,6 +113,9 @@ export default async function LicensePage() {
                 <p className="panel__text">
                   Shield and the gateway check this key with Mastyf Cloud and stay unlocked until the date above.
                   Buying again extends it; the key itself does not change.
+                  {licenseKey.oneDevice
+                    ? ' This key works on one device. To move it to another device, create a new key; the old device stops working.'
+                    : null}
                 </p>
                 <NewLicenseKeyButton />
               </>
@@ -163,6 +168,7 @@ export default async function LicensePage() {
                 <tbody>
                   {PRICING_TIERS.map((tier) => {
                     const current = tier.id === plan.pricingId;
+                    const offer = tier.id === 'developer' && (developerOffer?.open ?? false);
                     return (
                       <tr key={tier.id}>
                         <td>
@@ -170,18 +176,32 @@ export default async function LicensePage() {
                           <span className="cell-sub">{tier.audience}</span>
                         </td>
                         <td>
-                          {tier.price}
-                          <span className="cell-sub">{tier.billing}</span>
+                          {isPaidPlanId(tier.id) ? formatPlanPrice(tier.id, 'monthly', offer) : tier.price}
+                          <span className="cell-sub">
+                            {isPaidPlanId(tier.id)
+                              ? `per month, or ${formatPlanPrice(tier.id, 'yearly', offer)} per year`
+                              : tier.billing}
+                          </span>
                         </td>
                         <td className="dim col-opt">{tier.highlights.join(', ')}</td>
                         <td className="num">
                           {isPaidPlanId(tier.id) ? (
-                            <RazorpayCheckoutButton
-                              plan={tier.id}
-                              signedIn
-                              label={current ? 'Renew 30 days' : tier.shortCta}
-                              className="btn btn-sm"
-                            />
+                            <div className="plan-buy">
+                              <RazorpayCheckoutButton
+                                plan={tier.id}
+                                period="monthly"
+                                signedIn
+                                label={current ? 'Renew monthly' : 'Buy monthly'}
+                                className="btn btn-sm"
+                              />
+                              <RazorpayCheckoutButton
+                                plan={tier.id}
+                                period="yearly"
+                                signedIn
+                                label={current ? 'Renew yearly' : 'Buy yearly'}
+                                className="btn btn-sm"
+                              />
+                            </div>
                           ) : current ? (
                             <span className="status status--active">Current</span>
                           ) : tier.external ? (
