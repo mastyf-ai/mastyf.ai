@@ -494,6 +494,14 @@
   min-height: 3.2em;
 }
 
+.plan-row--current td {
+  background: var(--accent-soft);
+}
+
+.plan-current {
+  margin-left: var(--s-2);
+}
+
 .join-panel {
   max-width: 34rem;
 }

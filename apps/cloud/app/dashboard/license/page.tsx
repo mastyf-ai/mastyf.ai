@@ -170,9 +170,14 @@ export default async function LicensePage() {
                     const current = tier.id === plan.pricingId;
                     const offer = tier.id === 'developer' && (developerOffer?.open ?? false);
                     return (
-                      <tr key={tier.id}>
+                      <tr key={tier.id} className={current ? 'plan-row--current' : undefined}>
                         <td>
                           {tier.name}
+                          {current ? (
+                            <span className="status status--active plan-current">
+                              <span className="status__mark">●</span>Current plan
+                            </span>
+                          ) : null}
                           <span className="cell-sub">{tier.audience}</span>
                         </td>
                         <td>
@@ -202,9 +207,7 @@ export default async function LicensePage() {
                                 className="btn btn-sm"
                               />
                             </div>
-                          ) : current ? (
-                            <span className="status status--active">Current</span>
-                          ) : tier.external ? (
+                          ) : current ? null : tier.external ? (
                             <a href={tier.href} className="btn btn-sm" target="_blank" rel="noopener noreferrer">
                               {tier.shortCta}
                             </a>
