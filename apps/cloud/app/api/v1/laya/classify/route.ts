@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { extractBearerToken, extractRawBearerToken, isWellFormedApiKey } from '@/lib/api-keys';
-import { entitlementActive, findIssuedEntitlement } from '@/lib/billing/license-keys';
+import { deviceDecision, DEVICE_LIMIT_MESSAGE, entitlementActive, findIssuedEntitlement } from '@/lib/billing/license-keys';
 import { parseClassifyBody } from '@/lib/laya/classify-request';
 import { resolveLayaTarget, sharedTarget, type LayaTarget } from '@/lib/laya/deployment';
 import { forwardToLaya } from '@/lib/laya/forward';
@@ -35,6 +35,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       const entitlement = await findIssuedEntitlement(raw);
       if (!entitlement) return error(401, 'Unauthorized');
       if (!entitlementActive(entitlement)) return error(402, 'Protocol X requires a paid plan');
+      // A one-device key answers only on the device it was activated on.
+      const device = request.headers.get('x-mastyf-device')?.trim() ?? '';
+      if (deviceDecision(entitlement, device) !== 'allow') return error(403, DEVICE_LIMIT_MESSAGE);
       limitKey = `license-${entitlement.id}`;
       const limit = await checkLayaRateLimit(limitKey);
       if (!limit.success) {
