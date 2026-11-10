@@ -1,15 +1,18 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { MembersPanel } from '@/components/dashboard/MembersPanel';
-import { listSeats, planAllowsSeats } from '@/lib/billing/workspace-seats';
+import { listSeats, seatsAllowedFor } from '@/lib/billing/workspace-seats';
 import { activeLicense, requireDashboard } from '@/lib/dashboard-data';
 import { userCanManageOrg } from '@/lib/org-context';
 
 export default async function MembersPage() {
   const { session, ctx } = await requireDashboard();
   const orgId = ctx.org.id;
-  const [license, seats] = await Promise.all([activeLicense(orgId), listSeats(orgId).catch(() => null)]);
-  const hasPlan = planAllowsSeats(license);
+  const [license, seats, hasPlan] = await Promise.all([
+    activeLicense(orgId),
+    listSeats(orgId).catch(() => null),
+    seatsAllowedFor(orgId).catch(() => false),
+  ]);
 
   return (
     <>

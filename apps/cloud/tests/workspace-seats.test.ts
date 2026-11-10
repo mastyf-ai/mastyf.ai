@@ -54,15 +54,17 @@ describe('who can have members', () => {
   const later = new Date('2026-12-10T00:00:00Z');
   const before = new Date('2026-10-10T00:00:00Z');
 
-  it('needs an active Team or Custom plan', () => {
-    expect(planAllowsSeats({ tier: 'team', expiresAt: later }, now)).toBe(true);
-    expect(planAllowsSeats({ tier: 'enterprise', expiresAt: null }, now)).toBe(true);
+  it('needs a Team plan that was really paid for and is still running', () => {
+    expect(planAllowsSeats({ tier: 'team', expiresAt: later, paid: true }, now)).toBe(true);
   });
 
   it.each([
-    ['a lapsed Team plan', { tier: 'team', expiresAt: before }],
-    ['Developer Pro', { tier: 'pro', expiresAt: later }],
-    ['the free plan', { tier: 'free', expiresAt: null }],
+    ['a lapsed Team plan', { tier: 'team', expiresAt: before, paid: true }],
+    ['a Team row with no payment behind it', { tier: 'team', expiresAt: later, paid: false }],
+    ['a Team row with no end date', { tier: 'team', expiresAt: null, paid: true }],
+    ['a row that only claims to be a contract', { tier: 'enterprise', expiresAt: null, paid: false }],
+    ['Developer Pro', { tier: 'pro', expiresAt: later, paid: true }],
+    ['the free plan', { tier: 'free', expiresAt: null, paid: false }],
     ['no plan at all', null],
   ])('refuses %s', (_label, license) => {
     expect(planAllowsSeats(license, now)).toBe(false);

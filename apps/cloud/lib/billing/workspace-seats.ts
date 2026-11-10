@@ -49,12 +49,15 @@ function hashesEqual(a: string, b: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-type PlanView = { tier: string; expiresAt: Date | string | null };
+type PlanView = { tier: string; expiresAt: Date | string | null; paid: boolean };
 
-/** Team and Custom workspaces can have members, while the plan is paid up. */
+/**
+ * Members need a Team plan with a real payment behind it and a real end date. A license row alone
+ * isn't proof of payment, and these seats hand out working keys.
+ */
 export function planAllowsSeats(license: PlanView | null, now = new Date()): boolean {
-  if (!license || (license.tier !== 'team' && license.tier !== 'enterprise')) return false;
-  return license.expiresAt === null || new Date(license.expiresAt).getTime() > now.getTime();
+  if (!license || license.tier !== 'team' || !license.paid || license.expiresAt === null) return false;
+  return new Date(license.expiresAt).getTime() > now.getTime();
 }
 
 /** The lead is one of the people. A limit of zero or less means no limit. */
@@ -69,14 +72,18 @@ export function memberDisplayName(raw: unknown, email: string): string {
 
 const codeExpiry = () => new Date(Date.now() + JOIN_CODE_DAYS * DAY_MS);
 
-type SeatLicense = { tier: string; expiresAt: Date | null; maxUsers: number };
+type SeatLicense = { tier: string; expiresAt: Date | null; maxUsers: number; paid: boolean };
 
-async function seatLicense(tx: Tx, orgId: string, lock: boolean): Promise<SeatLicense | null> {
-  const [row] = rowsOf<{ tier: string; expires_at: string | Date | null; max_users: string | number }>(
-    await tx.execute(
+async function seatLicense(db: Pick<Tx, 'execute'>, orgId: string, lock: boolean): Promise<SeatLicense | null> {
+  const paidTeamOrder = sql`EXISTS (
+    SELECT 1 FROM razorpay_orders
+    WHERE org_id = ${orgId} AND status = 'paid' AND (plan = 'team' OR plan LIKE 'team:%')
+  )`;
+  const [row] = rowsOf<{ tier: string; expires_at: string | Date | null; max_users: string | number; paid: boolean }>(
+    await db.execute(
       lock
-        ? sql`SELECT tier, expires_at, max_users FROM licenses WHERE org_id = ${orgId} AND revoked_at IS NULL LIMIT 1 FOR UPDATE`
-        : sql`SELECT tier, expires_at, max_users FROM licenses WHERE org_id = ${orgId} AND revoked_at IS NULL LIMIT 1`,
+        ? sql`SELECT tier, expires_at, max_users, ${paidTeamOrder} AS paid FROM licenses WHERE org_id = ${orgId} AND revoked_at IS NULL LIMIT 1 FOR UPDATE`
+        : sql`SELECT tier, expires_at, max_users, ${paidTeamOrder} AS paid FROM licenses WHERE org_id = ${orgId} AND revoked_at IS NULL LIMIT 1`,
     ),
   );
   if (!row) return null;
@@ -84,7 +91,13 @@ async function seatLicense(tx: Tx, orgId: string, lock: boolean): Promise<SeatLi
     tier: String(row.tier),
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     maxUsers: Number(row.max_users),
+    paid: row.paid === true,
   };
+}
+
+/** Whether this workspace can have members, for the Members page. */
+export async function seatsAllowedFor(orgId: string): Promise<boolean> {
+  return planAllowsSeats(await seatLicense(getDb(), orgId, false));
 }
 
 export type SeatView = {
