@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { signEntitlement } from '@/lib/ed25519-signer';
-import { entitlementActive, findIssuedEntitlement } from '@/lib/billing/license-keys';
+import {
+  deviceDecision,
+  DEVICE_LIMIT_MESSAGE,
+  DEVICE_NOT_ACTIVATED_MESSAGE,
+  entitlementActive,
+  findIssuedEntitlement,
+} from '@/lib/billing/license-keys';
 
 const FROZEN_MODEL_REPO = 'Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened';
 const FROZEN_MODEL_REVISION = 'd59a6aa01f9139dff106146addb04109afa69c03';
@@ -63,6 +69,14 @@ export async function POST(request: Request) {
         },
         { status: 403 },
       );
+    }
+    // Renewing never ties a key to a device; that only happens at activation.
+    const device = deviceDecision(issued, instanceId ?? '');
+    if (device === 'refuse') {
+      return NextResponse.json({ success: false, error: DEVICE_LIMIT_MESSAGE, status: 'device_limit' }, { status: 403 });
+    }
+    if (device === 'claim') {
+      return NextResponse.json({ success: false, error: DEVICE_NOT_ACTIVATED_MESSAGE, status: 'not_activated' }, { status: 403 });
     }
     return renewedEntitlement(issued.expiresAt, instanceId);
   }

@@ -165,8 +165,10 @@ export const commercialEntitlements = pgTable('commercial_entitlements', {
   licenseKeyHash: text('license_key_hash').notNull().unique(),
   licenseKeyPreview: text('license_key_preview'),
   lemonLicenseId: text('lemon_license_id').unique(),
+  /** For a one-device key we issued, the device it is tied to; null until first activated. */
   lemonInstanceId: text('lemon_instance_id'),
   status: text('status').notNull().default('active'), // active, grace_period, expired, disabled
+  /** On keys we issued, 1 means one device; anything else means no device limit (license-keys.ts). */
   activationLimit: integer('activation_limit').notNull().default(2),
   instancesCount: integer('instances_count').notNull().default(0),
   lastValidatedAt: timestamp('last_validated_at', { mode: 'date', withTimezone: true }),
@@ -186,7 +188,7 @@ export const razorpayOrders = pgTable('razorpay_orders', {
   orgId: text('org_id')
     .notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
-  plan: text('plan').notNull(), // developer, team
+  plan: text('plan').notNull(), // what was bought: see purchaseCode in lib/billing/plans.ts
   amount: integer('amount').notNull(), // paise
   currency: text('currency').notNull(),
   status: text('status').notNull().default('created'), // created, paid

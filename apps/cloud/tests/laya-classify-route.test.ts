@@ -14,9 +14,9 @@ vi.mock('@/lib/laya/plan', () => ({ workspaceHasProtocolX: mocks.workspaceHasPro
 vi.mock('@/lib/org-context', () => ({ resolveOrgFromApiKey: mocks.resolveOrgFromApiKey }));
 vi.mock('@/lib/rate-limit', () => ({ checkLayaRateLimit: mocks.checkLayaRateLimit }));
 vi.mock('@/lib/laya/deployment', () => ({ resolveLayaTarget: mocks.resolveLayaTarget, sharedTarget: mocks.sharedTarget }));
-vi.mock('@/lib/billing/license-keys', () => ({
+vi.mock('@/lib/billing/license-keys', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/billing/license-keys')>()),
   findIssuedEntitlement: mocks.findIssuedEntitlement,
-  entitlementActive: (e: { status: string }) => e.status === 'active',
 }));
 vi.mock('@/lib/laya/forward', () => ({ forwardToLaya: mocks.forwardToLaya }));
 
@@ -91,6 +91,34 @@ describe('POST /api/v1/laya/classify', () => {
       const res = await call({ key: LICENSE });
       expect(res.status).toBe(429);
       expect(mocks.forwardToLaya).not.toHaveBeenCalled();
+    });
+
+    describe('a one-device key', () => {
+      const oneDevice = (device: string | null) => ({ id: 'ent1', status: 'active', activationLimit: 1, lemonInstanceId: device });
+
+      it('gets a verdict on the device it is tied to', async () => {
+        mocks.findIssuedEntitlement.mockResolvedValue(oneDevice('shield-a'));
+        const res = await call({ key: LICENSE, headers: { 'X-Mastyf-Device': 'shield-a' } });
+        expect(res.status).toBe(200);
+      });
+
+      it.each<[string, string | null, Record<string, string>]>([
+        ['another device', 'shield-a', { 'X-Mastyf-Device': 'shield-b' }],
+        ['a request that names no device', 'shield-a', {}],
+        ['a blank device name', 'shield-a', { 'X-Mastyf-Device': '   ' }],
+        ['a key that was never activated', null, { 'X-Mastyf-Device': 'shield-a' }],
+      ])('is refused for %s, before anything reaches the model', async (_label, bound, headers) => {
+        mocks.findIssuedEntitlement.mockResolvedValue(oneDevice(bound));
+        const res = await call({ key: LICENSE, headers });
+        expect(res.status).toBe(403);
+        expect(mocks.checkLayaRateLimit).not.toHaveBeenCalled();
+        expect(mocks.forwardToLaya).not.toHaveBeenCalled();
+      });
+    });
+
+    it('does not need a device name for a key without a device limit', async () => {
+      mocks.findIssuedEntitlement.mockResolvedValue({ id: 'ent1', status: 'active', activationLimit: 2, lemonInstanceId: null });
+      expect((await call({ key: LICENSE })).status).toBe(200);
     });
 
     it('503, not a verdict, when the lookup fails', async () => {

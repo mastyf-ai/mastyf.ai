@@ -1,8 +1,9 @@
 import { createHmac } from 'crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { safeAuth, getUserOrg, currentLicense, recordOrder, findOrder, fulfillOrder } = vi.hoisted(() => ({
+const { safeAuth, getUserOrg, currentLicense, developerOfferFor, recordOrder, findOrder, fulfillOrder } = vi.hoisted(() => ({
   safeAuth: vi.fn(),
+  developerOfferFor: vi.fn(),
   getUserOrg: vi.fn(),
   currentLicense: vi.fn(),
   recordOrder: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('@/lib/org-context', () => ({
 vi.mock('@/lib/billing/fulfillment', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/billing/fulfillment')>()),
   currentLicense,
+  developerOfferFor,
   recordOrder,
   findOrder,
   fulfillOrder,
@@ -49,7 +51,18 @@ beforeEach(() => {
   safeAuth.mockResolvedValue(SESSION);
   getUserOrg.mockResolvedValue(CTX);
   currentLicense.mockResolvedValue(null);
+  developerOfferFor.mockResolvedValue({ open: true, placesLeft: 100 });
 });
+
+/** Razorpay echoes what it was asked to charge; returns the request body it received. */
+function stubRazorpay() {
+  const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+    const sent = JSON.parse(String(init.body)) as { amount: number };
+    return Response.json({ id: 'order_1', amount: sent.amount, currency: 'INR' });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return () => JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+}
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -79,20 +92,64 @@ describe('POST /api/billing/create-order', () => {
   });
 
   it('charges the server-side price, whatever amount the browser sends, and records the order', async () => {
-    const fetchMock = vi.fn(async () => Response.json({ id: 'order_1', amount: 469900, currency: 'INR' }));
-    vi.stubGlobal('fetch', fetchMock);
+    const sent = stubRazorpay();
 
     const res = await createOrder(post({ plan: 'developer', amount: 100 }));
 
     expect(res.status).toBe(200);
-    const sent = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
-    expect(sent.amount).toBe(469900);
+    expect(sent().amount).toBe(99900);
     expect(recordOrder).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'order_1', userId: 'user-1', orgId: 'org-1', plan: 'developer', amount: 469900 }),
+      expect.objectContaining({ id: 'order_1', userId: 'user-1', orgId: 'org-1', plan: 'developer:monthly:offer', amount: 99900 }),
     );
     const body = await res.json();
-    expect(body).toMatchObject({ orderId: 'order_1', amount: 469900, currency: 'INR', keyId: 'rzp_test_key' });
+    expect(body).toMatchObject({ orderId: 'order_1', amount: 99900, currency: 'INR', keyId: 'rzp_test_key' });
     expect(JSON.stringify(body)).not.toContain(KEY_SECRET);
+  });
+
+  it('charges the yearly offer price while places remain', async () => {
+    const sent = stubRazorpay();
+    const res = await createOrder(post({ plan: 'developer', period: 'yearly' }));
+    expect(sent().amount).toBe(899900);
+    expect(recordOrder).toHaveBeenCalledWith(expect.objectContaining({ plan: 'developer:yearly:offer', amount: 899900 }));
+    expect((await res.json()).plan).toMatchObject({ id: 'developer', period: 'yearly' });
+  });
+
+  it('checks the offer against this workspace and its current plan', async () => {
+    stubRazorpay();
+    const license = { tier: 'pro', expiresAt: new Date(Date.now() + 86_400_000) };
+    currentLicense.mockResolvedValue(license);
+    await createOrder(post({ plan: 'developer' }));
+    expect(developerOfferFor).toHaveBeenCalledWith('org-1', license);
+  });
+
+  it('charges the normal price once the offer has closed, even if the browser asks for the offer', async () => {
+    developerOfferFor.mockResolvedValue({ open: false, placesLeft: 0 });
+    const sent = stubRazorpay();
+    await createOrder(post({ plan: 'developer', offer: true }));
+    expect(sent().amount).toBe(199900);
+    expect(recordOrder).toHaveBeenCalledWith(expect.objectContaining({ plan: 'developer:monthly', amount: 199900 }));
+  });
+
+  it('charges the normal yearly price once the offer has closed', async () => {
+    developerOfferFor.mockResolvedValue({ open: false, placesLeft: 0 });
+    const sent = stubRazorpay();
+    await createOrder(post({ plan: 'developer', period: 'yearly' }));
+    expect(sent().amount).toBe(2099900);
+  });
+
+  it.each([
+    ['monthly', 999900],
+    ['yearly', 10499900],
+  ])('charges Team %s at its one price, with no offer involved', async (period, amount) => {
+    const sent = stubRazorpay();
+    await createOrder(post({ plan: 'team', period }));
+    expect(sent().amount).toBe(amount);
+    expect(recordOrder).toHaveBeenCalledWith(expect.objectContaining({ plan: `team:${period}`, amount }));
+    expect(developerOfferFor).not.toHaveBeenCalled();
+  });
+
+  it('is 400 for a billing period it does not sell', async () => {
+    expect((await createOrder(post({ plan: 'developer', period: 'weekly' }))).status).toBe(400);
   });
 
   it('is 500 when Razorpay rejects the request, without recording an order', async () => {
@@ -148,6 +205,19 @@ describe('POST /api/billing/verify-payment', () => {
       expiresAt: expiresAt.toISOString(),
       licenseKey: 'MG-AAAA-BBBB-CCCC-DDDD',
     });
+  });
+
+  it('tells the buyer when the offer ended before their payment arrived', async () => {
+    findOrder.mockResolvedValue(ORDER);
+    fulfillOrder.mockResolvedValue({
+      status: 'paid',
+      order: ORDER,
+      expiresAt: new Date('2026-11-24T00:00:00Z'),
+      licenseKey: null,
+      offerEnded: true,
+      days: 14,
+    });
+    expect((await (await verifyPayment(post(paid()))).json()).offerEndedDays).toBe(14);
   });
 
   it('is idempotent when the webhook got there first', async () => {

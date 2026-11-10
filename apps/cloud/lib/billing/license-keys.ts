@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { cloudDbAvailable, getDb } from '../db';
 import { commercialCustomers, commercialEntitlements } from '../db/schema';
 import type { LemonLicenseActivateResult } from '../lemon-license-client';
@@ -17,6 +17,17 @@ export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type Entitlement = typeof commercialEntitlements.$inferSelect;
 
 export const ISSUED_SOURCE = 'razorpay';
+
+/** activation_limit on a key we issued. The column predates us and defaults to 2. */
+export const ONE_DEVICE = 1;
+export const NO_DEVICE_LIMIT = 2;
+
+export const DEVICE_LIMIT_MESSAGE =
+  'This license key is already active on another device. Developer Pro covers one person on one device. To move it here, create a new key on the License page of your Mastyf dashboard.';
+
+export const DEVICE_NOT_ACTIVATED_MESSAGE = 'Activate this license key on this device before renewing it.';
+
+const MAX_DEVICE_NAME = 128;
 
 const KEY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 symbols, no 0/O or 1/I
 
@@ -38,6 +49,17 @@ export function entitlementActive(e: Pick<Entitlement, 'status' | 'expiresAt'>, 
   return e.status === 'active' && (!e.expiresAt || e.expiresAt.getTime() > now.getTime());
 }
 
+/** Whether a device may use a key: `claim` means no device holds it yet. One-device keys need a device name. */
+export function deviceDecision(
+  e: Pick<Entitlement, 'activationLimit' | 'lemonInstanceId'>,
+  device: string,
+): 'allow' | 'claim' | 'refuse' {
+  if (e.activationLimit !== ONE_DEVICE) return 'allow';
+  if (!device) return 'refuse';
+  if (e.lemonInstanceId == null) return 'claim';
+  return e.lemonInstanceId === device ? 'allow' : 'refuse';
+}
+
 async function issuedEntitlementForEmail(tx: Pick<Tx, 'query'>, email: string): Promise<Entitlement | null> {
   const customer = await tx.query.commercialCustomers.findFirst({
     where: eq(commercialCustomers.email, email.toLowerCase()),
@@ -56,12 +78,15 @@ async function issuedEntitlementForEmail(tx: Pick<Tx, 'query'>, email: string): 
 /**
  * Keeps the buyer's key paid through `paidThrough`: creates the key on their first purchase,
  * otherwise extends the one they have. Returns the plaintext only when it was just created.
+ * `deviceLimit` is what this purchase allows; leave it out to keep the key's current limit.
  */
 export async function extendIssuedEntitlement(
   tx: Tx,
   email: string,
   paidThrough: Date,
+  deviceLimit?: number,
 ): Promise<{ licenseKey: string | null; expiresAt: Date }> {
+  const limit = deviceLimit === undefined ? {} : { activationLimit: deviceLimit };
   const normalized = email.toLowerCase();
   const existing = await issuedEntitlementForEmail(tx, normalized);
   if (existing) {
@@ -69,7 +94,7 @@ export async function extendIssuedEntitlement(
       existing.expiresAt && existing.expiresAt.getTime() > paidThrough.getTime() ? existing.expiresAt : paidThrough;
     await tx
       .update(commercialEntitlements)
-      .set({ expiresAt, status: 'active', updatedAt: new Date() })
+      .set({ expiresAt, status: 'active', updatedAt: new Date(), ...limit })
       .where(eq(commercialEntitlements.id, existing.id));
     return { licenseKey: null, expiresAt };
   }
@@ -93,13 +118,15 @@ export async function extendIssuedEntitlement(
     source: ISSUED_SOURCE,
     status: 'active',
     expiresAt: paidThrough,
+    ...limit,
   });
   return { licenseKey, expiresAt: paidThrough };
 }
 
 /**
  * Replaces the user's key, for one that was lost, leaked, or never shown (a webhook fulfilled
- * the order after the buyer closed the tab). The old key stops working immediately.
+ * the order after the buyer closed the tab). The old key stops working immediately, which also
+ * frees a one-device key to move to another device.
  */
 export async function rotateIssuedLicenseKey(
   email: string,
@@ -113,6 +140,7 @@ export async function rotateIssuedLicenseKey(
       .set({
         licenseKeyHash: hashProLicenseKey(licenseKey),
         licenseKeyPreview: licenseKeyPreview(licenseKey),
+        lemonInstanceId: null,
         updatedAt: new Date(),
       })
       .where(eq(commercialEntitlements.id, entitlement.id));
@@ -120,7 +148,7 @@ export async function rotateIssuedLicenseKey(
   });
 }
 
-export type IssuedLicenseSummary = { preview: string | null; expiresAt: Date | null; active: boolean };
+export type IssuedLicenseSummary = { preview: string | null; expiresAt: Date | null; active: boolean; oneDevice: boolean };
 
 /** The user's issued key as the dashboard shows it (preview only). */
 export async function issuedLicenseSummary(email: string): Promise<IssuedLicenseSummary | null> {
@@ -130,6 +158,7 @@ export async function issuedLicenseSummary(email: string): Promise<IssuedLicense
     preview: entitlement.licenseKeyPreview,
     expiresAt: entitlement.expiresAt,
     active: entitlementActive(entitlement),
+    oneDevice: entitlement.activationLimit === ONE_DEVICE,
   };
 }
 
@@ -154,11 +183,32 @@ export async function findIssuedEntitlement(licenseKey: string): Promise<Entitle
   }
 }
 
+/** Applies the one-device rule, tying the key to this device if none holds it yet. */
+async function deviceMayActivate(entitlement: Entitlement, device: string): Promise<boolean> {
+  const decision = deviceDecision(entitlement, device);
+  if (decision !== 'claim') return decision === 'allow';
+  const db = getDb();
+  const claimed = await db
+    .update(commercialEntitlements)
+    .set({ lemonInstanceId: device, updatedAt: new Date() })
+    .where(and(eq(commercialEntitlements.id, entitlement.id), isNull(commercialEntitlements.lemonInstanceId)))
+    .returning({ id: commercialEntitlements.id });
+  if (claimed.length > 0) return true;
+  // Another activation got there first. It may have been this same device.
+  const latest = await db.query.commercialEntitlements.findFirst({
+    where: eq(commercialEntitlements.id, entitlement.id),
+  });
+  return latest ? deviceDecision(latest, device) === 'allow' : false;
+}
+
 /**
  * /api/v1/activate for a key we issued, in the Lemon Squeezy result shape the route already
- * handles. Null means the key isn't ours (try Lemon Squeezy).
+ * handles. Null means the key isn't ours (try Lemon Squeezy). `device` names the machine asking.
  */
-export async function issuedLicenseActivation(licenseKey: string): Promise<LemonLicenseActivateResult | null> {
+export async function issuedLicenseActivation(
+  licenseKey: string,
+  device: string,
+): Promise<LemonLicenseActivateResult | null> {
   const entitlement = await findIssuedEntitlement(licenseKey);
   if (!entitlement) return null;
   const expiresAt = entitlement.expiresAt?.toISOString() ?? null;
@@ -170,6 +220,10 @@ export async function issuedLicenseActivation(licenseKey: string): Promise<Lemon
       expiresAt,
     };
   }
+  const deviceName = device.slice(0, MAX_DEVICE_NAME);
+  if (!(await deviceMayActivate(entitlement, deviceName))) {
+    return { valid: false, status: 'device_limit', message: DEVICE_LIMIT_MESSAGE, expiresAt };
+  }
   const customer = await getDb().query.commercialCustomers.findFirst({
     where: eq(commercialCustomers.id, entitlement.customerId),
   });
@@ -180,5 +234,6 @@ export async function issuedLicenseActivation(licenseKey: string): Promise<Lemon
     licenseKeyId: entitlement.id,
     customerEmail: customer?.email,
     expiresAt,
+    instanceId: entitlement.activationLimit === ONE_DEVICE ? deviceName : undefined,
   };
 }

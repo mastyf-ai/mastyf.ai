@@ -3,8 +3,18 @@ import { getDb } from '../db';
 import { razorpayOrders, users } from '../db/schema';
 import { rowsOf } from '../dashboard-shared';
 import { LICENSE_TIERS } from '../license-tiers';
-import { extendIssuedEntitlement } from './license-keys';
-import { isPaidPlanId, PAID_PLANS, PLAN_PERIOD_DAYS } from './plans';
+import { extendIssuedEntitlement, NO_DEVICE_LIMIT, ONE_DEVICE } from './license-keys';
+import {
+  daysWorthOf,
+  DEVELOPER_OFFER_CODES,
+  DEVELOPER_OFFER_DAYS,
+  DEVELOPER_OFFER_PLACES,
+  PAID_PLANS,
+  parsePurchase,
+  PERIOD_DAYS,
+  purchaseCode,
+  type Purchase,
+} from './plans';
 
 /**
  * Turning a paid Razorpay order into access. Called from the checkout's verify step and from
@@ -15,15 +25,22 @@ export type RazorpayOrderRow = typeof razorpayOrders.$inferSelect;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TIER_RANK: Record<string, number> = { free: 0, pro: 1, team: 2, enterprise: 3 };
+/** Held while a payment takes a launch-offer place, so places go one payment at a time. */
+const OFFER_LOCK = 7_240_001;
 
 export type CurrentLicense = { tier: string; expiresAt: Date | null };
 
 /** Paying again for the plan you're on adds a period after the current one; anything else starts now. */
-export function nextPeriodEnd(current: CurrentLicense | null, purchasedTier: string, now = new Date()): Date {
+export function nextPeriodEnd(
+  current: CurrentLicense | null,
+  purchasedTier: string,
+  now = new Date(),
+  days = PERIOD_DAYS.monthly,
+): Date {
   const renewing =
     current?.tier === purchasedTier && current.expiresAt !== null && current.expiresAt.getTime() > now.getTime();
   const start = renewing ? current.expiresAt!.getTime() : now.getTime();
-  return new Date(start + PLAN_PERIOD_DAYS * DAY_MS);
+  return new Date(start + days * DAY_MS);
 }
 
 /**
@@ -47,6 +64,58 @@ export async function currentLicense(orgId: string): Promise<CurrentLicense | nu
   return { tier: String(row.tier), expiresAt: row.expires_at ? new Date(row.expires_at) : null };
 }
 
+export type OfferState = { taken: number; firstPaidAt: Date | null; paidThrough: Date | null };
+
+/**
+ * Whether a workspace gets the Developer Pro launch price. New workspaces need a place to be left.
+ * One that has taken the offer keeps it for its 12 months, and can't pay its way past them.
+ */
+export function offerStillApplies({ taken, firstPaidAt, paidThrough }: OfferState, now = new Date()): boolean {
+  if (!firstPaidAt) return taken < DEVELOPER_OFFER_PLACES;
+  const endsAt = firstPaidAt.getTime() + DEVELOPER_OFFER_DAYS * DAY_MS;
+  return now.getTime() < endsAt && (paidThrough?.getTime() ?? 0) < endsAt;
+}
+
+export type DeveloperOffer = { open: boolean; placesLeft: number };
+
+/** Places taken by real payments, and this workspace's first offer payment. Unpaid checkouts never count. */
+async function offerCounts(
+  db: Pick<ReturnType<typeof getDb>, 'execute'>,
+  orgId: string | null,
+  exceptOrderId = '',
+): Promise<Pick<OfferState, 'taken' | 'firstPaidAt'>> {
+  const [row] = rowsOf<{ taken: string | number; first_paid_at: string | Date | null }>(
+    await db.execute(sql`
+      SELECT COUNT(DISTINCT org_id) AS taken, MIN(paid_at) FILTER (WHERE org_id = ${orgId}) AS first_paid_at
+      FROM razorpay_orders
+      WHERE status = 'paid' AND plan LIKE ${DEVELOPER_OFFER_CODES} AND id <> ${exceptOrderId}
+    `),
+  );
+  return {
+    taken: Number(row?.taken ?? 0),
+    firstPaidAt: row?.first_paid_at ? new Date(row.first_paid_at) : null,
+  };
+}
+
+/** The offer as it stands, counted from real payments. `orgId` is null for a visitor with no workspace. */
+export async function developerOfferFor(
+  orgId: string | null,
+  license?: CurrentLicense | null,
+): Promise<DeveloperOffer> {
+  const counts = await offerCounts(getDb(), orgId);
+  const current = license === undefined && orgId ? await currentLicense(orgId) : (license ?? null);
+  return {
+    open: offerStillApplies({ ...counts, paidThrough: current?.tier === 'pro' ? current.expiresAt : null }),
+    placesLeft: Math.max(0, DEVELOPER_OFFER_PLACES - counts.taken),
+  };
+}
+
+/** The device limit a purchase puts on the key. Older orders were sold without one. */
+function deviceLimitFor(purchase: Purchase): number | undefined {
+  if (purchase.legacy) return undefined;
+  return purchase.plan === 'developer' ? ONE_DEVICE : NO_DEVICE_LIMIT;
+}
+
 export async function recordOrder(order: typeof razorpayOrders.$inferInsert): Promise<void> {
   await getDb().insert(razorpayOrders).values(order);
 }
@@ -56,7 +125,15 @@ export async function findOrder(orderId: string): Promise<RazorpayOrderRow | nul
 }
 
 export type FulfillResult =
-  | { status: 'paid'; order: RazorpayOrderRow; expiresAt: Date; licenseKey: string | null }
+  | {
+      status: 'paid';
+      order: RazorpayOrderRow;
+      expiresAt: Date;
+      licenseKey: string | null;
+      /** The launch offer had gone when this payment arrived, so it bought `days` at the normal price. */
+      offerEnded: boolean;
+      days: number;
+    }
   | { status: 'already_paid'; order: RazorpayOrderRow }
   | { status: 'unknown_order' };
 
@@ -76,9 +153,10 @@ export async function fulfillOrder(orderId: string, paymentId: string): Promise<
       const existing = await tx.query.razorpayOrders.findFirst({ where: eq(razorpayOrders.id, orderId) });
       return existing ? { status: 'already_paid', order: existing } : { status: 'unknown_order' };
     }
-    if (!isPaidPlanId(order.plan)) throw new Error(`Order ${order.id} names an unknown plan: ${order.plan}`);
+    const purchase = parsePurchase(order.plan);
+    if (!purchase) throw new Error(`Order ${order.id} names an unknown plan: ${order.plan}`);
 
-    const plan = PAID_PLANS[order.plan];
+    const plan = PAID_PLANS[purchase.plan];
     const limits = LICENSE_TIERS[plan.tier];
     const [row] = rowsOf<{ tier: string; expires_at: string | Date | null }>(
       await tx.execute(sql`
@@ -86,7 +164,24 @@ export async function fulfillOrder(orderId: string, paymentId: string): Promise<
       `),
     );
     const current = row ? { tier: String(row.tier), expiresAt: row.expires_at ? new Date(row.expires_at) : null } : null;
-    const expiresAt = nextPeriodEnd(current, plan.tier);
+
+    // Decided here, with the money in, so a checkout opened earlier can't outrun the offer.
+    let days = PERIOD_DAYS[purchase.period];
+    let offerEnded = false;
+    if (purchase.offer) {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${OFFER_LOCK})`);
+      const counts = await offerCounts(tx, order.orgId, order.id);
+      const paidThrough = current?.tier === 'pro' ? current.expiresAt : null;
+      if (!offerStillApplies({ ...counts, paidThrough })) {
+        offerEnded = true;
+        days = daysWorthOf(purchase.plan, purchase.period, order.amount);
+        await tx
+          .update(razorpayOrders)
+          .set({ plan: purchaseCode({ ...purchase, offer: false }) })
+          .where(eq(razorpayOrders.id, order.id));
+      }
+    }
+    const expiresAt = nextPeriodEnd(current, plan.tier, new Date(), days);
 
     await tx.execute(sql`
       INSERT INTO licenses (org_id, tier, max_instances, max_teams, max_users, features, activated_at, expires_at)
@@ -110,8 +205,8 @@ export async function fulfillOrder(orderId: string, paymentId: string): Promise<
 
     const user = await tx.query.users.findFirst({ where: eq(users.id, order.userId) });
     if (!user) throw new Error(`Order ${order.id} belongs to a user that no longer exists`);
-    const { licenseKey } = await extendIssuedEntitlement(tx, user.email, expiresAt);
+    const { licenseKey } = await extendIssuedEntitlement(tx, user.email, expiresAt, deviceLimitFor(purchase));
 
-    return { status: 'paid', order, expiresAt, licenseKey };
+    return { status: 'paid', order, expiresAt, licenseKey, offerEnded, days };
   });
 }

@@ -3,11 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ issuedLicenseActivation: vi.fn(), findIssuedEntitlement: vi.fn(), byHash: vi.fn() }));
 
-vi.mock('@/lib/billing/license-keys', () => ({
+vi.mock('@/lib/billing/license-keys', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/billing/license-keys')>()),
   issuedLicenseActivation: mocks.issuedLicenseActivation,
   findIssuedEntitlement: mocks.findIssuedEntitlement,
-  entitlementActive: (e: { status: string }) => e.status === 'active',
-  ISSUED_SOURCE: 'razorpay',
 }));
 vi.mock('@/lib/hf-binding-service', () => ({ bindAndGrantHFAccess: vi.fn() }));
 vi.mock('@/lib/pro-license-keys', () => ({ hashProLicenseKey: (k: string) => `hash:${k}` }));
@@ -52,6 +51,27 @@ describe('POST /api/v1/activate', () => {
     expect(await res.json()).not.toHaveProperty('entitlement');
   });
 
+  it('tells the license check which device is asking', async () => {
+    mocks.issuedLicenseActivation.mockResolvedValue({ valid: true, status: 'active', message: 'ok', licenseKeyId: 'e1' });
+    await activate(post({ licenseKey: 'MG-X', instanceName: 'shield-abc' }));
+    expect(mocks.issuedLicenseActivation).toHaveBeenCalledWith('MG-X', 'shield-abc');
+  });
+
+  it('does not invent a device name when none is sent', async () => {
+    mocks.issuedLicenseActivation.mockResolvedValue({ valid: false, status: 'device_limit', message: 'x' });
+    await activate(post({ licenseKey: 'MG-X' }));
+    expect(mocks.issuedLicenseActivation).toHaveBeenCalledWith('MG-X', '');
+  });
+
+  it('refuses a key already on another device, with a status Shield treats as a denial', async () => {
+    mocks.issuedLicenseActivation.mockResolvedValue({ valid: false, status: 'device_limit', message: 'On another device.' });
+    const res = await activate(post({ licenseKey: 'MG-X', instanceName: 'shield-b' }));
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body).toMatchObject({ error: 'On another device.', status: 'device_limit' });
+    expect(body).not.toHaveProperty('entitlement');
+  });
+
   it('refuses a key nobody issued, and asks no third party', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
@@ -69,6 +89,36 @@ describe('POST /api/v1/license/renew', () => {
     const res = await renew(post({ licenseKey: 'MG-X' }));
     expect(res.status).toBe(200);
     expect(verifyEntitlement((await res.json()).entitlement).valid).toBe(true);
+  });
+
+  const oneDevice = (device: string | null) => ({
+    status: 'active',
+    expiresAt: new Date(Date.now() + 86400000),
+    activationLimit: 1,
+    lemonInstanceId: device,
+  });
+
+  it('renews a one-device key on its own device', async () => {
+    mocks.findIssuedEntitlement.mockResolvedValue(oneDevice('shield-a'));
+    expect((await renew(post({ licenseKey: 'MG-X', instanceId: 'shield-a' }))).status).toBe(200);
+  });
+
+  it('will not renew a one-device key that was never activated', async () => {
+    mocks.findIssuedEntitlement.mockResolvedValue(oneDevice(null));
+    const res = await renew(post({ licenseKey: 'MG-X', instanceId: 'shield-a' }));
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.status).toBe('not_activated');
+    expect(body).not.toHaveProperty('entitlement');
+  });
+
+  it.each([['another device', 'shield-b'], ['no device', undefined]])('refuses a one-device key from %s', async (_label, instanceId) => {
+    mocks.findIssuedEntitlement.mockResolvedValue(oneDevice('shield-a'));
+    const res = await renew(post({ licenseKey: 'MG-X', instanceId }));
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.status).toBe('device_limit');
+    expect(body).not.toHaveProperty('entitlement');
   });
 
   it.each([

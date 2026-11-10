@@ -1,8 +1,17 @@
 import { createHmac } from 'crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { blockedByHigherPlan, nextPeriodEnd } from '@/lib/billing/fulfillment';
-import { entitlementActive, generateLicenseKey, licenseKeyPreview } from '@/lib/billing/license-keys';
-import { formatPlanPrice, isPaidPlanId, PAID_PLANS } from '@/lib/billing/plans';
+import { blockedByHigherPlan, nextPeriodEnd, offerStillApplies } from '@/lib/billing/fulfillment';
+import { deviceDecision, entitlementActive, generateLicenseKey, licenseKeyPreview } from '@/lib/billing/license-keys';
+import {
+  daysWorthOf,
+  formatPlanPrice,
+  isBillingPeriod,
+  isPaidPlanId,
+  PAID_PLANS,
+  parsePurchase,
+  planAmount,
+  purchaseCode,
+} from '@/lib/billing/plans';
 import {
   createRazorpayOrder,
   paidOrderFromEvent,
@@ -103,10 +112,32 @@ describe('creating an order', () => {
 });
 
 describe('plans', () => {
-  it('prices the paid plans in INR, above Razorpay’s minimum', () => {
-    expect(formatPlanPrice('developer')).toBe('₹4,699');
-    expect(formatPlanPrice('team')).toBe('₹47,399');
-    for (const plan of Object.values(PAID_PLANS)) expect(plan.amount).toBeGreaterThanOrEqual(100);
+  it('prices Developer Pro: the first-100 offer, then the normal price', () => {
+    expect(formatPlanPrice('developer', 'monthly', true)).toBe('₹999');
+    expect(formatPlanPrice('developer', 'yearly', true)).toBe('₹8,999');
+    expect(formatPlanPrice('developer', 'monthly')).toBe('₹1,999');
+    expect(formatPlanPrice('developer', 'yearly')).toBe('₹20,999');
+  });
+
+  it('prices Team the same for everyone, with no offer to apply', () => {
+    expect(formatPlanPrice('team', 'monthly')).toBe('₹9,999');
+    expect(formatPlanPrice('team', 'yearly')).toBe('₹1,04,999');
+    expect(planAmount('team', 'yearly', true)).toBe(10_499_900);
+  });
+
+  it('keeps every price above Razorpay’s minimum', () => {
+    for (const plan of Object.values(PAID_PLANS)) {
+      for (const amount of [...Object.values(plan.amounts), ...Object.values(plan.offerAmounts ?? {})]) {
+        expect(amount).toBeGreaterThanOrEqual(100);
+      }
+    }
+  });
+
+  it('only knows monthly and yearly billing', () => {
+    expect(isBillingPeriod('monthly')).toBe(true);
+    expect(isBillingPeriod('yearly')).toBe(true);
+    expect(isBillingPeriod('weekly')).toBe(false);
+    expect(isBillingPeriod(undefined)).toBe(false);
   });
 
   it('only knows the plans sold through checkout', () => {
@@ -116,8 +147,93 @@ describe('plans', () => {
   });
 });
 
+describe('what an order bought', () => {
+  it('records the plan, the period and whether the offer applied', () => {
+    expect(purchaseCode({ plan: 'developer', period: 'yearly', offer: true })).toBe('developer:yearly:offer');
+    expect(parsePurchase('developer:yearly:offer')).toEqual({ plan: 'developer', period: 'yearly', offer: true, legacy: false });
+    expect(parsePurchase('team:monthly')).toEqual({ plan: 'team', period: 'monthly', offer: false, legacy: false });
+  });
+
+  it('reads orders from before yearly billing as 30 days, and marks them as older purchases', () => {
+    expect(parsePurchase('developer')).toEqual({ plan: 'developer', period: 'monthly', offer: false, legacy: true });
+    expect(parsePurchase('team')).toEqual({ plan: 'team', period: 'monthly', offer: false, legacy: true });
+  });
+
+  it.each(['enterprise', 'developer:weekly', 'team:monthly:offer', 'developer:monthly:free', 'developer:monthly:offer:x', ''])(
+    'rejects %j',
+    (code) => {
+      expect(parsePurchase(code)).toBeNull();
+    },
+  );
+});
+
+describe('the first-100 Developer Pro offer', () => {
+  const now = new Date('2026-11-10T00:00:00Z');
+  const first = new Date('2026-06-01T00:00:00Z');
+
+  it('is open to a new workspace while places remain', () => {
+    expect(offerStillApplies({ taken: 99, firstPaidAt: null, paidThrough: null }, now)).toBe(true);
+    expect(offerStillApplies({ taken: 100, firstPaidAt: null, paidThrough: null }, now)).toBe(false);
+  });
+
+  it('keeps an early customer on it for 12 months, even after the places run out', () => {
+    expect(offerStillApplies({ taken: 100, firstPaidAt: first, paidThrough: now }, now)).toBe(true);
+  });
+
+  it('ends 12 months after their first offer payment', () => {
+    const later = new Date(first.getTime() + 366 * DAY);
+    expect(offerStillApplies({ taken: 5, firstPaidAt: first, paidThrough: null }, later)).toBe(false);
+  });
+
+  it('cannot be stretched past the 12 months by paying far ahead', () => {
+    const paidThrough = new Date(first.getTime() + 366 * DAY);
+    expect(offerStillApplies({ taken: 5, firstPaidAt: first, paidThrough }, now)).toBe(false);
+  });
+});
+
+describe('a payment that arrives after the offer has gone', () => {
+  it('buys the days its amount is worth at the normal price', () => {
+    expect(daysWorthOf('developer', 'monthly', 99_900)).toBe(14);
+    expect(daysWorthOf('developer', 'yearly', 899_900)).toBe(156);
+  });
+
+  it('never buys less than a day', () => {
+    expect(daysWorthOf('developer', 'yearly', 100)).toBe(1);
+  });
+});
+
+describe('one device per Developer Pro key', () => {
+  it('ties an unused key to the first device', () => {
+    expect(deviceDecision({ activationLimit: 1, lemonInstanceId: null }, 'shield-a')).toBe('claim');
+  });
+
+  it('allows the device it is tied to, and no other', () => {
+    expect(deviceDecision({ activationLimit: 1, lemonInstanceId: 'shield-a' }, 'shield-a')).toBe('allow');
+    expect(deviceDecision({ activationLimit: 1, lemonInstanceId: 'shield-a' }, 'shield-b')).toBe('refuse');
+  });
+
+  it('does not limit keys sold without a device limit', () => {
+    expect(deviceDecision({ activationLimit: 2, lemonInstanceId: 'shield-a' }, 'shield-b')).toBe('allow');
+    expect(deviceDecision({ activationLimit: 2, lemonInstanceId: null }, '')).toBe('allow');
+  });
+
+  it('refuses a blank device name on a one-device key', () => {
+    expect(deviceDecision({ activationLimit: 1, lemonInstanceId: null }, '')).toBe('refuse');
+    expect(deviceDecision({ activationLimit: 1, lemonInstanceId: 'shield-a' }, '')).toBe('refuse');
+  });
+});
+
 describe('paid periods', () => {
   const now = new Date('2026-10-20T00:00:00Z');
+
+  it('buys a year when the purchase is yearly', () => {
+    expect(nextPeriodEnd(null, 'pro', now, 365).getTime()).toBe(now.getTime() + 365 * DAY);
+  });
+
+  it('adds the year after the current period when renewing early', () => {
+    const onPro = { tier: 'pro', expiresAt: new Date(now.getTime() + 10 * DAY) };
+    expect(nextPeriodEnd(onPro, 'pro', now, 365).getTime()).toBe(now.getTime() + 375 * DAY);
+  });
 
   it('starts 30 days from now for a new or different plan', () => {
     expect(nextPeriodEnd(null, 'pro', now).getTime()).toBe(now.getTime() + 30 * DAY);

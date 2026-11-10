@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   const licenseKey = typeof body.licenseKey === 'string' ? body.licenseKey.trim() : '';
   const hfUsername = typeof body.hfUsername === 'string' ? body.hfUsername.trim() : '';
-  const instanceName = typeof body.instanceName === 'string' ? body.instanceName.trim() : 'default-gateway-instance';
+  const instanceName = typeof body.instanceName === 'string' ? body.instanceName.trim() : '';
 
   if (!licenseKey) {
     return NextResponse.json({ error: 'licenseKey is required' }, { status: 400 });
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   // Shield-only activations omit hfUsername. Guard model bind still requires it.
 
   // 1. Only keys issued for Razorpay payments count, checked against our own records.
-  const activation = (await issuedLicenseActivation(licenseKey)) ?? {
+  const activation = (await issuedLicenseActivation(licenseKey, instanceName)) ?? {
     valid: false as const,
     status: 'inactive',
     message: 'This license key was not accepted.',
