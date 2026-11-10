@@ -172,11 +172,30 @@ export const commercialEntitlements = pgTable('commercial_entitlements', {
   activationLimit: integer('activation_limit').notNull().default(2),
   instancesCount: integer('instances_count').notNull().default(0),
   lastValidatedAt: timestamp('last_validated_at', { mode: 'date', withTimezone: true }),
-  source: text('source').notNull().default('lemonsqueezy'), // lemonsqueezy, razorpay
+  source: text('source').notNull().default('lemonsqueezy'), // lemonsqueezy, razorpay, team-seat
   /** Paid-through time for keys we issue (razorpay); null for Lemon Squeezy keys, which Lemon tracks. */
   expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }),
   createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+});
+
+/** People a Team lead has added to a workspace (lib/billing/workspace-seats.ts). */
+export const workspaceSeats = pgTable('workspace_seats', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  displayName: text('display_name'),
+  status: text('status').notNull().default('invited'), // invited, joined
+  codeHash: text('code_hash'),
+  codeExpiresAt: timestamp('code_expires_at', { mode: 'date', withTimezone: true }),
+  codeAttempts: integer('code_attempts').notNull().default(0),
+  codeSentAt: timestamp('code_sent_at', { mode: 'date', withTimezone: true }),
+  entitlementId: text('entitlement_id').references(() => commercialEntitlements.id, { onDelete: 'set null' }),
+  invitedBy: text('invited_by').references(() => users.id, { onDelete: 'set null' }),
+  joinedAt: timestamp('joined_at', { mode: 'date', withTimezone: true }),
+  createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
 });
 
 /** Razorpay orders we created; a paid one buys its plan for the workspace (lib/billing/fulfillment.ts). */

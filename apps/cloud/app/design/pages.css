@@ -494,6 +494,33 @@
   min-height: 3.2em;
 }
 
+.members-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-3);
+}
+
+.members-add .field {
+  flex: 1 1 260px;
+}
+
+.members-add ~ .notice,
+.members-add ~ .panel__text {
+  margin-top: var(--s-3);
+}
+
+.members-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+.join-panel {
+  max-width: 34rem;
+}
+
 .billing-switch {
   display: flex;
   justify-content: center;
