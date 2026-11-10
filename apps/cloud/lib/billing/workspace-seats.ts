@@ -4,7 +4,17 @@ import { rowsOf } from '../dashboard-shared';
 import { getDb } from '../db';
 import { commercialCustomers, commercialEntitlements, organizations, workspaceSeats } from '../db/schema';
 import { hashProLicenseKey } from '../pro-license-keys';
-import { generateLicenseKey, licenseKeyPreview, ONE_DEVICE, SEAT_SOURCE, type Tx } from './license-keys';
+import {
+  deviceDecision,
+  entitlementActive,
+  findIssuedEntitlement,
+  generateLicenseKey,
+  ISSUED_SOURCE,
+  licenseKeyPreview,
+  ONE_DEVICE,
+  SEAT_SOURCE,
+  type Tx,
+} from './license-keys';
 
 /**
  * The people a Team lead has added to a workspace. Joining takes two things: the lead must have
@@ -95,9 +105,47 @@ async function seatLicense(db: Pick<Tx, 'execute'>, orgId: string, lock: boolean
   };
 }
 
-/** Whether this workspace can have members, for the Members page. */
-export async function seatsAllowedFor(orgId: string): Promise<boolean> {
-  return planAllowsSeats(await seatLicense(getDb(), orgId, false));
+/** Whether this workspace can have members, and how many people its plan allows. */
+export async function seatOverview(orgId: string): Promise<{ allowed: boolean; maxPeople: number }> {
+  const license = await seatLicense(getDb(), orgId, false);
+  return { allowed: planAllowsSeats(license), maxPeople: license?.maxUsers ?? 0 };
+}
+
+export type SeatLead = { orgId: string; orgName: string; userId: string; email: string; name: string | null };
+export type LeadLookup =
+  | { ok: true; lead: SeatLead }
+  | { ok: false; reason: 'bad_key' | 'member_key' | 'not_lead' | 'device' };
+
+/**
+ * Who is managing members from Shield. Only the buyer's own key, active on the device it was
+ * activated on, belonging to an owner or admin. A member's key can never manage the team.
+ */
+export async function leadForLicenseKey(licenseKey: string, device: string): Promise<LeadLookup> {
+  const entitlement = await findIssuedEntitlement(licenseKey);
+  if (!entitlement || !entitlementActive(entitlement)) return { ok: false, reason: 'bad_key' };
+  if (entitlement.source !== ISSUED_SOURCE) return { ok: false, reason: 'member_key' };
+  if (deviceDecision(entitlement, device) !== 'allow') return { ok: false, reason: 'device' };
+
+  const [row] = rowsOf<{ user_id: string; name: string | null; email: string; org_id: string; org_name: string }>(
+    await getDb().execute(sql`
+      SELECT u.id AS user_id, u.name, lower(u.email) AS email, m.org_id, o.name AS org_name
+      FROM commercial_customers c
+      JOIN users u ON lower(u.email) = c.email
+      JOIN organization_members m ON m.user_id = u.id AND m.role IN ('owner', 'admin')
+      JOIN organizations o ON o.id = m.org_id
+      WHERE c.id = ${entitlement.customerId}
+      ORDER BY EXISTS (
+        SELECT 1 FROM razorpay_orders r
+        WHERE r.org_id = m.org_id AND r.status = 'paid' AND (r.plan = 'team' OR r.plan LIKE 'team:%')
+      ) DESC, m.org_id
+      LIMIT 1
+    `),
+  );
+  if (!row) return { ok: false, reason: 'not_lead' };
+  return {
+    ok: true,
+    lead: { orgId: row.org_id, orgName: row.org_name, userId: row.user_id, email: row.email, name: row.name },
+  };
 }
 
 export type SeatView = {

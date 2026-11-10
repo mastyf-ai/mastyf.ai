@@ -14,7 +14,6 @@ import {
   Server,
   Settings,
   ShieldCheck,
-  UserPlus,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -26,7 +25,6 @@ const NAV_ITEMS = [
   { href: '/dashboard/policy', label: 'Policy', icon: ShieldCheck },
   { href: '/dashboard/fleet', label: 'Fleet', icon: Server },
   { href: '/dashboard/teams', label: 'Teams', icon: Users },
-  { href: '/dashboard/members', label: 'Members', icon: UserPlus },
   { href: '/dashboard/threat-feed', label: 'Threat feed', icon: Flame },
   { href: '/dashboard/trust-scores', label: 'Trust scores', icon: Award },
   { href: '/dashboard/license', label: 'License', icon: KeyRound },
