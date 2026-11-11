@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readFileSync as readSource } from 'node:fs';
+import { join as joinPath } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PLAN_FOR_TIER } from '@/components/dashboard/plans';
 import { PRICING_TIERS } from '@/components/landing/stats';
@@ -65,6 +67,19 @@ describe('the website stays out of team management', () => {
   it('does not explain adding members in the plan text or docs', () => {
     expect(text('team')).not.toMatch(/Add people|join code|Members page/i);
     expect(file('components/docs/Plans.tsx')).not.toMatch(/Members page|adds people/i);
+  });
+});
+
+describe('the License page', () => {
+  const page = readSource(joinPath(process.cwd(), 'app/dashboard/license/page.tsx'), 'utf8');
+
+  it('labels the plan this workspace is on', () => {
+    expect(page).toContain('Current plan');
+    expect(page).toMatch(/current \? 'plan-row--current'/);
+  });
+
+  it('does not say Current twice', () => {
+    expect(page).not.toMatch(/>\s*Current\s*</);
   });
 });
 

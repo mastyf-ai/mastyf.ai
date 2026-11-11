@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     );
     if (!sent) {
       await removeSeat(lead.orgId, added.seatId);
-      return fail('We could not send the email, so nobody was added. Check the address and try again.', 502);
+      return fail('The invitation email could not be sent, so nobody was added. Try again shortly.', 502);
     }
 
     return NextResponse.json({ ok: true, seat: { id: added.seatId, email } }, { headers: NO_STORE });
