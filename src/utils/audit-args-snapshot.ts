@@ -23,6 +23,11 @@ function redactString(value: string): string {
   return out;
 }
 
+/** The same secret scrub, for text that is already a snippet. */
+export function redactSecretsInText(value: string): string {
+  return redactString(value);
+}
+
 function redactValue(value: unknown, depth = 0): unknown {
   if (depth > 6) return '[MAX_DEPTH]';
   if (value == null) return value;

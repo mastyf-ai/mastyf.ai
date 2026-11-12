@@ -379,6 +379,42 @@
   color: var(--ink-3);
 }
 
+/* Activity page: the decision on each call. Status colours mean status only. */
+.verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.verdict::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+.verdict--allow {
+  color: var(--ok);
+}
+
+.verdict--block {
+  color: var(--critical);
+}
+
+.verdict--flag,
+.verdict--held {
+  color: var(--warn);
+}
+
+.activity-snippet {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  overflow-wrap: anywhere;
+}
+
 .notice {
   margin: 0;
   padding: var(--s-3) var(--s-4);

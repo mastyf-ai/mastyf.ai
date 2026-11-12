@@ -9,6 +9,11 @@ if (!process.env.MASTYF_AI_DB_PATH) {
   process.env.MASTYF_AI_DB_PATH = join(dir, 'history.db');
 }
 
+/** Never send activity records to a real site from tests. */
+if (process.env.MASTYF_AI_ACTIVITY_UPLOAD === undefined) {
+  process.env.MASTYF_AI_ACTIVITY_UPLOAD = 'false';
+}
+
 /** Unlock Pro features in unit tests (license tests clear this explicitly). */
 if (process.env.MASTYF_AI_CI_BYPASS_LICENSE !== 'false') {
   process.env.MASTYF_AI_CI_BYPASS_LICENSE = 'true';

@@ -44,6 +44,14 @@ describe('connect', () => {
     }
   });
 
+  it('tells each wrapped server which agent it belongs to, for the activity record', () => {
+    const cursor = write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd') } });
+    const windsurf = write('.codeium/windsurf/mcp_config.json', { mcpServers: { b: stdio('b-cmd') } });
+    run();
+    expect(read(cursor).mcpServers.a.env.MASTYF_AI_AGENT).toBe('cursor');
+    expect(read(windsurf).mcpServers.b.env.MASTYF_AI_AGENT).toBe('windsurf');
+  });
+
   it('keeps a path with spaces as one argument', () => {
     const cursor = write('.cursor/mcp.json', { mcpServers: { a: stdio('a-cmd') } });
     run();

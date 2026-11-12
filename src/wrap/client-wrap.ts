@@ -170,8 +170,10 @@ export function runWrap(opts: WrapOptions): WrapResult {
   fs.mkdirSync(configsDir, { recursive: true, ...(managed ? { mode: 0o700 } : {}) });
 
   const remoteEnv: Record<string, string> | undefined = (() => {
-    if (!isRemoteSshEnabled()) return undefined;
-    const env: Record<string, string> = { MASTYF_AI_REMOTE_SSH: 'true' };
+    // Which agent the calls come from, for the activity record. Only `connect` knows it for sure.
+    const agentEnv: Record<string, string> = opts.fileKey ? { MASTYF_AI_AGENT: opts.fileKey } : {};
+    if (!isRemoteSshEnabled()) return Object.keys(agentEnv).length > 0 ? agentEnv : undefined;
+    const env: Record<string, string> = { ...agentEnv, MASTYF_AI_REMOTE_SSH: 'true' };
     if (process.env.MASTYF_AI_REMOTE_PATH_MAP) {
       env.MASTYF_AI_REMOTE_PATH_MAP = process.env.MASTYF_AI_REMOTE_PATH_MAP;
     }
