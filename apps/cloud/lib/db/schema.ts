@@ -167,6 +167,8 @@ export const commercialEntitlements = pgTable('commercial_entitlements', {
   lemonLicenseId: text('lemon_license_id').unique(),
   /** For a one-device key we issued, the device it is tied to; null until first activated. */
   lemonInstanceId: text('lemon_instance_id'),
+  /** SHA-256 of the secret the bound device received at activation; null until it asked for one. */
+  deviceSecretHash: text('device_secret_hash'),
   status: text('status').notNull().default('active'), // active, grace_period, expired, disabled
   /** On keys we issued, 1 means one device; anything else means no device limit (license-keys.ts). */
   activationLimit: integer('activation_limit').notNull().default(2),

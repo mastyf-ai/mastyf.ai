@@ -54,13 +54,20 @@ describe('POST /api/v1/activate', () => {
   it('tells the license check which device is asking', async () => {
     mocks.issuedLicenseActivation.mockResolvedValue({ valid: true, status: 'active', message: 'ok', licenseKeyId: 'e1' });
     await activate(post({ licenseKey: 'MG-X', instanceName: 'shield-abc' }));
-    expect(mocks.issuedLicenseActivation).toHaveBeenCalledWith('MG-X', 'shield-abc');
+    expect(mocks.issuedLicenseActivation).toHaveBeenCalledWith('MG-X', 'shield-abc', { secret: undefined, wantsSecret: false });
+  });
+
+  it('passes on the device secret an app sends, and hands back a new one once', async () => {
+    mocks.issuedLicenseActivation.mockResolvedValue({ valid: true, status: 'active', message: 'ok', licenseKeyId: 'e1', deviceSecret: 'new-secret' });
+    const res = await activate(post({ licenseKey: 'MG-X', instanceName: 'shield-abc', deviceSecret: 'old', wantsDeviceSecret: true }));
+    expect(mocks.issuedLicenseActivation).toHaveBeenCalledWith('MG-X', 'shield-abc', { secret: 'old', wantsSecret: true });
+    expect((await res.json()).deviceSecret).toBe('new-secret');
   });
 
   it('does not invent a device name when none is sent', async () => {
     mocks.issuedLicenseActivation.mockResolvedValue({ valid: false, status: 'device_limit', message: 'x' });
     await activate(post({ licenseKey: 'MG-X' }));
-    expect(mocks.issuedLicenseActivation).toHaveBeenCalledWith('MG-X', '');
+    expect(mocks.issuedLicenseActivation).toHaveBeenCalledWith('MG-X', '', { secret: undefined, wantsSecret: false });
   });
 
   it('refuses a key already on another device, with a status Shield treats as a denial', async () => {

@@ -37,7 +37,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (!entitlementActive(entitlement)) return error(402, 'Protocol X requires a paid plan');
       // A one-device key answers only on the device it was activated on.
       const device = request.headers.get('x-mastyf-device')?.trim() ?? '';
-      if (deviceDecision(entitlement, device) !== 'allow') return error(403, DEVICE_LIMIT_MESSAGE);
+      if (deviceDecision(entitlement, device, request.headers.get('x-mastyf-device-secret')?.trim() || undefined) !== 'allow') return error(403, DEVICE_LIMIT_MESSAGE);
       limitKey = `license-${entitlement.id}`;
       const limit = await checkLayaRateLimit(limitKey);
       if (!limit.success) {

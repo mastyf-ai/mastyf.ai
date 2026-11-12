@@ -23,6 +23,9 @@ export async function POST(request: Request) {
   const licenseKey = typeof body.licenseKey === 'string' ? body.licenseKey.trim() : '';
   const hfUsername = typeof body.hfUsername === 'string' ? body.hfUsername.trim() : '';
   const instanceName = typeof body.instanceName === 'string' ? body.instanceName.trim() : '';
+  // Shield 0.5 and later ask for a device secret and send it back on every check after.
+  const deviceSecret = typeof body.deviceSecret === 'string' ? body.deviceSecret.trim() || undefined : undefined;
+  const wantsDeviceSecret = body.wantsDeviceSecret === true;
 
   if (!licenseKey) {
     return NextResponse.json({ error: 'licenseKey is required' }, { status: 400 });
@@ -31,7 +34,7 @@ export async function POST(request: Request) {
   // Shield-only activations omit hfUsername. Guard model bind still requires it.
 
   // 1. Only keys issued for Razorpay payments count, checked against our own records.
-  const activation = (await issuedLicenseActivation(licenseKey, instanceName)) ?? {
+  const activation = (await issuedLicenseActivation(licenseKey, instanceName, { secret: deviceSecret, wantsSecret: wantsDeviceSecret })) ?? {
     valid: false as const,
     status: 'inactive',
     message: 'This license key was not accepted.',
@@ -161,5 +164,6 @@ export async function POST(request: Request) {
     message: 'Mastyf Guard Pro license successfully activated',
     entitlement: signedToken,
     instanceId: activation.instanceId,
+    ...('deviceSecret' in activation && activation.deviceSecret ? { deviceSecret: activation.deviceSecret } : {}),
   });
 }

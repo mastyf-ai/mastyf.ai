@@ -72,7 +72,18 @@ describe('who can manage members', () => {
 
   it('checks the key together with the device asking', async () => {
     await addP();
-    expect(m.leadForLicenseKey).toHaveBeenCalledWith(KEY, 'shield-abc');
+    expect(m.leadForLicenseKey).toHaveBeenCalledWith(KEY, 'shield-abc', undefined);
+  });
+
+  it('passes on the device secret when the app sends one', async () => {
+    await add(
+      new Request('http://localhost/x', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${KEY}`, 'x-mastyf-device': 'shield-abc', 'x-mastyf-device-secret': 's3cret' },
+        body: JSON.stringify({ email: 'p@example.com' }),
+      }) as never,
+    );
+    expect(m.leadForLicenseKey).toHaveBeenCalledWith(KEY, 'shield-abc', 's3cret');
   });
 
   it.each([

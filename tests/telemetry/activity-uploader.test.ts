@@ -42,6 +42,7 @@ describe('where activity goes', () => {
       home,
     );
     expect(sink).toMatchObject({ key: 'MG-AAAA', baseUrl: 'https://example.test', device: 'shield-abc' });
+    expect(resolveActivitySink({ MASTYF_AI_ACTIVITY_KEY: 'k', MASTYF_AI_DEVICE_SECRET: 'ds' }, home)?.deviceSecret).toBe('ds');
     expect(sink?.instanceId).toMatch(/^[A-Za-z0-9_-]{4,64}$/);
   });
 
@@ -89,7 +90,7 @@ describe('what is sent for a call', () => {
 });
 
 describe('sending', () => {
-  const sink = { key: 'mk_free', instanceId: 'inst-1', baseUrl: 'https://example.test', device: 'shield-abc' };
+  const sink = { key: 'mk_free', instanceId: 'inst-1', baseUrl: 'https://example.test', device: 'shield-abc', deviceSecret: 'ds-1' };
 
   it('batches events into one POST with the key and device', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200 });
@@ -100,7 +101,7 @@ describe('sending', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url).toBe('https://example.test/api/v1/events');
-    expect(init.headers).toMatchObject({ authorization: 'Bearer mk_free', 'x-mastyf-device': 'shield-abc' });
+    expect(init.headers).toMatchObject({ authorization: 'Bearer mk_free', 'x-mastyf-device': 'shield-abc', 'x-mastyf-device-secret': 'ds-1' });
     const body = JSON.parse(init.body);
     expect(body.instanceId).toBe('inst-1');
     expect(body.events).toHaveLength(2);

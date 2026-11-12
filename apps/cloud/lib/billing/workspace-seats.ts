@@ -120,11 +120,11 @@ export type LeadLookup =
  * Who is managing members from Shield. Only the buyer's own key, active on the device it was
  * activated on, belonging to an owner or admin. A member's key can never manage the team.
  */
-export async function leadForLicenseKey(licenseKey: string, device: string): Promise<LeadLookup> {
+export async function leadForLicenseKey(licenseKey: string, device: string, secret?: string): Promise<LeadLookup> {
   const entitlement = await findIssuedEntitlement(licenseKey);
   if (!entitlement || !entitlementActive(entitlement)) return { ok: false, reason: 'bad_key' };
   if (entitlement.source !== ISSUED_SOURCE) return { ok: false, reason: 'member_key' };
-  if (deviceDecision(entitlement, device) !== 'allow') return { ok: false, reason: 'device' };
+  if (deviceDecision(entitlement, device, secret) !== 'allow') return { ok: false, reason: 'device' };
 
   const [row] = rowsOf<{ user_id: string; name: string | null; email: string; org_id: string; org_name: string }>(
     await getDb().execute(sql`
