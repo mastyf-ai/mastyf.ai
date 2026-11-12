@@ -550,8 +550,25 @@
 }
 
 /* Verdict row: the site's .verdict, plus a neutral state while the model is still reading. */
+/* app.css styles .verdict as the Activity page's small inline label (nowrap, a leading dot). Inside a
+   console it is the full-width verdict row, so those rules are undone here. */
 .alab-gate .verdict {
+  display: flex;
+  width: 100%;
   border-bottom: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: 400;
+  white-space: normal;
+}
+
+.alab-gate .verdict::before {
+  content: none;
+}
+
+.alab-gate .verdict__bytes {
+  flex: 1 1 16ch;
+  min-width: 0;
 }
 
 .alab-verdict--pending .verdict__bytes {
@@ -598,6 +615,183 @@
 
 .alab-snapshot {
   margin-top: var(--s-6);
+}
+
+/* ------------------------------------------------------------ try an attack */
+
+.alab-play {
+  display: grid;
+  gap: var(--s-5);
+}
+
+.alab-play__setup {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-5);
+}
+
+@media (max-width: 899px) {
+  .alab-play__setup {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-4);
+  }
+}
+
+.alab-play__step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.alab-play__q {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  color: var(--ink-strong);
+  font-weight: 600;
+}
+
+.alab-play__q .alab-steps__n {
+  flex: none;
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+
+.alab-play__choices,
+.alab-play .alab-play__choices {
+  order: 0;
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+
+.alab-pill[role='radio'][aria-checked='true'] {
+  color: var(--ink-strong);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.alab-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.alab-play__line {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  line-height: 1.5;
+}
+
+.alab-play__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.alab-play__actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Previous release beside the current one, for the example on screen. */
+.alab-play__releases {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.alab-play__releases > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--s-3) var(--s-4);
+}
+
+.alab-play__releases > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.alab-play__releases dt {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+}
+
+.alab-play__releases dd {
+  margin: 0;
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+
+.alab-play__releases .is-good {
+  color: var(--ok);
+}
+
+.alab-play__releases .is-bad {
+  color: var(--critical);
+}
+
+.alab-play__releases .dim {
+  color: var(--ink-3);
+  font-family: var(--font-code);
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------ then and now */
+
+.alab-then__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-meta);
+}
+
+.alab-then__table th,
+.alab-then__table td {
+  padding: var(--s-3) var(--s-4) var(--s-3) 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: baseline;
+}
+
+.alab-then__table thead th {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  font-weight: 400;
+}
+
+.alab-then__table tbody th {
+  color: var(--ink-strong);
+  font-weight: 600;
+}
+
+.alab-then__from {
+  color: var(--ink-3);
+  font-family: var(--font-code);
+}
+
+.alab-then__to {
+  color: var(--ink-strong);
+  font-family: var(--font-code);
+  font-weight: 700;
+}
+
+.alab-then__n {
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+}
+
+@media (max-width: 599px) {
+  .alab-then__table th,
+  .alab-then__table td {
+    padding-right: var(--s-2);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

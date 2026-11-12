@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ATTACKS, BENIGN_CHECK, GENERATED, type AttackEntry } from './data';
 import { AttackSim, HowItWorksSim } from './GateSim';
+import { Playground, ThenAndNow } from './Playground';
 import './attack-lab.css';
 
 export const metadata: Metadata = {
@@ -78,6 +79,28 @@ export default function AttackLabPage() {
         </div>
       </section>
 
+      <section id="try" className="doc-section">
+        <h2>Try an attack</h2>
+        <p>
+          Play the attacker. Pick what you want the agent to do and how to hide it, then send it through Protocol X.
+          Every verdict is a real recording from our red team, including the ones that got through. Switch on the
+          harmless version to check the model isn&apos;t just blocking anything that looks unusual.
+        </p>
+        <div className="doc-block">
+          <Playground />
+        </div>
+      </section>
+
+      <section id="then-and-now" className="doc-section">
+        <h2>Then and now</h2>
+        <p>
+          Our red team invents disguises the model has never seen. We scored the previous release against the same
+          attacks and the same harmless text as the current one, so you can see whether the model got better at
+          stopping them and whether it started blocking normal work.
+        </p>
+        <ThenAndNow />
+      </section>
+
       <section id="novel" className="doc-section">
         <h2>Novel attacks</h2>
         <p>
@@ -115,6 +138,11 @@ export default function AttackLabPage() {
           <li>
             We only publish structures Protocol X reliably blocks. Structures where it is weaker today are being worked
             on and will appear here once a shipped model handles them.
+          </li>
+          <li>
+            Try an attack replays examples from 387 recorded attacks in the three disguises above and 180 harmless
+            versions of them. The count under each example covers every recording for that choice, not just the
+            five you can step through. Then and now scores the previous release on exactly the same text.
           </li>
           <li>
             Payloads are defanged for display: hosts, addresses and long blobs are replaced with examples.

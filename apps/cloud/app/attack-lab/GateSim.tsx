@@ -11,9 +11,10 @@ import { BENIGN_CHECK, HOW_SCENARIOS, type AttackEntry, type Direction } from '.
  * screen) it shows the finished decision, so the page reads completely without animation.
  */
 
-type Phase = 'rest' | 'type' | 'transit' | 'scan' | 'verdict';
+/** `ready` is a payload waiting to be sent: no verdict yet. */
+export type Phase = 'ready' | 'rest' | 'type' | 'transit' | 'scan' | 'verdict';
 
-type Sim = {
+export type Sim = {
   direction: Direction;
   tool: string;
   payload: string;
@@ -22,6 +23,10 @@ type Sim = {
   pUnsafe: number;
   latencyMs: number;
   outcome: string;
+  /** A wrong verdict (an attack that got through, or harmless text blocked): shown in the danger colour. */
+  bad?: boolean;
+  /** The verdict word, when Blocked or Allowed would mislead. */
+  label?: string;
 };
 
 const STEPS = [
@@ -32,7 +37,7 @@ const STEPS = [
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-function useReducedMotion() {
+export function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -58,7 +63,7 @@ function useInView<T extends Element>(threshold: number) {
 }
 
 /** One animated pass per `passKey`; calls `onDone` after the verdict has been held for `holdMs`. */
-function useGatePass(active: boolean, length: number, holdMs: number, passKey: string, onDone: () => void) {
+export function useGatePass(active: boolean, length: number, holdMs: number, passKey: string, onDone: () => void) {
   const [phase, setPhase] = useState<Phase>('rest');
   const [typed, setTyped] = useState(length);
   const done = useRef(onDone);
@@ -157,7 +162,7 @@ function Payload({ s, typed, phase }: { s: Sim; typed: number; phase: Phase }) {
   );
 }
 
-function GateConsole({
+export function GateConsole({
   s,
   phase,
   typed,
@@ -177,10 +182,11 @@ function GateConsole({
   const blocked = s.verdict === 'BLOCKED';
   const decided = phase === 'verdict' || phase === 'rest';
   const reading = phase === 'scan';
-  const waiting = phase === 'type' || phase === 'transit';
+  const waiting = phase === 'ready' || phase === 'type' || phase === 'transit';
   const [from, to] = s.direction === 'call' ? ['Agent', 'Tool'] : ['Tool', 'Agent'];
-  const step = phase === 'type' ? 0 : decided ? 2 : 1;
-  const tone = decided ? (blocked ? 'block' : 'allow') : reading ? 'read' : 'idle';
+  const step = phase === 'ready' ? -1 : phase === 'type' ? 0 : decided ? 2 : 1;
+  const danger = blocked || Boolean(s.bad);
+  const tone = decided ? (danger ? 'block' : 'allow') : reading ? 'read' : 'idle';
   const pct = useCountUp(s.pUnsafe * 100, reading, 1100);
   const shownPct = reading ? pct : s.pUnsafe * 100;
 
@@ -200,7 +206,7 @@ function GateConsole({
         ))}
       </ol>
 
-      <div className={`path alab-path${decided ? (blocked ? ' path--block' : ' path--allow') : ''}`} aria-hidden="true">
+      <div className={`path alab-path${decided ? (blocked ? ' path--block' : s.bad ? '' : ' path--allow') : ''}`} aria-hidden="true">
         <span className="path__node">{from}</span>
         <span className="path__seg">
           {phase === 'transit' || phase === 'scan' || phase === 'verdict' ? (
@@ -239,19 +245,23 @@ function GateConsole({
         <span className="alab-gauge__val">{waiting ? '—' : `${shownPct.toFixed(1)}%`}</span>
       </div>
 
-      <div className={`verdict${decided ? (blocked ? ' verdict--block' : ' verdict--allow') : ' alab-verdict--pending'}`}>
+      <div className={`verdict${decided ? (danger ? ' verdict--block' : ' verdict--allow') : ' alab-verdict--pending'}`}>
         <span
           className={`status ${
-            decided ? (blocked ? 'status--block' : 'status--allow') : reading ? 'status--evaluating' : 'status--idle'
+            decided ? (danger ? 'status--block' : 'status--allow') : reading ? 'status--evaluating' : 'status--idle'
           }`}
         >
           <span className="status__mark" aria-hidden="true">
-            {decided && blocked ? '×' : '●'}
+            {decided && blocked ? '×' : decided && s.bad ? '!' : '●'}
           </span>
-          {decided ? (blocked ? 'Blocked' : 'Allowed') : reading ? 'Reading' : 'Arriving'}
+          {decided ? (s.label ?? (blocked ? 'Blocked' : 'Allowed')) : reading ? 'Reading' : phase === 'ready' ? 'Ready' : 'Arriving'}
         </span>
         <span className="verdict__bytes">
-          {decided ? s.outcome : `Protocol X is reading the ${s.direction === 'call' ? 'call' : 'result'}…`}
+          {decided
+            ? s.outcome
+            : phase === 'ready'
+              ? 'Not sent yet.'
+              : `Protocol X is reading the ${s.direction === 'call' ? 'call' : 'result'}…`}
         </span>
         <span className="verdict__lat">{decided ? `${s.latencyMs} ms` : '—'}</span>
       </div>
@@ -261,7 +271,7 @@ function GateConsole({
   );
 }
 
-function PlayToggle({ paused, onToggle }: { paused: boolean; onToggle: () => void }) {
+export function PlayToggle({ paused, onToggle }: { paused: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
