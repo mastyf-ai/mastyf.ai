@@ -24,7 +24,13 @@ const UNAUTHORIZED: OwnerLookup = { ok: false, status: 401, error: 'Unauthorized
 
 export async function ownerForRequest(request: Request): Promise<OwnerLookup> {
   const raw = extractRawBearerToken(request.headers.get('authorization')) ?? '';
-  if (raw.startsWith('MG-')) return ownerForLicenseKey(raw, request.headers.get('x-mastyf-device')?.trim() ?? '');
+  if (raw.startsWith('MG-')) {
+    return ownerForLicenseKey(
+      raw,
+      request.headers.get('x-mastyf-device')?.trim() ?? '',
+      request.headers.get('x-mastyf-device-secret')?.trim() || undefined,
+    );
+  }
 
   const bearer = extractBearerToken(request.headers.get('authorization'));
   if (!bearer) return UNAUTHORIZED;
@@ -34,10 +40,10 @@ export async function ownerForRequest(request: Request): Promise<OwnerLookup> {
   return { ok: true, role: 'workspace', scopes: ctx.scopes, owner: { ownerId: ctx.org.id, tier, memberEmail: null } };
 }
 
-async function ownerForLicenseKey(key: string, device: string): Promise<OwnerLookup> {
+async function ownerForLicenseKey(key: string, device: string, secret?: string): Promise<OwnerLookup> {
   const entitlement = await findIssuedEntitlement(key);
   if (!entitlement || !entitlementActive(entitlement)) return UNAUTHORIZED;
-  if (deviceDecision(entitlement, device) !== 'allow') {
+  if (deviceDecision(entitlement, device, secret) !== 'allow') {
     return { ok: false, status: 403, error: 'This license key is active on another device.' };
   }
 
@@ -53,7 +59,7 @@ async function ownerForLicenseKey(key: string, device: string): Promise<OwnerLoo
     return { ok: true, role: 'member', owner: { ownerId: seat.org_id, tier: 'paid', memberEmail: seat.email } };
   }
 
-  const lead = await leadForLicenseKey(key, device);
+  const lead = await leadForLicenseKey(key, device, secret);
   if (lead.ok) return { ok: true, role: 'lead', owner: { ownerId: lead.lead.orgId, tier: 'paid', memberEmail: null } };
   return {
     ok: true,

@@ -16,11 +16,17 @@ vi.mock('@/lib/db', () => {
     set: (values: Record<string, unknown>) => ({
       where: () => {
         const isClaim = typeof values.lemonInstanceId === 'string';
+        const isSecretOnly = !isClaim && typeof values.deviceSecretHash === 'string';
         const written = Promise.resolve().then(() => {
-          if (!isClaim) Object.assign(db.entitlement!, values);
+          if (!isClaim && !isSecretOnly) Object.assign(db.entitlement!, values);
         });
         return Object.assign(written, {
           returning: async () => {
+            if (isSecretOnly) {
+              if (db.entitlement!.deviceSecretHash) return [];
+              Object.assign(db.entitlement!, values);
+              return [{ id: db.entitlement!.id }];
+            }
             db.beforeClaim?.();
             if (db.entitlement!.lemonInstanceId) return [];
             Object.assign(db.entitlement!, values);
@@ -35,7 +41,9 @@ vi.mock('@/lib/db', () => {
 });
 
 import { getDb } from '@/lib/db';
+import { createHash } from 'node:crypto';
 import {
+  deviceDecision,
   extendIssuedEntitlement,
   issuedLicenseActivation,
   NO_DEVICE_LIMIT,
@@ -52,8 +60,10 @@ const row = (extra: Record<string, unknown> = {}) => ({
   expiresAt: new Date(Date.now() + 86_400_000),
   activationLimit: ONE_DEVICE,
   lemonInstanceId: null,
+  deviceSecretHash: null,
   ...extra,
 });
+const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 
 beforeEach(() => {
   db.beforeClaim = null;
@@ -102,6 +112,57 @@ describe('activating a one-device key', () => {
     db.entitlement = row({ expiresAt: new Date(Date.now() - 1000) });
     expect(await issuedLicenseActivation('MG-X', 'shield-a')).toMatchObject({ valid: false, status: 'expired' });
     expect(db.entitlement!.lemonInstanceId).toBeNull();
+  });
+});
+
+describe('the device secret, for apps that ask for one', () => {
+  const ask = (secret?: string) => ({ wantsSecret: true, secret });
+
+  it('is issued when the device claims the key, and only its hash is kept', async () => {
+    const result = await issuedLicenseActivation('MG-X', 'shield-a', ask());
+    expect(result).toMatchObject({ valid: true });
+    const secret = result!.deviceSecret!;
+    expect(secret.length).toBeGreaterThanOrEqual(32);
+    expect(db.entitlement!.deviceSecretHash).toBe(sha(secret));
+  });
+
+  it('is then needed from that device: the device name alone no longer works', async () => {
+    const secret = (await issuedLicenseActivation('MG-X', 'shield-a', ask()))!.deviceSecret!;
+    expect(await issuedLicenseActivation('MG-X', 'shield-a', ask())).toMatchObject({ valid: false, status: 'device_limit' });
+    expect(await issuedLicenseActivation('MG-X', 'shield-a', ask('wrong'))).toMatchObject({ valid: false, status: 'device_limit' });
+    expect(await issuedLicenseActivation('MG-X', 'shield-a')).toMatchObject({ valid: false, status: 'device_limit' });
+    const again = await issuedLicenseActivation('MG-X', 'shield-a', ask(secret));
+    expect(again).toMatchObject({ valid: true });
+    expect(again!.deviceSecret).toBeUndefined();
+  });
+
+  it('is given to a device activated before secrets existed, at its next check', async () => {
+    db.entitlement = row({ lemonInstanceId: 'shield-a' });
+    const result = await issuedLicenseActivation('MG-X', 'shield-a', ask());
+    expect(result).toMatchObject({ valid: true });
+    expect(db.entitlement!.deviceSecretHash).toBe(sha(result!.deviceSecret!));
+  });
+
+  it('is never forced on an older app that does not ask, so it keeps working', async () => {
+    db.entitlement = row({ lemonInstanceId: 'shield-a' });
+    const result = await issuedLicenseActivation('MG-X', 'shield-a');
+    expect(result).toMatchObject({ valid: true });
+    expect(result!.deviceSecret).toBeUndefined();
+    expect(db.entitlement!.deviceSecretHash).toBeNull();
+  });
+
+  it('is checked by every other route through deviceDecision', () => {
+    const e = { activationLimit: ONE_DEVICE, lemonInstanceId: 'shield-a', deviceSecretHash: sha('s3cret') };
+    expect(deviceDecision(e, 'shield-a', 's3cret')).toBe('allow');
+    expect(deviceDecision(e, 'shield-a')).toBe('refuse');
+    expect(deviceDecision(e, 'shield-a', 'nope')).toBe('refuse');
+    expect(deviceDecision({ ...e, deviceSecretHash: null }, 'shield-a')).toBe('allow');
+  });
+
+  it('goes with the device when a new key is created', async () => {
+    db.entitlement = row({ lemonInstanceId: 'shield-a', deviceSecretHash: sha('old') });
+    await rotateIssuedLicenseKey('ada@example.com');
+    expect(db.entitlement!.deviceSecretHash).toBeNull();
   });
 });
 

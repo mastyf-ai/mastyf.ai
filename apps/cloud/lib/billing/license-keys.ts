@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { cloudDbAvailable, getDb } from '../db';
 import { commercialCustomers, commercialEntitlements } from '../db/schema';
@@ -53,14 +53,32 @@ export function entitlementActive(e: Pick<Entitlement, 'status' | 'expiresAt'>, 
 }
 
 /** Whether a device may use a key: `claim` means no device holds it yet. One-device keys need a device name. */
+export function hashDeviceSecret(secret: string): string {
+  return createHash('sha256').update(secret).digest('hex');
+}
+
+function secretMatches(hash: string, secret: string | undefined): boolean {
+  if (!secret) return false;
+  const a = Buffer.from(hashDeviceSecret(secret), 'hex');
+  const b = Buffer.from(hash, 'hex');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * The one-device rule. A device that asked for a secret at activation must show it from then on, so
+ * knowing the key and the device's name is no longer enough to use it elsewhere.
+ */
 export function deviceDecision(
-  e: Pick<Entitlement, 'activationLimit' | 'lemonInstanceId'>,
+  e: Pick<Entitlement, 'activationLimit' | 'lemonInstanceId'> & { deviceSecretHash?: string | null },
   device: string,
+  secret?: string,
 ): 'allow' | 'claim' | 'refuse' {
   if (e.activationLimit !== ONE_DEVICE) return 'allow';
   if (!device) return 'refuse';
   if (e.lemonInstanceId == null) return 'claim';
-  return e.lemonInstanceId === device ? 'allow' : 'refuse';
+  if (e.lemonInstanceId !== device) return 'refuse';
+  if (e.deviceSecretHash && !secretMatches(e.deviceSecretHash, secret)) return 'refuse';
+  return 'allow';
 }
 
 async function issuedEntitlementForEmail(tx: Pick<Tx, 'query'>, email: string): Promise<Entitlement | null> {
@@ -144,6 +162,7 @@ export async function rotateIssuedLicenseKey(
         licenseKeyHash: hashProLicenseKey(licenseKey),
         licenseKeyPreview: licenseKeyPreview(licenseKey),
         lemonInstanceId: null,
+        deviceSecretHash: null,
         updatedAt: new Date(),
       })
       .where(eq(commercialEntitlements.id, entitlement.id));
@@ -186,22 +205,41 @@ export async function findIssuedEntitlement(licenseKey: string): Promise<Entitle
   }
 }
 
-/** Applies the one-device rule, tying the key to this device if none holds it yet. */
-async function deviceMayActivate(entitlement: Entitlement, device: string): Promise<boolean> {
-  const decision = deviceDecision(entitlement, device);
-  if (decision !== 'claim') return decision === 'allow';
+type DeviceOptions = { secret?: string; wantsSecret?: boolean };
+
+/**
+ * Applies the one-device rule, tying the key to this device if none holds it yet. A device that asks
+ * gets a secret when it claims the key, or at its next check if it was claimed before secrets existed.
+ * Returns false when refused, else the new secret (or null when none was issued this time).
+ */
+async function deviceMayActivate(entitlement: Entitlement, device: string, opts: DeviceOptions): Promise<false | string | null> {
   const db = getDb();
+  const decision = deviceDecision(entitlement, device, opts.secret);
+  const issue = opts.wantsSecret && entitlement.activationLimit === ONE_DEVICE;
+  if (decision === 'refuse') return false;
+  if (decision === 'allow') {
+    if (!issue || entitlement.deviceSecretHash) return null;
+    const secret = randomBytes(32).toString('base64url');
+    const stored = await db
+      .update(commercialEntitlements)
+      .set({ deviceSecretHash: hashDeviceSecret(secret), updatedAt: new Date() })
+      .where(and(eq(commercialEntitlements.id, entitlement.id), isNull(commercialEntitlements.deviceSecretHash)))
+      .returning({ id: commercialEntitlements.id });
+    // Another check from "this device" got a secret first; only the holder of that one may continue.
+    return stored.length > 0 ? secret : false;
+  }
+  const secret = issue ? randomBytes(32).toString('base64url') : null;
   const claimed = await db
     .update(commercialEntitlements)
-    .set({ lemonInstanceId: device, updatedAt: new Date() })
+    .set({ lemonInstanceId: device, ...(secret ? { deviceSecretHash: hashDeviceSecret(secret) } : {}), updatedAt: new Date() })
     .where(and(eq(commercialEntitlements.id, entitlement.id), isNull(commercialEntitlements.lemonInstanceId)))
     .returning({ id: commercialEntitlements.id });
-  if (claimed.length > 0) return true;
+  if (claimed.length > 0) return secret;
   // Another activation got there first. It may have been this same device.
   const latest = await db.query.commercialEntitlements.findFirst({
     where: eq(commercialEntitlements.id, entitlement.id),
   });
-  return latest ? deviceDecision(latest, device) === 'allow' : false;
+  return latest && deviceDecision(latest, device, opts.secret) === 'allow' ? null : false;
 }
 
 /**
@@ -211,7 +249,8 @@ async function deviceMayActivate(entitlement: Entitlement, device: string): Prom
 export async function issuedLicenseActivation(
   licenseKey: string,
   device: string,
-): Promise<LemonLicenseActivateResult | null> {
+  opts: DeviceOptions = {},
+): Promise<(LemonLicenseActivateResult & { deviceSecret?: string }) | null> {
   const entitlement = await findIssuedEntitlement(licenseKey);
   if (!entitlement) return null;
   const expiresAt = entitlement.expiresAt?.toISOString() ?? null;
@@ -224,7 +263,8 @@ export async function issuedLicenseActivation(
     };
   }
   const deviceName = device.slice(0, MAX_DEVICE_NAME);
-  if (!(await deviceMayActivate(entitlement, deviceName))) {
+  const outcome = await deviceMayActivate(entitlement, deviceName, opts);
+  if (outcome === false) {
     return { valid: false, status: 'device_limit', message: DEVICE_LIMIT_MESSAGE, expiresAt };
   }
   const customer = await getDb().query.commercialCustomers.findFirst({
@@ -238,5 +278,7 @@ export async function issuedLicenseActivation(
     customerEmail: customer?.email,
     expiresAt,
     instanceId: entitlement.activationLimit === ONE_DEVICE ? deviceName : undefined,
+    // Shown once; the site keeps only its hash.
+    ...(outcome ? { deviceSecret: outcome } : {}),
   };
 }

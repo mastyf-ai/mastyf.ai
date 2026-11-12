@@ -29,5 +29,9 @@ export function refuse(reason: LeadFailure) {
 export async function lookUpLead(request: Request): Promise<LeadLookup> {
   const key = extractRawBearerToken(request.headers.get('authorization')) ?? '';
   if (!key.startsWith('MG-')) return { ok: false, reason: 'bad_key' };
-  return leadForLicenseKey(key, request.headers.get('x-mastyf-device')?.trim() ?? '');
+  return leadForLicenseKey(
+    key,
+    request.headers.get('x-mastyf-device')?.trim() ?? '',
+    request.headers.get('x-mastyf-device-secret')?.trim() || undefined,
+  );
 }

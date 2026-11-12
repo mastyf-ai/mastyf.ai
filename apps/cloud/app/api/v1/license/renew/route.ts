@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       );
     }
     // Renewing never ties a key to a device; that only happens at activation.
-    const device = deviceDecision(issued, instanceId ?? '');
+    const device = deviceDecision(issued, instanceId ?? '', request.headers.get('x-mastyf-device-secret')?.trim() || undefined);
     if (device === 'refuse') {
       return NextResponse.json({ success: false, error: DEVICE_LIMIT_MESSAGE, status: 'device_limit' }, { status: 403 });
     }
