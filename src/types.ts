@@ -147,6 +147,10 @@ export interface ProxyCallRecord {
   blockReason?: string;
   /** Redacted argument snippet for audit (encrypted at rest when MASTYF_AI_DB_ENCRYPT_AUDIT_ARGS=true) */
   argumentSnippet?: string;
+  /** Let through but marked for review, e.g. a result a check was unsure about. */
+  flagged?: boolean;
+  flagRule?: string;
+  flagReason?: string;
   /** Whether token counts came from provider API usage or local estimate */
   tokenSource?: 'api' | 'estimated';
   /** Multi-tenant isolation label */

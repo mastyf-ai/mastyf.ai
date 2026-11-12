@@ -35,6 +35,7 @@ export interface ActivitySink {
   instanceId: string;
   baseUrl: string;
   device: string | undefined;
+  deviceSecret?: string;
 }
 
 const DEFAULT_SITE = 'https://www.mastyf.ai';
@@ -68,6 +69,7 @@ export function resolveActivitySink(env: NodeJS.ProcessEnv = process.env, home: 
     instanceId: instanceId || `i-${createHash('sha256').update(`${os.hostname()}\0${key}`).digest('hex').slice(0, 24)}`,
     baseUrl,
     device: env.MASTYF_AI_DEVICE_NAME?.trim() || undefined,
+    deviceSecret: env.MASTYF_AI_DEVICE_SECRET?.trim() || undefined,
   };
 }
 
@@ -118,9 +120,12 @@ export function eventFromCallRecord(
     server: record.serverName,
     tool: record.toolName,
     direction: 'call',
-    verdict: record.blocked ? 'block' : 'allow',
-    rule: cut(record.blockRule, 128),
-    reason: record.blockReason ? cut(redactSecretsInText(record.blockReason), REASON_MAX) : null,
+    verdict: record.blocked ? 'block' : record.flagged ? 'flag' : 'allow',
+    rule: cut(record.blocked ? record.blockRule : record.flagRule, 128),
+    reason: (() => {
+      const why = record.blocked ? record.blockReason : record.flagReason;
+      return why ? cut(redactSecretsInText(why), REASON_MAX) : null;
+    })(),
     latencyMs: Number.isFinite(record.durationMs) ? Math.round(record.durationMs) : null,
     fingerprint: args && fingerprintKey ? keyedFingerprint(args, fingerprintKey) : null,
     snippet: rawSnippet ? cut(redactSecretsInText(rawSnippet), SNIPPET_MAX) : null,
@@ -174,6 +179,7 @@ export class ActivityUploader {
           authorization: `Bearer ${this.sink.key}`,
           'content-type': 'application/json',
           ...(this.sink.device ? { 'x-mastyf-device': this.sink.device } : {}),
+          ...(this.sink.deviceSecret ? { 'x-mastyf-device-secret': this.sink.deviceSecret } : {}),
         },
         body: JSON.stringify({ instanceId: this.sink.instanceId, events: batch }),
         signal: AbortSignal.timeout(5_000),
