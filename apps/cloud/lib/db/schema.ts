@@ -87,7 +87,7 @@ export const apiKeys = pgTable('api_keys', {
   hashScheme: text('hash_scheme').notNull().default('bcrypt'),
   prefix: text('prefix').notNull(),
   name: text('name').notNull().default('default'),
-  scopes: text('scopes').notNull().default('["badge:read","policy:read","laya:classify"]'),
+  scopes: text('scopes').notNull().default('["badge:read","policy:read","laya:classify","activity:write"]'),
   revokedAt: timestamp('revoked_at', { mode: 'date', withTimezone: true }),
   lastUsedAt: timestamp('last_used_at', { mode: 'date', withTimezone: true }),
   createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),

@@ -38,7 +38,8 @@ export type ApiScope =
   | 'policy:read'
   | 'policy:write'
   | 'keys:manage'
-  | 'laya:classify';
+  | 'laya:classify'
+  | 'activity:write';
 
 const ALLOWED_API_SCOPES: readonly ApiScope[] = [
   'badge:read',
@@ -47,6 +48,7 @@ const ALLOWED_API_SCOPES: readonly ApiScope[] = [
   'policy:write',
   'keys:manage',
   'laya:classify',
+  'activity:write',
 ];
 
 // For a missing or unreadable scope list only, so it stays read-only. New keys get their scopes

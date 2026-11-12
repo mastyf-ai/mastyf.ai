@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  Activity,
   ArrowUpRight,
   Award,
   Flame,
@@ -22,6 +23,7 @@ import { ThemeToggle } from '@/components/shell/ThemeToggle';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { href: '/dashboard/activity', label: 'Activity', icon: Activity },
   { href: '/dashboard/policy', label: 'Policy', icon: ShieldCheck },
   { href: '/dashboard/fleet', label: 'Fleet', icon: Server },
   { href: '/dashboard/teams', label: 'Teams', icon: Users },

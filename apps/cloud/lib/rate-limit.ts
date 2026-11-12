@@ -319,6 +319,22 @@ export function checkTeamInviteRateLimit(orgId: string): Promise<RateLimitResult
   return limitWith(getTeamInviteLimiter(), `org:${orgId}`);
 }
 
+let eventsLimiter: Ratelimit | null | undefined;
+
+function getEventsLimiter(): Ratelimit | null {
+  if (eventsLimiter !== undefined) return eventsLimiter;
+  const redis = getRedis();
+  eventsLimiter = redis
+    ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(240, '1 m'), prefix: 'mastyf-ai:cloud:events' })
+    : null;
+  return eventsLimiter;
+}
+
+/** Activity batches per workspace: clients send one every few seconds, so this only stops a flood. */
+export function checkEventsRateLimit(ownerId: string): Promise<RateLimitResult> {
+  return limitWith(getEventsLimiter(), `owner:${ownerId}`);
+}
+
 export async function checkPublicApiRateLimit(
   request: NextRequest,
   pathname: string,
@@ -355,6 +371,7 @@ export function resetRateLimitClientsForTests(): void {
   certificationsLimiter = undefined;
   teamJoinLimiter = undefined;
   teamInviteLimiter = undefined;
+  eventsLimiter = undefined;
   layaMinuteLimiter = undefined;
   layaDayLimiter = undefined;
   rateLimitUnavailableLogged = false;
