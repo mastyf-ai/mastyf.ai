@@ -3,19 +3,25 @@ import { createHash, createHmac } from 'crypto';
 /** How long a download link works. Long enough to start a download, short enough that sharing one is pointless. */
 const LINK_SECONDS = 300;
 
-/** The object for a platform. These are the only files a download can reach. */
-export function shieldObjectKey(os?: string, arch?: string): string {
+const RELEASE_FOLDER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/;
+
+/**
+ * The object for a platform. These are the only files a download can reach. With a version, the
+ * file from that release's folder (the upload script writes each release there and to latest/).
+ */
+export function shieldObjectKey(os?: string, arch?: string, version?: string): string {
   const platform = (os || '').toLowerCase();
   const variant = (arch || '').toLowerCase();
+  const folder = version && RELEASE_FOLDER.test(version) ? version : 'latest';
   if (platform === 'win' || platform === 'windows') {
     // The installer is the only Windows download.
-    return 'latest/Mastyf-Shield-Setup-latest.exe';
+    return `${folder}/Mastyf-Shield-Setup-latest.exe`;
   }
   if (platform === 'linux') {
-    return variant === 'deb' ? 'latest/Mastyf-Shield-latest.deb' : 'latest/Mastyf-Shield-latest.AppImage';
+    return variant === 'deb' ? `${folder}/Mastyf-Shield-latest.deb` : `${folder}/Mastyf-Shield-latest.AppImage`;
   }
-  if (variant === 'x64' || variant === 'intel') return 'latest/Mastyf-Shield-latest-x64.dmg';
-  return 'latest/Mastyf-Shield-latest-arm64.dmg';
+  if (variant === 'x64' || variant === 'intel') return `${folder}/Mastyf-Shield-latest-x64.dmg`;
+  return `${folder}/Mastyf-Shield-latest-arm64.dmg`;
 }
 
 function encode(value: string): string {

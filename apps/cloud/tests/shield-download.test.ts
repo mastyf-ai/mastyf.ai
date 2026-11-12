@@ -34,6 +34,7 @@ vi.mock('@/lib/db', () => ({
 
 import { GET, POST } from '../app/api/v1/download/shield/route';
 import { presignShieldDownload, shieldObjectKey } from '../lib/billing/shield-storage';
+import { SHIELD_PLATFORMS, SHIELD_VERSION } from '../lib/billing/shield-builds';
 
 const get = (query = '', json = false) =>
   GET(
@@ -182,6 +183,37 @@ describe('shield download', () => {
     expect((await get('?key=whatever', true)).status).toBe(402);
   });
 
+  describe('an installed app fetching an update', () => {
+    it('gets the listed version, not whatever is newest in storage, and the checksum to check it with', async () => {
+      mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'razorpay' });
+      const res = await post({ licenseKey: 'MG-X', os: 'win', arch: 'x64', forUpdate: true });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.version).toBe(SHIELD_VERSION);
+      expect(body.sha256).toBe(SHIELD_PLATFORMS.windows.primary.sha256);
+      expect(new URL(body.downloadUrl).pathname).toBe(`/${SHIELD_VERSION}/Mastyf-Shield-Setup-latest.exe`);
+    });
+
+    it('gets no link for a build the site has no checksum for', async () => {
+      mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'razorpay' });
+      const res = await post({ licenseKey: 'MG-X', os: 'mac', arch: 'arm64', forUpdate: true });
+      expect(res.status).toBe(404);
+      expect(JSON.stringify(await res.json())).not.toContain('amazonaws');
+    });
+
+    it('still needs an active subscription', async () => {
+      const res = await post({ licenseKey: 'MG-NOPE', os: 'win', forUpdate: true });
+      expect(res.status).toBe(402);
+    });
+
+    it('leaves the download page as it was: newest file, no checksum', async () => {
+      mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'razorpay' });
+      const body = await (await post({ licenseKey: 'MG-X', os: 'win' })).json();
+      expect(new URL(body.downloadUrl).pathname).toBe('/latest/Mastyf-Shield-Setup-latest.exe');
+      expect(body).not.toHaveProperty('sha256');
+    });
+  });
+
   it('answers 503, not a public link, when storage is not configured', async () => {
     vi.stubEnv('SHIELD_S3_BUCKET', '');
     mocks.entitlementByKey.mockResolvedValue({ status: 'active', source: 'razorpay' });
@@ -203,5 +235,10 @@ describe('shieldObjectKey', () => {
 
   it('ignores anything that tries to name another file', () => {
     expect(shieldObjectKey('../../secret', '../other')).toBe('latest/Mastyf-Shield-latest-arm64.dmg');
+  });
+
+  it('names a release folder only for a well-formed version', () => {
+    expect(shieldObjectKey('win', '', '0.5.0')).toBe('0.5.0/Mastyf-Shield-Setup-latest.exe');
+    expect(shieldObjectKey('win', '', '../0.5.0')).toBe('latest/Mastyf-Shield-Setup-latest.exe');
   });
 });

@@ -5,7 +5,13 @@ import { hashProLicenseKey } from '@/lib/pro-license-keys';
 import { entitlementActive, ISSUED_SOURCES } from '@/lib/billing/license-keys';
 import { normalizeEmail, verifySeatCode } from '@/lib/billing/workspace-seats';
 import { checkTeamJoinRateLimit } from '@/lib/rate-limit';
-import { SHIELD_PLATFORMS, SHIELD_VERSION, shieldPlatformAvailable, shieldPlatformOf } from '@/lib/billing/shield-builds';
+import {
+  SHIELD_PLATFORMS,
+  SHIELD_VERSION,
+  shieldBuildFor,
+  shieldPlatformAvailable,
+  shieldPlatformOf,
+} from '@/lib/billing/shield-builds';
 import { presignShieldDownload, shieldObjectKey } from '@/lib/billing/shield-storage';
 
 const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://www.mastyf.ai').replace(/\/$/, '');
@@ -67,6 +73,7 @@ async function answer(
   arch: string,
   asJson: boolean,
   invite: Invite = null,
+  forUpdate = false,
 ): Promise<NextResponse> {
   const access = await subscriberAccess(licenseKey, invite);
   if (!access) {
@@ -90,7 +97,17 @@ async function answer(
     return NextResponse.redirect(DOWNLOAD_PAGE_URL, 302);
   }
 
-  const downloadUrl = presignShieldDownload(shieldObjectKey(os, arch));
+  // An installed app updating itself gets the listed version's file and its checksum, and checks the
+  // file before running it. No checksum listed means no update link.
+  const checksum = forUpdate ? shieldBuildFor(platform, arch).sha256 : undefined;
+  if (forUpdate && !checksum) {
+    return NextResponse.json(
+      { success: false, error: `No checked build of Shield ${SHIELD_VERSION} for ${SHIELD_PLATFORMS[platform].name} yet`, platform },
+      { status: 404 },
+    );
+  }
+
+  const downloadUrl = presignShieldDownload(shieldObjectKey(os, arch, forUpdate ? SHIELD_VERSION : undefined));
   if (!downloadUrl) {
     return NextResponse.json({ success: false, error: 'Downloads are unavailable' }, { status: 503 });
   }
@@ -102,6 +119,7 @@ async function answer(
       authorizedVia: access,
       isLicensed: true,
       platform,
+      ...(checksum ? { sha256: checksum } : {}),
     });
   }
   return NextResponse.redirect(downloadUrl, 302);
@@ -128,6 +146,7 @@ export async function POST(request: Request) {
     arch?: unknown;
     email?: unknown;
     code?: unknown;
+    forUpdate?: unknown;
   } | null;
   const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
   const invite = text(body?.email) && text(body?.code) ? { email: text(body?.email), code: text(body?.code) } : null;
@@ -135,5 +154,5 @@ export async function POST(request: Request) {
     const limit = await checkTeamJoinRateLimit(request as NextRequest);
     if (!limit.success) return NextResponse.json({ success: false, error: 'Too many tries. Wait a few minutes.' }, { status: 429 });
   }
-  return answer(text(body?.licenseKey), text(body?.os), text(body?.arch), true, invite);
+  return answer(text(body?.licenseKey), text(body?.os), text(body?.arch), true, invite, body?.forUpdate === true);
 }
