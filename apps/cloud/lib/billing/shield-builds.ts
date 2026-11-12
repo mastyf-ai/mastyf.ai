@@ -57,6 +57,15 @@ export function shieldPlatformOf(os?: string | null): ShieldPlatform {
   return 'mac';
 }
 
+/** The listed build a request names, by the same arch rules as the storage key lookup. */
+export function shieldBuildFor(platform: ShieldPlatform, arch?: string | null): ShieldBuild {
+  const info = SHIELD_PLATFORMS[platform];
+  const variant = (arch || '').trim().toLowerCase();
+  if (platform === 'mac' && (variant === 'x64' || variant === 'intel')) return info.secondary ?? info.primary;
+  if (platform === 'linux' && variant === 'deb') return info.secondary ?? info.primary;
+  return info.primary;
+}
+
 /** Read on each call, so a deploy with a new list takes effect without code changes. */
 export function shieldPlatformAvailable(platform: ShieldPlatform): boolean {
   return (process.env.NEXT_PUBLIC_SHIELD_PLATFORMS || 'windows')
