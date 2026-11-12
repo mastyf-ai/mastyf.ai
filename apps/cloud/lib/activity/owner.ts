@@ -7,6 +7,7 @@ import { isPaidTier } from '@/lib/billing/paid-tier';
 import { workspaceTier } from '@/lib/billing/workspace-tier';
 import { deviceDecision, entitlementActive, findIssuedEntitlement, SEAT_SOURCE } from '@/lib/billing/license-keys';
 import { leadForLicenseKey } from '@/lib/billing/workspace-seats';
+import type { ApiScope } from '@/lib/org-rbac';
 import type { EventOwner } from './events-db';
 
 /**
@@ -16,7 +17,7 @@ import type { EventOwner } from './events-db';
  */
 export type OwnerRole = 'workspace' | 'lead' | 'member' | 'buyer';
 export type OwnerLookup =
-  | { ok: true; owner: EventOwner; role: OwnerRole }
+  | { ok: true; owner: EventOwner; role: OwnerRole; scopes?: ApiScope[] }
   | { ok: false; status: 401 | 403; error: string };
 
 const UNAUTHORIZED: OwnerLookup = { ok: false, status: 401, error: 'Unauthorized' };
@@ -30,7 +31,7 @@ export async function ownerForRequest(request: Request): Promise<OwnerLookup> {
   const ctx = await resolveOrgFromApiKey(bearer);
   if (!ctx) return UNAUTHORIZED;
   const tier = isPaidTier(await workspaceTier(ctx.org.id)) ? 'paid' : 'free';
-  return { ok: true, role: 'workspace', owner: { ownerId: ctx.org.id, tier, memberEmail: null } };
+  return { ok: true, role: 'workspace', scopes: ctx.scopes, owner: { ownerId: ctx.org.id, tier, memberEmail: null } };
 }
 
 async function ownerForLicenseKey(key: string, device: string): Promise<OwnerLookup> {

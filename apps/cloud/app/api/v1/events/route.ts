@@ -17,6 +17,12 @@ const MAX_LIST = 200;
 export async function POST(request: Request) {
   const found = await ownerForRequest(request);
   if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status, headers: NO_STORE });
+  if (found.role === 'workspace' && !found.scopes?.includes('activity:write')) {
+    return NextResponse.json(
+      { error: 'This key cannot send activity. Create a new key under Settings.' },
+      { status: 403, headers: NO_STORE },
+    );
+  }
 
   const limited = await checkEventsRateLimit(found.owner.ownerId);
   if (!limited.success) {
@@ -52,6 +58,11 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const found = await ownerForRequest(request);
   if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status, headers: NO_STORE });
+  // A site API key can send records but not read them back: they are read on mastyf.ai, signed in,
+  // or in Shield with its license key. A leaked proxy key then exposes nothing.
+  if (found.role === 'workspace') {
+    return NextResponse.json({ error: 'Read activity on mastyf.ai or in Shield.' }, { status: 403, headers: NO_STORE });
+  }
 
   const url = new URL(request.url);
   const kept = retentionDays(found.owner.tier);

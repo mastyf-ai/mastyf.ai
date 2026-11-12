@@ -37,7 +37,7 @@ const event = () => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.ownerForRequest.mockResolvedValue({ ok: true, role: 'workspace', owner: FREE });
+  m.ownerForRequest.mockResolvedValue({ ok: true, role: 'workspace', scopes: ['activity:write'], owner: FREE });
   m.insertEvents.mockResolvedValue(1);
   m.pruneEvents.mockResolvedValue(undefined);
   m.listEvents.mockResolvedValue([]);
@@ -51,6 +51,13 @@ describe('POST /api/v1/events', () => {
     expect(await res.json()).toEqual({ stored: 1, keptDays: 7 });
     expect(m.insertEvents).toHaveBeenCalledWith(FREE, 'inst-1', [expect.objectContaining({ server: 'shield-demo' })]);
     expect(m.pruneEvents).toHaveBeenCalledWith(FREE);
+  });
+
+  it('refuses a site key without the activity scope', async () => {
+    m.ownerForRequest.mockResolvedValue({ ok: true, role: 'workspace', scopes: ['badge:read'], owner: FREE });
+    const res = await POST(post({ events: [event()] }));
+    expect(res.status).toBe(403);
+    expect(m.insertEvents).not.toHaveBeenCalled();
   });
 
   it('refuses a request without a valid key', async () => {
@@ -92,7 +99,14 @@ describe('GET /api/v1/events', () => {
   });
 
   it('never reaches past what the plan keeps', async () => {
+    m.ownerForRequest.mockResolvedValue({ ok: true, role: 'buyer', owner: FREE });
     await GET(get('?days=400&limit=5000'));
     expect(m.listEvents).toHaveBeenCalledWith('org-1', expect.objectContaining({ days: 7, limit: 200 }));
+  });
+
+  it("won't let a site API key read records back", async () => {
+    const res = await GET(get());
+    expect(res.status).toBe(403);
+    expect(m.listEvents).not.toHaveBeenCalled();
   });
 });

@@ -30,12 +30,18 @@ export async function insertEvents(owner: EventOwner, instanceId: string | null,
   return stored;
 }
 
-/** Deletes this owner's records older than their plan keeps. */
+/**
+ * Deletes this owner's expired records, each by the plan it was stored under: a free upload must
+ * never cut short the paid records of the same workspace.
+ */
 export async function pruneEvents(owner: EventOwner): Promise<void> {
   await getDb().execute(sql`
     DELETE FROM activity_events
     WHERE owner_id = ${owner.ownerId}
-      AND occurred_at < now() - make_interval(days => ${retentionDays(owner.tier)})
+      AND (
+        (tier = 'free' AND occurred_at < now() - make_interval(days => ${retentionDays('free')}))
+        OR (tier = 'paid' AND occurred_at < now() - make_interval(days => ${retentionDays('paid')}))
+      )
   `);
 }
 

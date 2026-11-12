@@ -27,3 +27,13 @@ CREATE TABLE IF NOT EXISTS activity_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_events_owner_time ON activity_events (owner_id, occurred_at DESC);
+
+-- Sending activity needs its own scope. New keys get it with the other defaults. Existing live keys
+-- get it only if they hold the full previous default set, so keys someone deliberately narrowed stay narrow.
+ALTER TABLE api_keys ALTER COLUMN scopes SET DEFAULT '["badge:read","policy:read","laya:classify","activity:write"]';
+UPDATE api_keys
+   SET scopes = (scopes::jsonb || '["activity:write"]'::jsonb)::text
+ WHERE revoked_at IS NULL
+   AND scopes LIKE '[%'
+   AND scopes::jsonb @> '["badge:read","policy:read","laya:classify"]'::jsonb
+   AND NOT scopes::jsonb @> '["activity:write"]'::jsonb;

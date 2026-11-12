@@ -64,8 +64,21 @@ describe('what is sent for a call', () => {
     expect(e.snippet).not.toContain('ghp_');
   });
 
+  it('fingerprints arguments with the workspace key, so a stored fingerprint cannot be guessed back', async () => {
+    const { fingerprintArgs } = await import('../../src/ai/block-learning.js');
+    const msg = { params: { arguments: { pin: '1234' } } };
+    const a = eventFromCallRecord(record(), msg, undefined, 'key-one');
+    const b = eventFromCallRecord(record(), msg, undefined, 'key-one');
+    const c = eventFromCallRecord(record(), msg, undefined, 'key-two');
+    expect(a.fingerprint).toMatch(/^[a-f0-9]{16}$/);
+    expect(a.fingerprint).toBe(b.fingerprint);
+    expect(a.fingerprint).not.toBe(c.fingerprint);
+    expect(a.fingerprint).not.toBe(fingerprintArgs(msg.params.arguments));
+    expect(eventFromCallRecord(record(), msg, undefined).fingerprint).toBeNull();
+  });
+
   it('redacts an allowed call from its arguments: secret keys and secret-looking values', () => {
-    const e = eventFromCallRecord(record(), { params: { arguments: { path: '/tmp/a.txt', apiKey: 'plain', cmd: 'curl -H "x: sk-ant-' + 'b'.repeat(30) + '"' } } }, undefined);
+    const e = eventFromCallRecord(record(), { params: { arguments: { path: '/tmp/a.txt', apiKey: 'plain', cmd: 'curl -H "x: sk-ant-' + 'b'.repeat(30) + '"' } } }, undefined, 'k');
     expect(e.verdict).toBe('allow');
     expect(e.snippet).toContain('path=/tmp/a.txt');
     expect(e.snippet).not.toContain('plain');

@@ -7,11 +7,11 @@
  * It never blocks or slows a call: events are queued and sent in batches, and dropped if they can't be.
  * Turn it off with MASTYF_AI_ACTIVITY_UPLOAD=false.
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fingerprintArgs, redactArgSnippets } from '../ai/block-learning.js';
+import { redactArgSnippets } from '../ai/block-learning.js';
 import { redactSecretsInText, snapshotAuditArguments } from '../utils/audit-args-snapshot.js';
 import type { ProxyCallRecord } from '../types.js';
 
@@ -76,8 +76,34 @@ function cut(text: string | undefined | null, max: number): string | null {
   return t ? t.slice(0, max) : null;
 }
 
-/** One call as the site stores it. `msg` is the request, used for the snippet when the record has none. */
-export function eventFromCallRecord(record: ProxyCallRecord, msg: unknown, agent: string | undefined): ActivityEvent {
+/**
+ * Groups identical calls without revealing them: an HMAC under the workspace key, which the stored
+ * records never contain. A plain hash of a short argument (a PIN, say) could be guessed back.
+ */
+function keyedFingerprint(args: unknown, key: string): string {
+  let text: string;
+  try {
+    text = JSON.stringify(args, (_k, v) =>
+      v && typeof v === 'object' && !Array.isArray(v)
+        ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+        : v,
+    );
+  } catch {
+    text = String(args);
+  }
+  return createHmac('sha256', key).update(text).digest('hex').slice(0, 16);
+}
+
+/**
+ * One call as the site stores it. `msg` is the request, used for the snippet when the record has none;
+ * `fingerprintKey` is the workspace key (no key, no fingerprint).
+ */
+export function eventFromCallRecord(
+  record: ProxyCallRecord,
+  msg: unknown,
+  agent: string | undefined,
+  fingerprintKey?: string,
+): ActivityEvent {
   const args = (msg as { params?: { arguments?: unknown } } | undefined)?.params?.arguments;
   const fromArgs =
     args && typeof args === 'object'
@@ -96,7 +122,7 @@ export function eventFromCallRecord(record: ProxyCallRecord, msg: unknown, agent
     rule: cut(record.blockRule, 128),
     reason: record.blockReason ? cut(redactSecretsInText(record.blockReason), REASON_MAX) : null,
     latencyMs: Number.isFinite(record.durationMs) ? Math.round(record.durationMs) : null,
-    fingerprint: args ? fingerprintArgs(args) : null,
+    fingerprint: args && fingerprintKey ? keyedFingerprint(args, fingerprintKey) : null,
     snippet: rawSnippet ? cut(redactSecretsInText(rawSnippet), SNIPPET_MAX) : null,
   };
 }
@@ -127,6 +153,10 @@ export class ActivityUploader {
     // Offline for a long time: keep the newest.
     if (this.queue.length > this.maxQueue) this.queue.splice(0, this.queue.length - this.maxQueue);
     if (this.queue.length >= this.maxBatch) void this.flush();
+  }
+
+  fingerprintKey(): string {
+    return this.sink.key;
   }
 
   pending(): number {
@@ -186,7 +216,8 @@ export function activityUploader(): ActivityUploader | null {
 /** Queue one checked call. Never throws: activity must not affect the call itself. */
 export function recordActivity(record: ProxyCallRecord, msg?: unknown): void {
   try {
-    activityUploader()?.enqueue(eventFromCallRecord(record, msg, process.env.MASTYF_AI_AGENT));
+    const up = activityUploader();
+    up?.enqueue(eventFromCallRecord(record, msg, process.env.MASTYF_AI_AGENT, up.fingerprintKey()));
   } catch {
     // ignore
   }
