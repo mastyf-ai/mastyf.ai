@@ -48,8 +48,8 @@ html.lenis body {
 
 .nav__row {
   --nav-badge: 64px;
-  /* Where the rolled-up dog sits on its track (set by SiteNav). */
-  --dog-x: 0px;
+  /* Where the rolled-up logo badge sits on its track (set by SiteNav). */
+  --badge-x: 0px;
   position: relative;
   max-width: var(--content-max);
   margin: 0 auto;
@@ -76,7 +76,7 @@ html.lenis body {
   border-radius: var(--r-pill);
   pointer-events: auto;
   /* `translate`, not `transform`: the entrance animation below holds the transform. */
-  translate: var(--dog-x) 0;
+  translate: var(--badge-x) 0;
   /* Animate the bar itself: opacity on an ancestor would cut the backdrop blur off from the page. */
   animation: nav-enter 420ms var(--ease) both;
   transition:
@@ -135,20 +135,21 @@ html.lenis body {
    so the lines turn ink and the gold check stays gold. */
 :root[data-theme='light'] .brand-mark,
 .nav__bar .brand-mark,
+.nav__face .brand-mark,
 .app__side .brand-mark {
   filter: invert(1) hue-rotate(180deg);
 }
 
-/* ---- rolled up: the dog face and the page-progress bar */
+/* ---- rolled up: the logo badge and the page-progress bar */
 
-/* Carries the dog along its track. GSAP writes `translate: none` on elements whose
+/* Carries the badge along its track. GSAP writes `translate: none` on elements whose
    transforms it animates, so the travel lives on this wrapper, not the button. */
-.nav__dog {
+.nav__badge {
   position: absolute;
   top: 0;
   left: 0;
   z-index: 2;
-  translate: var(--dog-x) 0;
+  translate: var(--badge-x) 0;
   pointer-events: none;
 }
 
@@ -169,17 +170,16 @@ html.lenis body {
   opacity: 0;
 }
 
-.nav__face .dogface {
-  width: 60px;
-  height: 60px;
-  /* Lean and hop while travelling (set by SiteNav). */
-  rotate: var(--lean, 0deg);
-  translate: 0 var(--bob, 0px);
-  transition: transform var(--t) var(--ease);
+.nav__face-mark {
+  width: 34px;
+  height: 34px;
+  /* Turns as the badge rolls along the track (set by SiteNav). */
+  rotate: var(--spin, 0deg);
+  transition: scale var(--t) var(--ease);
 }
 
-.nav__face:hover .dogface {
-  transform: scale(1.07);
+.nav__face:hover .nav__face-mark {
+  scale: 1.08;
 }
 
 .nav__face:focus-visible {
@@ -187,8 +187,8 @@ html.lenis body {
   outline-offset: 4px;
 }
 
-/* The track the rolled-up dog travels along. Its fill runs from the dog's starting
-   point to wherever the dog is now. */
+/* The track the rolled-up badge travels along. Its fill runs from the badge's starting
+   point to wherever the badge is now. */
 .nav__progress {
   --p: 0;
   position: absolute;
@@ -269,6 +269,13 @@ html.lenis body {
 
 .nav__theme {
   display: inline-flex;
+}
+
+/* The bar has its own colours (gold in the dark theme). The page's raised surface would turn a
+   hovered button black on it, so buttons in the bar take the same light tint as its links. */
+.nav__bar .icon-btn:hover {
+  background: rgb(var(--tint) / 0.08);
+  border-color: var(--line);
 }
 
 .nav__external svg {
