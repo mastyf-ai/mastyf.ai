@@ -8,7 +8,6 @@ import gsap from 'gsap';
 import { ArrowUpRight, Download, Menu, X } from 'lucide-react';
 import { GITHUB_REPO_URL } from '@/lib/github-links';
 import { Flip } from '@/components/ui/Flip';
-import { DogFace } from '@/components/shell/DogFace';
 import { ThemeToggle } from '@/components/shell/ThemeToggle';
 
 type Props = {
@@ -76,9 +75,9 @@ export function SiteNav({ session }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // Scrolling rolls the bar up into the logo, which becomes the dog face; the dog then
-  // travels along a track from left to right as the page is read. Clicking the dog
-  // unrolls the bar until the reader scrolls on again.
+  // Scrolling rolls the bar up into the logo badge, which then travels along a track from
+  // left to right as the page is read, turning like a wheel. Clicking the badge unrolls the
+  // bar until the reader scrolls on again.
   useEffect(() => {
     const row = rowRef.current;
     const bar = barRef.current;
@@ -118,25 +117,16 @@ export function SiteNav({ session }: Props) {
     const roll = { k: 0 };
     let p = 0;
     let rowW = row.clientWidth;
-    let lastX = 0;
-    let lean = 0;
-    let speed = 0;
-    let phase = 0;
+    let lastX = -1;
     const place = () => {
       const x = roll.k * p * (rowW - BADGE);
-      const v = x - lastX;
-      if (v === 0 && Math.abs(lean) < 0.01 && speed < 0.01) return;
+      if (x === lastX) return;
       lastX = x;
-      row.style.setProperty('--dog-x', `${x.toFixed(2)}px`);
+      row.style.setProperty('--badge-x', `${x.toFixed(2)}px`);
       progress.style.setProperty('--p', (roll.k * p).toFixed(4));
       if (reduced) return;
-      // The dog leans into the direction it travels and hops a little while it moves.
-      lean += (Math.max(-12, Math.min(12, v * 1.6)) - lean) * 0.12;
-      speed += (Math.abs(v) - speed) * 0.15;
-      phase += Math.min(speed, 4) * 0.08;
-      const bob = -Math.abs(Math.sin(phase)) * Math.min(2.5, speed * 0.8);
-      face.style.setProperty('--lean', `${lean.toFixed(2)}deg`);
-      face.style.setProperty('--bob', `${bob.toFixed(2)}px`);
+      // The logo turns like a wheel rolling along the track: one full turn per circumference travelled.
+      face.style.setProperty('--spin', `${((x / (Math.PI * BADGE)) * 360).toFixed(1)}deg`);
     };
     gsap.ticker.add(place);
 
@@ -168,7 +158,7 @@ export function SiteNav({ session }: Props) {
           },
           0.06,
         )
-        // The bar winds into the logo, which rolls along to the dog's place on the track.
+        // The bar winds into the logo, which rolls along to its place on the track.
         .to(roll, { k: 1, duration: 0.62 }, 0.06)
         .to(mark, { rotate: 360, duration: 0.62 }, 0.06)
         .to(mark, { autoAlpha: 0, scale: 0.6, duration: 0.18, ease: 'power2.in' }, 0.52)
@@ -201,7 +191,7 @@ export function SiteNav({ session }: Props) {
         .to(face, { autoAlpha: 0, scale: 0.5, rotate: 24, duration: 0.24, ease: 'power2.in' }, 0)
         .to(mark, { autoAlpha: 1, scale: 1, duration: 0.2, ease: 'power2.out' }, 0.14)
         .to(mark, { rotate: 0, duration: 0.62 }, 0.14)
-        // Both edges unroll outward from wherever the dog was.
+        // Both edges unroll outward from wherever the badge was.
         .to(roll, { k: 0, duration: 0.62 }, 0.14)
         .to(
           bar,
@@ -269,7 +259,7 @@ export function SiteNav({ session }: Props) {
       gsap.ticker.remove(place);
       inner.inert = false;
       gsap.set([bar, inner, mark, face, progress, ...fadeItems()], { clearProps: 'all' });
-      row.style.removeProperty('--dog-x');
+      row.style.removeProperty('--badge-x');
       bar.classList.remove('is-rolled');
     };
   }, []);
@@ -359,7 +349,7 @@ export function SiteNav({ session }: Props) {
           </div>
 
           {/* The wrapper travels along the track; GSAP animates the button inside it. */}
-          <div className="nav__dog">
+          <div className="nav__badge">
             <button
               type="button"
               className="nav__face"
@@ -369,7 +359,7 @@ export function SiteNav({ session }: Props) {
               // A keyboard press reports detail 0; focus then moves into the unrolled bar.
               onClick={(event) => expandRef.current(event.detail === 0)}
             >
-              <DogFace active={collapsed} />
+              <Image src="/brand/mark-128.png" alt="" width={34} height={34} className="nav__face-mark brand-mark" />
             </button>
           </div>
 

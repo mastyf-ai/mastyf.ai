@@ -7,7 +7,6 @@
 @import './design/pages.css';
 @import './design/app.css';
 @import './design/preloader.css';
-@import './design/dogface.css';
 
 /* Legacy variable names still referenced by page stylesheets, mapped onto the new tokens. */
 :root {
