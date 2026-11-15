@@ -12,8 +12,9 @@
   background: var(--bg);
 }
 
-/* Pinned to the viewport: it stays put while the page scrolls, and only scrolls itself
-   (vertically) when the window is too short for it. Never sideways. */
+/* Pinned to the viewport: it stays put while the page scrolls. Spaced to fit a window
+   about 560px tall; in a shorter one it still scrolls (wheel, touch, keyboard focus),
+   but without a visible bar. Never sideways. */
 .app__side {
   position: fixed;
   top: 0;
@@ -22,14 +23,15 @@
   z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: var(--s-5);
+  gap: var(--s-4);
   width: var(--side-w);
   height: 100vh;
   height: 100dvh;
-  padding: var(--s-5) var(--s-3) var(--s-4);
+  padding: var(--s-4) var(--s-3);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: none;
   /* The sidebar's contents read the frame's ink instead of the page's. */
   --ink: var(--frame-ink);
   --ink-strong: var(--frame-ink);
@@ -42,6 +44,10 @@
   --bg: transparent;
   background: var(--frame-bg);
   border-right: 0;
+}
+
+.app__side::-webkit-scrollbar {
+  display: none;
 }
 
 .app__brand {
@@ -105,7 +111,7 @@
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  padding: 8px var(--s-3);
+  padding: 6px var(--s-3);
   color: var(--ink-2);
   font-size: var(--fs-meta);
   border-radius: var(--r);
@@ -142,7 +148,7 @@
   gap: var(--s-2);
   min-width: 0;
   margin-top: auto;
-  padding: var(--s-4) var(--s-2) 0;
+  padding: var(--s-3) var(--s-2) 0;
   border-top: 1px solid var(--line);
 }
 
