@@ -31,6 +31,7 @@ const HELP = `mastyf-check ${VERSION}: Mastyf's free checks for AI agents' tool 
 Commands:
   serve   Start the check API on 127.0.0.1 (default port 4100).
           Options: --port <n>  --host <address>  --policy <file>  --mode block|observe  --log json|text
+                   --max-body <MB>  --exit-with-parent (stop when stdin closes; used by the libraries)
   proxy   Put the checks in front of one MCP server on stdio:
           mastyf-check proxy [--policy <file>] [--mode block|observe] -- <command> [args...]
   test    Check one call and print the verdict (exit 2 when blocked):
@@ -56,6 +57,7 @@ function parse(argv: string[]): Parsed {
       break;
     }
     if (a === '--help' || a === '-h') out.flags['help'] = 'true';
+    else if (a === '--exit-with-parent') out.flags['exit-with-parent'] = 'true';
     else if (a.startsWith('--')) out.flags[a.slice(2)] = argv[++i] ?? '';
     else if (!out.command) out.command = a;
     else out.rest.push(a);
@@ -105,16 +107,32 @@ export async function run(argv: string[], io: Io): Promise<RunResult> {
         const token = ensureToken({ env: io.env, home: homedir(), platform: process.platform });
         const port = Number(p.flags['port'] ?? io.env['MASTYF_CHECK_PORT'] ?? 4100);
         if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`--port must be a port number, not "${p.flags['port']}"`);
+        let maxBodyBytes: number | undefined;
+        if (p.flags['max-body'] !== undefined) {
+          const mb = Number(p.flags['max-body']);
+          if (!Number.isInteger(mb) || mb < 1 || mb > 64) throw new Error(`--max-body must be a whole number of MB from 1 to 64, not "${p.flags['max-body']}"`);
+          maxBodyBytes = mb * 1024 * 1024;
+        }
         const text = p.flags['log'] === 'text';
         const log = (line: string) => say(io.stderr, text ? Object.entries(JSON.parse(line)).map(([k, v]) => `${k}=${v}`).join(' ') : line);
-        let server;
+        let server: Awaited<ReturnType<typeof startServer>>;
         try {
-          server = await startServer(engine, { host, port, token, log });
+          server = await startServer(engine, { host, port, token, log, maxBodyBytes });
         } catch (err) {
           if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') throw new Error(`port ${port} is in use (is mastyf-check already running?)`);
           throw err;
         }
         say(io.stderr, `mastyf-check ${VERSION} listening on ${server.url} (free tier, ${engine.ruleCount()} rules)`);
+        if (p.flags['exit-with-parent']) {
+          // Started by a library: when the parent goes away (its end of our stdin closes, even if it
+          // was killed), stop, so no service is left running on any OS.
+          const exited = new Promise<number>((resolve) => {
+            io.stdin.on('end', () => void server.close().then(() => resolve(0)));
+            io.stdin.on('close', () => void server.close().then(() => resolve(0)));
+            io.stdin.resume();
+          });
+          return { code: 0, close: server.close, exited };
+        }
         return { code: 0, close: server.close };
       }
 

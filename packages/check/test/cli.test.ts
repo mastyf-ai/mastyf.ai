@@ -56,6 +56,48 @@ describe('mastyf-check serve', () => {
   });
 });
 
+describe('mastyf-check serve, as a library starts it', () => {
+  it('--exit-with-parent: stops when its stdin closes (the parent went away)', async () => {
+    const port = await freePort();
+    const t = io();
+    const r = await run(['serve', '--port', String(port), '--exit-with-parent'], t);
+    expect(r.code).toBe(0);
+    expect(r.exited).toBeDefined();
+    t.stdin.end();
+    const code = await Promise.race([r.exited!, new Promise<number>((_, no) => setTimeout(() => no(new Error('still running')), 5000))]);
+    expect(code).toBe(0);
+    const after = await fetch(`http://127.0.0.1:${port}/v1/health`).then(() => 'up', () => 'down');
+    expect(after).toBe('down');
+  });
+
+  it('--max-body 32: accepts a 5 MB result, still refuses 33 MB', async () => {
+    const port = await freePort();
+    const r = await run(['serve', '--port', String(port), '--max-body', '32'], io());
+    try {
+      const post = (bytes: number) =>
+        fetch(`http://127.0.0.1:${port}/v1/check/result`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ tool: 'read_file', result: { content: 'a'.repeat(bytes) } }),
+        }).then((res) => res.status);
+      expect(await post(5 * 1024 * 1024)).toBe(200);
+      // Too large: a 413, or the connection closed mid-upload (the client may not read the 413 first).
+      const tooBig = await post(33 * 1024 * 1024).catch(() => 'closed');
+      expect([413, 'closed']).toContain(tooBig);
+    } finally {
+      await r.close?.();
+    }
+  }, 60000);
+
+  it('--max-body outside 1-64 MB is refused', async () => {
+    for (const value of ['0', '100', 'x']) {
+      const t = io();
+      expect((await run(['serve', '--port', '0', '--max-body', value], t)).code).toBe(1);
+      expect(t.err()).toMatch(/--max-body/);
+    }
+  });
+});
+
 describe('mastyf-check serve beyond this machine', () => {
   it('refuses to listen on a non-local address without an explicit MASTYF_CHECK_TOKEN', async () => {
     const t = io();

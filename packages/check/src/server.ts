@@ -9,7 +9,7 @@ import type { AddressInfo } from 'node:net';
 import type { CheckEngine, ToolDef, Verdict } from './engine';
 
 export const VERSION = '0.1.0';
-const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const DEFAULT_MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_DEPTH = 64;
 const BLOCKS_KEPT = 200;
 
@@ -20,6 +20,8 @@ export interface ServerOptions {
   port: number;
   token: string;
   log: Log;
+  /** Largest request body accepted; default 2 MB. */
+  maxBodyBytes?: number;
 }
 
 interface BlockRecord extends Verdict {
@@ -46,12 +48,12 @@ function depthOf(value: unknown, depth = 0): number {
   return depth;
 }
 
-async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(req: IncomingMessage, maxBytes: number): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) throw new HttpError(413, 'body over 2 MB');
+    if (size > maxBytes) throw new HttpError(413, `body over ${Math.round(maxBytes / 1024 / 1024)} MB`);
     chunks.push(chunk as Buffer);
   }
   let parsed: unknown;
@@ -118,7 +120,7 @@ export async function startServer(engine: CheckEngine, opts: ServerOptions): Pro
     }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
 
-    const body = await readBody(req);
+    const body = await readBody(req, opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES);
     switch (url.pathname) {
       case '/v1/check/call': {
         const tool = requiredTool(body);
@@ -163,7 +165,15 @@ export async function startServer(engine: CheckEngine, opts: ServerOptions): Pro
 
   const server = createServer((req, res) => {
     handle(req, res).catch((err: unknown) => {
-      if (err instanceof HttpError) return send(res, err.status, { error: err.message });
+      if (err instanceof HttpError) {
+        if (err.status === 413) {
+          // The rest of the body is never read: close the connection after answering, or a client
+          // still uploading would wait forever for us to read it.
+          res.setHeader('connection', 'close');
+          res.once('finish', () => req.destroy());
+        }
+        return send(res, err.status, { error: err.message });
+      }
       opts.log(JSON.stringify({ at: new Date().toISOString(), kind: 'error', message: err instanceof Error ? err.message : String(err) }));
       send(res, 500, { error: 'the check failed; treat the call as not checked' });
     });
