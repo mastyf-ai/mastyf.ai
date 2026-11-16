@@ -35,6 +35,14 @@ def _framework_fields(tool: BaseTool) -> set[str]:
     return out
 
 
+def _plain(value: Any) -> bool:
+    """A scalar, or a list of scalars: something a model could have written."""
+    scalars = (str, bytes, int, float, bool, type(None))
+    if isinstance(value, scalars):
+        return True
+    return isinstance(value, (list, tuple)) and all(isinstance(v, scalars) for v in value)
+
+
 def _framework_value(value: Any) -> bool:
     try:
         from langgraph.store.base import BaseStore
@@ -67,8 +75,10 @@ class GuardedTool(BaseTool):
             return value, {"input": value}
         # Every argument the tool gets is checked except the framework's own objects (graph state,
         # store, runtime). Plain LangChain lets a model fill other injected arguments, so those count.
+        # In a state/store slot only the graph's own structures (mappings, objects) are skipped;
+        # plain values there are checked, since outside a ToolNode the model can fill them.
         skip = _framework_fields(self.inner)
-        checked = {k: v for k, v in kwargs.items() if k not in skip and not _framework_value(v)}
+        checked = {k: v for k, v in kwargs.items() if not _framework_value(v) and (k not in skip or _plain(v))}
         return kwargs, checked
 
     def _run(self, *args: Any, **kwargs: Any) -> Any:

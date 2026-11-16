@@ -158,3 +158,21 @@ def test_a_model_filled_injected_list_is_checked_too():
     msg = call(guard_tools([open_files])[0], {"name": "notes.txt", "roots": ["/etc/passwd"]})
     assert msg.content.startswith("Blocked by Mastyf")
     assert calls == []
+
+
+def test_a_plain_value_in_a_state_slot_is_checked_too():
+    from typing import Annotated
+
+    from langgraph.prebuilt import InjectedState
+
+    calls: list = []
+
+    @tool
+    def open_file(name: str, root: Annotated[str, InjectedState("root")]) -> str:
+        """Open a file under the folder kept in the graph state."""
+        calls.append(root)
+        return "ok"
+
+    msg = call(guard_tools([open_file])[0], {"name": "notes.txt", "root": "/etc/passwd"})
+    assert msg.content.startswith("Blocked by Mastyf")
+    assert calls == []
