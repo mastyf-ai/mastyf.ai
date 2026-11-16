@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, statSync, writeFileSync, chmodSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync, lstatSync, symlinkSync, writeFileSync, chmodSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -46,6 +46,21 @@ describe('ensureToken', () => {
     const second = ensureToken(opts);
     expect(second).not.toBe(first);
     expect(statSync(p).mode & 0o077).toBe(0);
+  });
+
+  it.skipIf(process.platform === 'win32')('the folder is owner-only, and a link planted at the token path is replaced, not followed', () => {
+    const h = home();
+    const opts = { env: {}, home: h, platform: process.platform };
+    const p = tokenPath(opts);
+    mkdirSync(join(p, '..'), { recursive: true, mode: 0o755 });
+    const target = join(h, 'elsewhere.txt');
+    writeFileSync(target, 'untouched');
+    symlinkSync(target, p);
+    const t = ensureToken(opts);
+    expect(readFileSync(target, 'utf8')).toBe('untouched');
+    expect(lstatSync(p).isSymbolicLink()).toBe(false);
+    expect(readFileSync(p, 'utf8').trim()).toBe(t);
+    expect(statSync(join(p, '..')).mode & 0o077).toBe(0);
   });
 
   it('the token file lives under ~/.mastyf/check (or %APPDATA%\\Mastyf\\check on Windows)', () => {

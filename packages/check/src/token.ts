@@ -3,7 +3,7 @@
  * user who runs the service, and never logged.
  */
 import { randomBytes } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, posix, win32 } from 'node:path';
 
 export interface TokenOptions {
@@ -49,8 +49,18 @@ export function ensureToken(opts: TokenOptions): string {
   if (existing) return existing;
 
   const token = randomBytes(32).toString('base64url');
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  writeFileSync(path, `${token}\n`, { mode: 0o600 });
-  if (opts.platform !== 'win32') chmodSync(path, 0o600); // a replaced file keeps its old mode otherwise
+  const dir = dirname(path);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  if (opts.platform !== 'win32') chmodSync(dir, 0o700);
+  // A fresh file, created exclusively with owner-only permissions, then renamed over the old path:
+  // the token is never written into a file someone else can read, and a link at the path isn't followed.
+  const temp = `${path}.${randomBytes(6).toString('hex')}.tmp`;
+  writeFileSync(temp, `${token}\n`, { mode: 0o600, flag: 'wx' });
+  try {
+    renameSync(temp, path);
+  } catch (err) {
+    rmSync(temp, { force: true });
+    throw err;
+  }
   return token;
 }
