@@ -1,6 +1,6 @@
 /**
  * Decides when to tell the user about new blocks: never about blocks that were there before the
- * editor started, only for this editor's agents, at most once per interval, and several at once
+ * editor started, only for this editor's blocks, at most once per interval, and several at once
  * as a single "Shield blocked N calls".
  */
 import type { BlockRow } from './blocks';
@@ -22,12 +22,13 @@ export class BlockNotifier {
 
   constructor(private readonly intervalMs = 30_000) {}
 
-  observe(rowsNewestFirst: BlockRow[], agents: Set<string>, nowMs: number): BlockNote | null {
+  /** `belongs` says whether a block is this editor's (Shield 0.5.2 records no agent, so callers match by server name). */
+  observe(rowsNewestFirst: BlockRow[], belongs: (row: BlockRow) => boolean, nowMs: number): BlockNote | null {
     const fresh: BlockRow[] = [];
     for (const row of [...rowsNewestFirst].reverse()) {
       if (this.seen.has(row.id)) continue;
       this.remember(row.id);
-      if (this.started && agents.has(row.agent)) fresh.push(row);
+      if (this.started && belongs(row)) fresh.push(row);
     }
     if (!this.started) {
       this.started = true;

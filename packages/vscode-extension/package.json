@@ -32,7 +32,113 @@
     "ui"
   ],
   "main": "./dist/extension.js",
-  "contributes": {},
+  "contributes": {
+    "commands": [
+      {
+        "command": "mastyfShield.showPanel",
+        "title": "Show blocked calls",
+        "category": "Mastyf Shield"
+      },
+      {
+        "command": "mastyfShield.turnOn",
+        "title": "Turn on protection",
+        "category": "Mastyf Shield"
+      },
+      {
+        "command": "mastyfShield.openShield",
+        "title": "Open Shield",
+        "category": "Mastyf Shield"
+      },
+      {
+        "command": "mastyfShield.openDownload",
+        "title": "Get Shield",
+        "category": "Mastyf Shield"
+      },
+      {
+        "command": "mastyfShield.refresh",
+        "title": "Refresh",
+        "category": "Mastyf Shield",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mastyfShield.toggleThisEditorOnly",
+        "title": "Only this editor / all agents",
+        "category": "Mastyf Shield",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "mastyfShield.copyDetails",
+        "title": "Copy details",
+        "category": "Mastyf Shield",
+        "icon": "$(copy)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mastyfShield",
+          "title": "Mastyf Shield",
+          "icon": "media/shield.svg"
+        }
+      ]
+    },
+    "views": {
+      "mastyfShield": [
+        {
+          "id": "mastyfShield.blocks",
+          "name": "Blocked calls"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "mastyfShield.refresh",
+          "when": "view == mastyfShield.blocks",
+          "group": "navigation"
+        },
+        {
+          "command": "mastyfShield.toggleThisEditorOnly",
+          "when": "view == mastyfShield.blocks",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mastyfShield.copyDetails",
+          "when": "view == mastyfShield.blocks && viewItem == block",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mastyfShield.copyDetails",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Mastyf Shield",
+      "properties": {
+        "mastyfShield.port": {
+          "type": "number",
+          "default": 14000,
+          "description": "The port of the Shield app's local service on this PC."
+        },
+        "mastyfShield.notifyOnBlock": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when Shield blocks a call from this editor's agent."
+        },
+        "mastyfShield.pollSeconds": {
+          "type": "number",
+          "default": 15,
+          "minimum": 5,
+          "description": "How often to check Shield for new blocks while this window has focus."
+        }
+      }
+    }
+  },
   "scripts": {
     "build": "node esbuild.mjs",
     "test": "vitest run",
@@ -45,6 +151,7 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "1.85.0",
+    "@vscode/test-electron": "2.4.1",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.25.0",
     "ovsx": "^0.10.1",

@@ -13,7 +13,7 @@ const row = (id: string, agent = 'vscode', extra: Partial<BlockRow> = {}): Block
   ...extra,
 });
 
-const agents = new Set(['vscode']);
+const agents = (r: BlockRow) => r.agent === 'vscode';
 
 describe('BlockNotifier', () => {
   it('the first look only remembers what is already there', () => {
@@ -50,11 +50,19 @@ describe('BlockNotifier', () => {
     expect(n.observe([row('c'), row('b'), row('a')], agents, 90_000)).toEqual({ text: 'Shield blocked 2 calls' });
   });
 
-  it("another agent's blocks never notify here", () => {
+  it("blocks outside this editor never notify here", () => {
     const n = new BlockNotifier();
     n.observe([], agents, 0);
     expect(n.observe([row('x', 'claude-desktop')], agents, 60_000)).toBeNull();
     expect(n.observe([row('x', 'claude-desktop')], agents, 120_000)).toBeNull();
+  });
+
+  it("can decide by server name (Shield 0.5.2 records no agent)", () => {
+    const n = new BlockNotifier();
+    const mine = (r: BlockRow) => new Set(['shield-demo']).has(r.server);
+    n.observe([], mine, 0);
+    expect(n.observe([row('y', 'unknown agent', { server: 'other' })], mine, 60_000)).toBeNull();
+    expect(n.observe([row('z', 'unknown agent')], mine, 120_000)?.rowId).toBe('z');
   });
 
   it('a hundred new blocks at once (after sleep) give exactly one note', () => {
