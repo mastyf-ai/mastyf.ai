@@ -13,7 +13,8 @@ export interface FsOps {
   readFile(p: string): string;
 }
 
-const MAX_FILE_BYTES = 1024 * 1024;
+/** Large enough for a heavy Claude Code user's ~/.claude.json (it keeps project history), small enough to refuse junk. */
+const MAX_FILE_BYTES = 16 * 1024 * 1024;
 
 const MAX_LINK_HOPS = 8;
 

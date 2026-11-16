@@ -52,6 +52,25 @@ export class ShieldClient {
     return Array.isArray(list) ? (list.filter((r) => r && typeof r === 'object') as Receipt[]) : null;
   }
 
+  /**
+   * The newest `want` blocked calls. Shield lists every call, so this pages back (newest first)
+   * past allowed calls until it has enough blocks, reaches the end, or has looked at `maxScan` calls.
+   */
+  async recentBlocks(want: number, opts: { pageSize?: number; maxScan?: number } = {}): Promise<Receipt[] | null> {
+    const pageSize = opts.pageSize ?? 100;
+    const maxScan = opts.maxScan ?? 500;
+    const blocks: Receipt[] = [];
+    for (let offset = 0; offset < maxScan && blocks.length < want; offset += pageSize) {
+      const limit = Math.min(pageSize, maxScan - offset);
+      const body = await this.get(`/api/gateway/receipts?limit=${limit}&offset=${offset}`);
+      const list = (body as { receipts?: unknown } | null)?.receipts;
+      if (!Array.isArray(list)) return offset === 0 ? null : blocks;
+      for (const r of list) if (r && typeof r === 'object' && (r as Receipt).decision === 'BLOCK') blocks.push(r as Receipt);
+      if (list.length < limit) break;
+    }
+    return blocks.slice(0, want);
+  }
+
   /** GET a JSON body, or null on no key, timeout, a non-200 answer or a body that isn't JSON. */
   private async get(path: string): Promise<unknown> {
     const key = this.readKey();

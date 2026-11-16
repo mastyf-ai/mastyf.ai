@@ -54,14 +54,15 @@ jobs:
           fi
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # vsce 4 (the first with --oidc trusted publishing) needs Node 22.
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           name: vsix
           path: dist-vsix
       - name: Publish to the VS Code Marketplace (trusted publishing)
-        run: npx --yes @vscode/vsce@3 publish --oidc --packagePath dist-vsix/*.vsix
+        run: npx --yes @vscode/vsce@4.1.1 publish --oidc --packagePath dist-vsix/*.vsix
       - name: Publish to Open VSX
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: npx --yes ovsx@0.10 publish dist-vsix/*.vsix -p "$OVSX_PAT"
+        run: npx --yes ovsx@0.10.12 publish dist-vsix/*.vsix -p "$OVSX_PAT"

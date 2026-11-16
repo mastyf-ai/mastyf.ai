@@ -12,13 +12,15 @@ import { makeFileAccess, safePollSeconds, safePort } from './files';
 import { findShieldExe, REG_QUERY_ARGS } from './install';
 import { BlockNotifier } from './notify';
 import { BlocksPanel, type PanelNode, type PanelState } from './panel';
+import { Poller } from './poller';
 import { editorFromAppName, settingsFilesFor, SettingsReader, type AgentId, type Env } from './settings';
 import { ShieldClient } from './shield';
 import { computeStatus } from './status';
 
 const DOWNLOAD_URL = 'https://www.mastyf.ai/download';
 const PANEL_ROWS = 25;
-const POLL_ROWS = 50;
+/** How many of Shield's calls to look back through for blocks on each poll. */
+const MAX_SCAN = 500;
 
 /** Settings files can come from any cloned repository: local drives only, links checked, small regular files. */
 const { readSmallFile, mtimeOf } = makeFileAccess({
@@ -126,10 +128,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   async function poll(): Promise<void> {
     if (!windows) return;
-    const receipts = await client().receipts(POLL_ROWS);
+    // The newest blocks, however many allowed calls came after them.
+    const receipts = await client().recentBlocks(PANEL_ROWS, { pageSize: 100, maxScan: MAX_SCAN });
     if ((receipts !== null) !== shieldAnswering) output.appendLine(`${new Date().toISOString()} Shield ${receipts ? 'answering' : 'not answering'}`);
     shieldAnswering = receipts !== null;
-    latestRows = receipts ? toBlockRows(receipts, POLL_ROWS) : [];
+    latestRows = receipts ? toBlockRows(receipts, PANEL_ROWS) : [];
     showRows();
     refreshStatus();
     if (!receipts) return;
@@ -148,25 +151,12 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   // Poll only while this window has focus.
-  let timer: ReturnType<typeof setInterval> | undefined;
-  const stopPolling = () => {
-    if (timer) clearInterval(timer);
-    timer = undefined;
-  };
-  const startPolling = () => {
-    stopPolling();
-    if (!windows) return;
-    void poll();
-    const seconds = safePollSeconds(config().get('pollSeconds'));
-    timer = setInterval(() => void poll(), seconds * 1000);
-  };
-  context.subscriptions.push({ dispose: stopPolling });
+  const poller = new Poller(() => poll(), () => safePollSeconds(config().get('pollSeconds')));
+  context.subscriptions.push({ dispose: () => poller.dispose() });
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((s) => {
-      if (s.focused) {
-        refreshStatus();
-        startPolling();
-      } else stopPolling();
+      if (s.focused) refreshStatus();
+      if (windows) poller.setFocused(s.focused);
     }),
   );
 
@@ -197,7 +187,7 @@ export function activate(context: vscode.ExtensionContext): void {
       refreshStatus();
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('mastyfShield')) startPolling();
+      if (e.affectsConfiguration('mastyfShield')) poller.settingsChanged();
     }),
   );
 
@@ -267,7 +257,7 @@ export function activate(context: vscode.ExtensionContext): void {
       watchSettings();
       refreshStatus();
       showRows();
-      if (vscode.window.state.focused) startPolling();
+      if (vscode.window.state.focused) poller.setFocused(true);
     });
   }
 }

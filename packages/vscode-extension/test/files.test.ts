@@ -97,7 +97,7 @@ describe('makeFileAccess', () => {
       'C:\\a': { link: 'C:\\b' },
       'C:\\b': { link: '\\\\evil\\x' },
       'C:\\dir': { dir: true },
-      'C:\\big': { size: 5 * 1024 * 1024 },
+      'C:\\big': { size: 40 * 1024 * 1024 },
     });
     const f = makeFileAccess(ops);
     expect(() => f.readSmallFile('C:\\a')).toThrow();
@@ -119,5 +119,12 @@ describe('settings values', () => {
     expect(safePollSeconds(30)).toBe(30);
     expect(safePollSeconds(1)).toBe(5);
     for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, '10', null, undefined]) expect(safePollSeconds(bad)).toBe(15);
+  });
+});
+
+describe('size limit', () => {
+  it("reads a large ~/.claude.json (heavy Claude Code users pass 1 MB)", () => {
+    const { ops } = fakeFs({ 'C:\\Users\\u\\.claude.json': { size: 6 * 1024 * 1024, text: '{}' } });
+    expect(makeFileAccess(ops).readSmallFile('C:\\Users\\u\\.claude.json')).toBe('{}');
   });
 });

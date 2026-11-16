@@ -129,7 +129,8 @@
         "mastyfShield.notifyOnBlock": {
           "type": "boolean",
           "default": true,
-          "description": "Show a notification when Shield blocks a call from this editor's agent."
+          "description": "Show a notification when Shield blocks a call from this editor's agent.",
+          "scope": "machine"
         },
         "mastyfShield.pollSeconds": {
           "type": "number",

@@ -75,3 +75,42 @@ describe('ShieldClient', () => {
     expect(JSON.stringify(c)).not.toContain(KEY);
   });
 });
+
+describe('ShieldClient.recentBlocks', () => {
+  /** Shield's list, newest first: 120 allowed calls, then 3 blocks further back. */
+  const all = [
+    ...Array.from({ length: 120 }, (_, i) => ({ receipt_id: `a${i}`, decision: 'ALLOW' })),
+    { receipt_id: 'b1', decision: 'BLOCK' },
+    { receipt_id: 'b2', decision: 'BLOCK' },
+    { receipt_id: 'b3', decision: 'BLOCK' },
+  ];
+  const paged = fakeFetch((url) => {
+    const u = new URL(url);
+    const limit = Number(u.searchParams.get('limit'));
+    const offset = Number(u.searchParams.get('offset') ?? 0);
+    return json({ receipts: all.slice(offset, offset + limit), total_receipts: all.length });
+  });
+
+  it('pages back past allowed calls until it finds the blocks', async () => {
+    const c = new ShieldClient({ port: 14000, readKey: () => KEY, fetchImpl: paged.impl });
+    const blocks = await c.recentBlocks(25, { pageSize: 50, maxScan: 500 });
+    expect(blocks?.map((r) => r.receipt_id)).toEqual(['b1', 'b2', 'b3']);
+  });
+
+  it('stops at the scan cap', async () => {
+    const c = new ShieldClient({ port: 14000, readKey: () => KEY, fetchImpl: paged.impl });
+    expect(await c.recentBlocks(25, { pageSize: 50, maxScan: 100 })).toEqual([]);
+  });
+
+  it('stops once it has enough blocks', async () => {
+    const f = fakeFetch(() => json({ receipts: Array.from({ length: 50 }, (_, i) => ({ receipt_id: `b${i}`, decision: 'BLOCK' })) }));
+    const c = new ShieldClient({ port: 14000, readKey: () => KEY, fetchImpl: f.impl });
+    expect((await c.recentBlocks(25, { pageSize: 50, maxScan: 500 }))?.length).toBe(25);
+    expect(f.calls).toHaveLength(1);
+  });
+
+  it('null when Shield is not answering', async () => {
+    const c = new ShieldClient({ port: 14000, readKey: () => null, fetchImpl: paged.impl });
+    expect(await c.recentBlocks(25, { pageSize: 50, maxScan: 500 })).toBeNull();
+  });
+});

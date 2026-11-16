@@ -13,6 +13,9 @@ export interface BlockNote {
 
 const SEEN_MAX = 500;
 
+/** Notifications render [text](link) as a link, command: links included; names come from MCP servers. */
+const plain = (s: string) => s.replace(/[[\]]/g, '').replace(/\]\(/g, '');
+
 export class BlockNotifier {
   private readonly seen = new Set<string>();
   private readonly seenOrder: string[] = [];
@@ -44,7 +47,7 @@ export class BlockNotifier {
     this.lastNoteAt = nowMs;
     if (rows.length === 1) {
       const r = rows[0];
-      return { text: `Shield blocked ${r.tool} on ${r.server}: ${r.layer ?? r.rule ?? r.reason}`, rowId: r.id };
+      return { text: plain(`Shield blocked ${r.tool} on ${r.server}: ${r.layer ?? r.rule ?? r.reason}`), rowId: r.id };
     }
     return { text: `Shield blocked ${rows.length} calls` };
   }

@@ -73,3 +73,13 @@ describe('BlockNotifier', () => {
     expect(n.observe(many, agents, 120_000)).toBeNull();
   });
 });
+
+describe('note text', () => {
+  it('cannot carry a clickable link from a tool or server name', () => {
+    const n = new BlockNotifier();
+    n.observe([], agents, 0);
+    const note = n.observe([row('l', 'vscode', { tool: '[click](command:workbench.action.terminal.new)', server: 'x](https://evil.example)' })], agents, 60_000);
+    expect(note?.text).not.toMatch(/[[\]]/);
+    expect(note?.text).not.toContain('](');
+  });
+});
