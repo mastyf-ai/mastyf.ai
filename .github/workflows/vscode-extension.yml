@@ -1,0 +1,67 @@
+name: VS Code extension
+
+# Tests the extension on every change to it, and publishes it to the VS Code Marketplace and
+# Open VSX when a tag like vscode-v0.1.0 is pushed. The Marketplace step uses trusted publishing
+# (GitHub's OIDC token), so no Marketplace token is stored. Open VSX uses the OVSX_PAT secret.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/vscode-extension/**'
+      - '.github/workflows/vscode-extension.yml'
+  push:
+    tags:
+      - 'vscode-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter mastyf-shield
+      - run: pnpm --filter mastyf-shield test
+      - run: pnpm --filter mastyf-shield run typecheck
+      - run: pnpm --filter mastyf-shield run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: packages/vscode-extension/*.vsix
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/vscode-v')
+    needs: test
+    runs-on: ubuntu-latest
+    environment: vscode-marketplace
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches the extension version
+        run: |
+          want="vscode-v$(node -p "require('./packages/vscode-extension/package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version ($want)"; exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+          path: dist-vsix
+      - name: Publish to the VS Code Marketplace (trusted publishing)
+        run: npx --yes @vscode/vsce@3 publish --oidc --packagePath dist-vsix/*.vsix
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx --yes ovsx@0.10 publish dist-vsix/*.vsix -p "$OVSX_PAT"
