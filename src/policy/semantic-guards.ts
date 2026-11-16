@@ -17,15 +17,21 @@ const REPO_ARG_FIELDS = new Set(['repo', 'repository', 'owner']);
 const SQL_SENSITIVE_TABLES =
   'accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords';
 
+/** Columns whose values are secrets: never part of an exempt lookup. */
+const SQL_SECRET_COLUMNS = /\b(?:password|passwd|pwd|hash|salt|secret|token|api_?key|ssn|card|cvv|pin|otp|private_?key)\w*/i;
+
 /**
- * `SELECT col, col FROM table WHERE column = <one value>`: named columns, one literal, nothing that
- * widens the filter (no star, OR, UNION, comparison or second clause).
+ * The whole statement is `SELECT a, b FROM table WHERE <key column> = <one literal> [LIMIT n]`:
+ * one table, plain column names (no functions, star, joins or subqueries), no secret columns, and
+ * the filter is an equality on a key column (`id`, `*_id`, `uuid`), so it returns one record.
+ * Anything else falls through to the sensitive-table rule.
  */
 function isSingleRowLookup(sql: string): boolean {
-  const s = sql.trim();
-  if (/\bselect\s+\*/i.test(s)) return false;
-  if (/\b(?:or|union)\b/i.test(s)) return false;
-  return /\bwhere\s+[A-Za-z_][\w.]*\s*=\s*(?:\d+|'[^']*')\s*(?:limit\s+\d+\s*)?;?\s*$/i.test(s);
+  const m = /^\s*select\s+([\w\s.,]+?)\s+from\s+([A-Za-z_][\w.]*)\s+where\s+([A-Za-z_][\w.]*)\s*=\s*(?:\d+|'[^']*')\s*(?:limit\s+1\s*)?;?\s*$/i.exec(sql);
+  if (!m) return false;
+  const [, columns, , keyColumn] = m;
+  if (SQL_SECRET_COLUMNS.test(columns)) return false;
+  return /^(?:\w+\.)?(?:id|uuid|\w+_id|\w+_uuid)$/i.test(keyColumn);
 }
 
 const SQL_EXFIL_PATTERNS: RegExp[] = [

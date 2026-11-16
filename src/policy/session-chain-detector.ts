@@ -75,7 +75,9 @@ const EXFIL_TOOLS = new Set([
   'curl',
 ]);
 
-const ENCODE_ARG_HINTS = /\b(?:base64|btoa|encode|hex|rot13|gzip|compress)\b/i;
+/** Encoding, packing or encrypting before sending something out. */
+const ENCODE_ARG_HINTS =
+  /\b(?:base64|base32|btoa|encode|hex|rot13|gzip|bzip2|xz|compress|xxd|od|uuencode|gpg|openssl\s+(?:enc|base64)|zip|7z)\b|\btar\s+-?[a-z]*c/i;
 const EXFIL_ARG_HINTS = /\b(?:webhook|callback|post|upload|send|forward|https?:\/\/)\b/i;
 const SENSITIVE_ARG_HINTS =
   /\b(?:\/etc\/passwd|\.env|\.ssh|id_rsa|credentials|secret|token|api[_-]?key)\b/i;

