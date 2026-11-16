@@ -51,6 +51,7 @@ describe('free boundary', () => {
       import('../../../src/agentic/zero-trust/tier-adjuster.js'),
       import('../../../src/services/unified-spend-pool.js'),
       import('../../../src/extensions/index.js'),
+      import('../../../src/license/license-client.js'),
     ]);
     for (const m of mods) expect((m as { __mastyfCheckStub?: boolean }).__mastyfCheckStub).toBe(true);
   });

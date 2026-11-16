@@ -53,6 +53,9 @@ export interface EngineOptions {
   mode?: 'block' | 'observe';
 }
 
+/** Set by the single-file build to the default policy's text; undefined elsewhere. */
+declare const __CHECK_DEFAULT_POLICY__: string | undefined;
+
 const DEFAULT_SERVER = 'agent';
 
 type FingerprintState = { fingerprint: string | null; blocked: boolean };
@@ -154,8 +157,13 @@ export class CheckEngine {
       import('js-yaml'),
       import('../../../src/policy/policy-schema.js'),
     ]);
-    const path = opts.policyPath ?? defaultPolicyPath();
-    const raw = load(readFileSync(path, 'utf8'));
+    // The single-file build embeds the default policy; tests and the npm package read the file.
+    const text = opts.policyPath
+      ? readFileSync(opts.policyPath, 'utf8')
+      : typeof __CHECK_DEFAULT_POLICY__ === 'string'
+        ? __CHECK_DEFAULT_POLICY__
+        : readFileSync(defaultPolicyPath(), 'utf8');
+    const raw = load(text);
     const config = parsePolicyConfig(raw);
     const policyEngine = new pipeline.PolicyEngine(config);
     return new CheckEngine(pipeline, policyEngine, opts.mode ?? 'block', config.policy.rules.length);

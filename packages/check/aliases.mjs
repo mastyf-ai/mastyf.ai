@@ -14,6 +14,7 @@ export const STUBBED = {
   [norm(resolve(src, 'agentic/zero-trust/tier-adjuster'))]: stub('tier-adjuster.ts'),
   [norm(resolve(src, 'services/unified-spend-pool'))]: stub('spend-pool.ts'),
   [norm(resolve(src, 'extensions/index'))]: stub('extensions.ts'),
+  [norm(resolve(src, 'license/license-client'))]: stub('license-client.ts'),
 };
 
 /** Resolves an import (with or without .js/.ts) to its stub, or null. */

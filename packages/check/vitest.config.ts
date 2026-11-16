@@ -15,5 +15,6 @@ export default defineConfig({
       },
     },
   ],
-  test: { include: ['test/**/*.test.ts'], environment: 'node', testTimeout: 30000, hookTimeout: 180000 },
+  // One file at a time: the latency budget is measured, and the bundle build is CPU-heavy.
+  test: { include: ['test/**/*.test.ts'], environment: 'node', testTimeout: 30000, hookTimeout: 180000, fileParallelism: false },
 });
