@@ -10,6 +10,9 @@ import httpx
 from .verdict import Verdict
 
 
+DEFAULT_SERVICE_LIMIT = 2 * 1024 * 1024  # what a check service accepts unless it says otherwise
+
+
 class MastyfUnavailable(Exception):
     """No check could be made: the service is missing, refused the request, or failed."""
 
@@ -24,6 +27,11 @@ class CheckClient:
         self._token = token
         self._max_body = max_body_bytes
         self._http = httpx.Client(timeout=timeout, follow_redirects=False)
+
+    def limit_body(self, max_body_bytes: Any) -> None:
+        """Use the request size limit the service reported (from /v1/health)."""
+        if isinstance(max_body_bytes, int) and not isinstance(max_body_bytes, bool) and max_body_bytes > 0:
+            self._max_body = max_body_bytes
 
     def close(self) -> None:
         self._http.close()
@@ -78,6 +86,9 @@ class CheckClient:
                 f"{self.url}{path}", content=data, headers={"authorization": f"Bearer {self._token}", "content-type": "application/json"}
             )
         except httpx.HTTPError as err:
+            if len(data) > DEFAULT_SERVICE_LIMIT:
+                # A service that doesn't report its limit drops an oversize upload mid-way.
+                raise MastyfRefused(f"the check service at {self.url} didn't take an input of {len(data)} bytes") from None
             # The message never includes the request: it carries the token and the tool's data.
             raise MastyfUnavailable(f"the check service at {self.url} didn't answer ({type(err).__name__})") from None
         if res.status_code in (400, 413):

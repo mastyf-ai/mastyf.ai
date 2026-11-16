@@ -38,6 +38,7 @@ describe('health', () => {
     expect(r.json).toMatchObject({ status: 'ready', tier: 'free' });
     expect(typeof r.json.version).toBe('string');
     expect(r.json.rules).toBeGreaterThan(5);
+    expect(r.json.maxBodyBytes).toBe(2 * 1024 * 1024); // so a client can refuse oversize input before sending it
   });
 
   it('proves it knows the token by signing a nonce, without the token being sent', async () => {

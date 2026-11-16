@@ -97,7 +97,7 @@ export const SECRET_RULES: SecretRule[] = [
   { id: 'api_key_header', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: 'api[_-]?key\\s*=\\s*([A-Za-z0-9_\\-]{16,})', entropy: 3 },
   { id: 'bearer_token', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: '(?:token|auth|bearer)\\s*=\\s*([A-Za-z0-9_\\-]{16,})', entropy: 3 },
   { id: 'high-entropy-assignment', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: '(?:secret|token|credential)\\s*[:=]\\s*[\'"]([A-Za-z0-9+/=_\\-]{24,})[\'"]', entropy: 4, falsePositiveExclusions: ['placeholder', 'example', 'changeme', 'your-secret'] },
-  { id: 'uri-credentials', provider: 'Generic', severity: 'HIGH', flags: '', regex: '[a-z][a-z0-9+-]{0,30}://[^:@\\s/]{1,256}:[^:@\\s/]{1,256}@[^\\s]+', entropy: 3.5, falsePositiveExclusions: ['localhost', '127\\.0\\.0\\.1', '::1', 'example\\.com', 'test\\.com', '\\.local', '\\.internal'] },
+  { id: 'uri-credentials', provider: 'Generic', severity: 'HIGH', flags: '', regex: '[a-z][a-z0-9+-]{0,30}://[^:@\\s/]{1,256}:[^@\\s]{1,256}@[^\\s]+', entropy: 3.5, falsePositiveExclusions: ['localhost', '127\\.0\\.0\\.1', '::1', 'example\\.com', 'test\\.com', '\\.local', '\\.internal'] },
   { id: 'base64_large', provider: 'Generic', severity: 'MEDIUM', flags: '', regex: '(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{60,}={0,2})', entropy: 4.0 },
   { id: 'databricks-token', provider: 'Databricks', severity: 'HIGH', flags: '', regex: 'dapi[a-h0-9]{32}' },
   { id: 'vault-token', provider: 'HashiCorp', severity: 'HIGH', flags: '', regex: '(?:hvs|s\\.[A-Za-z0-9]{24})\\.[A-Za-z0-9_-]{6,}' },

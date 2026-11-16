@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, Tool
 
 from .guard import Guard
 from .verdict import Verdict
@@ -98,11 +98,37 @@ class GuardedTool(BaseTool):
         return _after(await asyncio.to_thread(self.guard.check_result, self.name, result, checked), result)
 
 
+def _single_input(t: Tool, g: Guard) -> Tool:
+    """An old-style one-string tool stays one: the model keeps seeing the same argument."""
+
+    def run(text: str) -> Any:
+        verdict = g.check_call(t.name, text)
+        if verdict.blocked:
+            return verdict.model_message()
+        result = t.invoke(text)
+        return _after(g.check_result(t.name, result, text), result)
+
+    async def arun(text: str) -> Any:
+        verdict = await asyncio.to_thread(g.check_call, t.name, text)
+        if verdict.blocked:
+            return verdict.model_message()
+        result = await t.ainvoke(text)
+        return _after(await asyncio.to_thread(g.check_result, t.name, result, text), result)
+
+    return Tool(name=t.name, description=t.description, func=run, coroutine=arun, return_direct=t.return_direct, tags=t.tags, metadata=t.metadata)
+
+
 def guard_tools(tools: list[BaseTool], guard: Guard | None = None) -> list[BaseTool]:
-    """Wraps each LangChain tool so Mastyf checks it. One Guard (one session) covers the list."""
+    """Wraps each LangChain tool so Mastyf checks it.
+
+    One Guard covers the list. An agent that serves many users should wrap its requests in
+    `with guard.session(request_id):` so each conversation is checked as its own session.
+    """
     g = guard or Guard()
     return [
-        GuardedTool(
+        _single_input(t, g)
+        if isinstance(t, Tool) and t.args_schema is None
+        else GuardedTool(
             name=t.name,
             description=t.description,
             args_schema=t.args_schema,

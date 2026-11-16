@@ -39,6 +39,7 @@ export async function configured(env: Env): Promise<Found | null> {
   if (!url) return null;
   const client = new CheckClient(url, env['MASTYF_CHECK_TOKEN'] ?? '');
   const health = (await client.health()) ?? {};
+  client.limitBody(health['maxBodyBytes']);
   return { client, tier: String(health['tier'] ?? 'free') };
 }
 
@@ -57,6 +58,7 @@ export async function runningLocal(env: Env, home: string): Promise<Found | null
   const expected = Buffer.from(createHmac('sha256', token).update(nonce).digest('hex'));
   const proof = Buffer.from(String(health['proof'] ?? ''));
   if (proof.length !== expected.length || !timingSafeEqual(proof, expected)) return null;
+  client.limitBody(health['maxBodyBytes']);
   return { client, tier: 'free' };
 }
 

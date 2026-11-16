@@ -58,6 +58,17 @@ return after.decision === 'redact' ? after.result : result;
 A blocked call never runs. The model is told which check stopped it, never the text that was
 matched.
 
+Some checks look at a whole run (for example, reading a secret file and then sending data out).
+A server that handles many users should give each request its own session, so one user's run
+never affects another's:
+
+```ts
+const guard = createGuard();
+const tools = guardTools([search, readFile], guard);
+
+app.post('/chat', (req, res) => guard.session(req.id, async () => res.json(await agent.invoke(req.body))));
+```
+
 ## MCP servers
 
 ```bash

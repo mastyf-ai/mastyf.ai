@@ -63,6 +63,19 @@ return after.result if after.decision == "redact" else result
 A blocked call never runs. The model is told which check stopped it, never the text that was
 matched.
 
+Some checks look at a whole run (for example, reading a secret file and then sending data out).
+An agent that serves many users should give each request its own session, so one user's run
+never affects another's:
+
+```python
+guard = Guard()
+tools = guard_tools([search, read_file], guard=guard)
+
+async def handle(request):
+    with guard.session(request.id):
+        return await agent.ainvoke(request.messages)
+```
+
 ## MCP servers
 
 Run an MCP server through the check program and every call and result passes through the same

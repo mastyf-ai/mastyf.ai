@@ -44,6 +44,7 @@ def configured(env: Mapping[str, str]) -> Found | None:
         return None
     client = CheckClient(url, env.get("MASTYF_CHECK_TOKEN", ""))
     health = client.health() or {}
+    client.limit_body(health.get("maxBodyBytes"))
     return Found(client, str(health.get("tier", "free")))
 
 
@@ -61,6 +62,7 @@ def running_local(env: Mapping[str, str], home: Path) -> Found | None:
     if not health or health.get("tier") != "free" or not hmac.compare_digest(str(health.get("proof", "")), expected):
         client.close()
         return None
+    client.limit_body(health.get("maxBodyBytes"))
     return Found(client, "free")
 
 

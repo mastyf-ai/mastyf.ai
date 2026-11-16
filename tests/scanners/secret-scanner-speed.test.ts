@@ -59,6 +59,9 @@ describe('secret scanner: still finds real secrets', () => {
     // A non-database scheme only the generic rule covers.
     const generic = ['smtp://', 'mailer', ':', `S${randomChars(14, ALNUM, 23)}`, '@mail.acme-corp.com:587'].join('');
     expect(scanForSecrets(generic, 'x').map((f) => f.type)).toContain('uri-credentials');
+    // A password with a slash in it is still a password.
+    const slashed = ['smtp://', 'mailer', ':', `S${randomChars(7, ALNUM, 29)}/${randomChars(7, ALNUM, 31)}`, '@mail.acme-corp.com:587'].join('');
+    expect(scanForSecrets(slashed, 'x').map((f) => f.type)).toContain('uri-credentials');
   });
 
   it('a large base64 blob is flagged, a long run of one character is not', () => {

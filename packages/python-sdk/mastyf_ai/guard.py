@@ -7,6 +7,7 @@ session), so two agents in one process don't affect each other's session checks.
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import json
 import logging
 import os
@@ -60,13 +61,32 @@ def _connect() -> None:
     _client, _tier = CheckClient(_started.url, token, max_body_bytes=ENGINE_MAX_BODY_MB * 1024 * 1024), "free"
 
 
-def _service(*, reconnect: bool = False) -> CheckClient:
+def _service() -> CheckClient:
     global _client
     with _lock:
-        if reconnect or _client is None or (_started is not None and not _started.alive()):
+        if _client is None or (_started is not None and not _started.alive()):
             _client = None
             _connect()
         assert _client is not None
+        return _client
+
+
+def _retry_client(failed: CheckClient) -> CheckClient | None:
+    """After `failed` didn't answer: the client to try once more, or None to give up.
+
+    Only the program this process started is restarted, only when it has really died, and only
+    once however many checks saw it die: later ones get the client the first one made.
+    """
+    global _client
+    with _lock:
+        if _started is None:
+            return None
+        if _client is not None and _client is not failed:
+            return _client
+        if _started.alive():
+            return None
+        _client = None
+        _connect()
         return _client
 
 
@@ -108,7 +128,7 @@ def _jsonable(value: Any) -> Any:
     else:
         fields = getattr(value, "__dict__", None)
         if isinstance(fields, dict):
-            out.update({str(k): _jsonable(v) for k, v in fields.items() if not k.startswith("_")})
+            out.update({str(k): _jsonable(v) for k, v in fields.items()})
     for attr in ("page_content", "content", "text"):
         if attr not in out:
             inner = getattr(value, attr, None)
@@ -122,14 +142,12 @@ def _jsonable(value: Any) -> Any:
             base = value
         except (TypeError, ValueError):
             base = str(value)
-    # A custom __str__ is what frameworks show the model for an object: check that text as well,
-    # beside the fields (so no field of the object can stand in for it).
-    if type(value).__str__ is not object.__str__:
-        try:
-            return {"value": base, "shown": str(value)}
-        except Exception:
-            pass
-    return base
+    # Frameworks show the model str(object) (for a dataclass, its repr with every field): check
+    # that text as well, beside the fields, so nothing the model is shown escapes the check.
+    try:
+        return {"value": base, "shown": str(value)}
+    except Exception:
+        return base
 
 
 def _arguments(arguments: Any) -> dict[str, Any]:
@@ -146,7 +164,9 @@ class Guard:
     """
 
     def __init__(self, session: str | None = None, on_unavailable: Literal["block", "allow"] = "block", server: str = "agent"):
-        self.session_id = session or uuid.uuid4().hex
+        self._default_session = session or uuid.uuid4().hex
+        # Per task/thread context, so concurrent runs sharing this Guard keep their own sessions.
+        self._session: contextvars.ContextVar[str | None] = contextvars.ContextVar(f"mastyf_session_{id(self)}", default=None)
         self.on_unavailable = on_unavailable
         self.server = server
 
@@ -155,13 +175,20 @@ class Guard:
         """"free" or "shield" once a check service is in use."""
         return _tier
 
+    @property
+    def session_id(self) -> str:
+        return self._session.get() or self._default_session
+
     @contextlib.contextmanager
     def session(self, name: str) -> Iterator["Guard"]:
-        previous, self.session_id = self.session_id, name
+        """Checks inside this block (in this task or thread) belong to session `name`.
+
+        A long-lived agent that serves many users should open one per request."""
+        token = self._session.set(name)
         try:
             yield self
         finally:
-            self.session_id = previous
+            self._session.reset(token)
 
     def check_call(self, tool: str, arguments: Any) -> Verdict:
         return self._ask(lambda c: c.check_call(tool, _arguments(arguments), server=self.server, session=self.session_id))
@@ -177,14 +204,16 @@ class Guard:
 
     def _ask(self, ask, unchecked: Any = ..., what: str = "tool call") -> Any:
         try:
+            client = _service()
             try:
-                return ask(_service())
+                return ask(client)
             except MastyfRefused:
                 raise
             except MastyfUnavailable:
-                if _started is None or _started.alive():
+                retry = _retry_client(client)
+                if retry is None:
                     raise
-                return ask(_service(reconnect=True))  # the program this process started died: once more
+                return ask(retry)  # the program this process started died: once more
         except MastyfRefused:
             return REFUSED  # an input the service won't take is never let through, in either mode
         except MastyfUnavailable as err:

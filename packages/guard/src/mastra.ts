@@ -9,7 +9,7 @@ import { createGuard, type Guard } from './guard.js';
 import { guarded } from './wrap.js';
 
 interface MastraTool {
-  id: string;
+  id?: string;
   inputSchema?: unknown;
   execute?: (input: any, context: any) => Promise<any>;
 }
@@ -26,13 +26,14 @@ async function asTheToolSeesIt(tool: MastraTool, input: unknown): Promise<unknow
   }
 }
 
-function wrap<T extends MastraTool>(tool: T, guard: Guard): T {
+function wrap<T extends MastraTool>(tool: T, guard: Guard, key?: string): T {
+  const name = tool.id ?? key ?? (tool as { name?: string }).name ?? 'tool';
   const original = tool.execute;
   if (!original) return tool;
   // Same prototype and fields as the original; only execute differs.
   const copy = Object.assign(Object.create(Object.getPrototypeOf(tool)), tool) as T;
   copy.execute = async (input: unknown, context: unknown) =>
-    guarded(guard, tool.id, await asTheToolSeesIt(tool, input), () => original.call(tool, input, context));
+    guarded(guard, name, await asTheToolSeesIt(tool, input), () => original.call(tool, input, context));
   return copy;
 }
 
@@ -40,5 +41,5 @@ export function guardTools<T extends MastraTool>(tools: T[], guard?: Guard): T[]
 export function guardTools<R extends Record<string, MastraTool>>(tools: R, guard?: Guard): R;
 export function guardTools(tools: MastraTool[] | Record<string, MastraTool>, guard: Guard = createGuard()): unknown {
   if (Array.isArray(tools)) return tools.map((t) => wrap(t, guard));
-  return Object.fromEntries(Object.entries(tools).map(([k, t]) => [k, wrap(t, guard)]));
+  return Object.fromEntries(Object.entries(tools).map(([k, t]) => [k, wrap(t, guard, k)]));
 }

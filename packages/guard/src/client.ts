@@ -1,6 +1,8 @@
 /** HTTP client for a Mastyf check service (the free service on this machine, or one you run). */
 import { MastyfRefusedError, MastyfUnavailableError, parseVerdict, type Verdict } from './verdict.js';
 
+const DEFAULT_SERVICE_LIMIT = 2 * 1024 * 1024; // what a check service accepts unless it says otherwise
+
 export interface Where {
   server: string;
   session: string;
@@ -13,9 +15,14 @@ export class CheckClient {
     url: string,
     private readonly token: string,
     private readonly timeoutMs = 10_000,
-    private readonly maxBodyBytes?: number,
+    private maxBodyBytes?: number,
   ) {
     this.url = url.replace(/\/+$/, '');
+  }
+
+  /** Use the request size limit the service reported (from /v1/health). */
+  limitBody(maxBodyBytes: unknown): void {
+    if (typeof maxBodyBytes === 'number' && Number.isInteger(maxBodyBytes) && maxBodyBytes > 0) this.maxBodyBytes = maxBodyBytes;
   }
 
   checkCall(tool: string, args: Record<string, unknown>, where: Where): Promise<Verdict> {
@@ -65,6 +72,10 @@ export class CheckClient {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
+      if (data.length > DEFAULT_SERVICE_LIMIT) {
+        // A service that doesn't report its limit drops an oversize upload mid-way.
+        throw new MastyfRefusedError(`the check service at ${this.url} didn't take an input of ${data.length} bytes`);
+      }
       // The message never includes the request: it carries the token and the tool's data.
       throw new MastyfUnavailableError(`the check service at ${this.url} didn't answer (${(err as Error)?.name ?? 'error'})`);
     }

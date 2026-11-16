@@ -4,6 +4,7 @@
  * One check service is shared by every guard in the process. Each guard is one agent run (its own
  * session), so two agents in one process don't affect each other's session checks.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { CheckClient } from './client.js';
@@ -41,18 +42,52 @@ async function connect(): Promise<void> {
 const ENGINE_MAX_BODY_MB = 32; // what the started engine accepts (--max-body)
 const REFUSED: Verdict = { decision: 'block', id: 'refused', layer: 'service', rule: 'input-refused', reason: 'the check service refused this input' };
 
-async function service(reconnect = false): Promise<CheckClient> {
+/** Waits until no connection attempt is in progress. */
+async function settled(): Promise<void> {
   while (connecting) await connecting.catch(() => {});
-  if (reconnect || !client || (started && !started.alive())) {
-    client = null;
-    connecting = connect();
-    try {
-      await connecting;
-    } finally {
-      connecting = null;
-    }
+}
+
+async function reconnect(): Promise<void> {
+  client = null;
+  connecting = connect();
+  try {
+    await connecting;
+  } finally {
+    connecting = null;
   }
+}
+
+async function service(): Promise<CheckClient> {
+  await settled();
+  if (!client || (started && !started.alive())) await reconnect();
   if (!client) throw new MastyfUnavailableError('no check service');
+  return client;
+}
+
+/**
+ * After `failed` didn't answer: the client to try once more, or null to give up. Only the engine
+ * this process started is restarted, only when it has really died, and only once however many
+ * checks saw it die: later ones get the client the first one made.
+ */
+async function retryClient(failed: CheckClient): Promise<CheckClient | null> {
+  await settled();
+  const engine = started;
+  if (!engine) return null;
+  if (client && client !== failed) return client;
+  if (engine.alive()) {
+    // The request can fail a moment before the exit is reported.
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 2000);
+      engine.child.once('exit', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+    await settled();
+    if (client && client !== failed) return client;
+    if (engine.alive()) return null;
+  }
+  await reconnect();
   return client;
 }
 
@@ -129,7 +164,13 @@ export interface GuardOptions {
 }
 
 export interface Guard {
-  readonly session: string;
+  /** The session checks are made under right now (inside session(), that one). */
+  readonly sessionId: string;
+  /**
+   * Runs `fn` with its checks under session `name`, apart from other runs going on at the same
+   * time. An agent that serves many users should run each request in its own session.
+   */
+  session<T>(name: string, fn: () => Promise<T> | T): Promise<T>;
   /** "free" or "shield" once a check service is in use. */
   readonly tier: string | null;
   checkCall(tool: string, args: unknown): Promise<Verdict>;
@@ -138,17 +179,22 @@ export interface Guard {
 }
 
 export function createGuard(options: GuardOptions = {}): Guard {
-  const session = options.session ?? randomUUID();
+  const defaultSession = options.session ?? randomUUID();
+  const current = new AsyncLocalStorage<string>();
+  const sessionNow = (): string => current.getStore() ?? defaultSession;
   const server = options.server ?? 'agent';
   const onUnavailable = options.onUnavailable ?? 'block';
 
   async function ask<T>(question: (c: CheckClient) => Promise<T>, unchecked: () => T, what: string, refused: () => T): Promise<T> {
     try {
+      const c = await service();
       try {
-        return await question(await service());
+        return await question(c);
       } catch (err) {
-        if (!(err instanceof MastyfUnavailableError) || err instanceof MastyfRefusedError || !started || started.alive()) throw err;
-        return await question(await service(true)); // the engine this process started died: once more
+        if (!(err instanceof MastyfUnavailableError) || err instanceof MastyfRefusedError) throw err;
+        const retry = await retryClient(c);
+        if (!retry) throw err;
+        return await question(retry); // the engine this process started died: once more
       }
     } catch (err) {
       if (err instanceof MastyfRefusedError) return refused(); // never let through, in either mode
@@ -163,18 +209,21 @@ export function createGuard(options: GuardOptions = {}): Guard {
   const allowUnchecked = (): Verdict => ({ decision: 'allow', id: 'unavailable', reason: 'not checked: no check service' });
 
   return {
-    session,
+    get sessionId() {
+      return sessionNow();
+    },
+    session: (name, fn) => current.run(name, async () => fn()),
     get tier() {
       return tier;
     },
-    checkCall: (tool, args) => ask((c) => c.checkCall(tool, asArguments(args), { server, session }), allowUnchecked, 'tool call', () => REFUSED),
+    checkCall: (tool, args) => ask((c) => c.checkCall(tool, asArguments(args), { server, session: sessionNow() }), allowUnchecked, 'tool call', () => REFUSED),
     checkResult: (tool, result, args) =>
       ask(
-        (c) => c.checkResult(tool, jsonable(result), { server, session, ...(args === undefined ? {} : { arguments: asArguments(args) }) }),
+        (c) => c.checkResult(tool, jsonable(result), { server, session: sessionNow(), ...(args === undefined ? {} : { arguments: asArguments(args) }) }),
         allowUnchecked,
         'tool result',
         () => REFUSED,
       ),
-    registerTools: (tools) => ask((c) => c.registerTools(server, jsonable(tools) as unknown[], { session }), () => null, 'tool definitions', () => REFUSED),
+    registerTools: (tools) => ask((c) => c.registerTools(server, jsonable(tools) as unknown[], { session: sessionNow() }), () => null, 'tool definitions', () => REFUSED),
   };
 }

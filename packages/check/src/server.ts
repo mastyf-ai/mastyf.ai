@@ -114,7 +114,8 @@ export async function startServer(engine: CheckEngine, opts: ServerOptions): Pro
       // random nonce and compares the HMAC. The token itself never travels on this route.
       const nonce = url.searchParams.get('nonce');
       const proof = nonce && /^[A-Za-z0-9_-]{16,128}$/.test(nonce) ? createHmac('sha256', opts.token).update(nonce).digest('hex') : undefined;
-      return send(res, 200, { status: 'ready', tier: 'free', version: VERSION, rules: engine.ruleCount(), ...(proof ? { proof } : {}) });
+      const maxBodyBytes = opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES; // lets a client refuse oversize input before sending it
+      return send(res, 200, { status: 'ready', tier: 'free', version: VERSION, rules: engine.ruleCount(), maxBodyBytes, ...(proof ? { proof } : {}) });
     }
     if (!tokenMatches(req.headers['authorization'], opts.token)) return send(res, 401, { error: 'missing or wrong token' });
 
