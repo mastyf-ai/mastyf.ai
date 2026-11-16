@@ -88,17 +88,29 @@ def _jsonable(value: Any) -> Any:
         return {str(k): _jsonable(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
         return [_jsonable(v) for v in value]
-    for attr in ("page_content", "content", "text"):
-        inner = getattr(value, attr, None)
-        if isinstance(inner, (str, bytes, list, dict)):
-            return {"type": type(value).__name__, attr: _jsonable(inner)}
+    # Objects: every field goes to the check, not just the text one (metadata can carry text too).
+    out: dict[str, Any] = {"type": type(value).__name__}
     for dump in ("model_dump", "dict", "to_dict"):
         fn = getattr(value, dump, None)
         if callable(fn):
             try:
-                return _jsonable(fn())
+                dumped = fn()
             except Exception:
-                pass
+                continue
+            if isinstance(dumped, dict):
+                out.update({str(k): _jsonable(v) for k, v in dumped.items()})
+                break
+    else:
+        fields = getattr(value, "__dict__", None)
+        if isinstance(fields, dict):
+            out.update({str(k): _jsonable(v) for k, v in fields.items() if not k.startswith("_")})
+    for attr in ("page_content", "content", "text"):
+        if attr not in out:
+            inner = getattr(value, attr, None)
+            if isinstance(inner, (str, bytes, list, dict)):
+                out[attr] = _jsonable(inner)
+    if len(out) > 1:
+        return out
     try:
         json.dumps(value)
         return value

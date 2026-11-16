@@ -44,8 +44,33 @@ def test_a_configured_url_comes_first(fake_service, monkeypatch, with_bundle):
     assert Guard().check_call("read_file", {"path": "/etc/passwd"}).id == "configured"
 
 
+def signed_health(token: str):
+    """A health answer from a service that knows `token`."""
+    import hashlib
+    import hmac
+    from urllib.parse import parse_qs, urlparse
+
+    def respond(path, body):
+        u = urlparse(path)
+        if u.path != "/v1/health":
+            return 200, {"decision": "allow", "id": "local"}
+        nonce = parse_qs(u.query).get("nonce", [""])[0]
+        health = {"status": "ready", "tier": "free"}
+        if nonce and token:
+            health["proof"] = hmac.new(token.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+        return 200, health
+
+    return respond
+
+
+def write_token(home):
+    p = token_path(dict(__import__("os").environ), home)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(TOKEN)
+
+
 def test_a_running_local_service_is_reused(fake_service, isolated_home, monkeypatch, with_bundle):
-    svc = fake_service(lambda path, body: (200, {"status": "ready", "tier": "free"}) if path == "/v1/health" else (200, {"decision": "allow", "id": "local"}))
+    svc = fake_service(signed_health(TOKEN))
     p = token_path(dict(__import__("os").environ), isolated_home)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(TOKEN)
@@ -121,3 +146,21 @@ def test_the_service_stops_when_the_python_process_ends(with_bundle, tmp_path):
     while pid_alive(pid) and time.monotonic() < deadline:
         time.sleep(0.2)
     assert not pid_alive(pid)
+
+
+def test_every_field_of_a_result_object_is_checked(with_bundle):
+    class Doc:
+        def __init__(self):
+            self.page_content = "Quarterly notes."
+            self.metadata = {"summary": TAKEOVER}
+
+    assert Guard().check_result("search", [Doc()]).blocked
+
+
+def test_something_else_on_the_local_port_never_gets_the_token(fake_service, isolated_home, monkeypatch, with_bundle):
+    squatter = fake_service(signed_health(""))  # answers health but can't sign: doesn't know the token
+    write_token(isolated_home)
+    monkeypatch.setattr("mastyf_ai.discovery.LOCAL_URL", squatter.url)
+    assert Guard().check_call("read_file", {"path": "/etc/passwd"}).blocked  # the library started its own
+    assert all(r["auth"] is None for r in squatter.requests)
+    assert all(r["path"].startswith("/v1/health") for r in squatter.requests)

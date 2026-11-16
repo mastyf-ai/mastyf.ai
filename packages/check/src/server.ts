@@ -3,7 +3,7 @@
  * local token. An error of the service's own is a 500, never an "allow"; each client decides what
  * a 500 means (block, by default).
  */
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { CheckEngine, ToolDef, Verdict } from './engine';
@@ -110,7 +110,11 @@ export async function startServer(engine: CheckEngine, opts: ServerOptions): Pro
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (req.method === 'GET' && url.pathname === '/v1/health') {
-      return send(res, 200, { status: 'ready', tier: 'free', version: VERSION, rules: engine.ruleCount() });
+      // A client can check this service knows the token before sending it anything: it sends a
+      // random nonce and compares the HMAC. The token itself never travels on this route.
+      const nonce = url.searchParams.get('nonce');
+      const proof = nonce && /^[A-Za-z0-9_-]{16,128}$/.test(nonce) ? createHmac('sha256', opts.token).update(nonce).digest('hex') : undefined;
+      return send(res, 200, { status: 'ready', tier: 'free', version: VERSION, rules: engine.ruleCount(), ...(proof ? { proof } : {}) });
     }
     if (!tokenMatches(req.headers['authorization'], opts.token)) return send(res, 401, { error: 'missing or wrong token' });
 

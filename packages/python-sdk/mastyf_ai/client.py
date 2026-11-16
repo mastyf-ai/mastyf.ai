@@ -46,9 +46,11 @@ class CheckClient:
         v = self._verdict("/v1/tools", {"server": server, "tools": tools, "session": session})
         return None if v.decision == "allow" else v
 
-    def health(self) -> dict[str, Any] | None:
+    def health(self, nonce: str | None = None) -> dict[str, Any] | None:
+        """The service's health (no token sent). With a nonce, a service that knows the token adds
+        "proof": the HMAC-SHA256 of the nonce keyed by the token."""
         try:
-            res = self._http.get(f"{self.url}/v1/health")
+            res = self._http.get(f"{self.url}/v1/health", params={"nonce": nonce} if nonce else None)
         except httpx.HTTPError:
             return None
         if res.status_code != 200:

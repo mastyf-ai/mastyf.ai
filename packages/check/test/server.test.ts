@@ -39,6 +39,15 @@ describe('health', () => {
     expect(typeof r.json.version).toBe('string');
     expect(r.json.rules).toBeGreaterThan(5);
   });
+
+  it('proves it knows the token by signing a nonce, without the token being sent', async () => {
+    const { createHmac } = await import('node:crypto');
+    const nonce = 'ab'.repeat(16);
+    const r = await call(`/v1/health?nonce=${nonce}`, undefined, null);
+    expect(r.json.proof).toBe(createHmac('sha256', TOKEN).update(nonce).digest('hex'));
+    expect((await call('/v1/health', undefined, null)).json.proof).toBeUndefined();
+    expect((await call(`/v1/health?nonce=${'x'.repeat(300)}`, undefined, null)).json.proof).toBeUndefined();
+  });
 });
 
 describe('token', () => {
