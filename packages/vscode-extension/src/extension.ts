@@ -4,10 +4,11 @@
  * changes Shield or any settings file.
  */
 import { execFile, spawn } from 'node:child_process';
-import { readFileSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, readlinkSync, statSync } from 'node:fs';
 import { win32 as path } from 'node:path';
 import * as vscode from 'vscode';
 import { blockDetailText, toBlockRows, type BlockRow } from './blocks';
+import { makeFileAccess, safePollSeconds, safePort } from './files';
 import { findShieldExe, REG_QUERY_ARGS } from './install';
 import { BlockNotifier } from './notify';
 import { BlocksPanel, type PanelNode, type PanelState } from './panel';
@@ -16,24 +17,16 @@ import { ShieldClient } from './shield';
 import { computeStatus } from './status';
 
 const DOWNLOAD_URL = 'https://www.mastyf.ai/download';
-const MAX_FILE_BYTES = 1024 * 1024;
 const PANEL_ROWS = 25;
 const POLL_ROWS = 50;
 
-/** Reads only regular files of a sane size: settings files can come from any cloned repository. */
-function readSmallFile(p: string): string {
-  const st = statSync(p);
-  if (!st.isFile() || st.size > MAX_FILE_BYTES) throw new Error('not a small regular file');
-  return readFileSync(p, 'utf8');
-}
-
-function mtimeOf(p: string): number | null {
-  try {
-    return statSync(p).mtimeMs;
-  } catch {
-    return null;
-  }
-}
+/** Settings files can come from any cloned repository: local drives only, links checked, small regular files. */
+const { readSmallFile, mtimeOf } = makeFileAccess({
+  lstat: (p) => lstatSync(p),
+  readlink: (p) => readlinkSync(p),
+  stat: (p) => statSync(p),
+  readFile: (p) => readFileSync(p, "utf8"),
+});
 
 const exists = (p: string) => mtimeOf(p) !== null;
 
@@ -60,7 +53,7 @@ export function activate(context: vscode.ExtensionContext): void {
       return null;
     }
   };
-  const client = () => new ShieldClient({ port: config().get<number>('port', 14000), readKey });
+  const client = () => new ShieldClient({ port: safePort(config().get('port')), readKey });
 
   const reader = new SettingsReader(readSmallFile, mtimeOf);
   const notifier = new BlockNotifier();
@@ -160,7 +153,7 @@ export function activate(context: vscode.ExtensionContext): void {
     stopPolling();
     if (!windows) return;
     void poll();
-    const seconds = Math.max(5, config().get<number>('pollSeconds', 15));
+    const seconds = safePollSeconds(config().get('pollSeconds'));
     timer = setInterval(() => void poll(), seconds * 1000);
   };
   context.subscriptions.push({ dispose: stopPolling });

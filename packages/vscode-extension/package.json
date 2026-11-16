@@ -123,7 +123,8 @@
         "mastyfShield.port": {
           "type": "number",
           "default": 14000,
-          "description": "The port of the Shield app's local service on this PC."
+          "description": "The port of the Shield app's local service on this PC.",
+          "scope": "machine"
         },
         "mastyfShield.notifyOnBlock": {
           "type": "boolean",
@@ -134,7 +135,8 @@
           "type": "number",
           "default": 15,
           "minimum": 5,
-          "description": "How often to check Shield for new blocks while this window has focus."
+          "description": "How often to check Shield for new blocks while this window has focus.",
+          "scope": "machine"
         }
       }
     }
@@ -157,5 +159,19 @@
     "ovsx": "^0.10.1",
     "typescript": "^5.4.0",
     "vitest": "^3.2.4"
+  },
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#141414",
+    "theme": "dark"
+  },
+  "bugs": {
+    "url": "https://github.com/mastyf-ai/mastyf.ai/issues"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": false
   }
 }
