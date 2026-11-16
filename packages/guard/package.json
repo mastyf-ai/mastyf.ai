@@ -1,0 +1,29 @@
+{
+  "name": "@mastyf_ai/guard",
+  "version": "0.1.0",
+  "description": "Mastyf's free checks for a custom agent's tool calls and tool results, on your own machine.",
+  "license": "MIT",
+  "homepage": "https://www.mastyf.ai",
+  "repository": { "type": "git", "url": "https://github.com/mastyf-ai/mastyf.ai.git", "directory": "packages/guard" },
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "files": ["dist", "LICENSE", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.build.json && vitest run"
+  },
+  "dependencies": {
+    "@mastyf_ai/check": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^3.2.4"
+  },
+  "keywords": ["ai-agents", "security", "prompt-injection", "tool-calls", "mastyf"]
+}
