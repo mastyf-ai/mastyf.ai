@@ -49,7 +49,12 @@ class GuardedTool(BaseTool):
             value = args[0]
             return value, {"input": value}
         fields = _call_fields(self.inner)
-        checked = kwargs if fields is None else {k: v for k, v in kwargs.items() if k in fields}
+        if fields is None:
+            return kwargs, kwargs
+        # Injected arguments (state, store, config) are left out of the check: they're the
+        # framework's objects, not the model's. But a plain value in an injected slot may have come
+        # from the model (plain LangChain doesn't stop it filling one), so those are checked too.
+        checked = {k: v for k, v in kwargs.items() if k in fields or isinstance(v, (str, bytes, int, float, bool))}
         return kwargs, checked
 
     def _run(self, *args: Any, **kwargs: Any) -> Any:

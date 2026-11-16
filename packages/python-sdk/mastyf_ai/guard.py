@@ -109,6 +109,12 @@ def _jsonable(value: Any) -> Any:
             inner = getattr(value, attr, None)
             if isinstance(inner, (str, bytes, list, dict)):
                 out[attr] = _jsonable(inner)
+    # A custom __str__ is what frameworks show the model for an object: check that text as well.
+    if type(value).__str__ is not object.__str__:
+        try:
+            out.setdefault("shown", str(value))
+        except Exception:
+            pass
     if len(out) > 1:
         return out
     try:

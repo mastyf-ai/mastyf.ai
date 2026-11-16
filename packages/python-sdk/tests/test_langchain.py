@@ -121,3 +121,22 @@ def test_a_given_guard_is_used():
     g = Guard(session="run-7")
     tools = guard_tools(make_tools([]), guard=g)
     assert all(t.guard is g for t in tools)
+
+
+def test_a_model_filled_injected_argument_is_checked_too():
+    from typing import Annotated
+
+    from langchain_core.tools import InjectedToolArg
+
+    calls: list = []
+
+    @tool
+    def open_file(name: str, root: Annotated[str, InjectedToolArg]) -> str:
+        """Open a file under the app's folder."""
+        calls.append(root)
+        return "ok"
+
+    guarded = guard_tools([open_file])[0]
+    msg = call(guarded, {"name": "notes.txt", "root": "/etc/passwd"})
+    assert msg.content.startswith("Blocked by Mastyf")
+    assert calls == []

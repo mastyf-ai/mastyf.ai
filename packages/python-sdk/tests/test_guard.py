@@ -164,3 +164,15 @@ def test_something_else_on_the_local_port_never_gets_the_token(fake_service, iso
     assert Guard().check_call("read_file", {"path": "/etc/passwd"}).blocked  # the library started its own
     assert all(r["auth"] is None for r in squatter.requests)
     assert all(r["path"].startswith("/v1/health") for r in squatter.requests)
+
+
+def test_what_the_model_would_be_shown_is_checked(with_bundle):
+    class Answer:
+        def __init__(self):
+            self.status = "ok"
+            self._body = TAKEOVER
+
+        def __str__(self):
+            return self._body
+
+    assert Guard().check_result("fetch_page", Answer()).blocked
