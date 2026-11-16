@@ -57,6 +57,28 @@ function applyLocalServiceEnv(): void {
   process.env['MASTYF_AI_RESPONSE_DLP_MODE'] ??= 'redact';
   process.env['MASTYF_AI_AGENTIC_ENABLED'] = 'false';
   process.env['MASTYF_AI_LEARNING_MODE'] = 'false';
+  // The pipeline logs every decision with the call's arguments at info level; the service logs its own, without them.
+  process.env['LOG_LEVEL'] ??= 'error';
+}
+
+/** The argument a matched text came from: its name, or a dotted path into nested arguments. */
+export function fieldFor(match: string | undefined, value: unknown, prefix = ''): string | undefined {
+  if (!match) return undefined;
+  if (typeof value === 'string') return value.includes(match) ? prefix || undefined : undefined;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const hit = fieldFor(match, value[i], `${prefix}[${i}]`);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+      const hit = fieldFor(match, inner, prefix ? `${prefix}.${key}` : key);
+      if (hit) return hit;
+    }
+  }
+  return undefined;
 }
 
 function defaultPolicyPath(): string {
@@ -81,6 +103,14 @@ async function loadPipeline(): Promise<Pipeline> {
     inspectToolResponse: inspection.inspectToolResponse as Pipeline['inspectToolResponse'],
     PolicyEngine: engineMod.PolicyEngine as unknown as Pipeline['PolicyEngine'],
   };
+}
+
+type Evidence = { layer?: string; match?: string; field?: string; confidence?: number };
+type Detail = Evidence & { reason?: string; rule?: string };
+
+/** Drops fields that were not recorded, so the JSON answer carries only what is known. */
+function compact(d: Detail): Detail {
+  return Object.fromEntries(Object.entries(d).filter(([, value]) => value !== undefined && value !== '')) as Detail;
 }
 
 const LAYER_FOR_PHASE: Record<string, string> = {
@@ -134,10 +164,14 @@ export class CheckEngine {
     );
     if (!outcome || typeof outcome.allowed !== 'boolean') throw new Error('malformed decision');
     if (outcome.allowed) return { decision: 'allow', id };
+    const ev = outcome.evidence as Evidence | undefined;
     return this.blocked(id, {
       reason: outcome.reason,
       rule: outcome.rule,
-      layer: LAYER_FOR_PHASE[outcome.phase] ?? 'policy',
+      layer: ev?.layer ?? LAYER_FOR_PHASE[outcome.phase] ?? 'policy',
+      match: ev?.match,
+      field: ev?.field ?? fieldFor(ev?.match, input.arguments),
+      confidence: ev?.confidence,
     });
   }
 
@@ -157,7 +191,15 @@ export class CheckEngine {
     });
     if (outcome.blocked) {
       const error = (outcome.blockResponse as { error?: { message?: string; data?: { rule?: string } } } | undefined)?.error;
-      return this.blocked(id, { reason: error?.message ?? 'Blocked', rule: error?.data?.rule, layer: 'answer-check' });
+      const ev = outcome.evidence as Evidence | undefined;
+      return this.blocked(id, {
+        reason: error?.message ?? 'Blocked',
+        rule: error?.data?.rule,
+        layer: ev?.layer ?? 'answer-check',
+        match: ev?.match,
+        field: ev?.field,
+        confidence: ev?.confidence,
+      });
     }
     if (outcome.redacted) {
       return { decision: 'redact', id, reason: (outcome.redactionReasons ?? []).join('; ') || 'Redacted', result: response['result'] };
@@ -165,10 +207,11 @@ export class CheckEngine {
     return { decision: 'allow', id };
   }
 
-  private blocked(id: string, v: { reason?: string; rule?: string; layer?: string }): Verdict {
+  private blocked(id: string, v: Detail): Verdict {
+    const detail = compact(v);
     if (this.mode === 'observe') {
-      return { decision: 'allow', id, reason: `Would have blocked: ${v.reason ?? v.rule ?? 'blocked'}`, rule: v.rule, layer: v.layer };
+      return { ...detail, decision: 'allow', id, reason: `Would have blocked: ${v.reason ?? v.rule ?? 'blocked'}` };
     }
-    return { decision: 'block', id, reason: v.reason, rule: v.rule, layer: v.layer };
+    return { ...detail, decision: 'block', id };
   }
 }

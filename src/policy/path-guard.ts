@@ -97,6 +97,8 @@ function isUnderPrefix(path: string, prefix: string): boolean {
 export interface PathGuardResult {
   block: boolean;
   reason?: string;
+  /** The path as it appeared in the arguments. */
+  match?: string;
 }
 
 /** Lowercase, slash-normalize, and collapse `..` segments for consistent matching. */
@@ -139,6 +141,7 @@ export function evaluatePathGuard(paths: string[]): PathGuardResult {
         return {
           block: true,
           reason: `Sensitive path blocked: ${path}`,
+          match: raw,
         };
       }
     }
@@ -149,6 +152,7 @@ export function evaluatePathGuard(paths: string[]): PathGuardResult {
       return {
         block: true,
         reason: `Path outside allowed workspace: ${inWorkspace} (allowed: ${prefixes.join(', ')})`,
+        match: raw,
       };
     }
   }

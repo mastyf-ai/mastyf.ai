@@ -4,6 +4,7 @@
  * metrics, redaction-meta injection, and block-response generation.
  */
 import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { clipMatch, type BlockEvidence } from './block-evidence.js';
 import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { injectRedactionMeta } from '../utils/redaction-meta.js';
 import { Logger } from '../utils/logger.js';
@@ -20,6 +21,8 @@ export interface ResponseInspectionResult {
   blockResponse?: Record<string, unknown>;
   /** If redacted, the reasons that triggered redaction. */
   redactionReasons?: string[];
+  /** If blocked, what the answer check matched. */
+  evidence?: BlockEvidence;
 }
 
 /**
@@ -71,9 +74,11 @@ export async function inspectToolResponse(params: {
         rule: 'result-prompt-injection',
         requestId: String(requestId),
       });
+      const matched = clipMatch(scan.matchedText);
       return {
         blocked: true,
         redacted: false,
+        evidence: { layer: 'answer-check', ...(matched ? { match: matched } : {}), confidence: scan.confidence },
         blockResponse: {
           jsonrpc: '2.0',
           id: requestId,

@@ -28,6 +28,8 @@ export interface InjectionFinding {
   patternId:   string;
   description: string;
   matchPreview: string;
+  /** The text the pattern matched, after decoding. */
+  matched?: string;
 }
 
 interface InjectionPattern {
@@ -372,6 +374,7 @@ function matchInjectionPatterns(
       patternId: pattern.id,
       description: pattern.description,
       matchPreview: `...${preview.slice(0, 100)}...`,
+      matched: match[0],
     });
   }
 

@@ -1,6 +1,7 @@
 import { isFpWhitelisted } from '../../ai/fp-whitelist.js';
 import { scanToolCallArguments } from '../../scanners/prompt-injection-detector.js';
 import type { PolicyStrategy } from './types.js';
+import { clipMatch } from '../../proxy/block-evidence.js';
 
 export const requestPromptInjectionStrategy: PolicyStrategy = {
   name: 'request-prompt-injection',
@@ -19,6 +20,7 @@ export const requestPromptInjectionStrategy: PolicyStrategy = {
       action: deps.resolveAction('block'),
       rule,
       reason: `Prompt injection in tool arguments: ${top.patternId} (${top.severity})`,
+      evidence: { layer: 'policy', match: clipMatch(top.matched) },
     };
   },
 };

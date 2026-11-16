@@ -9,10 +9,11 @@ import {
 import { checkExpandedPayload } from './payload-guard.js';
 import { hasJsonRpcId, jsonRpcErrorBody } from './json-rpc-utils.js';
 import type { IncomingHttpHeaders } from 'http';
+import type { BlockEvidence } from './block-evidence.js';
 
 export type ToolCallPreGuardResult =
   | { blocked: false; arguments?: Record<string, unknown> }
-  | { blocked: true; code: number; message: string };
+  | { blocked: true; code: number; message: string; evidence?: BlockEvidence };
 
 export async function runToolCallPreForwardGuard(
   serverName: string,
@@ -34,6 +35,7 @@ export async function runToolCallPreForwardGuard(
         blocked: true,
         code: -32001,
         message: `Blocked by Mastyf AI: ${expanded.reason}`,
+        evidence: { layer: 'size-limit' },
       };
     }
   }
@@ -52,6 +54,7 @@ export async function runToolCallPreForwardGuard(
         blocked: true,
         code: -32001,
         message: `Blocked by Mastyf AI: ${agentic.reason || 'agentic policy'}`,
+        evidence: agentic.evidence ?? { layer: 'injection-scan' },
       };
     }
     return { blocked: false, arguments: agentic.sanitizedArgs ?? args };

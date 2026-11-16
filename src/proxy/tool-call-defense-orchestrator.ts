@@ -4,6 +4,7 @@
  * Phases: lifecycle → pre-guard → policy → post-policy (spend + semantic).
  */
 import { applyExtensionMeta, checkDataFlow } from '../extensions/index.js';
+import { clipMatch, layerForPhase, type BlockEvidence } from './block-evidence.js';
 import type { IncomingHttpHeaders } from 'http';
 import type { PolicyEngine } from '../policy/policy-engine.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
@@ -55,6 +56,8 @@ export type ToolCallDefenseBlocked = {
   code: number;
   rule: string;
   reason: string;
+  /** The layer that blocked, and what it matched when it matched literal text. */
+  evidence: BlockEvidence;
   httpStatus?: number;
   preGuard?: Extract<ToolCallPreGuardResult, { blocked: true }>;
 };
@@ -130,6 +133,7 @@ export async function evaluateToolCallDefense(
       code: lifecycle.code ?? -32001,
       rule: lifecycle.rule ?? 'lifecycle-gate',
       reason: lifecycle.reason ?? 'Blocked by lifecycle assurance',
+      evidence: { layer: 'lifecycle' },
       httpStatus: 403,
     };
   }
@@ -164,6 +168,7 @@ export async function evaluateToolCallDefense(
       code: preGuard.code,
       rule: 'payload_or_agentic',
       reason: preGuard.message,
+      evidence: preGuard.evidence ?? { layer: 'injection-scan' },
       httpStatus: 403,
       preGuard,
     };
@@ -187,6 +192,11 @@ export async function evaluateToolCallDefense(
       code: -32001,
       rule: 'hook-before',
       reason: hookResult.reason ?? 'Blocked by tool-call hook',
+      evidence: {
+        layer: 'hooks',
+        ...(hookResult.match ? { match: clipMatch(hookResult.match) } : {}),
+        ...(hookResult.field ? { field: hookResult.field } : {}),
+      },
       httpStatus: 403,
     };
   }
@@ -230,6 +240,7 @@ export async function evaluateToolCallDefense(
       code: -32001,
       rule: flowBlock.rule,
       reason: violationReason,
+      evidence: { layer: 'policy' },
       httpStatus: 403,
     };
   }
@@ -323,6 +334,7 @@ export async function evaluateToolCallDefense(
       code: -32001,
       rule: decision.rule,
       reason: decision.reason,
+      evidence: decision.evidence ?? { layer: 'policy' },
       httpStatus: policyHttpStatus(decision),
     };
   }
@@ -340,14 +352,16 @@ export async function evaluateToolCallDefense(
         rule: gateOutcome.rule ?? 'semantic_gate',
       });
     }
+    const gatePhase = gateOutcome.rule === 'unified-spend-pool' || gateOutcome.rule?.includes('budget')
+      ? 'spend'
+      : 'semantic';
     return {
       allowed: false,
-      phase: gateOutcome.rule === 'unified-spend-pool' || gateOutcome.rule?.includes('budget')
-        ? 'spend'
-        : 'semantic',
+      phase: gatePhase,
       code: -32001,
       rule: gateOutcome.rule ?? 'semantic_gate',
       reason: gateOutcome.reason,
+      evidence: { layer: layerForPhase(gatePhase) },
       httpStatus: 403,
     };
   }
