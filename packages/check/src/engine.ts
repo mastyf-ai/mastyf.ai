@@ -70,6 +70,8 @@ function applyLocalServiceEnv(): void {
   process.env['MASTYF_AI_RESPONSE_DLP_MODE'] ??= 'redact';
   process.env['MASTYF_AI_AGENTIC_ENABLED'] = 'false';
   process.env['MASTYF_AI_LEARNING_MODE'] = 'false';
+  // Regexes run inline: the worker-thread evaluator loads a separate file the single-file build doesn't carry.
+  process.env['MASTYF_AI_REGEX_USE_WORKER'] = 'false';
   // The pipeline logs every decision with the call's arguments at info level; the service logs its own, without them.
   process.env['LOG_LEVEL'] ??= 'error';
 }
