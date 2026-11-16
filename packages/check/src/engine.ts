@@ -54,6 +54,8 @@ export interface EngineOptions {
 }
 
 const DEFAULT_SERVER = 'agent';
+
+type FingerprintState = { fingerprint: string | null; blocked: boolean };
 const DEFAULT_TENANT = 'local';
 
 /** Settings the local service needs before the pipeline modules load. */
@@ -95,18 +97,23 @@ type Pipeline = {
   evaluateToolCallDefense: (input: any, deps: any) => Promise<any>;
   inspectToolResponse: (params: any) => Promise<any>;
   PolicyEngine: new (config: any) => any;
+  applyToolFingerprint: (state: FingerprintState, tools: ToolDef[], ctx: Record<string, unknown>) => boolean;
 };
 
+const fingerprintKey = (server?: string, session?: string) => `${session ?? 'default'}|${server ?? DEFAULT_SERVER}`;
+
 async function loadPipeline(): Promise<Pipeline> {
-  const [orchestrator, inspection, engineMod] = await Promise.all([
+  const [orchestrator, inspection, engineMod, fingerprint] = await Promise.all([
     import('../../../src/proxy/tool-call-defense-orchestrator.js'),
     import('../../../src/proxy/response-inspection.js'),
     import('../../../src/policy/policy-engine.js'),
+    import('../../../src/proxy/tool-fingerprint.js'),
   ]);
   return {
     evaluateToolCallDefense: orchestrator.evaluateToolCallDefense as Pipeline['evaluateToolCallDefense'],
     inspectToolResponse: inspection.inspectToolResponse as Pipeline['inspectToolResponse'],
     PolicyEngine: engineMod.PolicyEngine as unknown as Pipeline['PolicyEngine'],
+    applyToolFingerprint: fingerprint.applyToolFingerprint as unknown as Pipeline['applyToolFingerprint'],
   };
 }
 
@@ -127,6 +134,9 @@ const LAYER_FOR_PHASE: Record<string, string> = {
 };
 
 export class CheckEngine {
+  /** One tool-definition fingerprint per session and server. */
+  private readonly fingerprints = new Map<string, FingerprintState>();
+
   private constructor(
     private readonly pipeline: Pipeline,
     private readonly policyEngine: any,
@@ -152,6 +162,24 @@ export class CheckEngine {
     return this.rules;
   }
 
+  /**
+   * What a server offers. The first registration is remembered; a later one that changes a tool's
+   * name, description or schema marks the server as changed, and its calls are blocked from then on.
+   * Returns the block verdict when that happens, otherwise null.
+   */
+  registerTools(server: string, tools: ToolDef[], session?: string): Verdict | null {
+    const key = fingerprintKey(server, session);
+    const state = this.fingerprints.get(key) ?? { fingerprint: null, blocked: false };
+    this.fingerprints.set(key, state);
+    const changed = this.pipeline.applyToolFingerprint(state, tools, { serverName: server, tenantId: DEFAULT_TENANT, quiet: true });
+    if (!changed) return null;
+    return this.blocked(randomUUID(), {
+      reason: `Server ${server} changed its tool definitions after they were registered`,
+      rule: 'tool-fingerprint-mismatch',
+      layer: 'lifecycle',
+    });
+  }
+
   async checkCall(input: CallInput): Promise<Verdict> {
     const id = randomUUID();
     const outcome = await this.pipeline.evaluateToolCallDefense(
@@ -164,8 +192,14 @@ export class CheckEngine {
         tenantId: DEFAULT_TENANT,
         agentId: input.agent,
         mcpSessionId: input.session,
+        // The session history (chains, loops) is keyed by identity: one agent run, one history.
+        agentIdentity: { sub: `${input.agent ?? 'agent'}:${input.session ?? 'default'}` },
       },
-      { policyEngine: this.policyEngine, emitBlockTelemetry: false },
+      {
+        policyEngine: this.policyEngine,
+        emitBlockTelemetry: false,
+        rugPullState: this.fingerprints.get(fingerprintKey(input.server, input.session)),
+      },
     );
     if (!outcome || typeof outcome.allowed !== 'boolean') throw new Error('malformed decision');
     if (outcome.allowed) return { decision: 'allow', id };

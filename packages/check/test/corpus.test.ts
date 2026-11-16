@@ -12,6 +12,8 @@ interface Entry {
   expected: 'block' | 'pass';
   category: string;
   simulatedResponse?: string;
+  toolsListBefore?: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+  toolsListAfter?: Array<{ name: string; description?: string; inputSchema?: unknown }>;
 }
 
 function entries(dir: string): Entry[] {
@@ -33,10 +35,15 @@ async function measure() {
   const byCategory: Record<string, { caught: number; total: number }> = {};
   const missed: string[] = [];
   let caught = 0;
+  let n = 0;
   for (const e of attacks) {
+    // Tool definitions before and after a change: register both, as a client would on each tools/list.
+    const session = `corpus-${n++}`;
+    if (e.toolsListBefore?.length) engine.registerTools('corpus', e.toolsListBefore, session);
+    if (e.toolsListAfter?.length) engine.registerTools('corpus', e.toolsListAfter, session);
     const verdict = e.simulatedResponse
       ? await engine.checkResult({ tool: e.toolName, result: e.simulatedResponse, arguments: e.arguments })
-      : await engine.checkCall({ tool: e.toolName, arguments: e.arguments });
+      : await engine.checkCall({ tool: e.toolName, arguments: e.arguments, server: 'corpus', session });
     const hit = verdict.decision !== 'allow';
     const c = (byCategory[e.category] ??= { caught: 0, total: 0 });
     c.total++;
