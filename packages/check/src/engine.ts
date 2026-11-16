@@ -60,7 +60,10 @@ const DEFAULT_TENANT = 'local';
 
 /** Settings the local service needs before the pipeline modules load. */
 function applyLocalServiceEnv(): void {
-  process.env['MASTYF_AI_POLICY_MIN_EVAL_MS'] = '0'; // the 25 ms floor is a timing guard for hosted use
+  // The 25 ms minimum evaluation time hides pass/block timing from callers of a hosted service; here
+  // the caller is the agent on the same machine. (MASTYF_AI_POLICY_MIN_EVAL_MS=0 is ignored: the
+  // reader treats 0 as unset and falls back to 25, so the envelope itself is switched off.)
+  process.env['MASTYF_AI_POLICY_TIMING_ENVELOPE'] = 'false';
   process.env['MASTYF_AI_RESPONSE_DLP_MODE'] ??= 'redact';
   process.env['MASTYF_AI_AGENTIC_ENABLED'] = 'false';
   process.env['MASTYF_AI_LEARNING_MODE'] = 'false';
