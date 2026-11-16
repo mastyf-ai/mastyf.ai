@@ -23,6 +23,11 @@ export interface ResultInput {
   agent?: string;
   session?: string;
   arguments?: Record<string, unknown>;
+  /**
+   * Include the words the check matched in a blocked result. Off by default: they are text an attacker
+   * wrote, and a client that shows a verdict to the model would hand them straight back to it.
+   */
+  includeMatch?: boolean;
 }
 
 export interface ToolDef {
@@ -199,6 +204,7 @@ export class CheckEngine {
         match: ev?.match,
         field: ev?.field,
         confidence: ev?.confidence,
+        ...(input.includeMatch ? {} : { match: undefined }),
       });
     }
     if (outcome.redacted) {
