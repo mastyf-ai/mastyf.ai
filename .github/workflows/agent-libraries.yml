@@ -1,0 +1,65 @@
+name: Agent libraries
+
+# Tests the Python package (mastyf-ai) and the TypeScript package (@mastyf_ai/guard) on every
+# change to them or to the check engine they start. Both start the real engine, so the engine's
+# single-file bundle is built first. Nothing is published.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/python-sdk/**'
+      - 'packages/guard/**'
+      - 'packages/check/**'
+      - 'packages/langchain-middleware/**'
+      - 'packages/openai-agents-middleware/**'
+      - 'src/policy/**'
+      - 'src/proxy/**'
+      - 'src/scanners/**'
+      - '.github/workflows/agent-libraries.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+        python: ['3.10', '3.11', '3.12']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @mastyf_ai/check --ignore-scripts
+      - run: pnpm --filter @mastyf_ai/check build
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Test
+        working-directory: packages/python-sdk
+        run: uv run --isolated --with pytest --with pytest-asyncio --with ".[langchain,langgraph,openai-agents]" pytest tests -q
+
+  typescript:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @mastyf_ai/guard... --filter @mastyf_ai/langchain-middleware --filter @mastyf_ai/openai-agents-middleware --ignore-scripts
+      - run: pnpm --filter @mastyf_ai/check build
+      - run: pnpm --filter @mastyf_ai/guard typecheck
+      - run: pnpm --filter @mastyf_ai/guard test
+      - run: pnpm --filter @mastyf_ai/langchain-middleware --filter @mastyf_ai/openai-agents-middleware build

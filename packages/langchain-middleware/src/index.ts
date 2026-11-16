@@ -23,6 +23,9 @@
  * the call is blocked. Set `failOpen: true` to let calls through in that case instead.
  */
 
+// Deprecated (printed once per process, when this module is first loaded).
+process.emitWarning('@mastyf_ai/langchain-middleware is deprecated: use @mastyf_ai/guard/langchain, which checks tool calls on your own machine without a proxy.', { type: 'DeprecationWarning', code: 'MASTYF_DEP_LANGCHAIN_MIDDLEWARE' });
+
 export type MastyfMode = 'audit' | 'warn' | 'block';
 
 export interface MastyfMiddlewareConfig {

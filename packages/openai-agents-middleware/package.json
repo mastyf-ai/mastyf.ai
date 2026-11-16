@@ -1,7 +1,7 @@
 {
   "name": "@mastyf_ai/openai-agents-middleware",
-  "version": "0.1.2",
-  "description": "Mastyf AI security middleware for OpenAI Agents SDK — intercepts tool calls through the Mastyf policy proxy",
+  "version": "0.2.0",
+  "description": "Deprecated: use @mastyf_ai/guard/openai-agents instead.",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
