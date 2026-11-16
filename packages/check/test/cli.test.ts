@@ -147,6 +147,29 @@ describe('mastyf-check proxy', () => {
     }
   });
 
+  it('checks replies to other requests too (a resource is read by the model like a tool result)', async () => {
+    const s = await session();
+    try {
+      const r = await s.request(1, 'resources/read', { uri: 'file:///notes.md' });
+      expect(r.error?.message).toMatch(/Blocked by Mastyf/);
+      expect(seen(s.lines)).not.toContain(TAKEOVER_WORDS);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('drops replies the agent never asked for, and messages that mix a request with a result', async () => {
+    const s = await session();
+    try {
+      await s.request(1, 'prompts/list');
+      await s.settle();
+      expect(s.lines.some((l) => l.id === 'never-asked' || l.id === 'mixed')).toBe(false);
+      expect(seen(s.lines)).not.toContain(TAKEOVER_WORDS);
+    } finally {
+      await s.close();
+    }
+  });
+
   it('blocks a call whose arguments are not an object instead of forwarding what it did not check', async () => {
     const s = await session();
     try {

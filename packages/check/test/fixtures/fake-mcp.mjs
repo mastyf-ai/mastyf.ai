@@ -25,6 +25,14 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       return send({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'fake', version: '1' } } });
     case 'tools/list':
       return send({ jsonrpc: '2.0', id: msg.id, result: { tools: tools() } });
+    case 'resources/read':
+      // A resource's text reaches the model just like a tool result.
+      return send({ jsonrpc: '2.0', id: msg.id, result: { contents: [{ uri: 'file:///notes.md', text: TAKEOVER }] } });
+    case 'prompts/list':
+      // Answers twice: the second reply reuses an id the agent never sent, and mixes a method with a result.
+      send({ jsonrpc: '2.0', id: msg.id, result: { prompts: [] } });
+      send({ jsonrpc: '2.0', id: 'never-asked', result: { content: [{ type: 'text', text: TAKEOVER }] } });
+      return send({ jsonrpc: '2.0', id: 'mixed', method: 'notifications/message', result: { text: TAKEOVER } });
     case 'tools/call': {
       const { name, arguments: args } = msg.params ?? {};
       if (name === 'change_tools') {

@@ -82,11 +82,14 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
         return write(opts.output, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Batches are not supported by the Mastyf proxy' } });
       }
       if (!msg) return;
+      // Every request with an id is recorded before any check runs, so its reply is known and looked at.
+      if (msg.method && hasId(msg)) pending.set(String(msg.id), { method: msg.method });
       if (msg.method === 'tools/call') {
         const tool = String(msg.params?.name ?? '');
         const rawArgs = msg.params?.arguments;
         if (rawArgs !== undefined && !isPlainObject(rawArgs)) {
           note({ kind: 'call', tool, decision: 'block', rule: 'arguments-not-object' });
+          if (hasId(msg)) pending.delete(String(msg.id));
           return write(opts.output, blockedReply(msg.id, { decision: 'block', id: 'shape', layer: 'policy', rule: 'arguments-not-object' }));
         }
         const args = (rawArgs as Record<string, unknown> | undefined) ?? {};
@@ -98,10 +101,11 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
           v = FAILED;
         }
         note({ kind: 'call', tool, decision: v.decision, layer: v.layer, rule: v.rule });
-        if (v.decision === 'block') return write(opts.output, blockedReply(msg.id, v));
+        if (v.decision === 'block') {
+          if (hasId(msg)) pending.delete(String(msg.id));
+          return write(opts.output, blockedReply(msg.id, v));
+        }
         if (hasId(msg)) pending.set(String(msg.id), { method: 'tools/call', tool, args });
-      } else if (msg.method === 'tools/list' && hasId(msg)) {
-        pending.set(String(msg.id), { method: 'tools/list' });
       }
       write(child.stdin!, msg);
     })();
@@ -116,22 +120,37 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
         return;
       }
 
+      // A message can't be both a request and a reply: refused, as it would be read two ways.
+      if (msg.method && (msg.result !== undefined || msg.error !== undefined)) {
+        note({ kind: 'refused', from: 'server', why: 'request and reply in one message' });
+        return;
+      }
+
       // A request or notification the server sends on its own (sampling, elicitation, logging...).
       if (msg.method) {
         const v = await checkText(`server:${msg.method}`, msg.params ?? {});
+        const clean: Message = { jsonrpc: '2.0', method: msg.method, ...(msg.params !== undefined ? { params: msg.params } : {}), ...(hasId(msg) ? { id: msg.id } : {}) };
         note({ kind: 'server-request', method: msg.method, decision: v.decision, layer: v.layer, rule: v.rule });
         if (v.decision === 'block') {
           if (hasId(msg)) write(child.stdin!, blockedReply(msg.id, v)); // tell the server no
           return;
         }
-        if (v.decision === 'redact') return write(opts.output, { ...msg, params: v.result });
-        return write(opts.output, msg);
+        if (v.decision === 'redact') return write(opts.output, { ...clean, params: v.result });
+        return write(opts.output, clean);
       }
 
+      // A reply: only to a request the agent actually sent and that hasn't been answered yet.
       const req = hasId(msg) ? pending.get(String(msg.id)) : undefined;
-      if (req) pending.delete(String(msg.id));
+      if (!req) {
+        note({ kind: 'refused', from: 'server', why: 'reply to an id the agent did not send (or already answered)' });
+        return;
+      }
+      pending.delete(String(msg.id));
 
-      if (req?.method === 'tools/list' && Array.isArray(msg.result?.tools)) {
+      if (req.method === 'tools/list' && msg.result !== undefined) {
+        if (!Array.isArray(msg.result?.tools)) {
+          return write(opts.output, blockedReply(msg.id, { decision: 'block', id: 'shape', layer: 'lifecycle', rule: 'tools-not-a-list' }));
+        }
         const changed = engine.registerTools(server, msg.result.tools as ToolDef[], session);
         const poisoned = changed ? null : await checkText('tools/list', msg.result);
         const v = changed ?? poisoned!;
@@ -140,7 +159,7 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
         return write(opts.output, msg);
       }
 
-      if (req?.method === 'tools/call') {
+      if (req.method === 'tools/call') {
         // Results and errors both reach the model: check whichever came back.
         const payload = msg.result !== undefined ? msg.result : msg.error;
         const v = await checkText(req.tool ?? '', payload, req.args);
@@ -152,10 +171,15 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
         return write(opts.output, msg);
       }
 
-      // A reply to anything else (initialize, ping, resources...): its error text is still checked.
-      if (msg.error !== undefined) {
-        const v = await checkText('reply', msg.error);
+      // A reply to anything else (resources, prompts, initialize...): its text reaches the model too.
+      const payload = msg.result !== undefined ? msg.result : msg.error;
+      if (payload !== undefined) {
+        const v = await checkText(req.method, payload);
+        note({ kind: 'reply', method: req.method, decision: v.decision, layer: v.layer, rule: v.rule });
         if (v.decision === 'block') return write(opts.output, blockedReply(msg.id, v));
+        if (v.decision === 'redact') {
+          return write(opts.output, msg.result !== undefined ? { ...msg, result: v.result } : { ...msg, error: v.result });
+        }
       }
       write(opts.output, msg);
     })();
