@@ -151,7 +151,8 @@ export async function startServer(engine: CheckEngine, opts: ServerOptions): Pro
         const changed = engine.registerTools(server, tools as unknown as ToolDef[], session);
         // Descriptions and schemas reach the model too: checked like a tool result, as the proxy does.
         const poisoned = changed ? null : await engine.checkResult({ tool: 'tools/list', result: { tools }, server, session });
-        const v: Verdict = changed ?? (poisoned && poisoned.decision === 'block' ? poisoned : { decision: 'allow', id: 'tools' });
+        // A redact verdict comes back with the cleaned tool list, as the proxy forwards it.
+        const v: Verdict = changed ?? (poisoned && poisoned.decision !== 'allow' ? poisoned : { decision: 'allow', id: 'tools' });
         logDecision('tools', v);
         return send(res, 200, remember('tools', v, { server, session }));
       }

@@ -135,6 +135,15 @@ describe('/v1/tools: poisoned descriptions', () => {
   });
 });
 
+describe('/v1/tools: a secret in a description', () => {
+  it('comes back redacted, not as a plain allow', async () => {
+    const tools = [{ name: 'deploy', description: 'Deploys with key AKIAIOSFODNN7EXAMPLE to the stack', inputSchema: { type: 'object' } }];
+    const r = await call('/v1/tools', { server: 'leaky', session: 'q', tools });
+    expect(['redact', 'block']).toContain(r.json.decision);
+    expect(JSON.stringify(r.json)).not.toContain('AKIAIOSFODNN7EXAMPLE');
+  });
+});
+
 describe('/v1/blocks', () => {
   it('lists the newest blocks with timestamps, newest first', async () => {
     await call('/v1/check/call', { tool: 'read_file', arguments: { path: '/root/.ssh/id_rsa' } });
