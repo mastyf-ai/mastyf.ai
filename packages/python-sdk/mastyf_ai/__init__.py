@@ -1,19 +1,7 @@
-"""
-Mastyf AI — Python SDK for MCP security proxy.
+"""Mastyf for custom agents: every tool call checked before it runs, every result before the model reads it."""
 
-Usage:
-    from mastyf_ai import MastyfProxy
+from .client import CheckClient, MastyfUnavailable
+from .verdict import Verdict
 
-    proxy = MastyfProxy("http://localhost:4000")
-    proxy.start()
-
-    # The proxy is now protecting all MCP tool calls
-"""
-
-from .client import MastyfProxy, MastyfConfig
-from .middleware.openai_agents import MastyfOpenAIGuard
-from .middleware.langchain import MastyfLangChainGuard
-from .scanner import TrustScanner
-
-__version__ = "4.3.1"
-__all__ = ["MastyfProxy", "MastyfConfig", "MastyfOpenAIGuard", "MastyfLangChainGuard", "TrustScanner"]
+__all__ = ["CheckClient", "MastyfUnavailable", "Verdict"]
+__version__ = "5.0.0"
