@@ -85,3 +85,35 @@ export async function waitFor(cond: () => boolean, ms: number): Promise<boolean>
   }
   return cond();
 }
+
+export const SECRET = ['AKIA', 'IOSFODNN7', 'EXAMPLE'].join('');
+
+type Hook = (fn: () => Promise<void>) => void;
+
+/**
+ * Each test gets an empty home, no MASTYF_* settings and nothing on the "already running" port, so
+ * the guard starts the free engine itself. Call at the top of a test file.
+ */
+export async function isolate(hooks: { beforeEach: Hook; afterEach: Hook }): Promise<void> {
+  const { _setLocalUrlForTests } = await import('../src/discovery.js');
+  const { _resetForTests } = await import('../src/guard.js');
+  const keys = ['HOME', 'USERPROFILE', 'APPDATA', 'MASTYF_CHECK_URL', 'MASTYF_CHECK_TOKEN', 'MASTYF_CHECK_BIN'];
+  let saved: Record<string, string | undefined> = {};
+  let home: ReturnType<typeof isolatedHome> | undefined;
+  hooks.beforeEach(async () => {
+    saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    for (const k of keys) delete process.env[k];
+    home = isolatedHome();
+    Object.assign(process.env, home.env);
+    _setLocalUrlForTests('http://127.0.0.1:9');
+    await _resetForTests();
+  });
+  hooks.afterEach(async () => {
+    await _resetForTests();
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+    home?.cleanup();
+  });
+}

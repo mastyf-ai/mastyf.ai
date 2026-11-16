@@ -4,15 +4,40 @@
   "description": "Mastyf's free checks for a custom agent's tool calls and tool results, on your own machine.",
   "license": "MIT",
   "homepage": "https://www.mastyf.ai",
-  "repository": { "type": "git", "url": "https://github.com/mastyf-ai/mastyf.ai.git", "directory": "packages/guard" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastyf-ai/mastyf.ai.git",
+    "directory": "packages/guard"
+  },
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./mastra": {
+      "types": "./dist/mastra.d.ts",
+      "default": "./dist/mastra.js"
+    },
+    "./langchain": {
+      "types": "./dist/langchain.d.ts",
+      "default": "./dist/langchain.js"
+    },
+    "./openai-agents": {
+      "types": "./dist/openai-agents.d.ts",
+      "default": "./dist/openai-agents.js"
+    }
   },
-  "files": ["dist", "LICENSE", "README.md"],
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -23,7 +48,33 @@
   },
   "devDependencies": {
     "typescript": "^5.4.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@langchain/core": "^1.4.1",
+    "@mastra/core": "^1.83.0",
+    "@openai/agents": "^0.22.0",
+    "zod": "^4.6.7"
   },
-  "keywords": ["ai-agents", "security", "prompt-injection", "tool-calls", "mastyf"]
+  "keywords": [
+    "ai-agents",
+    "security",
+    "prompt-injection",
+    "tool-calls",
+    "mastyf"
+  ],
+  "peerDependencies": {
+    "@langchain/core": ">=0.3.0",
+    "@mastra/core": ">=1.0.0",
+    "@openai/agents": ">=0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@langchain/core": {
+      "optional": true
+    },
+    "@mastra/core": {
+      "optional": true
+    },
+    "@openai/agents": {
+      "optional": true
+    }
+  }
 }
