@@ -15,16 +15,30 @@ export interface FsOps {
 
 const MAX_FILE_BYTES = 1024 * 1024;
 
-/** The local path to actually read: the path itself, or one link hop to a local drive. Throws otherwise. */
-function localTarget(fs: FsOps, p: string): string {
+const MAX_LINK_HOPS = 8;
+
+/**
+ * The local path to actually read. Walks the path one folder at a time from the drive root with
+ * lstat, which never follows a link, so a linked folder (`.vscode` → `\\host\share`) is caught
+ * before anything goes through it. A link to a local drive is followed by rewriting the path;
+ * anything else throws.
+ */
+function localTarget(fs: FsOps, p: string, hops = 0): string {
   if (!isLocalDrivePath(p)) throw new Error('not a local drive path');
-  const st = fs.lstat(p);
-  if (!st.isSymbolicLink()) return p;
-  // readlink reads the link itself; the target is checked before anything touches it.
-  const target = path.resolve(path.dirname(p), fs.readlink(p));
-  if (!isLocalDrivePath(target)) throw new Error('link to a non-local path');
-  if (fs.lstat(target).isSymbolicLink()) throw new Error('link to a link');
-  return target;
+  const parts = path.normalize(p).split('\\').filter(Boolean);
+  let current = `${parts[0]}\\`;
+  for (let i = 1; i < parts.length; i++) {
+    const next = path.join(current, parts[i]);
+    if (fs.lstat(next).isSymbolicLink()) {
+      if (hops >= MAX_LINK_HOPS) throw new Error('too many links');
+      // readlink reads the link itself; the target is checked before anything touches it.
+      const target = path.resolve(path.dirname(next), fs.readlink(next));
+      if (!isLocalDrivePath(target)) throw new Error('link to a non-local path');
+      return localTarget(fs, path.join(target, ...parts.slice(i + 1)), hops + 1);
+    }
+    current = next;
+  }
+  return current;
 }
 
 export function makeFileAccess(fs: FsOps) {

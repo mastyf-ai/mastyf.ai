@@ -170,7 +170,8 @@
   },
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": true
+      "supported": "limited",
+      "description": "In a workspace you haven't trusted, the project's own MCP settings files are not read; your user settings and Shield's blocked calls still show."
     },
     "virtualWorkspaces": false
   }

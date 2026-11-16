@@ -79,7 +79,11 @@ export function activate(context: vscode.ExtensionContext): void {
     if (vscode.extensions.getExtension('saoudrizwan.claude-dev')) list.push('cline');
     return list;
   };
-  const folders = () => (vscode.workspace.workspaceFolders ?? []).filter((f) => f.uri.scheme === 'file').map((f) => f.uri.fsPath);
+  // Project settings files are only read in workspaces the user has trusted.
+  const folders = () =>
+    vscode.workspace.isTrusted
+      ? (vscode.workspace.workspaceFolders ?? []).filter((f) => f.uri.scheme === 'file').map((f) => f.uri.fsPath)
+      : [];
   const installed = () => Boolean(exe) || exists(keyFile);
 
   function refreshStatus(): void {
@@ -185,6 +189,10 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push({ dispose: () => watchers.forEach((w) => w.dispose()) });
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      watchSettings();
+      refreshStatus();
+    }),
+    vscode.workspace.onDidGrantWorkspaceTrust(() => {
       watchSettings();
       refreshStatus();
     }),

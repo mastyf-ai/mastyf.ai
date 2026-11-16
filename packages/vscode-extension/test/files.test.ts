@@ -6,9 +6,11 @@ type Entry = { link?: string; size?: number; dir?: boolean; mtimeMs?: number; te
 /** A fake file system that records every path the code touches beyond lstat/readlink. */
 function fakeFs(entries: Record<string, Entry>) {
   const followed: string[] = [];
+  // A path that is a parent of a listed path is a folder.
+  const isParent = (p: string) => Object.keys(entries).some((k) => k.toLowerCase().startsWith(`${p.toLowerCase()}\\`));
   const ops: FsOps = {
     lstat: (p) => {
-      const e = entries[p];
+      const e = entries[p] ?? (isParent(p) ? { dir: true } : undefined);
       if (!e) throw new Error('ENOENT');
       return { isSymbolicLink: () => Boolean(e.link), isFile: () => !e.link && !e.dir, size: e.size ?? 10, mtimeMs: e.mtimeMs ?? 1 };
     },
@@ -59,6 +61,35 @@ describe('makeFileAccess', () => {
       'C:\\repo\\shared\\mcp.json': { text: '{}' },
     });
     expect(makeFileAccess(ops).readSmallFile('C:\\repo\\.vscode\\mcp.json')).toBe('{}');
+  });
+
+  it('never goes through a linked folder that points at a network share', () => {
+    const touched: string[] = [];
+    const { ops, followed } = fakeFs({
+      'C:\\repo': { dir: true },
+      'C:\\repo\\.vscode': { link: '\\\\evil.example\\share' },
+    });
+    const lstat = ops.lstat;
+    ops.lstat = (p) => {
+      touched.push(p);
+      return lstat(p);
+    };
+    const f = makeFileAccess(ops);
+    expect(() => f.readSmallFile('C:\\repo\\.vscode\\mcp.json')).toThrow();
+    expect(f.mtimeOf('C:\\repo\\.vscode\\mcp.json')).toBeNull();
+    expect(touched).not.toContain('C:\\repo\\.vscode\\mcp.json');
+    expect([...touched, ...followed].filter((p) => p.startsWith('\\\\'))).toEqual([]);
+  });
+
+  it('follows a linked folder that points at a local drive', () => {
+    const { ops } = fakeFs({
+      'C:\\repo': { dir: true },
+      'C:\\repo\\.vscode': { link: 'D:\\shared\\vscode' },
+      'D:\\shared': { dir: true },
+      'D:\\shared\\vscode': { dir: true },
+      'D:\\shared\\vscode\\mcp.json': { text: '{"servers":{}}' },
+    });
+    expect(makeFileAccess(ops).readSmallFile('C:\\repo\\.vscode\\mcp.json')).toBe('{"servers":{}}');
   });
 
   it('refuses a link to a link (one hop only), a directory, a huge file, and a network path itself', () => {
