@@ -22,9 +22,14 @@ function parse(input: string): unknown {
 
 export function guardTools<T extends Tool<any>>(tools: T[], guard: Guard = createGuard()): T[] {
   return tools.map((t) => {
-    if (t.type !== 'function') {
+    if (t.type === 'hosted_tool') {
       console.warn(`Mastyf: ${t.name} is a hosted tool and is not checked`);
       return t;
+    }
+    if (t.type !== 'function') {
+      // Shell, computer and apply-patch tools run on this machine; passing them through unchecked
+      // would be a silent gap, so they're refused. Add them to the agent separately to accept that.
+      throw new TypeError(`Mastyf can't check ${t.type} tools (${t.name}) yet; add them to the agent outside guardTools() if you accept running them unchecked`);
     }
     const original = t.invoke;
     const invoke: typeof original = async (runContext, input, details) => {

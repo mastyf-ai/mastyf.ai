@@ -120,3 +120,11 @@ async def test_the_runner_gets_checked_answers():
     assert outputs["a"] == "contents of ./README.md"
     assert outputs["b"].startswith("Blocked by Mastyf")
     assert calls == ["./README.md"]
+
+
+def test_local_tools_it_cannot_check_are_refused():
+    from agents import LocalShellTool
+
+    shell = LocalShellTool(executor=lambda request: "")
+    with pytest.raises(TypeError, match="can't check"):
+        guard_function_tools([shell])

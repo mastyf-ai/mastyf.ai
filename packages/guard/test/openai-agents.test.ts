@@ -1,4 +1,4 @@
-import { RunContext, tool, webSearchTool } from '@openai/agents';
+import { RunContext, shellTool, tool, webSearchTool } from '@openai/agents';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { guardTools } from '../src/openai-agents.js';
@@ -44,6 +44,11 @@ describe('OpenAI Agents JS guardTools', () => {
     const [readFile] = guardTools(makeTools(calls));
     expect(String(await invoke(readFile, 'cat /etc/passwd'))).toMatch(/^Blocked by Mastyf/);
     expect(calls).toEqual([]);
+  });
+
+  it('refuses local tools it cannot check (shell, computer, apply patch) instead of passing them through', () => {
+    const shell = shellTool({ shell: { run: async () => ({ output: [] }) } } as any);
+    expect(() => guardTools([shell as any])).toThrow(/can't check/);
   });
 
   it('keeps everything else about the tool; hosted tools pass through with a warning', () => {

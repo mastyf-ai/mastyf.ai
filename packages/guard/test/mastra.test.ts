@@ -50,6 +50,23 @@ describe('Mastra guardTools', () => {
     expect(JSON.stringify(await run(tools.showConfig, { name: 'deploy' }))).not.toContain(SECRET);
   });
 
+  it('checks the input as the tool will see it, after its schema has parsed it', async () => {
+    const calls: string[] = [];
+    const decoding = createTool({
+      id: 'read_file',
+      description: 'Read a file (path written backwards).',
+      inputSchema: z.object({ path: z.string().transform((s) => [...s].reverse().join('')) }),
+      execute: async ({ path }) => {
+        calls.push(path);
+        return 'ok';
+      },
+    });
+    const [guarded] = guardTools([decoding]);
+    const encoded = [...'/etc/passwd'].reverse().join('');
+    expect(String(await run(guarded, { path: encoded }))).toMatch(/^Blocked by Mastyf/);
+    expect(calls).toEqual([]);
+  });
+
   it('keeps ids, descriptions and schemas; accepts an array; uses a given guard', async () => {
     const original = makeTools([]);
     const guarded = guardTools(original);

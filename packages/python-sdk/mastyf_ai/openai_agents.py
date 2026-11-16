@@ -58,9 +58,21 @@ def guard_function_tools(tools: list[Any], guard: Guard | None = None) -> list[A
     g = guard or Guard()
     out = []
     for t in tools:
+        name = getattr(t, "name", type(t).__name__)
         if isinstance(t, FunctionTool):
             out.append(_wrap(t, g))
-        else:
-            log.warning("Mastyf: %s is a hosted tool and is not checked", getattr(t, "name", type(t).__name__))
+        elif type(t).__name__ in HOSTED:
+            log.warning("Mastyf: %s is a hosted tool and is not checked", name)
             out.append(t)
+        else:
+            # Shell, computer, apply-patch and custom tools run on this machine; passing them
+            # through unchecked would be a silent gap, so they're refused.
+            raise TypeError(
+                f"Mastyf can't check {type(t).__name__} tools ({name}) yet; "
+                "add them to the agent outside guard_function_tools() if you accept running them unchecked"
+            )
     return out
+
+
+# Tools that run on OpenAI's side, out of reach of any local check.
+HOSTED = {"WebSearchTool", "FileSearchTool", "CodeInterpreterTool", "HostedMCPTool", "ImageGenerationTool", "ToolSearchTool"}

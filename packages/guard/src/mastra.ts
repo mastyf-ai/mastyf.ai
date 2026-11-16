@@ -10,7 +10,20 @@ import { guarded } from './wrap.js';
 
 interface MastraTool {
   id: string;
+  inputSchema?: unknown;
   execute?: (input: any, context: any) => Promise<any>;
+}
+
+/** The input as the tool will see it: after its schema has parsed (and maybe transformed) it. */
+async function asTheToolSeesIt(tool: MastraTool, input: unknown): Promise<unknown> {
+  const schema = tool.inputSchema as { safeParseAsync?: (v: unknown) => Promise<{ success: boolean; data?: unknown }> } | undefined;
+  if (typeof schema?.safeParseAsync !== 'function') return input;
+  try {
+    const parsed = await schema.safeParseAsync(input);
+    return parsed.success ? parsed.data : input; // invalid input: the tool refuses it anyway
+  } catch {
+    return input;
+  }
 }
 
 function wrap<T extends MastraTool>(tool: T, guard: Guard): T {
@@ -18,7 +31,8 @@ function wrap<T extends MastraTool>(tool: T, guard: Guard): T {
   if (!original) return tool;
   // Same prototype and fields as the original; only execute differs.
   const copy = Object.assign(Object.create(Object.getPrototypeOf(tool)), tool) as T;
-  copy.execute = (input: unknown, context: unknown) => guarded(guard, tool.id, input, () => original.call(tool, input, context));
+  copy.execute = async (input: unknown, context: unknown) =>
+    guarded(guard, tool.id, await asTheToolSeesIt(tool, input), () => original.call(tool, input, context));
   return copy;
 }
 
