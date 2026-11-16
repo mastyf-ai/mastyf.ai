@@ -1,0 +1,417 @@
+version: '1.0'
+policy:
+  mode: block
+  default_action: pass
+  semantic_shell: true
+  unicode_strict: true
+  default_sandbox_tier: shadow
+  rules:
+    - name: deny-dangerous-tools
+      description: Explicitly deny tools that can execute arbitrary code
+      action: block
+      tools:
+        deny:
+          - execute_command
+          - bash
+          - sh
+          - eval
+          - exec
+          - execute
+          - system
+          - spawn
+          - fork
+          - popen
+          - source
+          - powershell
+          - pwsh
+          - cmd
+          - curl
+          - wget
+          - nc
+          - ncat
+          - netcat
+          - socat
+          - xmrig
+          - lolminer
+          - t-rex
+          - nbminer
+          - ethminer
+          - miner
+          - execute_code
+          - render_html
+          - write_log
+          - graphql_query
+          - template_render
+    - name: deny-github-write-tools
+      description: Block destructive repository actions (repo deletion, etc.)
+      action: block
+      tools:
+        deny:
+          - delete_repository
+          - delete_branch
+    - name: allowlist-common-tools
+      description: Read-only / query tools; all others blocked by default_action
+      action: block
+      enabled: false
+      tools:
+        allow:
+          - read_file
+          - read_text_file
+          - list_directory
+          - list_files
+          - get_file_contents
+          - search
+          - search_files
+          - search_repositories
+          - list_tables
+          - query
+          - echo
+          - puppeteer_navigate
+          - puppeteer_screenshot
+    - name: block-dangerous-urls
+      description: Block SSRF-prone URLs (metadata, localhost, file/javascript/data schemes, private IPs)
+      action: block
+      argPatterns:
+        - field: url
+          patterns:
+            - '^(?:file|javascript|data|vbscript):'
+            - ^https?://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]|0\\.0\\.0\\.0|169\\.254\\.|100\\.100\\.100\\.200)
+            - ^https?://\\d{8,10}(?:/|$)
+            - metadata\\.google
+            - metadata\\.google\\.internal
+            - instance-data\\.
+            - 100\\.100\\.100\\.200
+        - field: href
+          patterns:
+            - '^(?:file|javascript|data):'
+            - ^https?://(?:localhost|127\\.0\\.0\\.1)
+        - field: webhook
+          patterns:
+            - ^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.)
+        - field: callback
+          patterns:
+            - ^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.)
+        - field: target
+          patterns:
+            - '^(?:file|javascript|data):'
+        - field: message
+          patterns:
+            - https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.|10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)
+        - field: body
+          patterns:
+            - https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.|10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)
+        - field: link
+          patterns:
+            - ^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.|10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)
+    - name: block-sensitive-paths
+      description: Block reads/lists of credentials, SSH, env files, and filesystem root
+      action: block
+      argPatterns:
+        - field: path
+          patterns:
+            - ^/$
+            - ^/etc/
+            - /\\.ssh
+            - /\\.env
+            - /\\.aws/credentials
+            - (?:^|/)passwd$
+            - id_rsa
+            - /var/run/docker\\.sock
+            - /var/run/secrets/kubernetes\\.io/
+            - terraform\\.tfstate
+            - \\.npmrc
+            - \\.git-credentials
+            - \\.vault-token
+            - service-account.*\\.json
+            - \\.kube/config
+            - /root/\\.kube/config
+            - /etc/kubernetes/admin\\.conf
+        - field: file
+          patterns:
+            - ^/$
+            - ^/etc/
+            - /\\.ssh
+            - /\\.env
+            - /\\.aws/credentials
+            - /var/run/docker\\.sock
+            - /var/run/secrets/kubernetes\\.io/
+            - terraform\\.tfstate
+            - \\.npmrc
+            - \\.git-credentials
+            - \\.vault-token
+            - service-account.*\\.json
+            - \\.kube/config
+            - /root/\\.kube/config
+        - field: directory
+          patterns:
+            - ^/$
+            - ^/etc/
+            - /var/run/secrets/kubernetes\\.io/
+    - name: block-sql-exfil
+      description: Block obvious bulk data exfiltration SQL in tool arguments
+      action: block
+      argPatterns:
+        - field: sql
+          patterns:
+            - >-
+              \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - >-
+              \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - \bunion\b.+\bselect\b
+            - \bdelete\s+from\b
+            - \b(?:drop|truncate)\s+table\b
+            - \bload_file\s*\(
+            - \bsleep\s*\(
+            - \bbenchmark\s*\(
+            - \\$where
+            - \\$ne
+            - \\$gt
+            - \\$regex
+            - __schema
+            - introspection
+            - admin\)\(&
+        - field: query
+          patterns:
+            - >-
+              \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - >-
+              \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - \bunion\b.+\bselect\b
+            - \bdelete\s+from\b
+            - \badmin'\s*--
+            - \\$where
+            - \\$ne
+            - __type\s*\(
+            - __schema
+        - field: q
+          patterns:
+            - \badmin'\s*--
+            - \bor\s+['"]?1['"]?\s*=\s*['"]?1['"]?\b
+            - \bunion\b.+\bselect\b
+        - field: blob
+          patterns:
+            - ^.{50000,}$
+        - field: data
+          patterns:
+            - ^.{50000,}$
+        - field: body
+          patterns:
+            - \bdelete\s+from\b
+            - \bselect\s+\*\s+from\b.+\b(payments|transactions|credentials|users)\b
+            - \\$ne
+            - </script>
+            - <script[\s>/]
+            - onerror\s*=
+        - field: message
+          patterns:
+            - \\r\\n
+            - '\\nFATAL:'
+        - field: assertion
+          patterns:
+            - <saml:Assertion
+            - <saml:AttributeValue>admin</saml:AttributeValue>
+        - field: template
+          patterns:
+            - '%25%[0-9a-fA-F]{2}%[0-9a-fA-F]{2}'
+        - field: '*'
+          patterns:
+            - \.unsigned(?:"|'|\s|$)
+            - JTY0ZWNobw==
+    - name: block-encoding-evasion
+      description: Block base64 and raw hex blobs used to hide instructions (layered decode in encoding-guard)
+      action: block
+      patterns:
+        - (?:^|[^A-Za-z0-9+/])(?=[A-Za-z0-9+/]{24,}(?:.*[+/=A-Z0-9]))[A-Za-z0-9+/]{24,}={0,2}(?:[^A-Za-z0-9+/]|$)
+        - \b(?:(?!(.)\1{31,})[0-9a-fA-F]){32,}\b
+      argPatterns:
+        - field: command
+          patterns:
+            - (?:^|[^A-Za-z0-9+/])(?=[A-Za-z0-9+/]{20,}(?:.*[+/=A-Z0-9]))[A-Za-z0-9+/]{20,}={0,2}
+            - \\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}
+        - field: payload
+          patterns:
+            - (?:^|[^A-Za-z0-9+/])(?=[A-Za-z0-9+/]{20,}(?:.*[+/=A-Z0-9]))[A-Za-z0-9+/]{20,}={0,2}
+            - \\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}
+        - field: data
+          patterns:
+            - (?:^|[^A-Za-z0-9+/])(?=[A-Za-z0-9+/]{20,}(?:.*[+/=A-Z0-9]))[A-Za-z0-9+/]{20,}={0,2}
+            - \\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}
+        - field: input
+          patterns:
+            - (?:^|[^A-Za-z0-9+/])(?=[A-Za-z0-9+/]{20,}(?:.*[+/=A-Z0-9]))[A-Za-z0-9+/]{20,}={0,2}
+            - \\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}
+    - name: block-path-traversal
+      description: Block tool calls with path traversal attempts
+      action: block
+      argPatterns:
+        - field: path
+          patterns:
+            - \.\.
+        - field: file
+          patterns:
+            - \.\.
+        - field: directory
+          patterns:
+            - \.\.
+        - field: filepath
+          patterns:
+            - \.\.
+        - field: filename
+          patterns:
+            - \.\.
+        - field: dir
+          patterns:
+            - \.\.
+        - field: url
+          patterns:
+            - '(?:\.\.[/\\\\]|[/\\\\]\.\.)'
+      patterns:
+        - '(?:\.\.[/\\\\]|[/\\\\]\.\.|\.\.$)'
+    - name: block-shell-injection
+      description: Block shell injection, downloaders, and PowerShell encoded commands
+      action: block
+      patterns:
+        - curl\s|wget\s
+        - rm\s+-rf
+        - ;\s*\w
+        - '&&|\|\|'
+        - \$\{
+        - \{\{
+        - <%|#\{
+        - \$\([^)]+\)
+        - '`[^`]+`'
+        - powershell|pwsh|-enc|-EncodedCommand
+    - name: block-data-exfil-tools
+      description: Block data exfiltration via cloud CLI, git push, scp, rsync, sftp
+      action: block
+      patterns:
+        - \b(?:gcloud|az|aws)\s+(?:compute|storage|s3|ec2|vm)
+        - \bgcloud\s+compute\s+ssh\b
+        - \baz\s+storage\s+blob\s+upload\b
+        - \baws\s+s3\s+cp\b
+        - \bgsutil\s+cp\b
+        - \bscp\s+-[a-z]*[iPr]\s+\S+\s+\S+@
+        - \brsync\s+-[a-z]*[aAeEpPtTv]\s+\S+\s+\S+@
+        - \bsftp\s+\S+@
+        - \bgit\s+clone\s+https?://
+        - \bgit\s+push\b
+        - \bgit\s+format-patch\b
+        - \btar\s+czf\s+-\s+\|\s+(?:ssh|curl|nc|ncat|socat)
+        - \bzip\s+-r\s+-\s+\|\s+(?:ssh|curl|nc|ncat|socat)
+    - name: block-reverse-shell
+      description: Block reverse shell one-liners, C2 callbacks, and tunneling
+      action: block
+      patterns:
+        - bash\s+-i\s+>&\s+/dev/(?:tcp|udp)/
+        - sh\s+-i\s+>&\s+/dev/(?:tcp|udp)/
+        - mkfifo\s+/tmp/\S+\s+&&\s+cat\s+/tmp/\S+\s+\|\s+/bin/(?:bash|sh)\s+-i\s+2>&1\s+\|\s+nc\s+
+        - python\s+-c\s+['\"]import\s+socket
+        - python3\s+-c\s+['\"]import\s+socket
+        - ncat\s+--ssl\s+
+        - openssl\s+s_client\s+-connect
+        - 'socat\s+(?:tcp|exec|system):'
+        - ngrok\s+(?:tcp|http)
+        - chisel\s+client\s+
+        - frpc\s+-c\s+
+    - name: burst-rate-limit
+      description: Block burst floods exceeding 40 calls per 10 seconds per server+tool
+      action: block
+      maxCallsPer10Seconds: 40
+    - name: rate-limit-tool-calls
+      description: Block tool calls exceeding 120 per minute per server+tool
+      action: block
+      maxCallsPerMinute: 120
+    - name: token-budget
+      description: Block tool calls exceeding 50K input tokens
+      action: block
+      maxTokens: 50000
+    - name: quarantine-semantic-177963052577
+      description: '[QUARANTINE] Reinforce semantic threat THR-S2840 from monitor'
+      action: block
+      tools:
+        allow:
+          - run
+      patterns:
+        - \{"x":"ignore all previous instructions developer mode"\}
+    - name: attack-learned-semantic-path-guard-read_file
+      description: Learned from 8 blocks (semantic-path-guard on read_file@filesystem) — pending approval
+      action: block
+      argPatterns:
+        - field: path
+          patterns:
+            - /etc
+    - name: block-result-injection
+      description: Block tool call args that embed classic result/prompt-injection payloads (defense in depth for poisoned content forwarded as args)
+      action: block
+      patterns:
+        - Ignore all previous instructions
+        - You are now DAN
+        - Forget all previous training
+        - disable safety
+        - ADMIN_MODE
+        - DEV_MODE
+        - You have been reprogrammed
+        - Ignore your system prompt
+        - Override safety protocols
+    - name: block-graphql-injection
+      description: Block GraphQL introspection, schema extraction, and depth explosion attacks
+      action: block
+      argPatterns:
+        - field: query
+          patterns:
+            - __schema\s*\{
+            - __type\s*\(
+            - introspectionQuery
+            - fragment\s+\w+\s+on\s+__
+            - '\{[^{}]*\{[^{}]*\{[^{}]*\{[^{}]*\{'
+        - field: operationName
+          patterns:
+            - IntrospectionQuery
+            - Introspect
+        - field: variables
+          patterns:
+            - __schema
+            - __type
+        - field: '*'
+          patterns:
+            - __schema\s*\{
+            - __type\s*\(
+    - name: block-privilege-escalation
+      description: Block tool calls requesting privilege escalation or role manipulation
+      action: block
+      argPatterns:
+        - field: '*'
+          patterns:
+            - (?:make|set|grant|assign|elevate|promote)\s+(?:me|user|this|current)\s+(?:an?\s+)?(?:admin|root|superuser|owner|manager|god)
+            - role\s*[=:]\s*["']?(?:admin|root|superuser|owner|god|system)["']?
+            - is_admin\s*[=:]\s*(?:true|1|yes)
+            - permissions?\s*[=:]\s*["']?\*["']?
+            - sudo\s+(?:su|chmod|chown|usermod|visudo)
+            - NOPASSWD:\s*ALL
+    - name: block-resource-exhaustion
+      description: Block tool calls with unbounded limits or denial-of-service parameters
+      action: block
+      argPatterns:
+        - field: '*'
+          patterns:
+            - limit\s*[=:]\s*(?:[1-9]\d{6,}|unlimited|infinity|-1)
+            - timeout\s*[=:]\s*(?:0|unlimited|infinity|-1|none)
+            - max_tokens?\s*[=:]\s*[1-9]\d{6,}
+            - batch_size\s*[=:]\s*[1-9]\d{4,}
+            - while\s*\(\s*(?:true|1)\s*\)
+            - for\s*\(\s*;\s*;\s*\)
+    - name: block-credential-patterns-expanded
+      description: Expanded detection for cloud API keys, tokens, and private keys
+      action: block
+      argPatterns:
+        - field: '*'
+          patterns:
+            - (?:AKIA|ASIA)[0-9A-Z]{16}
+            - sk-[a-zA-Z0-9]{20,}
+            - ghp_[a-zA-Z0-9]{36}
+            - glpat-[a-zA-Z0-9\-]{20,}
+            - xox[bspar]-[a-zA-Z0-9\-]+
+            - eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}
+            - -----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----
+            - Bearer\s+[a-zA-Z0-9._\-]{25,}
+
