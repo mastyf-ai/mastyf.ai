@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -13,10 +14,15 @@ class MastyfUnavailable(Exception):
     """No check could be made: the service is missing, refused the request, or failed."""
 
 
+class MastyfRefused(MastyfUnavailable):
+    """The service refused this particular input (too large or malformed). Never a reason to let it through."""
+
+
 class CheckClient:
-    def __init__(self, url: str, token: str, timeout: float = 10.0):
+    def __init__(self, url: str, token: str, timeout: float = 10.0, max_body_bytes: int | None = None):
         self.url = url.rstrip("/")
         self._token = token
+        self._max_body = max_body_bytes
         self._http = httpx.Client(timeout=timeout, follow_redirects=False)
 
     def close(self) -> None:
@@ -64,11 +70,18 @@ class CheckClient:
     # -- internals --------------------------------------------------------------------------
 
     def _verdict(self, path: str, body: dict[str, Any]) -> Verdict:
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        if self._max_body is not None and len(data) > self._max_body:
+            raise MastyfRefused(f"the input is larger than the check service accepts ({len(data)} bytes)")
         try:
-            res = self._http.post(f"{self.url}{path}", json=body, headers={"authorization": f"Bearer {self._token}"})
+            res = self._http.post(
+                f"{self.url}{path}", content=data, headers={"authorization": f"Bearer {self._token}", "content-type": "application/json"}
+            )
         except httpx.HTTPError as err:
             # The message never includes the request: it carries the token and the tool's data.
             raise MastyfUnavailable(f"the check service at {self.url} didn't answer ({type(err).__name__})") from None
+        if res.status_code in (400, 413):
+            raise MastyfRefused(f"the check service at {self.url} refused this input ({res.status_code})")
         if res.status_code != 200:
             raise MastyfUnavailable(f"the check service at {self.url} answered {res.status_code}")
         try:

@@ -20,13 +20,30 @@ from .verdict import Verdict
 __all__ = ["guard_tools", "GuardedTool"]
 
 
-def _call_fields(tool: BaseTool) -> set[str] | None:
-    """The arguments the model fills in (injected ones like state or config are left out)."""
-    schema = tool.tool_call_schema
-    if isinstance(schema, dict):
-        return set((schema.get("properties") or {}).keys())
-    fields = getattr(schema, "model_fields", None)
-    return set(fields) if fields is not None else None
+def _framework_fields(tool: BaseTool) -> set[str]:
+    """Arguments LangGraph fills from the graph (InjectedState, InjectedStore)."""
+    try:
+        from langgraph.prebuilt import InjectedState, InjectedStore
+    except ImportError:
+        return set()
+    kinds = (InjectedState, InjectedStore)
+    out = set()
+    for name, info in (getattr(tool.args_schema, "model_fields", None) or {}).items():
+        for m in getattr(info, "metadata", ()):
+            if isinstance(m, kinds) or (isinstance(m, type) and issubclass(m, kinds)):
+                out.add(name)
+    return out
+
+
+def _framework_value(value: Any) -> bool:
+    try:
+        from langgraph.store.base import BaseStore
+
+        if isinstance(value, BaseStore):
+            return True
+    except ImportError:
+        pass
+    return type(value).__name__ == "ToolRuntime"
 
 
 def _after(verdict: Verdict, result: Any) -> Any:
@@ -48,13 +65,10 @@ class GuardedTool(BaseTool):
         if args and not kwargs:
             value = args[0]
             return value, {"input": value}
-        fields = _call_fields(self.inner)
-        if fields is None:
-            return kwargs, kwargs
-        # Injected arguments (state, store, config) are left out of the check: they're the
-        # framework's objects, not the model's. But a plain value in an injected slot may have come
-        # from the model (plain LangChain doesn't stop it filling one), so those are checked too.
-        checked = {k: v for k, v in kwargs.items() if k in fields or isinstance(v, (str, bytes, int, float, bool))}
+        # Every argument the tool gets is checked except the framework's own objects (graph state,
+        # store, runtime). Plain LangChain lets a model fill other injected arguments, so those count.
+        skip = _framework_fields(self.inner)
+        checked = {k: v for k, v in kwargs.items() if k not in skip and not _framework_value(v)}
         return kwargs, checked
 
     def _run(self, *args: Any, **kwargs: Any) -> Any:

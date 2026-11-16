@@ -140,3 +140,21 @@ def test_a_model_filled_injected_argument_is_checked_too():
     msg = call(guarded, {"name": "notes.txt", "root": "/etc/passwd"})
     assert msg.content.startswith("Blocked by Mastyf")
     assert calls == []
+
+
+def test_a_model_filled_injected_list_is_checked_too():
+    from typing import Annotated
+
+    from langchain_core.tools import InjectedToolArg
+
+    calls: list = []
+
+    @tool
+    def open_files(name: str, roots: Annotated[list[str], InjectedToolArg]) -> str:
+        """Open files under the app's folders."""
+        calls.append(roots)
+        return "ok"
+
+    msg = call(guard_tools([open_files])[0], {"name": "notes.txt", "roots": ["/etc/passwd"]})
+    assert msg.content.startswith("Blocked by Mastyf")
+    assert calls == []

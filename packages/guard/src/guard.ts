@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { CheckClient } from './client.js';
 import { configured, runningLocal, shieldClient } from './discovery.js';
 import { assertNode, findEngine, startEngine, type Running } from './engine-process.js';
-import { MastyfUnavailableError, type Verdict } from './verdict.js';
+import { MastyfRefusedError, MastyfUnavailableError, type Verdict } from './verdict.js';
 
 let client: CheckClient | null = null;
 let tier: string | null = null;
@@ -29,11 +29,17 @@ async function connect(): Promise<void> {
     return;
   }
   assertNode();
+  const old = started;
+  started = null;
+  await old?.stop(); // never leave an old one behind
   const token = randomBytes(32).toString('base64url');
   started = await startEngine(findEngine(env), token);
-  client = new CheckClient(started.url, token);
+  client = new CheckClient(started.url, token, 10_000, ENGINE_MAX_BODY_MB * 1024 * 1024);
   tier = 'free';
 }
+
+const ENGINE_MAX_BODY_MB = 32; // what the started engine accepts (--max-body)
+const REFUSED: Verdict = { decision: 'block', id: 'refused', layer: 'service', rule: 'input-refused', reason: 'the check service refused this input' };
 
 async function service(reconnect = false): Promise<CheckClient> {
   while (connecting) await connecting.catch(() => {});
@@ -94,16 +100,18 @@ export function jsonable(value: unknown, seen = new WeakSet<object>()): unknown 
       if (typeof v === 'string' || (v && typeof v === 'object')) out[k] = jsonable(v, seen);
     }
   }
-  // A custom toString is what frameworks show the model for an object: check that text as well.
+  const base = Object.keys(out).length ? out : String(value);
+  // A custom toString is what frameworks show the model for an object: check that text as well,
+  // beside the fields (so no field of the object can stand in for it).
   const toString = (value as { toString?: unknown }).toString;
-  if (typeof toString === 'function' && toString !== Object.prototype.toString && !('shown' in out)) {
+  if (typeof toString === 'function' && toString !== Object.prototype.toString) {
     try {
-      out['shown'] = String(value);
+      return { value: base, shown: String(value) };
     } catch {
       /* nothing to add */
     }
   }
-  return Object.keys(out).length ? out : String(value);
+  return base;
 }
 
 function asArguments(args: unknown): Record<string, unknown> {
@@ -134,15 +142,16 @@ export function createGuard(options: GuardOptions = {}): Guard {
   const server = options.server ?? 'agent';
   const onUnavailable = options.onUnavailable ?? 'block';
 
-  async function ask<T>(question: (c: CheckClient) => Promise<T>, unchecked: () => T, what: string): Promise<T> {
+  async function ask<T>(question: (c: CheckClient) => Promise<T>, unchecked: () => T, what: string, refused: () => T): Promise<T> {
     try {
       try {
         return await question(await service());
       } catch (err) {
-        if (!(err instanceof MastyfUnavailableError) || !started) throw err;
+        if (!(err instanceof MastyfUnavailableError) || err instanceof MastyfRefusedError || !started || started.alive()) throw err;
         return await question(await service(true)); // the engine this process started died: once more
       }
     } catch (err) {
+      if (err instanceof MastyfRefusedError) return refused(); // never let through, in either mode
       if (err instanceof MastyfUnavailableError && onUnavailable === 'allow') {
         console.warn(`Mastyf: ${what} not checked (${err.message})`);
         return unchecked();
@@ -158,13 +167,14 @@ export function createGuard(options: GuardOptions = {}): Guard {
     get tier() {
       return tier;
     },
-    checkCall: (tool, args) => ask((c) => c.checkCall(tool, asArguments(args), { server, session }), allowUnchecked, 'tool call'),
+    checkCall: (tool, args) => ask((c) => c.checkCall(tool, asArguments(args), { server, session }), allowUnchecked, 'tool call', () => REFUSED),
     checkResult: (tool, result, args) =>
       ask(
         (c) => c.checkResult(tool, jsonable(result), { server, session, ...(args === undefined ? {} : { arguments: asArguments(args) }) }),
         allowUnchecked,
         'tool result',
+        () => REFUSED,
       ),
-    registerTools: (tools) => ask((c) => c.registerTools(server, jsonable(tools) as unknown[], { session }), () => null, 'tool definitions'),
+    registerTools: (tools) => ask((c) => c.registerTools(server, jsonable(tools) as unknown[], { session }), () => null, 'tool definitions', () => REFUSED),
   };
 }

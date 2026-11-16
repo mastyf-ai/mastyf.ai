@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tokenPath, _setLocalUrlForTests } from '../src/discovery.js';
 import { createGuard, _resetForTests, _running } from '../src/guard.js';
-import { MastyfUnavailableError } from '../src/verdict.js';
+import { MastyfUnavailableError, modelMessage } from '../src/verdict.js';
 import { fakeService, isolatedHome, pidAlive, signedHealth, TAKEOVER, TOKEN, waitFor, type Fake } from './helpers.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -88,6 +88,23 @@ describe('createGuard with the free engine', () => {
       }
     }
     expect((await g.checkResult('fetch_page', new Answer())).decision).toBe('block');
+    class Shadowed {
+      shown = 'fine';
+      toString() {
+        return TAKEOVER;
+      }
+    }
+    expect((await g.checkResult('fetch_page', new Shadowed())).decision).toBe('block');
+  });
+
+  it('a refused input is blocked and does not restart the engine', async () => {
+    const g = createGuard();
+    await g.checkCall('read_file', { path: './README.md' });
+    const pid = _running()!.child.pid;
+    const v = await g.checkResult('fetch_page', 'a'.repeat(33 * 1024 * 1024));
+    expect(v.decision).toBe('block');
+    expect(_running()!.child.pid).toBe(pid);
+    expect(_running()!.alive()).toBe(true);
   });
 
   it('the engine stops when the program using the guard ends on its own', async () => {
@@ -144,6 +161,16 @@ describe('where the checks come from', () => {
     _setLocalUrlForTests(squatter.url);
     expect((await createGuard().checkCall('read_file', { path: '/etc/passwd' })).decision).toBe('block'); // started its own
     expect(squatter.requests.every((r) => r.auth === undefined && r.path.startsWith('/v1/health'))).toBe(true);
+  });
+
+  it('input the service refuses is blocked, never let through, in either mode', async () => {
+    const svc = await fake((p) => (p.startsWith('/v1/health') ? [200, { status: 'ready', tier: 'free' }] : [413, { error: 'too large' }]));
+    process.env['MASTYF_CHECK_URL'] = svc.url;
+    process.env['MASTYF_CHECK_TOKEN'] = TOKEN;
+    for (const onUnavailable of ['block', 'allow'] as const) {
+      const v = await createGuard({ onUnavailable }).checkResult('fetch_page', 'x');
+      expect(modelMessage(v)).toBe('Blocked by Mastyf (service: input-refused).');
+    }
   });
 
   it('nothing available fails closed by default', async () => {

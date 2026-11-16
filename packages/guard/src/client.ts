@@ -1,5 +1,5 @@
 /** HTTP client for a Mastyf check service (the free service on this machine, or one you run). */
-import { MastyfUnavailableError, parseVerdict, type Verdict } from './verdict.js';
+import { MastyfRefusedError, MastyfUnavailableError, parseVerdict, type Verdict } from './verdict.js';
 
 export interface Where {
   server: string;
@@ -13,6 +13,7 @@ export class CheckClient {
     url: string,
     private readonly token: string,
     private readonly timeoutMs = 10_000,
+    private readonly maxBodyBytes?: number,
   ) {
     this.url = url.replace(/\/+$/, '');
   }
@@ -50,18 +51,26 @@ export class CheckClient {
   }
 
   private async verdict(path: string, body: Record<string, unknown>): Promise<Verdict> {
+    const data = Buffer.from(JSON.stringify(body), 'utf8');
+    if (this.maxBodyBytes !== undefined && data.length > this.maxBodyBytes) {
+      throw new MastyfRefusedError(`the input is larger than the check service accepts (${data.length} bytes)`);
+    }
     let res: Response;
     try {
       res = await fetch(`${this.url}${path}`, {
         method: 'POST',
         redirect: 'manual',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${this.token}` },
-        body: JSON.stringify(body),
+        body: data,
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
       // The message never includes the request: it carries the token and the tool's data.
       throw new MastyfUnavailableError(`the check service at ${this.url} didn't answer (${(err as Error)?.name ?? 'error'})`);
+    }
+    if (res.status === 400 || res.status === 413) {
+      await res.body?.cancel().catch(() => {});
+      throw new MastyfRefusedError(`the check service at ${this.url} refused this input (${res.status})`);
     }
     if (res.status !== 200) {
       await res.body?.cancel().catch(() => {});

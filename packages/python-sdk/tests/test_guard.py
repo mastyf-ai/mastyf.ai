@@ -176,3 +176,33 @@ def test_what_the_model_would_be_shown_is_checked(with_bundle):
             return self._body
 
     assert Guard().check_result("fetch_page", Answer()).blocked
+
+
+def test_input_the_service_refuses_is_blocked_never_let_through(fake_service, monkeypatch):
+    svc = fake_service(lambda path, body: (200, {"status": "ready", "tier": "free"}) if path.startswith("/v1/health") else (413, {"error": "too large"}))
+    monkeypatch.setenv("MASTYF_CHECK_URL", svc.url)
+    monkeypatch.setenv("MASTYF_CHECK_TOKEN", TOKEN)
+    for mode in ("block", "allow"):
+        v = Guard(on_unavailable=mode).check_result("fetch_page", "x")
+        assert v.blocked
+        assert v.model_message() == "Blocked by Mastyf (service: input-refused)."
+
+
+def test_a_refused_input_does_not_restart_the_engine(with_bundle):
+    g = Guard()
+    g.check_call("read_file", {"path": "./README.md"})
+    pid = guard_module._running().process.pid
+    assert g.check_result("fetch_page", "a" * (33 * 1024 * 1024)).blocked
+    assert guard_module._running().process.pid == pid
+    assert guard_module._running().alive()
+
+
+def test_shown_text_cannot_hide_behind_a_field_of_the_same_name(with_bundle):
+    class Answer:
+        def __init__(self):
+            self.shown = "fine"
+
+        def __str__(self):
+            return TAKEOVER
+
+    assert Guard().check_result("fetch_page", Answer()).blocked

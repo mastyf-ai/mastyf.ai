@@ -16,6 +16,14 @@ export class MastyfUnavailableError extends Error {
   }
 }
 
+/** The service refused this particular input (too large or malformed). Never a reason to let it through. */
+export class MastyfRefusedError extends MastyfUnavailableError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MastyfRefusedError';
+  }
+}
+
 export function isBlocked(v: Verdict): boolean {
   return v.decision === 'block';
 }

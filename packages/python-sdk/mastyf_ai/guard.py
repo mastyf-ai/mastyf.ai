@@ -18,7 +18,7 @@ from typing import Any, Iterator, Literal
 
 from . import discovery, program
 from ._check_sha256 import CHECK_VERSION, SHA256
-from .client import CheckClient, MastyfUnavailable
+from .client import CheckClient, MastyfRefused, MastyfUnavailable
 from .verdict import Verdict
 
 log = logging.getLogger("mastyf_ai")
@@ -27,6 +27,8 @@ _lock = threading.Lock()
 _client: CheckClient | None = None
 _tier: str | None = None
 _started: program.Running | None = None
+ENGINE_MAX_BODY_MB = 32  # what the started program accepts (--max-body)
+REFUSED = Verdict(decision="block", id="refused", layer="service", rule="input-refused", reason="the check service refused this input")
 
 
 def _home() -> Path:
@@ -50,9 +52,12 @@ def _connect() -> None:
     )
     if not path.exists():
         raise MastyfUnavailable(f"the Mastyf check program wasn't found at {path}")
+    if _started is not None:
+        _started.stop()  # never leave an old one behind
+        _started = None
     token = secrets.token_urlsafe(32)
     _started = program.start(path, token)
-    _client, _tier = CheckClient(_started.url, token), "free"
+    _client, _tier = CheckClient(_started.url, token, max_body_bytes=ENGINE_MAX_BODY_MB * 1024 * 1024), "free"
 
 
 def _service(*, reconnect: bool = False) -> CheckClient:
@@ -109,19 +114,22 @@ def _jsonable(value: Any) -> Any:
             inner = getattr(value, attr, None)
             if isinstance(inner, (str, bytes, list, dict)):
                 out[attr] = _jsonable(inner)
-    # A custom __str__ is what frameworks show the model for an object: check that text as well.
+    if len(out) > 1:
+        base: Any = out
+    else:
+        try:
+            json.dumps(value)
+            base = value
+        except (TypeError, ValueError):
+            base = str(value)
+    # A custom __str__ is what frameworks show the model for an object: check that text as well,
+    # beside the fields (so no field of the object can stand in for it).
     if type(value).__str__ is not object.__str__:
         try:
-            out.setdefault("shown", str(value))
+            return {"value": base, "shown": str(value)}
         except Exception:
             pass
-    if len(out) > 1:
-        return out
-    try:
-        json.dumps(value)
-        return value
-    except (TypeError, ValueError):
-        return str(value)
+    return base
 
 
 def _arguments(arguments: Any) -> dict[str, Any]:
@@ -163,24 +171,26 @@ class Guard:
         return self._ask(lambda c: c.check_result(tool, _jsonable(result), arguments=args, server=self.server, session=self.session_id))
 
     def register_tools(self, tools: list[dict[str, Any]]) -> Verdict | None:
-        try:
-            return _service().register_tools(self.server, _jsonable(tools), session=self.session_id)
-        except MastyfUnavailable:
-            if self.on_unavailable == "allow":
-                log.warning("Mastyf: tool definitions not checked (no check service)")
-                return None
-            raise
+        return self._ask(
+            lambda c: c.register_tools(self.server, _jsonable(tools), session=self.session_id), unchecked=None, what="tool definitions"
+        )
 
-    def _ask(self, ask) -> Verdict:
+    def _ask(self, ask, unchecked: Any = ..., what: str = "tool call") -> Any:
         try:
             try:
                 return ask(_service())
+            except MastyfRefused:
+                raise
             except MastyfUnavailable:
-                if _started is None:
+                if _started is None or _started.alive():
                     raise
                 return ask(_service(reconnect=True))  # the program this process started died: once more
+        except MastyfRefused:
+            return REFUSED  # an input the service won't take is never let through, in either mode
         except MastyfUnavailable as err:
             if self.on_unavailable == "allow":
-                log.warning("Mastyf: tool call not checked (%s)", err)
-                return Verdict(decision="allow", id="unavailable", reason="not checked: no check service")
+                log.warning("Mastyf: %s not checked (%s)", what, err)
+                if unchecked is ...:
+                    return Verdict(decision="allow", id="unavailable", reason="not checked: no check service")
+                return unchecked
             raise
