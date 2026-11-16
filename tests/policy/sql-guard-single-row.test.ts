@@ -26,6 +26,12 @@ describe('SQL guard: bulk reads of sensitive tables are blocked, single-row look
       'SELECT name FROM customers WHERE id = (SELECT max(id) FROM customers)',
       'SELECT name FROM customers WHERE country = \'IN\'',
       'SELECT token FROM credentials WHERE id = 3',
+      'SELECT name FROM customers UNION SELECT api_token FROM users WHERE id = 1',
+      'SELECT name FROM customers EXCEPT SELECT name FROM users WHERE id = 1',
+      'SELECT user_password FROM users WHERE id = 1',
+      'SELECT name, api_token FROM users WHERE id = 1',
+      'SELECT name FROM customers WHERE tenant_id = 7',
+      'SELECT email FROM users WHERE org_id = 3',
     ]) {
       expect({ sql, rule: guard(sql)?.rule }).toEqual({ sql, rule: 'semantic-sql-guard' });
     }
@@ -34,6 +40,7 @@ describe('SQL guard: bulk reads of sensitive tables are blocked, single-row look
   it('allows a lookup by a key column', () => {
     expect(guard('SELECT name, email FROM customers WHERE customer_id = 42')).toBeNull();
     expect(guard("SELECT status FROM payments WHERE uuid = 'a1b2'")).toBeNull();
+    expect(guard('SELECT c.name AS n FROM customers WHERE c.id = 42')).toBeNull();
   });
 
   it('still blocks the always-true filters and star selects that dump a table', () => {

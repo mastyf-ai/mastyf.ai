@@ -17,21 +17,36 @@ const REPO_ARG_FIELDS = new Set(['repo', 'repository', 'owner']);
 const SQL_SENSITIVE_TABLES =
   'accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords';
 
-/** Columns whose values are secrets: never part of an exempt lookup. */
-const SQL_SECRET_COLUMNS = /\b(?:password|passwd|pwd|hash|salt|secret|token|api_?key|ssn|card|cvv|pin|otp|private_?key)\w*/i;
+/** A secret-looking column name, anywhere in the identifier (api_token, user_password, ...). */
+const SQL_SECRET_COLUMN = /(?:password|passwd|pwd|hash|salt|secret|token|api_?key|ssn|card|cvv|pin|otp|private_?key)/i;
+
+/** SQL words that can never appear inside an exempt lookup. */
+const SQL_WIDENING_WORDS = /\b(?:union|except|intersect|minus|join|or|in|like|between|not|exists|group|having|order)\b/i;
+
+const IDENT = '[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?';
+const COLUMN = `${IDENT}(?:\\s+as\\s+[A-Za-z_]\\w*)?`;
+const SINGLE_ROW_LOOKUP = new RegExp(
+  `^\\s*select\\s+(${COLUMN}(?:\\s*,\\s*${COLUMN})*)\\s+from\\s+([A-Za-z_]\\w*)\\s+where\\s+(${IDENT})\\s*=\\s*(?:\\d+|'[^']*')\\s*(?:limit\\s+1\\s*)?;?\\s*$`,
+  'i',
+);
 
 /**
- * The whole statement is `SELECT a, b FROM table WHERE <key column> = <one literal> [LIMIT n]`:
- * one table, plain column names (no functions, star, joins or subqueries), no secret columns, and
- * the filter is an equality on a key column (`id`, `*_id`, `uuid`), so it returns one record.
- * Anything else falls through to the sensitive-table rule.
+ * The whole statement is `SELECT a, b [AS x] FROM table WHERE <primary key> = <one literal> [LIMIT 1]`:
+ * one SELECT on one table, plain column names that aren't secrets, and an equality on the table's
+ * primary key (`id`, `uuid`, or `<table in singular>_id`), so it returns one record. Anything else,
+ * including `tenant_id = 7` (many rows), falls through to the sensitive-table rule.
  */
 function isSingleRowLookup(sql: string): boolean {
-  const m = /^\s*select\s+([\w\s.,]+?)\s+from\s+([A-Za-z_][\w.]*)\s+where\s+([A-Za-z_][\w.]*)\s*=\s*(?:\d+|'[^']*')\s*(?:limit\s+1\s*)?;?\s*$/i.exec(sql);
+  if ((sql.match(/\bselect\b/gi) ?? []).length !== 1 || (sql.match(/\bfrom\b/gi) ?? []).length !== 1) return false;
+  if (SQL_WIDENING_WORDS.test(sql) || /[()*]/.test(sql)) return false;
+  const m = SINGLE_ROW_LOOKUP.exec(sql);
   if (!m) return false;
-  const [, columns, , keyColumn] = m;
-  if (SQL_SECRET_COLUMNS.test(columns)) return false;
-  return /^(?:\w+\.)?(?:id|uuid|\w+_id|\w+_uuid)$/i.test(keyColumn);
+  const [, columns, table, keyColumn] = m;
+  const names = columns.split(',').map((c) => c.trim().split(/\s+/)[0].split('.').pop() ?? '');
+  if (names.some((name) => SQL_SECRET_COLUMN.test(name))) return false;
+  const key = (keyColumn.split('.').pop() ?? '').toLowerCase();
+  const singular = table.toLowerCase().replace(/s$/, '');
+  return key === 'id' || key === 'uuid' || key === `${singular}_id` || key === `${singular}_uuid`;
 }
 
 const SQL_EXFIL_PATTERNS: RegExp[] = [
