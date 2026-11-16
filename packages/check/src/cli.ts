@@ -93,9 +93,14 @@ export async function run(argv: string[], io: Io): Promise<RunResult> {
       }
 
       case 'serve': {
+        const host = p.flags['host'] ?? io.env['MASTYF_CHECK_HOST'] ?? '127.0.0.1';
+        // Beyond this machine (e.g. in a container), a token file nobody else can read doesn't exist:
+        // the token must be set on purpose.
+        if (!['127.0.0.1', 'localhost', '::1'].includes(host) && !io.env['MASTYF_CHECK_TOKEN']) {
+          throw new Error(`listening on ${host} needs MASTYF_CHECK_TOKEN set (32 characters or more); 127.0.0.1 doesn't`);
+        }
         const engine = await CheckEngine.create({ policyPath: p.flags['policy'], mode: mode(p.flags) });
         const token = ensureToken({ env: io.env, home: homedir(), platform: process.platform });
-        const host = p.flags['host'] ?? io.env['MASTYF_CHECK_HOST'] ?? '127.0.0.1';
         const port = Number(p.flags['port'] ?? io.env['MASTYF_CHECK_PORT'] ?? 4100);
         if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`--port must be a port number, not "${p.flags['port']}"`);
         const text = p.flags['log'] === 'text';

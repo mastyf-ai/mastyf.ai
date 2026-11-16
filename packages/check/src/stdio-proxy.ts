@@ -147,7 +147,18 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
       }
       pending.delete(String(msg.id));
 
-      if (req.method === 'tools/list' && msg.result !== undefined) {
+      // A reply carries exactly one of result or error; anything else is refused. What the agent
+      // receives is rebuilt from {jsonrpc, id} plus the one part that was checked, never the original.
+      const hasResult = msg.result !== undefined;
+      const hasError = msg.error !== undefined;
+      if (hasResult === hasError) {
+        note({ kind: 'refused', from: 'server', why: 'reply must have exactly one of result or error' });
+        return write(opts.output, blockedReply(msg.id, { decision: 'block', id: 'shape', layer: 'policy', rule: 'malformed-reply' }));
+      }
+      const key = hasResult ? 'result' : 'error';
+      const reply = (part: unknown): Message => ({ jsonrpc: '2.0', id: msg.id, [key]: part });
+
+      if (req.method === 'tools/list' && hasResult) {
         if (!Array.isArray(msg.result?.tools)) {
           return write(opts.output, blockedReply(msg.id, { decision: 'block', id: 'shape', layer: 'lifecycle', rule: 'tools-not-a-list' }));
         }
@@ -156,32 +167,15 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
         const v = changed ?? poisoned!;
         note({ kind: 'tools', decision: v.decision, layer: v.layer, rule: v.rule });
         if (v.decision === 'block') return write(opts.output, blockedReply(msg.id, v));
-        return write(opts.output, msg);
+        return write(opts.output, reply(v.decision === 'redact' ? v.result : msg.result));
       }
 
-      if (req.method === 'tools/call') {
-        // Results and errors both reach the model: check whichever came back.
-        const payload = msg.result !== undefined ? msg.result : msg.error;
-        const v = await checkText(req.tool ?? '', payload, req.args);
-        note({ kind: 'result', tool: req.tool, decision: v.decision, layer: v.layer, rule: v.rule });
-        if (v.decision === 'block') return write(opts.output, blockedReply(msg.id, v));
-        if (v.decision === 'redact') {
-          return write(opts.output, msg.result !== undefined ? { ...msg, result: v.result } : { ...msg, error: v.result });
-        }
-        return write(opts.output, msg);
-      }
-
-      // A reply to anything else (resources, prompts, initialize...): its text reaches the model too.
-      const payload = msg.result !== undefined ? msg.result : msg.error;
-      if (payload !== undefined) {
-        const v = await checkText(req.method, payload);
-        note({ kind: 'reply', method: req.method, decision: v.decision, layer: v.layer, rule: v.rule });
-        if (v.decision === 'block') return write(opts.output, blockedReply(msg.id, v));
-        if (v.decision === 'redact') {
-          return write(opts.output, msg.result !== undefined ? { ...msg, result: v.result } : { ...msg, error: v.result });
-        }
-      }
-      write(opts.output, msg);
+      // Tool results, errors, resources, prompts, initialize...: all of it can reach the model.
+      const part = hasResult ? msg.result : msg.error;
+      const v = req.method === 'tools/call' ? await checkText(req.tool ?? '', part, req.args) : await checkText(req.method, part);
+      note({ kind: req.method === 'tools/call' ? 'result' : 'reply', method: req.method, tool: req.tool, decision: v.decision, layer: v.layer, rule: v.rule });
+      if (v.decision === 'block') return write(opts.output, blockedReply(msg.id, v));
+      write(opts.output, reply(v.decision === 'redact' ? v.result : part));
     })();
   });
 

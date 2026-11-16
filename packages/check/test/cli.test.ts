@@ -55,6 +55,26 @@ describe('mastyf-check serve', () => {
   });
 });
 
+describe('mastyf-check serve beyond this machine', () => {
+  it('refuses to listen on a non-local address without an explicit MASTYF_CHECK_TOKEN', async () => {
+    const t = io();
+    t.env = {};
+    const r = await run(['serve', '--host', '0.0.0.0', '--port', '0'], t);
+    expect(r.code).toBe(1);
+    expect(t.err()).toMatch(/MASTYF_CHECK_TOKEN/);
+  });
+
+  it('listens on a non-local address when MASTYF_CHECK_TOKEN is set', async () => {
+    const t = io();
+    const r = await run(['serve', '--host', '0.0.0.0', '--port', '0'], t);
+    try {
+      expect(r.code).toBe(0);
+    } finally {
+      await r.close?.();
+    }
+  });
+});
+
 describe('mastyf-check test', () => {
   it('prints the verdict; exit 2 on block, 0 on allow', async () => {
     const t = io();
@@ -110,6 +130,17 @@ describe('mastyf-check proxy', () => {
 
   const TAKEOVER_WORDS = 'ignore all previous';
   const seen = (lines: unknown[]) => JSON.stringify(lines).toLowerCase();
+
+  it('never forwards the part of a reply it did not check (a reply with both result and error)', async () => {
+    const s = await session();
+    try {
+      await s.request(1, 'tools/call', { name: 'result_and_error', arguments: {} }).catch(() => null);
+      await s.settle();
+      expect(seen(s.lines)).not.toContain(TAKEOVER_WORDS);
+    } finally {
+      await s.close();
+    }
+  });
 
   it("checks a server's error message too", async () => {
     const s = await session();
