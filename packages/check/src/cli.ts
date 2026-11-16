@@ -22,6 +22,8 @@ export interface Io {
 export interface RunResult {
   code: number;
   close?: () => Promise<void>;
+  /** For `proxy`: settles with the exit code to use once the server has stopped. */
+  exited?: Promise<number>;
 }
 
 const HELP = `mastyf-check ${VERSION}: Mastyf's free checks for AI agents' tool calls, on this machine.
@@ -128,7 +130,7 @@ export async function run(argv: string[], io: Io): Promise<RunResult> {
           log: (line) => say(io.stderr, line),
           server: p.flags['server'],
         });
-        return { code: 0, close: proxy.close };
+        return { code: 0, close: proxy.close, exited: proxy.exited };
       }
 
       default:

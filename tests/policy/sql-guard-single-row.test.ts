@@ -32,6 +32,12 @@ describe('SQL guard: bulk reads of sensitive tables are blocked, single-row look
       'SELECT name, api_token FROM users WHERE id = 1',
       'SELECT name FROM customers WHERE tenant_id = 7',
       'SELECT email FROM users WHERE org_id = 3',
+      // MySQL compares a string column to 0 as a number: nearly every row matches.
+      'SELECT email, name FROM users WHERE uuid = 0',
+      'SELECT email FROM users WHERE user_uuid = 0',
+      "SELECT email FROM users WHERE id = '0'",
+      'SELECT email FROM users WHERE id = 0',
+      "SELECT email FROM users WHERE uuid = ''",
     ]) {
       expect({ sql, rule: guard(sql)?.rule }).toEqual({ sql, rule: 'semantic-sql-guard' });
     }

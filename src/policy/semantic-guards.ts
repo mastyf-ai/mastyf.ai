@@ -26,7 +26,7 @@ const SQL_WIDENING_WORDS = /\b(?:union|except|intersect|minus|join|or|in|like|be
 const IDENT = '[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?';
 const COLUMN = `${IDENT}(?:\\s+as\\s+[A-Za-z_]\\w*)?`;
 const SINGLE_ROW_LOOKUP = new RegExp(
-  `^\\s*select\\s+(${COLUMN}(?:\\s*,\\s*${COLUMN})*)\\s+from\\s+([A-Za-z_]\\w*)\\s+where\\s+(${IDENT})\\s*=\\s*(?:\\d+|'[^']*')\\s*(?:limit\\s+1\\s*)?;?\\s*$`,
+  `^\\s*select\\s+(${COLUMN}(?:\\s*,\\s*${COLUMN})*)\\s+from\\s+([A-Za-z_]\\w*)\\s+where\\s+(${IDENT})\\s*=\\s*(\\d+|'[^']*')\\s*(?:limit\\s+1\\s*)?;?\\s*$`,
   'i',
 );
 
@@ -41,12 +41,17 @@ function isSingleRowLookup(sql: string): boolean {
   if (SQL_WIDENING_WORDS.test(sql) || /[()*]/.test(sql)) return false;
   const m = SINGLE_ROW_LOOKUP.exec(sql);
   if (!m) return false;
-  const [, columns, table, keyColumn] = m;
+  const [, columns, table, keyColumn, literal] = m;
   const names = columns.split(',').map((c) => c.trim().split(/\s+/)[0].split('.').pop() ?? '');
   if (names.some((name) => SQL_SECRET_COLUMN.test(name))) return false;
   const key = (keyColumn.split('.').pop() ?? '').toLowerCase();
   const singular = table.toLowerCase().replace(/s$/, '');
-  return key === 'id' || key === 'uuid' || key === `${singular}_id` || key === `${singular}_uuid`;
+  const quotedNonEmpty = /^'[^']+'$/.test(literal) && !/^'0*'$/.test(literal);
+  // MySQL compares a string column to a number by converting it: `uuid = 0` matches nearly every
+  // row. So a uuid key needs a quoted, non-empty value, and an id key a positive whole number or one.
+  if (key === 'uuid' || key === `${singular}_uuid`) return quotedNonEmpty;
+  if (key === 'id' || key === `${singular}_id`) return /^[1-9]\d*$/.test(literal) || quotedNonEmpty;
+  return false;
 }
 
 const SQL_EXFIL_PATTERNS: RegExp[] = [

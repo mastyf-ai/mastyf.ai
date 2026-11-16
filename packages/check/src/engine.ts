@@ -72,6 +72,12 @@ function applyLocalServiceEnv(): void {
   process.env['MASTYF_AI_LEARNING_MODE'] = 'false';
   // Regexes run inline: the worker-thread evaluator loads a separate file the single-file build doesn't carry.
   process.env['MASTYF_AI_REGEX_USE_WORKER'] = 'false';
+  // Settings a shell may carry from other Mastyf tools that must not change the free service:
+  // the LLM review is paid (its module is also stubbed), and results are always scanned.
+  for (const name of ['MASTYF_AI_SEMANTIC_ASYNC', 'MASTYF_AI_SEMANTIC_SYNC_REQUEST', 'MASTYF_AI_SEMANTIC_SYNC_REQUEST_LLM', 'MASTYF_AI_SEMANTIC_STRICT']) {
+    process.env[name] = 'false';
+  }
+  delete process.env['MASTYF_AI_SKIP_RESPONSE_SCAN'];
   // The pipeline logs every decision with the call's arguments at info level; the service logs its own, without them.
   process.env['LOG_LEVEL'] ??= 'error';
 }

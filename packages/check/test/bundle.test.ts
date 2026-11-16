@@ -20,7 +20,7 @@ beforeAll(() => {
 
 describe('the bundle', () => {
   it('contains no paid layer, licence client or extension loader', () => {
-    for (const word of ['protocol-x', 'causal-gate', 'ai-review', 'difc/taint', 'globalSessionTaintTracker', 'src/license/license-client', 'src/agentic/', 'src/extensions/index', 'MASTYF_AI_EXTENSIONS', 'mastyf-enterprise']) {
+    for (const word of ['protocol-x', 'causal-gate', 'ai-review', 'difc/taint', 'globalSessionTaintTracker', 'src/license/license-client', 'src/proxy/semantic-proxy-hooks', 'enqueueSemanticAudit', 'src/agentic/', 'src/extensions/index', 'MASTYF_AI_EXTENSIONS', 'mastyf-enterprise']) {
       expect({ word, found: text.includes(word) }).toEqual({ word, found: false });
     }
   });

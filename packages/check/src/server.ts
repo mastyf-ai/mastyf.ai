@@ -149,7 +149,9 @@ export async function startServer(engine: CheckEngine, opts: ServerOptions): Pro
         }
         const session = optionalString(body, 'session');
         const changed = engine.registerTools(server, tools as unknown as ToolDef[], session);
-        const v: Verdict = changed ?? { decision: 'allow', id: 'tools' };
+        // Descriptions and schemas reach the model too: checked like a tool result, as the proxy does.
+        const poisoned = changed ? null : await engine.checkResult({ tool: 'tools/list', result: { tools }, server, session });
+        const v: Verdict = changed ?? (poisoned && poisoned.decision === 'block' ? poisoned : { decision: 'allow', id: 'tools' });
         logDecision('tools', v);
         return send(res, 200, remember('tools', v, { server, session }));
       }

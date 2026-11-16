@@ -15,7 +15,8 @@ function io() {
   let err = '';
   stdout.on('data', (d) => (out += d));
   stderr.on('data', (d) => (err += d));
-  return { stdin, stdout, stderr, env: { MASTYF_CHECK_TOKEN: TOKEN }, out: () => out, err: () => err };
+  const env: Record<string, string | undefined> = { MASTYF_CHECK_TOKEN: TOKEN };
+  return { stdin, stdout, stderr, env, out: () => out, err: () => err };
 }
 
 async function freePort(): Promise<number> {
@@ -97,6 +98,43 @@ describe('mastyf-check test', () => {
     expect((await run(['test', 'read_file', '{nope'], t)).code).toBe(1);
     expect(t.err()).toMatch(/JSON/);
   });
+});
+
+describe("mastyf-check proxy: the server's lifecycle", () => {
+  const within = <T,>(p: Promise<T>, ms: number) =>
+    Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`not within ${ms} ms`)), ms))]);
+
+  it('a server that cannot start: a clear message and a non-zero exit, not a crash', async () => {
+    const t = io();
+    const r = await run(['proxy', '--', 'mastyf-no-such-command-xyz'], t);
+    expect(await within(r.exited!, 10000)).not.toBe(0);
+    expect(t.err()).toMatch(/could not start/i);
+  });
+
+  it('a server that dies: requests in flight get an error, and the proxy exits with its code', async () => {
+    const t = io();
+    const r = await run(['proxy', '--', process.execPath, FAKE_MCP], t);
+    const lines: Array<Record<string, any>> = [];
+    t.stdout.on('data', (d) => String(d).split('\n').filter(Boolean).forEach((l) => lines.push(JSON.parse(l))));
+    t.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'crash', arguments: {} } })}\n`);
+    expect(await within(r.exited!, 10000)).toBe(3);
+    await new Promise((r2) => setTimeout(r2, 100)); // the stream delivers the last line a tick later
+    expect(lines.find((l) => l.id === 9)?.error?.message).toMatch(/stopped/i);
+  });
+
+  it('the agent going away stops the server too', async () => {
+    const t = io();
+    const r = await run(['proxy', '--', process.execPath, FAKE_MCP], t);
+    t.stdin.end();
+    await within(r.exited!, 10000);
+  });
+
+  it('starts servers configured as npx (which on Windows is npx.cmd)', async () => {
+    const t = io();
+    const r = await run(['proxy', '--', 'npx', '--version'], t);
+    expect(await within(r.exited!, 60000)).toBe(0);
+    expect(t.err()).not.toMatch(/could not start/i);
+  }, 70000);
 });
 
 describe('mastyf-check proxy', () => {

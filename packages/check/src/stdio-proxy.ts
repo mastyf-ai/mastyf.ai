@@ -9,7 +9,9 @@
  * requests the server sends on its own (sampling, elicitation) are checked too. JSON-RPC batches
  * (arrays) are refused both ways: MCP doesn't use them, and they would hide messages from the checks.
  */
-import { spawn, type ChildProcess } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+// cross-spawn starts .cmd files on Windows (npx, pnpm...) safely; plain spawn can't without a shell.
+import crossSpawn from 'cross-spawn';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
@@ -56,12 +58,23 @@ function parseOne(line: string): Message | null | 'batch' {
   return isPlainObject(parsed) ? (parsed as Message) : null;
 }
 
-export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { close(): Promise<void>; child: ChildProcess } {
+export interface StdioProxy {
+  child: ChildProcess;
+  close(): Promise<void>;
+  /** Settles once the server has stopped: its exit code, or 1 when it failed or couldn't start. */
+  exited: Promise<number>;
+}
+
+export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): StdioProxy {
   const server = opts.server ?? 'stdio';
   const session = randomUUID();
-  const child = spawn(opts.command, opts.args, { stdio: ['pipe', 'pipe', 'inherit'], env: opts.env ?? process.env, windowsHide: true });
+  const child = crossSpawn(opts.command, opts.args, { stdio: ['pipe', 'pipe', 'inherit'], env: opts.env ?? process.env, windowsHide: true });
+  let settle!: (code: number) => void;
+  const exited = new Promise<number>((resolve) => (settle = resolve));
+  let stopped = false;
   /** Agent requests in flight whose replies the proxy must look at: id → method and tool. */
-  const pending = new Map<string, { method: string; tool?: string; args?: Record<string, unknown> }>();
+  // Keyed by String(id); `id` keeps the original (number or string) so replies carry it unchanged.
+  const pending = new Map<string, { id: Id; method: string; tool?: string; args?: Record<string, unknown> }>();
   const write = (stream: Writable, msg: Message) => stream.write(`${JSON.stringify(msg)}\n`);
   const note = (fields: Record<string, unknown>) => opts.log(JSON.stringify(fields));
 
@@ -83,7 +96,7 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
       }
       if (!msg) return;
       // Every request with an id is recorded before any check runs, so its reply is known and looked at.
-      if (msg.method && hasId(msg)) pending.set(String(msg.id), { method: msg.method });
+      if (msg.method && hasId(msg)) pending.set(String(msg.id), { id: msg.id!, method: msg.method });
       if (msg.method === 'tools/call') {
         const tool = String(msg.params?.name ?? '');
         const rawArgs = msg.params?.arguments;
@@ -105,7 +118,7 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
           if (hasId(msg)) pending.delete(String(msg.id));
           return write(opts.output, blockedReply(msg.id, v));
         }
-        if (hasId(msg)) pending.set(String(msg.id), { method: 'tools/call', tool, args });
+        if (hasId(msg)) pending.set(String(msg.id), { id: msg.id!, method: 'tools/call', tool, args });
       }
       write(child.stdin!, msg);
     })();
@@ -179,13 +192,38 @@ export function startStdioProxy(engine: CheckEngine, opts: ProxyOptions): { clos
     })();
   });
 
-  child.on('exit', (code) => note({ kind: 'server-exit', code }));
+  /** The server is gone: every request still waiting gets an error, so the agent isn't left hanging. */
+  const stop = (code: number, message: string) => {
+    if (stopped) return;
+    stopped = true;
+    for (const { id } of pending.values()) {
+      write(opts.output, { jsonrpc: '2.0', id, error: { code: -32002, message } });
+    }
+    pending.clear();
+    settle(code);
+  };
+  child.on('error', (err) => {
+    opts.log(`mastyf-check: could not start the MCP server "${opts.command}": ${err.message}`);
+    stop(1, 'The MCP server could not be started');
+  });
+  child.on('exit', (code, signal) => {
+    note({ kind: 'server-exit', code, signal });
+    stop(code ?? 1, `The MCP server stopped (exit code ${code ?? signal})`);
+  });
+  // The agent went away: stop the server rather than leave it running.
+  opts.input.on('end', () => {
+    child.stdin?.end();
+    setTimeout(() => {
+      if (!stopped) child.kill();
+    }, 2000).unref();
+  });
 
   return {
     child,
+    exited,
     close: () =>
       new Promise<void>((resolve) => {
-        if (child.exitCode !== null) return resolve();
+        if (stopped || child.exitCode !== null) return resolve();
         child.once('exit', () => resolve());
         child.stdin?.end();
         child.kill();
