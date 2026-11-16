@@ -17,7 +17,34 @@ type CompiledRule = {
   regex: RegExp;
   entropy?: number;
   exclusions?: RegExp[];
+  /** A cheap test for the rule's keyword; when it fails, the rule can't match and isn't run. */
+  keyword?: RegExp;
 };
+
+const KEYWORD_LEAD = '[\\w.-]{0,50}?';
+const KEYWORD_TAIL = '(?:[ \\t\\w.-]{0,20})';
+
+/**
+ * Most provider rules have the shape `<up to 50 chars><up to 50 chars><keyword><up to 20 chars>
+ * <separator><value>`. Run at every position of a long text, the two leading 0-50 runs cost about
+ * 2,500 steps each, so a megabyte with no keyword in it took tens of seconds. The keyword part on
+ * its own is a small alternation: test it first, and skip the rule when the keyword isn't there.
+ */
+function keywordPrefilter(pattern: string): RegExp | undefined {
+  // One or two leading runs, then the keyword, then the tail: take what sits between the last
+  // leading run and the tail. (The case-insensitive test is broader than some rules, which is safe.)
+  if (!pattern.startsWith(KEYWORD_LEAD)) return undefined;
+  const tail = pattern.indexOf(KEYWORD_TAIL);
+  const lead = tail === -1 ? -1 : pattern.lastIndexOf(KEYWORD_LEAD, tail);
+  if (tail === -1 || lead === -1) return undefined;
+  const keyword = pattern.slice(lead + KEYWORD_LEAD.length, tail);
+  if (!keyword || keyword.includes('{0,')) return undefined; // only plain alternations of words
+  try {
+    return compileSecretRegex(keyword, 'i');
+  } catch {
+    return undefined;
+  }
+}
 
 let compiledRules: CompiledRule[] | null = null;
 
@@ -51,6 +78,7 @@ export function getRules(): CompiledRule[] {
       regex: compileSecretRegex(r.regex, r.flags),
       entropy: r.entropy,
       exclusions: r.falsePositiveExclusions?.map(e => new RegExp(e, 'i')),
+      keyword: keywordPrefilter(r.regex),
     }));
   }
   return compiledRules;
@@ -108,6 +136,7 @@ export function scanForSecrets(
   const seenSpans = new Set<string>();
   const pluginCtx = { location: context };
   for (const rule of getRules()) {
+    if (rule.keyword && !rule.keyword.test(target)) continue;
     // Use matchAll to find all occurrences, not just the first
     const globalRegex = new RegExp(rule.regex.source, rule.regex.flags + (rule.regex.flags.includes('g') ? '' : 'g'));
     const matches = target.matchAll(globalRegex);
