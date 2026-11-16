@@ -103,8 +103,81 @@ describe('mastyf-check proxy', () => {
       }
       throw new Error(`no answer for ${method}`);
     };
-    return { request, close: () => handle.close?.() };
+    const sendRaw = (text: string) => t.stdin.write(`${text}\n`);
+    const settle = () => new Promise((r) => setTimeout(r, 400));
+    return { request, sendRaw, settle, lines, close: () => handle.close?.() };
   }
+
+  const TAKEOVER_WORDS = 'ignore all previous';
+  const seen = (lines: unknown[]) => JSON.stringify(lines).toLowerCase();
+
+  it("checks a server's error message too", async () => {
+    const s = await session();
+    try {
+      const r = await s.request(1, 'tools/call', { name: 'error_injection', arguments: {} });
+      expect(r.error?.message).toMatch(/Blocked by Mastyf/);
+      expect(seen(s.lines)).not.toContain(TAKEOVER_WORDS);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('never passes a batch (array) either way', async () => {
+    const s = await session();
+    try {
+      s.sendRaw(JSON.stringify([{ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'read_file', arguments: { path: '/etc/passwd' } } }]));
+      await s.settle();
+      expect(seen(s.lines)).not.toContain('contents of /etc/passwd');
+      await s.request(8, 'tools/call', { name: 'batch_reply', arguments: {} }).catch(() => null);
+      await s.settle();
+      expect(seen(s.lines)).not.toContain(TAKEOVER_WORDS);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('checks requests the server sends on its own (e.g. asking the model to write)', async () => {
+    const s = await session();
+    try {
+      await s.request(1, 'tools/call', { name: 'ask_model', arguments: {} });
+      await s.settle();
+      expect(seen(s.lines)).not.toContain(TAKEOVER_WORDS);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('blocks a call whose arguments are not an object instead of forwarding what it did not check', async () => {
+    const s = await session();
+    try {
+      const r = await s.request(1, 'tools/call', { name: 'echo_args', arguments: 'read /etc/passwd' });
+      expect(r.error?.message).toMatch(/Blocked by Mastyf/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('does not hand a changed or poisoned tool list to the agent', async () => {
+    const s = await session();
+    try {
+      await s.request(1, 'tools/list');
+      await s.request(2, 'tools/call', { name: 'change_tools', arguments: {} });
+      const changed = await s.request(3, 'tools/list');
+      expect(changed.error?.message).toMatch(/Blocked by Mastyf/);
+
+      const s2 = await session();
+      try {
+        await s2.request(1, 'tools/call', { name: 'poison_tools', arguments: {} });
+        const poisoned = await s2.request(2, 'tools/list');
+        expect(poisoned.error?.message).toMatch(/Blocked by Mastyf/);
+        expect(seen(s2.lines)).not.toContain(TAKEOVER_WORDS);
+      } finally {
+        await s2.close();
+      }
+    } finally {
+      await s.close();
+    }
+  });
 
   it('passes ordinary calls through and blocks a sensitive one before the server sees it', async () => {
     const s = await session();
