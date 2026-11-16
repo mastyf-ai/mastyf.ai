@@ -1,42 +1,54 @@
 {
-  "name": "mastyf-ai-vscode",
-  "displayName": "mastyf.ai — MCP Security Scanner",
+  "name": "mastyf-shield",
+  "displayName": "Mastyf Shield",
+  "description": "See whether your editor's MCP servers are routed through Mastyf Shield, and what Shield blocked and why.",
   "version": "0.1.0",
-  "description": "Scan MCP configurations for malicious servers and check trust scores inline",
+  "private": true,
+  "preview": true,
   "publisher": "mastyf-ai",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Linters", "Security", "Other"],
-  "activationEvents": ["onStartupFinished"],
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastyf-ai/mastyf.ai.git",
+    "directory": "packages/vscode-extension"
+  },
+  "homepage": "https://www.mastyf.ai",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "mcp",
+    "security",
+    "agents",
+    "prompt injection"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
   "main": "./dist/extension.js",
-  "contributes": {
-    "commands": [{
-      "command": "mastyf.scanMCPConfig",
-      "title": "Mastyf: Scan MCP Configurations"
-    }],
-    "problemMatchers": [{
-      "name": "mastyf-mcp-server-security",
-      "label": "Mastyf MCP Server Security",
-      "owner": "mcp-security",
-      "pattern": [{
-        "regexp": "^(.*):(\\d+):(\\d+):\\s+(\\w+)\\s+(.+)$",
-        "file": 1,
-        "line": 2,
-        "column": 3,
-        "severity": 4,
-        "message": 5
-      }]
-    }]
-  },
+  "contributes": {},
   "scripts": {
-    "vscode:prepublish": "tsc -p ./",
-    "build": "tsc -p ./",
-    "package": "vsce package"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.85.0",
-    "typescript": "^5.4.0"
+    "build": "node esbuild.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "node esbuild.mjs && vsce package --no-dependencies"
   },
   "dependencies": {
-    "@mastyf_ai/tool-registry": "workspace:*"
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "ovsx": "^0.10.1",
+    "typescript": "^5.4.0",
+    "vitest": "^3.2.4"
   }
 }
