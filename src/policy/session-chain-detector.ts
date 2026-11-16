@@ -123,7 +123,13 @@ function classifyNode(
     toolName,
     argShapeHash: argShapeHash(args),
     sensitiveRead: READ_TOOLS.has(lower) && SENSITIVE_ARG_HINTS.test(blob),
-    encodeHint: ENCODE_TOOLS.has(lower) || ENCODE_ARG_HINTS.test(blob) || ENCODE_ARG_HINTS.test(lower),
+    // A shell or interpreter tool only counts as an encoding step when its arguments encode
+    // something, or when it ran with no arguments recorded. Treating every `bash` call as encoding
+    // made any message sent after `git status` look like encode-then-exfil.
+    encodeHint:
+      ENCODE_ARG_HINTS.test(blob) ||
+      ENCODE_ARG_HINTS.test(lower) ||
+      (ENCODE_TOOLS.has(lower) && !blob.trim()),
     exfilHint: rawExfil && !safeRead && !isSafeExfilUrl(blob) && !isSafeExfilUrl(lower),
   };
 }

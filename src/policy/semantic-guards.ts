@@ -17,6 +17,17 @@ const REPO_ARG_FIELDS = new Set(['repo', 'repository', 'owner']);
 const SQL_SENSITIVE_TABLES =
   'accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords';
 
+/**
+ * `SELECT col, col FROM table WHERE column = <one value>`: named columns, one literal, nothing that
+ * widens the filter (no star, OR, UNION, comparison or second clause).
+ */
+function isSingleRowLookup(sql: string): boolean {
+  const s = sql.trim();
+  if (/\bselect\s+\*/i.test(s)) return false;
+  if (/\b(?:or|union)\b/i.test(s)) return false;
+  return /\bwhere\s+[A-Za-z_][\w.]*\s*=\s*(?:\d+|'[^']*')\s*(?:limit\s+\d+\s*)?;?\s*$/i.test(s);
+}
+
 const SQL_EXFIL_PATTERNS: RegExp[] = [
   new RegExp(`\\bselect\\b.+\\bfrom\\b.+\\b(?:${SQL_SENSITIVE_TABLES})\\b`, 'i'),
   new RegExp(`\\bselect\\s+\\*\\s+from\\b.+\\b(?:${SQL_SENSITIVE_TABLES})\\b`, 'i'),
@@ -212,7 +223,9 @@ export function evaluateSemanticGuards(
   for (const value of sqlLeaves) {
     const sqlCandidates = [value, deobfuscateRecursive(value)];
     for (const candidate of sqlCandidates) {
-      for (const pattern of SQL_EXFIL_PATTERNS) {
+      for (const [index, pattern] of SQL_EXFIL_PATTERNS.entries()) {
+        // The first pattern is "reads a sensitive table"; one named record is a lookup, not a dump.
+        if (index === 0 && isSingleRowLookup(candidate)) continue;
         if (pattern.test(candidate)) {
           return {
             action: 'block',

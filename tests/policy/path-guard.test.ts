@@ -13,6 +13,29 @@ describe('evaluatePathGuard', () => {
     expect(evaluatePathGuard(['/']).block).toBe(true);
   });
 
+  it('blocks Windows credential hives and system binaries, however the path is written', () => {
+    for (const p of [
+      String.raw`C:\Windows\System32\config\SAM`,
+      'c:/windows/system32/config/system',
+      String.raw`..\..\..\Windows\System32\config`,
+      String.raw`..\..\..\..\..\Windows\System32\evil.dll`,
+      String.raw`C:\Windows\System32\drivers\etc\hosts`,
+    ]) {
+      expect({ p, block: evaluatePathGuard([p]).block }).toEqual({ p, block: true });
+    }
+  });
+
+  it('leaves ordinary Windows project paths alone', () => {
+    expect(evaluatePathGuard([String.raw`C:\Users\asha\projects\app\src\index.ts`]).block).toBe(false);
+    expect(evaluatePathGuard([String.raw`D:\work\windows-app\system32-notes.md`]).block).toBe(false);
+  });
+
+  it('does not mistake the working directory ("." or "./") for the filesystem root', () => {
+    expect(evaluatePathGuard(['.']).block).toBe(false);
+    expect(evaluatePathGuard(['./']).block).toBe(false);
+    expect(evaluatePathGuard(['/', '.']).block).toBe(true);
+  });
+
   it('blocks .ssh paths', () => {
     expect(evaluatePathGuard(['/home/user/.ssh/config']).block).toBe(true);
   });

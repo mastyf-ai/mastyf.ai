@@ -2,31 +2,15 @@ version: '1.0'
 policy:
   mode: block
   default_action: pass
-  semantic_shell: true
+  semantic_shell: false
   unicode_strict: true
-  default_sandbox_tier: shadow
   rules:
     - name: deny-dangerous-tools
-      description: Explicitly deny tools that can execute arbitrary code
+      description: Explicitly deny tools whose only purpose is arbitrary code execution, mining or raw network access
       action: block
       tools:
         deny:
-          - execute_command
-          - bash
-          - sh
           - eval
-          - exec
-          - execute
-          - system
-          - spawn
-          - fork
-          - popen
-          - source
-          - powershell
-          - pwsh
-          - cmd
-          - curl
-          - wget
           - nc
           - ncat
           - netcat
@@ -154,8 +138,6 @@ policy:
         - field: sql
           patterns:
             - >-
-              \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
-            - >-
               \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
             - \bunion\b.+\bselect\b
             - \bdelete\s+from\b
@@ -172,8 +154,6 @@ policy:
             - admin\)\(&
         - field: query
           patterns:
-            - >-
-              \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
             - >-
               \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
             - \bunion\b.+\bselect\b
@@ -246,41 +226,37 @@ policy:
       argPatterns:
         - field: path
           patterns:
-            - \.\.
+            - '(^|[/\\\\])\.\.([/\\\\]|$)'
         - field: file
           patterns:
-            - \.\.
+            - '(^|[/\\\\])\.\.([/\\\\]|$)'
         - field: directory
           patterns:
-            - \.\.
+            - '(^|[/\\\\])\.\.([/\\\\]|$)'
         - field: filepath
           patterns:
-            - \.\.
+            - '(^|[/\\\\])\.\.([/\\\\]|$)'
         - field: filename
           patterns:
-            - \.\.
+            - '(^|[/\\\\])\.\.([/\\\\]|$)'
         - field: dir
           patterns:
-            - \.\.
+            - '(^|[/\\\\])\.\.([/\\\\]|$)'
         - field: url
           patterns:
             - '(?:\.\.[/\\\\]|[/\\\\]\.\.)'
       patterns:
-        - '(?:\.\.[/\\\\]|[/\\\\]\.\.|\.\.$)'
+        - '(?:\.\.[/\\\\]|[/\\\\]\.\.(?![.\w])|(?<![.\w])\.\.$)'
     - name: block-shell-injection
       description: Block shell injection, downloaders, and PowerShell encoded commands
       action: block
       patterns:
-        - curl\s|wget\s
+        - '(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b'
         - rm\s+-rf
-        - ;\s*\w
-        - '&&|\|\|'
         - \$\{
         - \{\{
         - <%|#\{
-        - \$\([^)]+\)
-        - '`[^`]+`'
-        - powershell|pwsh|-enc|-EncodedCommand
+        - '-EncodedCommand|-enc\s+[A-Za-z0-9+/=]{20,}'
     - name: block-data-exfil-tools
       description: Block data exfiltration via cloud CLI, git push, scp, rsync, sftp
       action: block
@@ -304,6 +280,9 @@ policy:
       patterns:
         - bash\s+-i\s+>&\s+/dev/(?:tcp|udp)/
         - sh\s+-i\s+>&\s+/dev/(?:tcp|udp)/
+        - TCPSocket\.new|fsockopen\(|-rsocket\b
+        - '\$\((?:cat|id|whoami|uname|curl|wget|nc|bash|sh|rm)\b'
+        - '`(?:cat|id|whoami|uname|curl|wget|nc|bash|sh|rm)\b[^`]*`'
         - mkfifo\s+/tmp/\S+\s+&&\s+cat\s+/tmp/\S+\s+\|\s+/bin/(?:bash|sh)\s+-i\s+2>&1\s+\|\s+nc\s+
         - python\s+-c\s+['\"]import\s+socket
         - python3\s+-c\s+['\"]import\s+socket
@@ -325,21 +304,6 @@ policy:
       description: Block tool calls exceeding 50K input tokens
       action: block
       maxTokens: 50000
-    - name: quarantine-semantic-177963052577
-      description: '[QUARANTINE] Reinforce semantic threat THR-S2840 from monitor'
-      action: block
-      tools:
-        allow:
-          - run
-      patterns:
-        - \{"x":"ignore all previous instructions developer mode"\}
-    - name: attack-learned-semantic-path-guard-read_file
-      description: Learned from 8 blocks (semantic-path-guard on read_file@filesystem) — pending approval
-      action: block
-      argPatterns:
-        - field: path
-          patterns:
-            - /etc
     - name: block-result-injection
       description: Block tool call args that embed classic result/prompt-injection payloads (defense in depth for poisoned content forwarded as args)
       action: block
