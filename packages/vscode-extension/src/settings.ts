@@ -77,6 +77,15 @@ export function settingsFilesFor(
 
 const folderKey = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
+/**
+ * Only a plain local drive path (`C:\...`). A settings file in a cloned repository can name any
+ * path, and reading a network share (`\\host\share`, `//host`) or device path (`\\?\`, `\\.\`)
+ * makes Windows send the user's login hash to that host.
+ */
+export function isLocalDrivePath(p: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(p) && !p.includes('..');
+}
+
 type Parsed = { raw: unknown; shieldCanRead: boolean };
 
 /** Shield parses with JSON.parse (an empty file is `{}`); comments only get past jsonc-parser. */
@@ -99,6 +108,12 @@ export class SettingsReader {
     private readonly readFile: (p: string) => string,
     private readonly statMtimeMs: (p: string) => number | null,
   ) {}
+
+  /** For paths named inside settings files (`--config`): local drive paths only. */
+  private readonly readLocalOnly = (p: string): string => {
+    if (!isLocalDrivePath(p)) throw new Error('not a local drive path');
+    return this.readFile(p);
+  };
 
   read(agent: AgentId, files: string[], workspaceFolders: string[]): { servers: ServerEntry[]; newestMtimeMs: number } {
     const servers: ServerEntry[] = [];
@@ -132,7 +147,7 @@ export class SettingsReader {
             name,
             file,
             agent,
-            state: parsed.shieldCanRead ? routingState(server, name, this.readFile) : 'unreadable-by-shield',
+            state: parsed.shieldCanRead ? routingState(server, name, this.readLocalOnly) : 'unreadable-by-shield',
           });
         }
       }

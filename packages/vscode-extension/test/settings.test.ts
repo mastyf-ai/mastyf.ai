@@ -120,6 +120,33 @@ describe('SettingsReader', () => {
     ]);
   });
 
+  it('never follows a --config path to a network share or device path (would leak Windows credentials)', () => {
+    const proj = 'C:\\repo\\.vscode\\mcp.json';
+    const attempts: string[] = [];
+    const bad = ['\\\\evil.example\\share\\x.json', '//evil.example/share/x.json', '\\\\?\\UNC\\evil\\x.json', '\\\\.\\pipe\\x', 'relative\\x.json'];
+    const servers = Object.fromEntries(
+      bad.map((p, i) => [`s${i}`, { command: 'mastyf', args: ['proxy', '--config', p, '--policy', 'p.yaml'] }]),
+    );
+    const readFile = (p: string) => {
+      attempts.push(p);
+      if (p === proj) return JSON.stringify({ servers });
+      throw new Error('no');
+    };
+    new SettingsReader(readFile, () => 100).read('vscode', [proj], []);
+    expect(attempts).toEqual([proj]);
+  });
+
+  it('still follows a --config path on a local drive', () => {
+    const attempts: string[] = [];
+    const readFile = (p: string) => {
+      attempts.push(p);
+      if (p === vsFile) return JSON.stringify({ servers: { a: { command: 'mastyf', args: ['proxy', '--config', 'C:\\cfg\\free.json'] } } });
+      throw new Error('no');
+    };
+    new SettingsReader(readFile, () => 100).read('vscode', [vsFile], []);
+    expect(attempts).toContain('C:\\cfg\\free.json');
+  });
+
   it('newestMtimeMs is the latest change among the files read', () => {
     const proj = 'C:\\a\\.vscode\\mcp.json';
     const fs = files({ [vsFile]: ['{}', 100], [proj]: ['{}', 250] });
