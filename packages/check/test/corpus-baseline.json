@@ -1,0 +1,91 @@
+{
+  "attacks": 288,
+  "caught": 266,
+  "rate": 0.9236111111111112,
+  "byCategory": {
+    "boundary-evasion": {
+      "caught": 7,
+      "total": 7
+    },
+    "command-injection": {
+      "caught": 5,
+      "total": 6
+    },
+    "context-injection": {
+      "caught": 10,
+      "total": 10
+    },
+    "credential-exfil": {
+      "caught": 24,
+      "total": 24
+    },
+    "cross-tool-chain": {
+      "caught": 16,
+      "total": 16
+    },
+    "dangerous-js": {
+      "caught": 8,
+      "total": 8
+    },
+    "deserialization": {
+      "caught": 6,
+      "total": 8
+    },
+    "edge-cases": {
+      "caught": 28,
+      "total": 33
+    },
+    "file-inclusion": {
+      "caught": 5,
+      "total": 5
+    },
+    "graphql-injection": {
+      "caught": 4,
+      "total": 4
+    },
+    "http-smuggling": {
+      "caught": 4,
+      "total": 4
+    },
+    "jwt-manipulation": {
+      "caught": 4,
+      "total": 4
+    },
+    "log-injection": {
+      "caught": 5,
+      "total": 5
+    },
+    "polyglot-injection": {
+      "caught": 7,
+      "total": 7
+    },
+    "prompt-injection": {
+      "caught": 32,
+      "total": 32
+    },
+    "result-injection": {
+      "caught": 10,
+      "total": 10
+    },
+    "rug-pull": {
+      "caught": 11,
+      "total": 25
+    },
+    "shell-obfuscation": {
+      "caught": 26,
+      "total": 26
+    },
+    "sql-nosql": {
+      "caught": 27,
+      "total": 27
+    },
+    "ssrf-url": {
+      "caught": 24,
+      "total": 24
+    },
+    "zip-slip": {
+      "caught": 3,
+      "total": 3
+    }
+  }
+}

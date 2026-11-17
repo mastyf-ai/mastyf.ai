@@ -2,6 +2,7 @@
  * Bridge from proxy transports to agentic container hooks.
  */
 import type { IncomingHttpHeaders } from 'http';
+import type { BlockEvidence } from './block-evidence.js';
 import { getAgenticContainer, isAgenticEnabled } from '../utils/agentic-container.js';
 import {
   recordAgenticAudit,
@@ -19,7 +20,7 @@ export async function agenticPreForwardToolCall(
   args: Record<string, unknown> | undefined,
   ctx: AgenticToolCallContext | string,
   legacyAgentId?: string,
-): Promise<{ blocked: boolean; sanitizedArgs?: Record<string, unknown>; reason?: string }> {
+): Promise<{ blocked: boolean; sanitizedArgs?: Record<string, unknown>; reason?: string; evidence?: BlockEvidence }> {
   const container = getAgenticContainer();
   if (!isAgenticEnabled() || !container || !args) {
     return { blocked: false };

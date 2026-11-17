@@ -9,6 +9,11 @@ const PATH_ARG_FIELDS = new Set(['path', 'file', 'filepath', 'file_path', 'direc
 /** Paths that must never be read/list even when tools are allowlisted. */
 const SENSITIVE_PATH_PATTERNS: RegExp[] = [
   /^\/$/,
+  // Windows, with or without a drive letter (paths are lower-cased and slash-normalized first):
+  // the registry hives that hold password hashes, the hosts file, and executables in System32.
+  /^(?:\/[a-z]:)?\/windows\/system32\/config(?:\/|$)/,
+  /^(?:\/[a-z]:)?\/windows\/system32\/drivers\/etc\/hosts$/,
+  /^(?:\/[a-z]:)?\/windows\/system32\/[^/]+\.(?:dll|exe|sys)$/,
   /^\/etc(?:\/|$)/,
   /^\/root(?:\/|$)/,
   /^\/proc(?:\/|$)/,
@@ -97,6 +102,8 @@ function isUnderPrefix(path: string, prefix: string): boolean {
 export interface PathGuardResult {
   block: boolean;
   reason?: string;
+  /** The path as it appeared in the arguments. */
+  match?: string;
 }
 
 /** Lowercase, slash-normalize, and collapse `..` segments for consistent matching. */
@@ -132,6 +139,9 @@ function canonicalPath(raw: string): string {
 
 export function evaluatePathGuard(paths: string[]): PathGuardResult {
   for (const raw of paths) {
+    // "." and "./" mean the working directory. They normalize to "/", which is the filesystem root.
+    const bare = raw.trim();
+    if (bare === '.' || bare === './' || bare === '.\\') continue;
     const path = normalizePathForGuard(raw);
 
     for (const pattern of SENSITIVE_PATH_PATTERNS) {
@@ -139,6 +149,7 @@ export function evaluatePathGuard(paths: string[]): PathGuardResult {
         return {
           block: true,
           reason: `Sensitive path blocked: ${path}`,
+          match: raw,
         };
       }
     }
@@ -149,6 +160,7 @@ export function evaluatePathGuard(paths: string[]): PathGuardResult {
       return {
         block: true,
         reason: `Path outside allowed workspace: ${inWorkspace} (allowed: ${prefixes.join(', ')})`,
+        match: raw,
       };
     }
   }

@@ -74,6 +74,7 @@ function evaluateSemanticShell(
       action: resolveAction('block'),
       rule: 'semantic-shell-guard',
       reason: `Semantic: dangerous shell commands detected: [${shellRisk.dangerousCommands.join(', ')}]`,
+      evidence: { layer: 'policy', match: shellRisk.dangerousCommands.join(', ') },
     };
   }
 

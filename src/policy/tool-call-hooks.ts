@@ -33,7 +33,10 @@ export interface BeforeToolCallHook {
   name: string;
   version?: string;
   priority: number;
-  beforeToolCall(context: HookContext): Promise<{ allowed: boolean; reason?: string; modifiedArgs?: Record<string, unknown> }>;
+  /** `match` and `field`: the argument text a refusal was based on, when there was one. */
+  beforeToolCall(
+    context: HookContext,
+  ): Promise<{ allowed: boolean; reason?: string; modifiedArgs?: Record<string, unknown>; match?: string; field?: string }>;
 }
 
 export interface AfterToolCallHook {
@@ -107,7 +110,9 @@ export class ToolCallHookRegistry {
     }
   }
 
-  async runBeforeHooks(context: HookContext): Promise<{ allowed: boolean; reason?: string; args?: Record<string, unknown> }> {
+  async runBeforeHooks(
+    context: HookContext,
+  ): Promise<{ allowed: boolean; reason?: string; args?: Record<string, unknown>; match?: string; field?: string }> {
     let modifiedArgs: Record<string, unknown> | undefined;
 
     for (const hook of this.beforeHooks) {
@@ -115,7 +120,12 @@ export class ToolCallHookRegistry {
       try {
         const result = await hook.beforeToolCall(context);
         if (!result.allowed) {
-          return { allowed: false, reason: result.reason || `Blocked by hook "${hook.name}"` };
+          return {
+            allowed: false,
+            reason: result.reason || `Blocked by hook "${hook.name}"`,
+            ...(result.match ? { match: result.match } : {}),
+            ...(result.field ? { field: result.field } : {}),
+          };
         }
         if (result.modifiedArgs) {
           modifiedArgs = { ...(modifiedArgs || context.tool.arguments), ...result.modifiedArgs };
@@ -265,7 +275,7 @@ export function createSensitivePathGuard(allowedPaths: string[], deniedPaths: st
   return {
     name: 'builtin-sensitive-path-guard',
     priority: 5,
-    async beforeToolCall(context: HookContext): Promise<{ allowed: boolean; reason?: string; modifiedArgs?: Record<string, unknown> }> {
+    async beforeToolCall(context: HookContext): Promise<{ allowed: boolean; reason?: string; modifiedArgs?: Record<string, unknown>; match?: string; field?: string }> {
       const args = context.tool.arguments;
 
       for (const pathKey of ['path', 'file', 'directory', 'source', 'target']) {
@@ -280,7 +290,7 @@ export function createSensitivePathGuard(allowedPaths: string[], deniedPaths: st
         for (const denied of deniedPaths) {
           const regex = new RegExp(denied.replace(/\*/g, '.*'));
           if (regex.test(pathValue)) {
-            return { allowed: false, reason: `Access to path matching "${denied}" denied: ${pathValue}` };
+            return { allowed: false, reason: `Access to path matching "${denied}" denied: ${pathValue}`, match: pathValue, field: pathKey };
           }
         }
 
@@ -290,7 +300,7 @@ export function createSensitivePathGuard(allowedPaths: string[], deniedPaths: st
             return regex.test(pathValue);
           });
           if (!isAllowed) {
-            return { allowed: false, reason: `Path not in allowed list: ${pathValue}` };
+            return { allowed: false, reason: `Path not in allowed list: ${pathValue}`, match: pathValue, field: pathKey };
           }
         }
       }

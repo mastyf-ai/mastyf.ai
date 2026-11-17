@@ -4,11 +4,55 @@ import { walkStringLeaves } from './arg-leaf-walker.js';
 import { evaluatePathGuard, extractPathArgumentValues } from './path-guard.js';
 import { evaluateUrlGuard, extractHttpUrlsFromLeaves } from './url-guard.js';
 import type { CallContext, PolicyDecision } from './policy-types.js';
+import { clipMatch, matchOf, type BlockEvidence } from '../proxy/block-evidence.js';
+
+/** Policy evidence; the matched text only when there was some. */
+function policyEvidence(text?: string): BlockEvidence {
+  const match = clipMatch(text);
+  return match ? { layer: 'policy', match } : { layer: 'policy' };
+}
 
 const REPO_ARG_FIELDS = new Set(['repo', 'repository', 'owner']);
 
 const SQL_SENSITIVE_TABLES =
   'accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords';
+
+/** A secret-looking column name, anywhere in the identifier (api_token, user_password, ...). */
+const SQL_SECRET_COLUMN = /(?:password|passwd|pwd|hash|salt|secret|token|api_?key|ssn|card|cvv|pin|otp|private_?key)/i;
+
+/** SQL words that can never appear inside an exempt lookup. */
+const SQL_WIDENING_WORDS = /\b(?:union|except|intersect|minus|join|or|in|like|between|not|exists|group|having|order)\b/i;
+
+const IDENT = '[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)?';
+const COLUMN = `${IDENT}(?:\\s+as\\s+[A-Za-z_]\\w*)?`;
+const SINGLE_ROW_LOOKUP = new RegExp(
+  `^\\s*select\\s+(${COLUMN}(?:\\s*,\\s*${COLUMN})*)\\s+from\\s+([A-Za-z_]\\w*)\\s+where\\s+(${IDENT})\\s*=\\s*(\\d+|'[^']*')\\s*(?:limit\\s+1\\s*)?;?\\s*$`,
+  'i',
+);
+
+/**
+ * The whole statement is `SELECT a, b [AS x] FROM table WHERE <primary key> = <one literal> [LIMIT 1]`:
+ * one SELECT on one table, plain column names that aren't secrets, and an equality on the table's
+ * primary key (`id`, `uuid`, or `<table in singular>_id`), so it returns one record. Anything else,
+ * including `tenant_id = 7` (many rows), falls through to the sensitive-table rule.
+ */
+function isSingleRowLookup(sql: string): boolean {
+  if ((sql.match(/\bselect\b/gi) ?? []).length !== 1 || (sql.match(/\bfrom\b/gi) ?? []).length !== 1) return false;
+  if (SQL_WIDENING_WORDS.test(sql) || /[()*]/.test(sql)) return false;
+  const m = SINGLE_ROW_LOOKUP.exec(sql);
+  if (!m) return false;
+  const [, columns, table, keyColumn, literal] = m;
+  const names = columns.split(',').map((c) => c.trim().split(/\s+/)[0].split('.').pop() ?? '');
+  if (names.some((name) => SQL_SECRET_COLUMN.test(name))) return false;
+  const key = (keyColumn.split('.').pop() ?? '').toLowerCase();
+  const singular = table.toLowerCase().replace(/s$/, '');
+  const quotedNonEmpty = /^'[^']+'$/.test(literal) && !/^'0*'$/.test(literal);
+  // MySQL compares a string column to a number by converting it: `uuid = 0` matches nearly every
+  // row. So a uuid key needs a quoted, non-empty value, and an id key a positive whole number or one.
+  if (key === 'uuid' || key === `${singular}_uuid`) return quotedNonEmpty;
+  if (key === 'id' || key === `${singular}_id`) return /^[1-9]\d*$/.test(literal) || quotedNonEmpty;
+  return false;
+}
 
 const SQL_EXFIL_PATTERNS: RegExp[] = [
   new RegExp(`\\bselect\\b.+\\bfrom\\b.+\\b(?:${SQL_SENSITIVE_TABLES})\\b`, 'i'),
@@ -185,7 +229,7 @@ export function evaluateSemanticGuards(
   ];
   const pathCheck = evaluatePathGuard([...new Set(pathCandidates)]);
   if (pathCheck.block) {
-    return { action: 'block', rule: 'semantic-path-guard', reason: pathCheck.reason! };
+    return { action: 'block', rule: 'semantic-path-guard', reason: pathCheck.reason!, evidence: policyEvidence(pathCheck.match) };
   }
 
   const urlCandidates = [
@@ -194,7 +238,8 @@ export function evaluateSemanticGuards(
   ];
   const urlCheck = evaluateUrlGuard([...new Set(urlCandidates)], ctx.toolName);
   if (urlCheck.block) {
-    return { action: 'block', rule: 'semantic-url-guard', reason: urlCheck.reason! };
+    const url = urlCandidates.find((u) => urlCheck.reason!.includes(u));
+    return { action: 'block', rule: 'semantic-url-guard', reason: urlCheck.reason!, evidence: policyEvidence(url) };
   }
 
   const sqlLeaves = new Set<string>();
@@ -204,12 +249,15 @@ export function evaluateSemanticGuards(
   for (const value of sqlLeaves) {
     const sqlCandidates = [value, deobfuscateRecursive(value)];
     for (const candidate of sqlCandidates) {
-      for (const pattern of SQL_EXFIL_PATTERNS) {
+      for (const [index, pattern] of SQL_EXFIL_PATTERNS.entries()) {
+        // The first pattern is "reads a sensitive table"; one named record is a lookup, not a dump.
+        if (index === 0 && isSingleRowLookup(candidate)) continue;
         if (pattern.test(candidate)) {
           return {
             action: 'block',
             rule: 'semantic-sql-guard',
             reason: `SQL/NoSQL/LDAP pattern blocked in tool '${ctx.toolName}'`,
+            evidence: policyEvidence(matchOf(pattern, candidate)),
           };
         }
       }
@@ -219,6 +267,7 @@ export function evaluateSemanticGuards(
         action: 'block',
         rule: 'semantic-dns-exfil',
         reason: `Suspicious exfiltration hostname in tool '${ctx.toolName}'`,
+        evidence: policyEvidence(matchOf(MALICIOUS_HOST_RE, value)),
       };
     }
   }
@@ -232,6 +281,7 @@ export function evaluateSemanticGuards(
         action: 'block',
         rule: 'semantic-shell-guard',
         reason: 'Base64-decode piped to shell detected in arguments',
+        evidence: policyEvidence(matchOf(pattern, argsBlob)),
       };
     }
   }
@@ -251,6 +301,7 @@ export function evaluateSemanticGuards(
           action: 'block',
           rule: 'semantic-github-guard',
           reason: `GitHub repo '${repo}' not in allowlist`,
+          evidence: policyEvidence(repo),
         };
       }
     }
@@ -261,6 +312,7 @@ export function evaluateSemanticGuards(
           action: 'block',
           rule: 'semantic-github-guard',
           reason: `Suspicious GitHub repo target: ${repo}`,
+          evidence: policyEvidence(repo),
         };
       }
     }
@@ -272,6 +324,7 @@ export function evaluateSemanticGuards(
         action: 'block',
         rule: 'semantic-powershell-guard',
         reason: 'PowerShell execution pattern detected in arguments',
+        evidence: policyEvidence(matchOf(pattern, argsBlob)),
       };
     }
   }
@@ -282,6 +335,7 @@ export function evaluateSemanticGuards(
         action: 'block',
         rule: 'semantic-ssti-guard',
         reason: 'Server-side template injection pattern detected in arguments',
+        evidence: policyEvidence(matchOf(pattern, argsBlob)),
       };
     }
   }
@@ -292,6 +346,7 @@ export function evaluateSemanticGuards(
         action: 'block',
         rule: 'semantic-privilege-escalation',
         reason: 'Privilege escalation phrasing detected in arguments',
+        evidence: policyEvidence(matchOf(pattern, argsBlob)),
       };
     }
   }
@@ -302,6 +357,7 @@ export function evaluateSemanticGuards(
         action: 'block',
         rule: 'semantic-shell-guard',
         reason: 'Container escape or privileged docker pattern in arguments',
+        evidence: policyEvidence(matchOf(pattern, argsBlob)),
       };
     }
   }
@@ -313,6 +369,7 @@ export function evaluateSemanticGuards(
         action: 'block',
         rule: 'semantic-log-injection',
         reason: 'Log or audit trail injection pattern in arguments',
+        evidence: policyEvidence(matchOf(pattern, rawLogBlob)),
       };
     }
   }
@@ -327,6 +384,7 @@ export function evaluateSemanticGuards(
           action: 'block',
           rule: 'semantic-prompt-injection',
           reason: 'Multi-line prompt injection pattern in arguments',
+          evidence: policyEvidence(matchOf(pattern, injectionBlob)),
         };
       }
     }
@@ -336,6 +394,7 @@ export function evaluateSemanticGuards(
           action: 'block',
           rule: 'semantic-prompt-injection',
           reason: 'Prompt or system override pattern in arguments',
+          evidence: policyEvidence(matchOf(pattern, injectionBlob)),
         };
       }
     }
@@ -345,6 +404,7 @@ export function evaluateSemanticGuards(
           action: 'block',
           rule: 'semantic-rate-limit-evasion',
           reason: 'Rate-limit or identity key evasion pattern in arguments',
+          evidence: policyEvidence(matchOf(pattern, injectionBlob)),
         };
       }
     }
@@ -354,6 +414,7 @@ export function evaluateSemanticGuards(
           action: 'block',
           rule: 'semantic-token-budget-abuse',
           reason: 'Token budget bypass or exhaustion pattern in arguments',
+          evidence: policyEvidence(matchOf(pattern, injectionBlob)),
         };
       }
     }

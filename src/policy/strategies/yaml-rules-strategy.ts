@@ -4,6 +4,7 @@ import { scanToolCallArguments } from '../../scanners/prompt-injection-detector.
 import { runTokenInspection } from '../../scanners/token-inspector.js';
 import { walkStringLeaves } from '../arg-leaf-walker.js';
 import type { PolicyStrategy } from './types.js';
+import { clipMatch } from '../../proxy/block-evidence.js';
 
 /** Defense in depth: allowlisted tools must still pass argument guards (adv-066 class). */
 function blockAllowlistedToolIfArgsUnsafe(ctx: import('../policy-types.js').CallContext): PolicyDecision | null {
@@ -18,6 +19,7 @@ function blockAllowlistedToolIfArgsUnsafe(ctx: import('../policy-types.js').Call
       action: 'block',
       rule: top.patternId ?? 'request-prompt-injection',
       reason: top.description ?? 'Allowlisted tool blocked: unsafe arguments',
+      evidence: { layer: 'policy', match: clipMatch(top.matched) },
     };
   }
 

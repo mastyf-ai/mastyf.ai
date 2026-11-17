@@ -1,0 +1,153 @@
+name: Check service
+
+# Tests the free check service on every change to it (and to the shared rules it runs), on Linux,
+# macOS and Windows. On a tag like check-v0.1.0 it also builds a single-file program per platform,
+# smoke-tests each one, builds the Docker image (not pushed), and attaches the programs and their
+# SHA-256 sums to a DRAFT GitHub release. Nothing is published to npm or a container registry.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/check/**'
+      - 'src/policy/**'
+      - 'src/proxy/**'
+      - 'src/scanners/**'
+      - 'config/threat-intel-signatures.json'
+      - '.github/workflows/check-service.yml'
+  push:
+    tags:
+      - 'check-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @mastyf_ai/check --ignore-scripts
+      # Includes the corpus, ordinary-work, latency and bundle tests, and the owner-only token tests on macOS/Linux.
+      - run: pnpm --filter @mastyf_ai/check test
+
+  shared-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: npx vitest run tests/policy/path-guard.test.ts tests/policy/sql-guard-single-row.test.ts tests/policy/session-chain-shell-names.test.ts tests/policy/session-chain-detector.test.ts
+
+  programs:
+    if: startsWith(github.ref, 'refs/tags/check-v')
+    needs: [test, shared-rules]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x64
+          - os: ubuntu-24.04-arm
+            name: linux-arm64
+          - os: macos-latest
+            name: darwin-arm64
+          - os: macos-15-intel
+            name: darwin-x64
+          - os: windows-latest
+            name: win-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @mastyf_ai/check --ignore-scripts
+      - name: Build the bundle and the single-file program
+        working-directory: packages/check
+        run: |
+          node esbuild.mjs
+          node scripts/build-sea.mjs
+      - name: Smoke test the program
+        shell: bash
+        working-directory: packages/check/dist
+        env:
+          MASTYF_CHECK_TOKEN: ${{ github.run_id }}-smoke-token-not-a-secret-000000
+        run: |
+          exe=$(ls mastyf-check-${{ matrix.name }}*)
+          set +e
+          ./$exe test read_file '{"path":"./README.md"}'
+          [ $? -eq 0 ] || { echo "ordinary read was not allowed"; exit 1; }
+          ./$exe serve --port 4199 & pid=$!
+          for i in $(seq 1 60); do sleep 0.5; curl -sf http://127.0.0.1:4199/v1/health && break; done
+          curl -sf http://127.0.0.1:4199/v1/health | grep -q '"tier":"free"' || { echo "health check failed"; kill $pid; exit 1; }
+          kill $pid
+      - name: SHA-256
+        shell: bash
+        working-directory: packages/check/dist
+        run: |
+          exe=$(ls mastyf-check-${{ matrix.name }}*)
+          if command -v sha256sum >/dev/null; then sha256sum "$exe" > "$exe.sha256"; else shasum -a 256 "$exe" > "$exe.sha256"; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: program-${{ matrix.name }}
+          path: |
+            packages/check/dist/mastyf-check-${{ matrix.name }}*
+          if-no-files-found: error
+
+  docker:
+    if: startsWith(github.ref, 'refs/tags/check-v')
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image (not pushed)
+        run: docker build -f packages/check/Dockerfile -t mastyf-check:${{ github.ref_name }} .
+      - name: The image refuses to start without a token, and answers health with one
+        run: |
+          if docker run --rm mastyf-check:${{ github.ref_name }}; then echo "started without a token"; exit 1; fi
+          docker run -d --name mc -e MASTYF_CHECK_TOKEN=docker-smoke-token-not-a-secret-0000000 -p 127.0.0.1:4100:4100 mastyf-check:${{ github.ref_name }}
+          for i in $(seq 1 60); do sleep 0.5; curl -sf http://127.0.0.1:4100/v1/health && break; done
+          curl -sf http://127.0.0.1:4100/v1/health | grep -q '"tier":"free"'
+          docker rm -f mc
+      - run: docker save mastyf-check:${{ github.ref_name }} | gzip > mastyf-check-image.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: mastyf-check-image.tar.gz
+
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/check-v')
+    needs: [programs, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: program-*
+          merge-multiple: true
+          path: release
+      - name: Create a draft release (not published)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" release/* \
+            --repo "${{ github.repository }}" \
+            --draft \
+            --title "Mastyf check service ${{ github.ref_name }}" \
+            --notes "Free check service: single-file programs for Linux, macOS and Windows with SHA-256 sums. Draft: review before publishing."

@@ -1,3 +1,4 @@
+import type { BlockEvidence } from '../proxy/block-evidence.js';
 /**
  * Policy types for the MCP Mastyf AI active blocking engine.
  */
@@ -99,6 +100,8 @@ export interface PolicyDecision {
   action: PolicyAction;
   rule: string;
   reason: string;
+  /** What the rule matched, when it matched literal text in the arguments. */
+  evidence?: BlockEvidence;
 }
 
 export interface CallContext {
