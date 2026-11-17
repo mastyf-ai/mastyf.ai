@@ -3,7 +3,7 @@
  * in the job summary, sets the counts, fails the job if asked to, and stops the checks.
  */
 import { rmSync } from 'node:fs';
-import { stopEngine } from './engine.js';
+import { stopEngine, verifyHealth } from './engine.js';
 import { appendSummary, fail, getState, setOutput, warning } from './runner.js';
 import { counts, renderSummary, type Block } from './summary.js';
 
@@ -14,6 +14,7 @@ const KEPT = 200; // how many entries the service keeps
 
 async function fetchBlocks(url: string, token: string): Promise<Block[] | null> {
   try {
+    await verifyHealth(url, token); // the service this Action started, nothing else on that port
     const res = await fetch(`${url}/v1/blocks?limit=${KEPT}`, {
       headers: { authorization: `Bearer ${token}` },
       redirect: 'manual',
@@ -45,6 +46,9 @@ export async function run(env: Env = process.env, opts: { print?: Print } = {}):
       setOutput('blocked-count', String(n.blocked), env);
       setOutput('redacted-count', String(n.redacted), env);
       if (failOnBlock && n.blocked > 0) fail(`Mastyf blocked ${n.blocked} tool call(s); see the job summary.`, print);
+    } else if (startedOk && failOnBlock) {
+      // "Couldn't check" is never "nothing blocked": a step could have stopped the checks.
+      fail("Mastyf couldn't confirm what was blocked in this job (the checks weren't reachable at the end); failing because fail-on-block is set.", print);
     } else if (startedOk) {
       warning("Mastyf: the checks weren't reachable at the end of the job; the summary has no list.", print);
     }

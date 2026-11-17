@@ -68,13 +68,30 @@ describe('post step', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('an engine that died mid-job gives a summary, not a crash, and never fails the job by itself', async () => {
-    const { r, pid } = await started({ 'fail-on-block': 'true' });
-    process.kill(pid);
-    await waitFor(() => !pidAlive(pid), 10000);
-    await post(r.postStep(), { print: () => {} });
-    expect(r.summary()).toContain("wasn't reachable at the end of the job");
+  it('an engine that died mid-job gives a summary, not a crash; it fails the job only with fail-on-block', async () => {
+    const a = await started();
+    process.kill(a.pid);
+    await waitFor(() => !pidAlive(a.pid), 10000);
+    await post(a.r.postStep(), { print: () => {} });
+    expect(a.r.summary()).toContain("wasn't reachable at the end of the job");
     expect(process.exitCode ?? 0).toBe(0);
+
+    // With fail-on-block, "couldn't check" is never "nothing blocked": the agent could have killed it.
+    const b = await started({ 'fail-on-block': 'true' });
+    process.kill(b.pid);
+    await waitFor(() => !pidAlive(b.pid), 10000);
+    const lines: string[] = [];
+    await post(b.r.postStep(), { print: (l) => lines.push(l) });
+    expect(process.exitCode).toBe(1);
+    expect(lines.join('\n')).toContain("couldn't confirm what was blocked");
+  });
+
+  it('a tampered token or an impostor service is never trusted', async () => {
+    const { r, url, token } = await started({ 'fail-on-block': 'true' });
+    await checkCall(url, token, 'read_file', { path: '/etc/passwd' });
+    await post({ ...r.postStep(), MASTYF_CHECK_TOKEN: 'x'.repeat(43) }, { print: () => {} });
+    expect(process.exitCode).toBe(1);
+    expect(r.summary()).toContain("wasn't reachable at the end of the job");
   });
 
   it("when the checks never started (on-error: continue), the summary says so", async () => {
