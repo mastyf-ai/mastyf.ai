@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { enginePath, inContainer as detectContainer, pidAlive, startDetached, stopEngine, verifyHealth } from './engine.js';
-import { readBase, writeClaudeSettings } from './claude-settings.js';
+import { hooksSwitchedOffIn, readBase, writeClaudeSettings } from './claude-settings.js';
 import { readInputs, type Inputs } from './inputs.js';
 import { exportVariable, fail, info, mask, saveState, setOutput, warning } from './runner.js';
 
@@ -51,6 +51,8 @@ export async function run(env: Env = process.env, opts: RunOptions = {}): Promis
   if (inputs.claudeCode) {
     try {
       readBase(inputs.claudeSettingsBase); // a broken base file stops us before anything starts
+      const off = hooksSwitchedOffIn(env['GITHUB_WORKSPACE'] || process.cwd());
+      if (off) throw new Error(`${off} in this repository switches Claude Code hooks off (disableAllHooks or allowManagedHooksOnly), so Claude Code couldn't be checked; remove that setting`);
     } catch (err) {
       return problem((err as Error).message);
     }

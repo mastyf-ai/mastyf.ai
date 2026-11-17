@@ -96,6 +96,22 @@ describe('main with claude-code: true', () => {
     }
   });
 
+  it("the repository's own Claude settings can't switch the hooks off", async () => {
+    const d = dir();
+    const out = writeClaudeSettings({ dir: d, hookPath: HOOK, url: 'http://127.0.0.1:4100', token: TOKEN });
+    const s = JSON.parse(readFileSync(out.settings, 'utf8'));
+    expect(s.disableAllHooks).toBe(false); // our layer overrides the project's
+    expect(s.allowManagedHooksOnly).toBe(false);
+
+    const r = fakeRunner({ 'claude-code': 'true' });
+    mkdirSync(join(r.env['GITHUB_WORKSPACE']!, '.claude'));
+    writeFileSync(join(r.env['GITHUB_WORKSPACE']!, '.claude', 'settings.json'), JSON.stringify({ disableAllHooks: true }));
+    await run(r.env, { print: r.print, inContainer: () => false });
+    expect(process.exitCode).toBe(1);
+    expect(r.lines.join('\n')).toContain('.claude/settings.json');
+    expect(r.read('GITHUB_STATE')['pid']).toBeUndefined();
+  });
+
   it('a broken base file stops the step, naming it', async () => {
     const r = fakeRunner({ 'claude-code': 'true', 'claude-settings-base': '.claude/ci.json' });
     mkdirSync(join(r.env['GITHUB_WORKSPACE']!, '.claude'));

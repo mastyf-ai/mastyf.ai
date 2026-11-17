@@ -41,7 +41,21 @@ export function buildSettings(base: Settings, hookCommand: string): Settings {
     const theirs = Array.isArray(hooks[event]) ? hooks[event]! : [];
     hooks[event] = [...theirs, ours];
   }
-  return { ...base, hooks };
+  // Forced on: passed as --settings, this layer overrides the repository's own .claude settings.
+  return { ...base, disableAllHooks: false, allowManagedHooksOnly: false, hooks };
+}
+
+/** The repository's own Claude Code settings files that would switch hooks off, if any. */
+export function hooksSwitchedOffIn(workspace: string): string | null {
+  for (const rel of ['.claude/settings.json', '.claude/settings.local.json']) {
+    try {
+      const s = JSON.parse(readFileSync(join(workspace, rel), 'utf8')) as Settings;
+      if (s && (s['disableAllHooks'] || s['allowManagedHooksOnly'])) return rel;
+    } catch {
+      /* missing or not JSON: Claude Code ignores it too */
+    }
+  }
+  return null;
 }
 
 /**
