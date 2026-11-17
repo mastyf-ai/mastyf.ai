@@ -84,8 +84,12 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(text);
 }
 
-function tokenMatches(header: string | undefined, token: string): boolean {
-  const presented = /^Bearer\s+(.+)$/i.exec(header ?? '')?.[1] ?? '';
+export function tokenMatches(header: string | undefined, token: string): boolean {
+  // No regex: "Bearer\s+(.+)" backtracks quadratically on a header of many spaces or tabs.
+  const h = header ?? '';
+  if (h.slice(0, 6).toLowerCase() !== 'bearer' || !/^\s$/.test(h.charAt(6))) return false;
+  const presented = h.slice(7).trim();
+  if (!presented) return false;
   const a = Buffer.from(presented);
   const b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
