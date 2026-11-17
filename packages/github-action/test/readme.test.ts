@@ -10,7 +10,7 @@ const action = parse(readFileSync(join(pkg, 'action.yml'), 'utf8'));
 
 describe('README', () => {
   it('every YAML example parses', () => {
-    const blocks = [...readme.matchAll(/```ya?ml\n([\s\S]*?)```/g)].map((m) => m[1]!);
+    const blocks = [...readme.matchAll(/```ya?ml\r?\n([\s\S]*?)```/g)].map((m) => m[1]!);
     expect(blocks.length).toBeGreaterThanOrEqual(3);
     for (const b of blocks) expect(() => parse(b)).not.toThrow();
   });

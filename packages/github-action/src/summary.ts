@@ -27,6 +27,9 @@ const OUTCOME_TEXT: Record<Block['outcome'], string> = {
   redacted: 'secret hidden',
 };
 
+const CELL_MAX = 120; // characters per cell: a tool's name can be anything its server says
+const TABLE_MAX = 800 * 1024; // GitHub drops a step summary over 1 MiB
+
 const FOOTER = ['', 'Free checks, run on this runner; nothing was sent to Mastyf.', 'Paid protection: [mastyf.ai](https://www.mastyf.ai)', ''].join('\n');
 
 /**
@@ -34,7 +37,8 @@ const FOOTER = ['', 'Free checks, run on this runner; nothing was sent to Mastyf
  * formatting, and no breaking the row. Tool names and reasons can come from whoever controls a tool.
  */
 function cell(text: string | undefined): string {
-  return (text ?? '')
+  const t = text ?? '';
+  return (t.length > CELL_MAX ? `${t.slice(0, CELL_MAX)}…` : t)
     .replace(/\\/g, '\\\\') // first, so a backslash in the text can't undo the escapes below
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -70,17 +74,25 @@ export function renderSummary(blocks: Block[] | null, opts: SummaryOptions): str
   if (blocks.length === 0) return `### Mastyf: nothing was blocked in this job\n${FOOTER}`;
 
   const { blocked, redacted } = counts(blocks);
+  const observed = blocked > 0 && blocks.every((b) => b.outcome !== 'blocked');
   const more = opts.capped ? ' (200 or more entries; the oldest may be missing)' : '';
   const parts = [];
-  if (blocked) parts.push(`${blocked} tool call${blocked === 1 ? '' : 's'} blocked`);
+  if (blocked) parts.push(`${blocked} tool call${blocked === 1 ? '' : 's'} ${observed ? 'would have been blocked (observe mode)' : 'blocked'}`);
   if (redacted) parts.push(`${redacted} secret${redacted === 1 ? '' : 's'} hidden`);
   const lines = [`### Mastyf: ${parts.join(', ')} in this job${more}`, ''];
   const head = ['When (UTC)', 'Outcome', 'Kind', 'Tool', 'Check', ...(opts.showReasons ? ['Reason'] : [])];
   lines.push(`| ${head.join(' | ')} |`, `|${head.map(() => ' --- ').join('|')}|`);
+  let size = 0;
   for (const b of blocks) {
+    if (size > TABLE_MAX) {
+      lines.push('', '(List truncated: too long to show in full.)');
+      break;
+    }
     const check = [b.layer, b.rule].filter(Boolean).join(': ');
     const row = [time(b.at), OUTCOME_TEXT[b.outcome] ?? cell(b.outcome), cell(b.kind), cell(b.tool), cell(check), ...(opts.showReasons ? [cell(b.reason)] : [])];
-    lines.push(`| ${row.join(' | ')} |`);
+    const line = `| ${row.join(' | ')} |`;
+    size += line.length;
+    lines.push(line);
   }
   return `${lines.join('\n')}\n${FOOTER}`;
 }

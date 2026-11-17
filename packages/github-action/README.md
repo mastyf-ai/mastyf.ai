@@ -33,7 +33,9 @@ At the end of the job, the run's summary page lists what was blocked:
 | 10:42:09 | secret hidden | result | show_config | |
 
 With `fail-on-block: true`, a block turns the job red, so a pull request that makes your agent
-misbehave doesn't pass.
+misbehave doesn't pass. It guards against an agent being misled (for example by instructions
+hidden in a page it reads), not against untrusted code in the job itself: code that runs with
+the job's permissions can change the workflow or skip the libraries altogether.
 
 ## Inputs
 
@@ -66,10 +68,15 @@ Action ships. Make the engine's path available to later steps:
       - run: echo "MASTYF_ENGINE=${{ steps.mastyf.outputs.engine }}" >> "$GITHUB_ENV"
 ```
 
-Then, in your agent's MCP configuration, run the server as
-`node $MASTYF_ENGINE proxy -- npx -y @modelcontextprotocol/server-filesystem ./project`
-instead of `npx -y @modelcontextprotocol/server-filesystem ./project`. The proxy checks calls
-itself, so its blocks show in the step's log, not in the job summary.
+Then start the server through the engine in your agent's MCP configuration. Most MCP clients
+don't expand variables there, so have the step that writes the configuration put in the real
+path (from `$MASTYF_ENGINE`), for example:
+
+```json
+{ "command": "node", "args": ["<path from MASTYF_ENGINE>", "proxy", "--", "npx", "-y", "@modelcontextprotocol/server-filesystem", "./project"] }
+```
+
+The proxy checks calls itself, so its blocks show in the step's log, not in the job summary.
 
 ## Observe first
 

@@ -1,9 +1,10 @@
 import { existsSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { stopEngine } from '../src/engine.js';
+import { join } from 'node:path';
+import { startDetached, stopEngine } from '../src/engine.js';
 import { run as main } from '../src/main.js';
 import { run as post } from '../src/post.js';
-import { checkCall, checkResult, fakeRunner, pidAlive, waitFor, type FakeRunner } from './fake-runner.js';
+import { checkCall, checkResult, ENGINE, fakeRunner, pidAlive, waitFor, type FakeRunner } from './fake-runner.js';
 
 const SECRET = ['AKIA', 'IOSFODNN7', 'EXAMPLE'].join('');
 const pids: number[] = [];
@@ -63,8 +64,12 @@ describe('post step', () => {
   it('observe mode lists what would have been blocked, and fail-on-block still fails', async () => {
     const { r, url, token } = await started({ mode: 'observe', 'fail-on-block': 'true' });
     expect((await checkCall(url, token, 'read_file', { path: '/etc/passwd' })).decision).toBe('allow');
-    await post(r.postStep(), { print: () => {} });
+    const lines: string[] = [];
+    await post(r.postStep(), { print: (l) => lines.push(l) });
     expect(r.summary()).toContain('would block (observe mode)');
+    expect(r.summary()).toContain('1 tool call would have been blocked (observe mode)');
+    expect(r.summary()).not.toContain('1 tool call blocked');
+    expect(lines.join(' ')).toContain('1 tool call(s) would have been blocked (observe mode)');
     expect(process.exitCode).toBe(1);
   });
 
@@ -101,6 +106,28 @@ describe('post step', () => {
     expect(r.summary()).toContain("wasn't reachable at the end of the job");
     expect(process.exitCode).toBe(1);
     expect(await waitFor(() => !pidAlive(pid), 10000)).toBe(true);
+  });
+
+  it('a later step restarting the engine with the real token cannot turn the job green', async () => {
+    const { r, url, token, pid } = await started({ 'fail-on-block': 'true' });
+    await checkCall(url, token, 'read_file', { path: '/etc/passwd' });
+    process.kill(pid);
+    await waitFor(() => !pidAlive(pid), 10000);
+    // The impostor: the real engine, the real token (later steps have it), the same port, an empty list.
+    const port = Number(new URL(url).port);
+    const impostor = await startDetached({ engine: ENGINE, token, port, maxBodyMb: 32, mode: 'block', logFile: join(r.root, 'impostor.log') });
+    pids.push(impostor.pid);
+    await post(r.postStep(), { print: () => {} });
+    expect(process.exitCode).toBe(1);
+    expect(r.summary()).toContain("wasn't reachable at the end of the job");
+  });
+
+  it('fail-on-block still fails when the summary or outputs cannot be written', async () => {
+    const { r, url, token } = await started({ 'fail-on-block': 'true' });
+    await checkCall(url, token, 'read_file', { path: '/etc/passwd' });
+    const env = { ...r.postStep(), GITHUB_STEP_SUMMARY: r.root, GITHUB_OUTPUT: join(r.root, 'no', 'such', 'dir', 'out') }; // a folder, a missing path
+    await post(env, { print: () => {} });
+    expect(process.exitCode).toBe(1);
   });
 
   it("when the checks never started (on-error: continue), the summary says so", async () => {

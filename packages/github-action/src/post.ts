@@ -3,7 +3,7 @@
  * in the job summary, sets the counts, fails the job if asked to, and stops the checks.
  */
 import { rmSync } from 'node:fs';
-import { stopEngine, verifyHealth } from './engine.js';
+import { pidAlive, stopEngine, verifyHealth } from './engine.js';
 import { appendSummary, fail, getState, setOutput, warning } from './runner.js';
 import { counts, renderSummary, type Block } from './summary.js';
 
@@ -38,24 +38,33 @@ export async function run(env: Env = process.env, opts: { print?: Print } = {}):
   const url = getState('url', env);
   const log = getState('log', env);
 
+  // Only the engine this Action started counts: a later step has the token and could start its
+  // own on the same port after stopping ours.
+  const ours = startedOk && !!url && pidAlive(pid);
+  const blocks = ours ? await fetchBlocks(url, getState('token', env)) : null;
+  const n = blocks ? counts(blocks) : null;
+  const observed = !!blocks && n!.blocked > 0 && blocks.every((b) => b.outcome !== 'blocked');
+  // Decide first, so a failure writing the summary can never skip it.
+  const failure =
+    failOnBlock && n && n.blocked > 0
+      ? observed
+        ? `Mastyf: ${n.blocked} tool call(s) would have been blocked (observe mode); see the job summary.`
+        : `Mastyf blocked ${n.blocked} tool call(s); see the job summary.`
+      : failOnBlock && startedOk && !blocks
+        ? "Mastyf couldn't confirm what was blocked in this job (the checks weren't reachable at the end); failing because fail-on-block is set."
+        : null;
   try {
-    const blocks = startedOk && url ? await fetchBlocks(url, getState('token', env)) : null;
     appendSummary(renderSummary(blocks, { showReasons, capped: (blocks?.length ?? 0) >= KEPT, serviceStarted: startedOk }), env);
-    if (blocks) {
-      const n = counts(blocks);
+    if (n) {
       setOutput('blocked-count', String(n.blocked), env);
       setOutput('redacted-count', String(n.redacted), env);
-      if (failOnBlock && n.blocked > 0) fail(`Mastyf blocked ${n.blocked} tool call(s); see the job summary.`, print);
-    } else if (startedOk && failOnBlock) {
-      // "Couldn't check" is never "nothing blocked": a step could have stopped the checks.
-      fail("Mastyf couldn't confirm what was blocked in this job (the checks weren't reachable at the end); failing because fail-on-block is set.", print);
-    } else if (startedOk) {
+    } else if (startedOk && !failOnBlock) {
       warning("Mastyf: the checks weren't reachable at the end of the job; the summary has no list.", print);
     }
   } catch (err) {
-    // Never let the summary break the job.
     warning(`Mastyf: couldn't write the summary (${(err as Error).message})`, print);
   } finally {
+    if (failure) fail(failure, print);
     if (pid) await stopEngine(pid);
     if (log) rmSync(log, { force: true });
   }

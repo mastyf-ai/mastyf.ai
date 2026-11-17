@@ -1,5 +1,5 @@
 name: 'Mastyf: protect your agent'
-description: 'Free checks on every tool call and tool result of the AI agents in your job, run on your own runner. Nothing is sent to Mastyf.'
+description: 'Free checks on every tool call and result of the AI agents in your job, on your own runner.'
 author: 'Mastyf Labs'
 branding:
   icon: 'shield'

@@ -75,3 +75,13 @@ describe('counts', () => {
     expect(counts([blocked, would, hidden])).toEqual({ blocked: 2, redacted: 1 });
   });
 });
+
+describe('size', () => {
+  it('a huge tool name cannot push the summary past what GitHub shows', () => {
+    const huge: Block = { ...blocked, tool: 'x'.repeat(2_000_000) };
+    const md = renderSummary(Array.from({ length: 200 }, () => huge), { ...opts, showReasons: true });
+    expect(Buffer.byteLength(md)).toBeLessThan(900 * 1024);
+    expect(md).toContain('…');
+    expect(md).toContain('Free checks, run on this runner; nothing was sent to Mastyf.');
+  });
+});
