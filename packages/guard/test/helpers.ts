@@ -117,3 +117,24 @@ export async function isolate(hooks: { beforeEach: Hook; afterEach: Hook }): Pro
     home?.cleanup();
   });
 }
+
+/**
+ * A stand-in for Mastra's `createTool` (Mastra 1.x needs Node 22.13, and this repository installs on
+ * Node 20): an instance of a Tool class with id, description and inputSchema, whose execute parses
+ * the input with the schema before running, as Mastra's does. CI also runs the adapter against the
+ * real Mastra on Node 22 (scripts/mastra-smoke.mjs).
+ */
+export class MastraLikeTool<I, O> {
+  id: string;
+  description: string;
+  inputSchema: { parse(v: unknown): I; safeParseAsync?: (v: unknown) => Promise<{ success: boolean; data?: unknown }> };
+  execute: (input: unknown, context: unknown) => Promise<O>;
+  constructor(opts: { id: string; description: string; inputSchema: MastraLikeTool<I, O>['inputSchema']; execute: (input: I, context: unknown) => Promise<O> }) {
+    this.id = opts.id;
+    this.description = opts.description;
+    this.inputSchema = opts.inputSchema;
+    this.execute = async (input, context) => opts.execute(this.inputSchema.parse(input), context);
+  }
+}
+
+export const createTool = <I, O>(opts: ConstructorParameters<typeof MastraLikeTool<I, O>>[0]) => new MastraLikeTool<I, O>(opts);
