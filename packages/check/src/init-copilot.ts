@@ -3,7 +3,7 @@
  * Copilot's coding agent into a repository. Copilot reads hooks only from .github/hooks/*.json in
  * the repository and its sessions can't download anything, so the engine goes in the repo too.
  */
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 
 const HOOK_DIR = '.github/hooks/mastyf';
@@ -34,6 +34,16 @@ The engine (\`mastyf-check.cjs\`) is AGPL-3.0; see LICENSE. Paid protection: htt
 
 export class InitError extends Error {}
 
+/** True for anything at `p`, including a dangling link (existsSync says false for those). */
+function lstatExists(p: string): boolean {
+  try {
+    lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** A file next to the bundle, or one folder up (npm package: dist/ + package root). */
 function beside(bundle: string, name: string): string | null {
   for (const dir of [dirname(bundle), dirname(dirname(bundle))]) {
@@ -58,7 +68,21 @@ export function initCopilot(opts: { dir: string; bundle: string; force?: boolean
   ];
   if (policy) files.push([`${HOOK_DIR}/check-default-policy.yaml`, readFileSync(policy)]);
 
-  // Check everything first, so nothing is half-written.
+  // Check everything first, so nothing is half-written. A cloned repository can hold links: every
+  // step of every path we write must be a real folder or file inside the repository.
+  const root = realpathSync(opts.dir);
+  const same = (a: string, b: string) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+  for (const [rel] of files) {
+    const parts = rel.split('/');
+    for (let i = 1; i <= parts.length; i++) {
+      const step = parts.slice(0, i).join('/');
+      const full = join(opts.dir, step);
+      if (!existsSync(full) && !lstatExists(full)) break;
+      if (lstatSync(full).isSymbolicLink() || !same(realpathSync(full), join(root, ...parts.slice(0, i)))) {
+        throw new InitError(`${step} is a link; refusing to write through it`);
+      }
+    }
+  }
   if (!opts.force) {
     for (const [rel, content] of files) {
       const full = join(opts.dir, rel);

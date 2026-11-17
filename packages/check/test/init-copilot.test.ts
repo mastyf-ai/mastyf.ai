@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,6 +59,17 @@ describe('init-copilot', () => {
     expect(init(d).status).toBe(0);
     expect(readFileSync(join(d, '.github', 'hooks', 'audit.json'), 'utf8')).toBe('{"version":1,"hooks":{}}');
     expect(existsSync(join(d, '.github', 'hooks', 'mastyf.json'))).toBe(true);
+  });
+
+  it('never writes through a link out of the repository', () => {
+    const d = repo();
+    const outside = repo();
+    mkdirSync(join(d, '.github'));
+    symlinkSync(outside, join(d, '.github', 'hooks'), process.platform === 'win32' ? 'junction' : 'dir');
+    const r = init(d);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/link/);
+    expect(existsSync(join(outside, 'mastyf.json'))).toBe(false);
   });
 
   it('a directory that does not exist is an error', () => {
