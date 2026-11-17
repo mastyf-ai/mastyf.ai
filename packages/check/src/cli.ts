@@ -7,6 +7,7 @@
  *   mastyf-check copilot-hook pre|post   (GitHub Copilot hook; see init-copilot)
  */
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
@@ -29,6 +30,17 @@ export interface RunResult {
   close?: () => Promise<void>;
   /** For `proxy`: settles with the exit code to use once the server has stopped. */
   exited?: Promise<number>;
+  /** Exit as soon as the output is written (a hook must end by its deadline). */
+  exitNow?: boolean;
+}
+
+/** This program's real path: npm's bin is a link on Linux and macOS, and argv[1] keeps the link. */
+function selfPath(): string {
+  try {
+    return realpathSync(process.argv[1] ?? '');
+  } catch {
+    return process.argv[1] ?? '';
+  }
 }
 
 const HELP = `mastyf-check ${VERSION}: Mastyf's free checks for AI agents' tool calls, on this machine.
@@ -164,7 +176,7 @@ export async function run(argv: string[], io: Io): Promise<RunResult> {
       case 'init-copilot': {
         const dir = resolve(p.flags['dir'] || process.cwd());
         try {
-          const written = initCopilot({ dir, bundle: process.argv[1] || '', force: p.flags['force'] !== undefined });
+          const written = initCopilot({ dir, bundle: selfPath(), force: p.flags['force'] !== undefined });
           say(io.stdout, initCopilotMessage(dir, written));
           return { code: 0 };
         } catch (err) {
@@ -179,18 +191,22 @@ export async function run(argv: string[], io: Io): Promise<RunResult> {
       case 'copilot-hook': {
         const kind = p.rest[0];
         if (kind !== 'pre' && kind !== 'post') throw new Error('usage: mastyf-check copilot-hook pre|post (reads the hook event on stdin)');
-        const chunks: Buffer[] = [];
-        for await (const c of io.stdin) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c)));
+        // The deadline starts now, before reading stdin: a sender that never closes it can't stall us.
+        const input = (async () => {
+          const chunks: Buffer[] = [];
+          for await (const c of io.stdin) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c)));
+          return Buffer.concat(chunks).toString('utf8');
+        })();
         const cwd = process.cwd();
         const stateDir = io.env['MASTYF_COPILOT_STATE_DIR'] || join(tmpdir(), `mastyf-copilot-${createHash('sha256').update(cwd).digest('hex').slice(0, 12)}`);
         const deadline = Number(io.env['MASTYF_COPILOT_DEADLINE_MS']);
-        const out = await copilotHook(kind, Buffer.concat(chunks).toString('utf8'), {
-          engine: io.env['MASTYF_COPILOT_ENGINE'] || process.argv[1] || '',
+        const out = await copilotHook(kind, input, {
+          engine: io.env['MASTYF_COPILOT_ENGINE'] || selfPath(),
           stateDir,
           deadlineMs: Number.isFinite(deadline) && deadline > 0 ? deadline : undefined,
         });
         if (out) io.stdout.write(out);
-        return { code: 0 }; // nothing is left open, so the process ends right away
+        return { code: 0, exitNow: true }; // nothing still running may hold the hook past its deadline
       }
 
       default:

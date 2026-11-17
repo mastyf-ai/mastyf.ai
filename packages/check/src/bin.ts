@@ -18,5 +18,9 @@ void (async () => {
     process.once('SIGTERM', stop);
     return; // serve keeps running
   }
+  if (result.exitNow) {
+    process.stdout.write('', () => process.exit(result.code));
+    return;
+  }
   process.exitCode = result.code;
 })();

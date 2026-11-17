@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmodSync, closeSync, constants, existsSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
+import { connect } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
 
 /** One HTTP request on a connection that is closed afterwards (nothing keeps the hook alive). */
@@ -81,11 +82,13 @@ function pidAlive(pid: number): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function proves(s: State): Promise<boolean> {
+async function proves(s: State, until: number): Promise<boolean> {
   if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(s.url) || !pidAlive(s.pid)) return false;
   try {
     const nonce = randomBytes(16).toString('hex');
-    const res = await http(`${s.url}/v1/health?nonce=${nonce}`, { timeoutMs: 3000 });
+    const left = until - Date.now();
+    if (left <= 0) return false;
+    const res = await http(`${s.url}/v1/health?nonce=${nonce}`, { timeoutMs: Math.min(3000, left) });
     const h = res.json as { proof?: string };
     const want = Buffer.from(createHmac('sha256', s.token).update(nonce).digest('hex'));
     const got = Buffer.from(String(h.proof ?? ''));
@@ -122,6 +125,21 @@ function ownFile(file: string): boolean {
   return !POSIX || (st.uid === process.getuid!() && (st.mode & 0o077) === 0);
 }
 
+function portOpen(url: string, ms: number): Promise<boolean> {
+  return new Promise((ok) => {
+    if (ms <= 0) return ok(false);
+    const u = new URL(url);
+    const sock = connect({ host: u.hostname, port: Number(u.port) });
+    const done = (v: boolean) => {
+      sock.destroy();
+      ok(v);
+    };
+    sock.setTimeout(ms, () => done(false));
+    sock.once('connect', () => done(true));
+    sock.once('error', () => done(false));
+  });
+}
+
 function readState(dir: string): State | null {
   try {
     if (!ownFile(join(dir, 'state.json'))) return null;
@@ -135,9 +153,12 @@ function readState(dir: string): State | null {
 async function startEngine(opts: HookOptions, until: number): Promise<State> {
   if (!existsSync(opts.engine)) throw new Error('engine missing');
   const token = randomBytes(32).toString('base64url');
-  const log = join(opts.stateDir, 'engine.log');
+  // A log of its own: a shared log would still hold the address of an engine that died.
+  const log = join(opts.stateDir, `engine.${randomBytes(6).toString('hex')}.log`);
   const fd = POSIX ? openSync(log, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW, 0o600) : openSync(log, 'a');
-  const child = spawn(process.execPath, [opts.engine, 'serve', '--port', '0', '--max-body', '32'], {
+  const policy = join(dirname(opts.engine), 'check-default-policy.yaml');
+  const args = [opts.engine, 'serve', '--port', '0', '--max-body', '32', ...(existsSync(policy) ? ['--policy', policy] : [])];
+  const child = spawn(process.execPath, args, {
     detached: true,
     stdio: ['ignore', fd, fd],
     windowsHide: true,
@@ -150,9 +171,10 @@ async function startEngine(opts: HookOptions, until: number): Promise<State> {
   child.once('error', () => (exited = true));
   const pid = child.pid ?? 0;
   while (Date.now() < until && !exited) {
-    const m = READY.exec(readFileSync(log, 'utf8').split(/\r?\n/).slice(-50).join('\n'));
+    const m = READY.exec(readFileSync(log, 'utf8'));
     if (m && pidAlive(pid)) {
       const state = { url: m[1]!, token, pid };
+      if (!(await proves(state, until))) break; // never save a state that hasn't proved itself
       const tmp = join(opts.stateDir, `state.${process.pid}.tmp`);
       writeFileSync(tmp, JSON.stringify(state), { mode: 0o600 });
       renameSync(tmp, join(opts.stateDir, 'state.json'));
@@ -172,16 +194,25 @@ async function startEngine(opts: HookOptions, until: number): Promise<State> {
 async function service(opts: HookOptions, until: number): Promise<State> {
   secureDir(opts.stateDir);
   const lock = join(opts.stateDir, 'start.lock');
+  const mine = `${process.pid}:${randomBytes(8).toString('hex')}`;
   while (Date.now() < until) {
     const s = readState(opts.stateDir);
-    if (s && (await proves(s))) return s;
+    if (s && (await proves(s, until))) return s;
+    // Alive and accepting connections but slow to answer: busy, not dead. Wait, don't start another.
+    if (s && pidAlive(s.pid) && (await portOpen(s.url, Math.min(500, until - Date.now())))) {
+      await sleep(200);
+      continue;
+    }
     let fd: number | null = null;
     try {
       fd = openSync(lock, 'wx');
+      writeFileSync(fd, mine);
     } catch {
-      // Someone else is starting it; a lock older than 30 s was left by a hook that died.
+      // Someone else is starting it. A lock whose owner is gone was left by a hook that died.
       try {
-        if (Date.now() - statSync(lock).mtimeMs > 30_000) rmSync(lock, { force: true });
+        const owner = readFileSync(lock, 'utf8');
+        const ownerPid = Number(owner.split(':')[0]);
+        if (owner && !pidAlive(ownerPid) && readFileSync(lock, 'utf8') === owner) rmSync(lock, { force: true });
       } catch {
         /* gone already */
       }
@@ -190,22 +221,27 @@ async function service(opts: HookOptions, until: number): Promise<State> {
     }
     try {
       const again = readState(opts.stateDir);
-      if (again && (await proves(again))) return again;
+      if (again && (await proves(again, until))) return again;
       return await startEngine(opts, until);
     } finally {
       closeSync(fd);
-      rmSync(lock, { force: true });
+      try {
+        if (readFileSync(lock, 'utf8') === mine) rmSync(lock, { force: true });
+      } catch {
+        /* gone */
+      }
     }
   }
   throw new Error('timed out');
 }
 
 async function ask(s: State, path: string, body: unknown, until: number): Promise<Verdict> {
+  if (until - Date.now() <= 0) throw new Error('out of time');
   const res = await http(`${s.url}${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${s.token}` },
     body: JSON.stringify(body),
-    timeoutMs: Math.max(1000, until - Date.now()),
+    timeoutMs: Math.max(1, until - Date.now()),
   });
   if (res.status !== 200) throw new Error(`answered ${res.status}`);
   const v = res.json as Verdict;
@@ -225,11 +261,29 @@ function parseArgs(raw: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : { input: v ?? null };
 }
 
+/** The result text Copilot will show the model, whatever shape it came in. */
+function resultOf(input: Record<string, unknown>): unknown {
+  let tr = input['toolResult'];
+  if (typeof tr === 'string') {
+    try {
+      tr = JSON.parse(tr);
+    } catch {
+      return tr; // plain text
+    }
+  }
+  if (tr && typeof tr === 'object') {
+    const text = (tr as { textResultForLlm?: unknown }).textResultForLlm;
+    return typeof text === 'string' ? text : tr; // no text field: check the whole result
+  }
+  if (tr !== undefined && tr !== null) return tr;
+  return input['tool_response'] ?? undefined;
+}
+
 function touchesHooks(args: Record<string, unknown>): boolean {
   return PROTECTED.test(JSON.stringify(args));
 }
 
-const WRITES = /^(create|edit|str_replace_editor|apply_patch|write|multiedit|notebookedit|bash|powershell)$/i;
+const WRITES = /^(create|edit|str_replace_editor|apply_patch|write|multiedit|notebookedit|bash|write_bash|powershell)$/i;
 
 async function decide(kind: 'pre' | 'post', stdin: string, opts: HookOptions, until: number): Promise<string> {
   const input = JSON.parse(stdin) as Record<string, unknown>;
@@ -244,8 +298,8 @@ async function decide(kind: 'pre' | 'post', stdin: string, opts: HookOptions, un
     return v.decision === 'block' ? deny(message(v)) : '';
   }
 
-  const tr = input['toolResult'] as { textResultForLlm?: unknown } | undefined;
-  const result = tr && typeof tr === 'object' ? tr.textResultForLlm : input['tool_response'];
+  const result = resultOf(input);
+  if (result === undefined) return replace(CANT_CHECK_RESULT); // nothing we can read: never let it through unchecked
   const v = await ask(await service(opts, until), '/v1/check/result', { tool, result: result ?? null, arguments: args, ...where }, until);
   if (v.decision === 'block') return replace(message(v));
   if (v.decision === 'redact') {
@@ -256,16 +310,17 @@ async function decide(kind: 'pre' | 'post', stdin: string, opts: HookOptions, un
 }
 
 /** What to print on stdout. Never throws, never takes longer than the deadline. */
-export async function copilotHook(kind: 'pre' | 'post', stdin: string, opts: HookOptions): Promise<string> {
+export async function copilotHook(kind: 'pre' | 'post', stdin: string | Promise<string>, opts: HookOptions): Promise<string> {
   const failed = kind === 'pre' ? deny(CANT_CHECK_CALL) : replace(CANT_CHECK_RESULT);
-  const deadline = opts.deadlineMs ?? 25_000;
+  // Copilot lets a call through after 30 s: stay well inside it, whatever was configured.
+  const deadline = Math.min(opts.deadlineMs ?? 20_000, 25_000);
   const until = Date.now() + deadline - 500;
   let timer: NodeJS.Timeout | undefined;
   const late = new Promise<string>((ok) => {
     timer = setTimeout(() => ok(failed), deadline);
   });
   try {
-    return await Promise.race([decide(kind, stdin, opts, until).catch(() => failed), late]);
+    return await Promise.race([Promise.resolve(stdin).then((text) => decide(kind, text, opts, until)).catch(() => failed), late]);
   } finally {
     clearTimeout(timer);
   }

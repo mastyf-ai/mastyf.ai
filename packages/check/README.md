@@ -43,10 +43,11 @@ Once it's on your default branch:
   "Blocked by Mastyf (...)", never what was matched.
 - After each tool call, a blocked result (for example a page with hidden instructions) is
   replaced before Copilot reads it, and a secret is replaced by the cleaned text.
-- If the checks can't run, the call is denied and the result withheld. The hook always answers
-  within its time limit, because Copilot lets a call through when a hook times out.
-- It works in sessions on GitHub Actions and in GitHub's cloud sandbox alike; nothing is sent to
-  Mastyf.
+- If the checks can't run, the call is denied and the result withheld. The hook is built to
+  answer and exit within 20 seconds, because Copilot lets a call through when a hook takes more
+  than 30. If the check program is stopped during a session, the next call starts a new one.
+- It's designed to work in sessions on GitHub Actions and in GitHub's cloud sandbox alike;
+  nothing is sent to Mastyf.
 
 Limits:
 

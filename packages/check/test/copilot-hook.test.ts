@@ -1,6 +1,6 @@
 /** `mastyf-check copilot-hook pre|post`, run as Copilot's coding agent runs it. */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -90,7 +90,7 @@ describe('copilot-hook', () => {
       });
     const outs = await Promise.all([one(), one(), one(), one()]);
     for (const o of outs) expect(o.trim() ? JSON.parse(o).permissionDecision : undefined).toBeUndefined();
-    const log = readFileSync(join(d, 'engine.log'), 'utf8');
+    const log = readdirSync(d).filter((f) => /^engine\..+\.log$/.test(f)).map((f) => readFileSync(join(d, f), 'utf8')).join(' ');
     expect(log.match(/listening on/g)?.length).toBe(1);
   });
 
