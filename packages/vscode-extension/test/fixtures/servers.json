@@ -1,0 +1,20 @@
+[
+  { "name": "files", "why": "_mastyf managed, version 2", "expected": "routed",
+    "server": { "command": "C:/Shield/node.exe", "args": ["C:/Shield/proxy-launcher.cjs", "proxy", "--config", "C:/cfg/files.json", "--policy", "C:/p.yaml"], "_mastyf": { "managed": true, "version": 2, "original_command": "npx" } } },
+  { "name": "old", "why": "_mastyf version 1 entry with original_command is outdated", "expected": "fixable",
+    "server": { "command": "mastyf-ai-old", "args": [], "_mastyf": { "managed": true, "original_command": "npx" } } },
+  { "name": "cli", "why": "command mastyf + proxy", "expected": "routed",
+    "server": { "command": "mastyf", "args": ["proxy", "--config", "x.json"], "_mastyf": { "managed": true, "version": 2 } } },
+  { "name": "wrapped", "why": "args with proxy and --policy, marker present", "expected": "routed",
+    "server": { "command": "node", "args": ["launcher.cjs", "proxy", "--policy", "p.yaml"], "_mastyf": { "managed": true, "version": 2 } } },
+  { "name": "plain", "why": "ordinary npx server", "expected": "fixable",
+    "server": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/work"] } },
+  { "name": "remote", "why": "URL-based server", "expected": "url",
+    "server": { "type": "http", "url": "https://mcp.example.com/sse" } },
+  { "name": "windsurf-remote", "why": "Windsurf serverUrl", "expected": "url",
+    "server": { "serverUrl": "https://mcp.example.com/mcp" } },
+  { "name": "both", "why": "command and url: local wins", "expected": "fixable",
+    "server": { "command": "npx", "args": ["thing"], "url": "https://mcp.example.com" } },
+  { "name": "garbage", "why": "not an object", "expected": "fixable",
+    "server": "npx thing" }
+]
