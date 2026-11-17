@@ -29,3 +29,5 @@ for (const name of ['main', 'post']) {
 mkdirSync(join(here, 'dist', 'engine'), { recursive: true });
 copyFileSync(engine, join(here, 'dist', 'engine', 'mastyf-check.cjs'));
 copyFileSync(join(check, 'check-default-policy.yaml'), join(here, 'dist', 'engine', 'check-default-policy.yaml'));
+// The engine is AGPL-3.0 (the Action's own code is MIT): its licence travels with it.
+copyFileSync(join(check, 'LICENSE'), join(here, 'dist', 'engine', 'LICENSE'));

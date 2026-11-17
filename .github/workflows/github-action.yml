@@ -1,0 +1,78 @@
+name: GitHub Action (protect your agent)
+
+# Tests packages/github-action on every change to it or to the engine it bundles, then uses the
+# Action from this repository on Linux, macOS and Windows runners with a small agent, as the real
+# check that it works on GitHub's runners. Nothing is published.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/github-action/**'
+      - 'packages/check/**'
+      - 'packages/guard/**'
+      - 'src/**'
+      - '.github/workflows/github-action.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @mastyf_ai/github-action... --filter @mastyf_ai/guard... --ignore-scripts
+      - run: pnpm --filter @mastyf_ai/check build
+      - run: pnpm --filter @mastyf_ai/guard build
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - name: Python for the end-to-end test
+        run: |
+          uv venv /tmp/mastyf-py
+          uv pip install --python /tmp/mastyf-py/bin/python httpx
+          echo "MASTYF_TEST_PYTHON=/tmp/mastyf-py/bin/python" >> "$GITHUB_ENV"
+      - run: pnpm --filter @mastyf_ai/github-action test
+
+  on-runners:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @mastyf_ai/github-action... --filter @mastyf_ai/guard... --ignore-scripts
+      - run: pnpm --filter @mastyf_ai/check build
+      - run: pnpm --filter @mastyf_ai/guard build
+      - run: pnpm --filter @mastyf_ai/github-action build
+      - uses: ./packages/github-action
+        id: mastyf
+      - name: An agent using @mastyf_ai/guard is checked through the Action
+        shell: bash
+        run: |
+          test -n "$MASTYF_CHECK_URL"
+          cat > agent.mjs <<'EOF'
+          import { createGuard, _running } from './packages/guard/dist/guard.js';
+          const g = createGuard();
+          const bad = await g.checkCall('read_file', { path: '/etc/passwd' });
+          const ok = await g.checkCall('read_file', { path: './README.md' });
+          if (bad.decision !== 'block' || ok.decision !== 'allow' || _running() !== null) {
+            console.error(JSON.stringify({ bad: bad.decision, ok: ok.decision, startedItsOwn: _running() !== null }));
+            process.exit(1);
+          }
+          console.log('checked through the Action:', bad.decision, ok.decision);
+          EOF
+          node agent.mjs
+      # The post step then writes the job summary (one block) and stops the checks.
