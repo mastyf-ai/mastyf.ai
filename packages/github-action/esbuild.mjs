@@ -13,7 +13,7 @@ if (!existsSync(engine)) {
   process.exit(1);
 }
 
-for (const name of ['main', 'post']) {
+for (const name of ['main', 'post', 'claude-hook']) {
   await build({
     entryPoints: [join(here, 'src', `${name}.ts`)],
     outfile: join(here, 'dist', `${name}.cjs`),
