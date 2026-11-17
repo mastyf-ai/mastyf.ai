@@ -11,6 +11,8 @@ export interface Inputs {
   maxBodyMb: number;
   showReasons: boolean;
   onError: 'fail' | 'continue';
+  claudeCode: boolean;
+  claudeSettingsBase?: string;
 }
 
 export class InputError extends Error {
@@ -44,18 +46,18 @@ function int(env: Env, name: string, fallback: number, min: number, max: number)
   return n;
 }
 
-function policyPath(env: Env, workspace: string): string | undefined {
-  const raw = getInput('policy', env);
+function workspaceFile(env: Env, workspace: string, name: string): string | undefined {
+  const raw = getInput(name, env);
   if (!raw) return undefined;
   const full = resolve(workspace, raw);
   const inside = (p: string, root: string) => {
     const rel = relative(root, p);
     return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
   };
-  if (!inside(full, resolve(workspace))) throw new InputError(`policy "${raw}" is outside the workspace`);
-  if (!existsSync(full)) throw new InputError(`policy file not found: ${raw}`);
+  if (!inside(full, resolve(workspace))) throw new InputError(`${name} "${raw}" is outside the workspace`);
+  if (!existsSync(full)) throw new InputError(`${name} file not found: ${raw}`);
   // A link inside the workspace that points out of it is outside too.
-  if (!inside(realpathSync(full), realpathSync(workspace))) throw new InputError(`policy "${raw}" is outside the workspace`);
+  if (!inside(realpathSync(full), realpathSync(workspace))) throw new InputError(`${name} "${raw}" is outside the workspace`);
   return full;
 }
 
@@ -63,10 +65,12 @@ export function readInputs(env: Env, workspace: string): Inputs {
   return {
     failOnBlock: bool(env, 'fail-on-block', false),
     mode: oneOf(env, 'mode', ['block', 'observe'] as const, 'block'),
-    policy: policyPath(env, workspace),
+    policy: workspaceFile(env, workspace, 'policy'),
     port: int(env, 'port', 0, 0, 65535),
     maxBodyMb: int(env, 'max-body-mb', 32, 1, 64),
     showReasons: bool(env, 'show-reasons', false),
     onError: oneOf(env, 'on-error', ['fail', 'continue'] as const, 'fail'),
+    claudeCode: bool(env, 'claude-code', false),
+    claudeSettingsBase: workspaceFile(env, workspace, 'claude-settings-base'),
   };
 }

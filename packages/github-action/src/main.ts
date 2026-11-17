@@ -5,8 +5,9 @@
  */
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { enginePath, inContainer as detectContainer, pidAlive, startDetached, stopEngine, verifyHealth } from './engine.js';
+import { readBase, writeClaudeSettings } from './claude-settings.js';
 import { readInputs, type Inputs } from './inputs.js';
 import { exportVariable, fail, info, mask, saveState, setOutput, warning } from './runner.js';
 
@@ -16,6 +17,11 @@ type Print = (line: string) => void;
 export interface RunOptions {
   print?: Print;
   inContainer?: () => boolean;
+}
+
+/** dist/claude-hook.cjs next to the running script (MASTYF_ACTION_CLAUDE_HOOK overrides, for tests). */
+function claudeHookPath(env: Env): string {
+  return env['MASTYF_ACTION_CLAUDE_HOOK'] || join(dirname(process.argv[1] ?? '.'), 'claude-hook.cjs');
 }
 
 export async function run(env: Env = process.env, opts: RunOptions = {}): Promise<void> {
@@ -41,6 +47,13 @@ export async function run(env: Env = process.env, opts: RunOptions = {}): Promis
 
   if ((opts.inContainer ?? detectContainer)()) {
     return problem("container jobs aren't supported yet; run the agent's steps on the runner itself");
+  }
+  if (inputs.claudeCode) {
+    try {
+      readBase(inputs.claudeSettingsBase); // a broken base file stops us before anything starts
+    } catch (err) {
+      return problem((err as Error).message);
+    }
   }
   const running = Number(env['MASTYF_ACTION_PID'] ?? 0);
   if (running && pidAlive(running)) {
@@ -83,6 +96,16 @@ export async function run(env: Env = process.env, opts: RunOptions = {}): Promis
     }
     setOutput('url', startedEngine.url, env);
     setOutput('engine', engine, env);
+    if (inputs.claudeCode) {
+      const written = writeClaudeSettings({
+        dir: env['RUNNER_TEMP'] || tmpdir(),
+        hookPath: claudeHookPath(env),
+        url: startedEngine.url,
+        token,
+        base: inputs.claudeSettingsBase,
+      });
+      setOutput('claude-settings', written.settings, env);
+    }
     info(`Mastyf checks are on for this job (free tier, on this runner).${inputs.mode === 'observe' ? ' Observe mode: nothing is blocked, what would be is listed.' : ''}`, print);
   } catch (err) {
     if (pid) await stopEngine(pid);

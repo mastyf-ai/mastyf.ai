@@ -30,7 +30,7 @@ describe('the built Action', () => {
   it('action.yml declares the runtime, entry points, inputs and outputs', () => {
     const a = parse(readFileSync(join(pkg, 'action.yml'), 'utf8'));
     expect(a.runs).toEqual({ using: 'node24', main: 'dist/main.cjs', post: 'dist/post.cjs', 'post-if': 'always()' });
-    expect(Object.keys(a.inputs).sort()).toEqual(['fail-on-block', 'max-body-mb', 'mode', 'on-error', 'policy', 'port', 'show-reasons'].sort());
+    expect(Object.keys(a.inputs).sort()).toEqual(['claude-code', 'claude-settings-base', 'fail-on-block', 'max-body-mb', 'mode', 'on-error', 'policy', 'port', 'show-reasons'].sort());
     expect(Object.fromEntries(Object.entries(a.inputs).map(([k, v]: [string, any]) => [k, v.default]))).toEqual({
       'fail-on-block': 'false',
       mode: 'block',
@@ -39,8 +39,10 @@ describe('the built Action', () => {
       'max-body-mb': '32',
       'show-reasons': 'false',
       'on-error': 'fail',
+      'claude-code': 'false',
+      'claude-settings-base': '',
     });
-    expect(Object.keys(a.outputs).sort()).toEqual(['blocked-count', 'engine', 'redacted-count', 'url']);
+    expect(Object.keys(a.outputs).sort()).toEqual(['blocked-count', 'claude-settings', 'engine', 'redacted-count', 'url']);
     expect(a.branding).toEqual({ icon: 'shield', color: 'gray-dark' });
   });
 

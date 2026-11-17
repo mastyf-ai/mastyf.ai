@@ -21,6 +21,8 @@ describe('readInputs', () => {
       maxBodyMb: 32,
       showReasons: false,
       onError: 'fail',
+      claudeCode: false,
+      claudeSettingsBase: undefined,
     });
   });
 
@@ -29,7 +31,7 @@ describe('readInputs', () => {
       inputs({ 'fail-on-block': 'true', mode: 'observe', policy: '.mastyf/policy.yaml', port: '4100', 'max-body-mb': '8', 'show-reasons': 'true', 'on-error': 'continue' }),
       workspace,
     );
-    expect(r).toEqual({ failOnBlock: true, mode: 'observe', policy: join(workspace, '.mastyf', 'policy.yaml'), port: 4100, maxBodyMb: 8, showReasons: true, onError: 'continue' });
+    expect(r).toEqual({ failOnBlock: true, mode: 'observe', policy: join(workspace, '.mastyf', 'policy.yaml'), port: 4100, maxBodyMb: 8, showReasons: true, onError: 'continue', claudeCode: false, claudeSettingsBase: undefined });
   });
 
   it.each([

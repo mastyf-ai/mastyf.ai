@@ -33,11 +33,21 @@ inputs:
     description: '"fail" stops the job if the checks cannot start; "continue" warns and goes on without them.'
     required: false
     default: 'fail'
+  claude-code:
+    description: 'Also write Claude Code settings whose hooks send every Claude Code tool call and result to the checks. Pass the "claude-settings" output to anthropics/claude-code-action as "settings".'
+    required: false
+    default: 'false'
+  claude-settings-base:
+    description: 'Path (in your repository) to your own Claude Code settings; the hooks are added to them.'
+    required: false
+    default: ''
 outputs:
   url:
     description: 'Address of the checks for this job (also in MASTYF_CHECK_URL for later steps).'
   engine:
     description: 'Path of the bundled check engine, e.g. for "node <engine> proxy -- <MCP server command>".'
+  claude-settings:
+    description: 'Path of the Claude Code settings file (with claude-code: true).'
   blocked-count:
     description: 'Tool calls blocked in the job (set by the post step).'
   redacted-count:
