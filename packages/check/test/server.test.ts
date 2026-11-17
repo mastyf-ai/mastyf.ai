@@ -210,3 +210,25 @@ describe('logs', () => {
     expect(all).not.toContain('/etc/passwd');
   });
 });
+
+describe('token check', () => {
+  it('takes linear time on a crafted Authorization header (no backtracking regex)', async () => {
+    const { tokenMatches } = await import('../src/server');
+    const crafted = 'Bearer\t' + '\t'.repeat(40_000) + '\n';
+    const t0 = performance.now();
+    expect(tokenMatches(crafted, TOKEN)).toBe(false);
+    expect(performance.now() - t0).toBeLessThan(50);
+  });
+
+  it('accepts the token with any case of "Bearer" and surrounding spaces, and nothing else', async () => {
+    const { tokenMatches } = await import('../src/server');
+    expect(tokenMatches(`Bearer ${TOKEN}`, TOKEN)).toBe(true);
+    expect(tokenMatches(`bearer   ${TOKEN}`, TOKEN)).toBe(true);
+    expect(tokenMatches(`Bearer\t${TOKEN} `, TOKEN)).toBe(true);
+    expect(tokenMatches(`Bearer${TOKEN}`, TOKEN)).toBe(false);
+    expect(tokenMatches(`Basic ${TOKEN}`, TOKEN)).toBe(false);
+    expect(tokenMatches(`Bearer ${TOKEN}x`, TOKEN)).toBe(false);
+    expect(tokenMatches(undefined, TOKEN)).toBe(false);
+    expect(tokenMatches('Bearer ', '')).toBe(false);
+  });
+});
