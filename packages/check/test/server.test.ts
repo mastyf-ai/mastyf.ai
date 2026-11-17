@@ -162,6 +162,44 @@ describe('/v1/blocks', () => {
     expect(r.json.blocks.length).toBeLessThanOrEqual(2);
     expect(r.json.blocks[0]).toMatchObject({ decision: 'block', tool: 'read_file' });
     expect(Date.parse(r.json.blocks[0].at)).not.toBeNaN();
+    expect(r.json.blocks[0].outcome).toBe('blocked');
+  });
+
+  it('keeps totals that the 200-entry list can never push a block out of', async () => {
+    const before = (await call('/v1/blocks?limit=1')).json.totals;
+    await call('/v1/check/call', { tool: 'read_file', arguments: { path: '/etc/shadow' } });
+    const secret = ['AKIA', 'IOSFODNN7', 'EXAMPLE'].join('');
+    for (let i = 0; i < 205; i++) await call('/v1/check/result', { tool: 'cat', result: { content: `key=${secret}` } });
+    const r = (await call('/v1/blocks?limit=200')).json;
+    expect(r.blocks).toHaveLength(200);
+    expect(r.blocks.some((b: any) => b.outcome === 'blocked' && b.tool === 'read_file' && b.at > '')).toBe(false); // pushed out
+    expect(r.totals.blocked).toBe(before.blocked + 1);
+    expect(r.totals.redacted).toBe(before.redacted + 205);
+    expect(r.totals.wouldBlock).toBe(before.wouldBlock);
+  });
+
+  it('also lists results whose secrets were hidden, without the result or the match', async () => {
+    const secret = ['AKIA', 'IOSFODNN7', 'EXAMPLE'].join('');
+    const v = await call('/v1/check/result', { tool: 'show_config', result: { content: `key=${secret} and more` } });
+    expect(v.json.decision).toBe('redact');
+    const entry = (await call('/v1/blocks?limit=5')).json.blocks.find((b: any) => b.tool === 'show_config');
+    expect(entry).toMatchObject({ outcome: 'redacted', kind: 'result', decision: 'redact' });
+    expect(entry.result).toBeUndefined();
+    expect(entry.match).toBeUndefined();
+    expect(JSON.stringify(entry)).not.toContain(secret);
+  });
+
+  it('in observe mode, lists what would have been blocked', async () => {
+    const observing = await startServer(await CheckEngine.create({ mode: 'observe' }), { host: '127.0.0.1', port: 0, token: TOKEN, log: () => {} });
+    try {
+      const post = (path: string, body: unknown) =>
+        fetch(`${observing.url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` }, body: JSON.stringify(body) }).then((r) => r.json());
+      expect((await post('/v1/check/call', { tool: 'read_file', arguments: { path: '/etc/passwd' } })).decision).toBe('allow');
+      const blocks = await fetch(`${observing.url}/v1/blocks`, { headers: { authorization: `Bearer ${TOKEN}` } }).then((r) => r.json());
+      expect(blocks.blocks[0]).toMatchObject({ outcome: 'would-block', tool: 'read_file', decision: 'allow' });
+    } finally {
+      await observing.close();
+    }
   });
 });
 

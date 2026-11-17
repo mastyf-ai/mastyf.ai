@@ -46,6 +46,8 @@ export interface Verdict {
   confidence?: number;
   id: string;
   result?: unknown;
+  /** Observe mode: allowed, but the free checks would have blocked it. */
+  observed?: boolean;
 }
 
 export interface EngineOptions {
@@ -269,7 +271,7 @@ export class CheckEngine {
   private blocked(id: string, v: Detail): Verdict {
     const detail = compact(v);
     if (this.mode === 'observe') {
-      return { ...detail, decision: 'allow', id, reason: `Would have blocked: ${v.reason ?? v.rule ?? 'blocked'}` };
+      return { ...detail, decision: 'allow', id, observed: true, reason: `Would have blocked: ${v.reason ?? v.rule ?? 'blocked'}` };
     }
     return { ...detail, decision: 'block', id };
   }

@@ -26,6 +26,8 @@ export interface ServerOptions {
 
 interface BlockRecord extends Verdict {
   at: string;
+  /** blocked; would-block (observe mode: allowed, but would have been blocked); redacted (a secret hidden from a result). */
+  outcome: 'blocked' | 'would-block' | 'redacted';
   kind: 'call' | 'result' | 'tools';
   tool?: string;
   server?: string;
@@ -99,10 +101,16 @@ export function tokenMatches(header: string | undefined, token: string): boolean
 
 export async function startServer(engine: CheckEngine, opts: ServerOptions): Promise<{ url: string; close(): Promise<void> }> {
   const blocks: BlockRecord[] = [];
+  // Never capped: a flood of later entries can't push a block out of the count.
+  const totals = { blocked: 0, wouldBlock: 0, redacted: 0 };
   const remember = (kind: BlockRecord['kind'], v: Verdict, extra: Partial<BlockRecord>): Verdict => {
-    if (v.decision === 'block') {
-      const { result: _result, ...rest } = v;
-      blocks.unshift({ ...rest, ...extra, kind, at: new Date().toISOString() });
+    const outcome: BlockRecord['outcome'] | null =
+      v.decision === 'block' ? 'blocked' : v.decision === 'redact' ? 'redacted' : v.observed ? 'would-block' : null;
+    if (outcome) {
+      totals[outcome === 'blocked' ? 'blocked' : outcome === 'would-block' ? 'wouldBlock' : 'redacted']++;
+      // Never the result or the matched text: this list is shown on run pages and dashboards.
+      const { result: _result, match: _match, ...rest } = v;
+      blocks.unshift({ ...rest, ...extra, kind, outcome, at: new Date().toISOString() });
       if (blocks.length > BLOCKS_KEPT) blocks.length = BLOCKS_KEPT;
     }
     return v;
@@ -125,7 +133,7 @@ export async function startServer(engine: CheckEngine, opts: ServerOptions): Pro
 
     if (req.method === 'GET' && url.pathname === '/v1/blocks') {
       const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 50) || 50, 1), BLOCKS_KEPT);
-      return send(res, 200, { blocks: blocks.slice(0, limit) });
+      return send(res, 200, { blocks: blocks.slice(0, limit), totals });
     }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' });
 

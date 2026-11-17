@@ -1,0 +1,59 @@
+name: 'Mastyf: protect your agent'
+description: 'Free checks on every tool call and result of the AI agents in your job, on your own runner.'
+author: 'Mastyf Labs'
+branding:
+  icon: 'shield'
+  color: 'gray-dark'
+inputs:
+  fail-on-block:
+    description: 'Fail the job if anything was blocked (in observe mode: if anything would have been).'
+    required: false
+    default: 'false'
+  mode:
+    description: '"block" stops what the checks catch; "observe" lets it run and lists what would have been blocked.'
+    required: false
+    default: 'block'
+  policy:
+    description: 'Path (in your repository) to a policy file. Empty: the built-in free policy.'
+    required: false
+    default: ''
+  port:
+    description: 'Port for the checks on 127.0.0.1. 0 picks a free one.'
+    required: false
+    default: '0'
+  max-body-mb:
+    description: 'Largest tool call or result to check, in MB (1-64). Larger ones are blocked.'
+    required: false
+    default: '32'
+  show-reasons:
+    description: "Add each block's reason to the job summary. Off by default: a reason can quote an argument, and run pages of public repositories are public."
+    required: false
+    default: 'false'
+  on-error:
+    description: '"fail" stops the job if the checks cannot start; "continue" warns and goes on without them.'
+    required: false
+    default: 'fail'
+  claude-code:
+    description: 'Also write Claude Code settings whose hooks send every Claude Code tool call and result to the checks. Pass the "claude-settings" output to anthropics/claude-code-action as "settings".'
+    required: false
+    default: 'false'
+  claude-settings-base:
+    description: 'Path (in your repository) to your own Claude Code settings; the hooks are added to them.'
+    required: false
+    default: ''
+outputs:
+  url:
+    description: 'Address of the checks for this job (also in MASTYF_CHECK_URL for later steps).'
+  engine:
+    description: 'Path of the bundled check engine, e.g. for "node <engine> proxy -- <MCP server command>".'
+  claude-settings:
+    description: 'Path of the Claude Code settings file (with claude-code: true).'
+  blocked-count:
+    description: 'Tool calls blocked in the job (set by the post step).'
+  redacted-count:
+    description: 'Secrets hidden from tool results in the job (set by the post step).'
+runs:
+  using: 'node24'
+  main: 'dist/main.cjs'
+  post: 'dist/post.cjs'
+  post-if: 'always()'
