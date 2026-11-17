@@ -47,7 +47,7 @@ export function readBase(path: string | undefined): Settings {
 
 export function buildSettings(base: Settings, hookCommand: string): Settings {
   // Fail closed: onFailure "block" (Claude Code v2.1.295+); the hook also exits 2 on any error.
-  const ours = { matcher: '*', hooks: [{ type: 'command', command: hookCommand, timeout: 30, onFailure: 'block' }] };
+  const ours = ourEntry(hookCommand);
   const hooks: Record<string, unknown[]> = { ...(base.hooks ?? {}) };
   for (const event of ['PreToolUse', 'PostToolUse']) hooks[event] = [...(hooks[event] ?? []), ours];
   // No settings change takes effect during the run (except managed policy settings).
@@ -68,29 +68,41 @@ export function hooksSwitchedOffIn(workspace: string): string | null {
   return null;
 }
 
-function hasCommand(list: unknown, command: string): boolean {
-  return Array.isArray(list) && list.some((e) => Array.isArray((e as { hooks?: unknown[] })?.hooks) && (e as { hooks: { command?: string }[] }).hooks.some((h) => h?.command === command));
+function ourEntry(command: string) {
+  return { matcher: '*', hooks: [{ type: 'command', command, timeout: 30, onFailure: 'block' }] };
+}
+
+/** Our entry, exactly as installed (matcher, command, timeout, onFailure). */
+function hasEntry(list: unknown, entry: unknown): boolean {
+  const want = JSON.stringify(entry);
+  return Array.isArray(list) && list.some((e) => JSON.stringify(e) === want);
 }
 
 /**
  * Why Claude Code's checks can't be trusted to have been on for the whole run, or null.
- * ~/.claude/settings.json is where claude-code-action put our hooks; if it's missing, Claude Code
- * wasn't run in this job and there is nothing to check.
+ * ~/.claude/settings.json is where claude-code-action puts our hooks; with claude-code: true it must
+ * still hold them, exactly as installed, at the end of the job.
  */
 export function claudeHooksProblem(home: string, workspace: string, command: string): string | null {
   const off = hooksSwitchedOffIn(workspace);
   if (off) return `${off} switches hooks off`;
-  const file = join(home, '.claude', 'settings.json');
+  try {
+    const local = JSON.parse(readFileSync(join(home, '.claude', 'settings.local.json'), 'utf8')) as Settings;
+    if (local && (local['disableAllHooks'] || local['allowManagedHooksOnly'])) return '~/.claude/settings.local.json switches hooks off';
+  } catch {
+    /* missing or not JSON: Claude Code ignores it too */
+  }
   let s: Settings;
   try {
-    s = JSON.parse(readFileSync(file, 'utf8')) as Settings;
+    s = JSON.parse(readFileSync(join(home, '.claude', 'settings.json'), 'utf8')) as Settings;
   } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'ENOENT' ? null : '~/.claude/settings.json is unreadable';
+    // claude-code: true was asked for, so Claude Code's settings should be there.
+    return (err as NodeJS.ErrnoException).code === 'ENOENT' ? '~/.claude/settings.json is missing' : '~/.claude/settings.json is unreadable';
   }
   if (s['disableAllHooks'] || s['allowManagedHooksOnly']) return '~/.claude/settings.json switches hooks off';
-  if (!hasCommand(s.hooks?.['PreToolUse'], command) || !hasCommand(s.hooks?.['PostToolUse'], command)) {
-    return "Mastyf's hooks are missing from ~/.claude/settings.json";
-  }
+  const ours = ourEntry(command);
+  if (!hasEntry(s.hooks?.['PreToolUse'], ours) || !hasEntry(s.hooks?.['PostToolUse'], ours)) return "Mastyf's hooks are missing or changed in ~/.claude/settings.json";
+  if (!hasEntry(s.hooks?.['ConfigChange'], CONFIG_CHANGE)) return "Mastyf's settings-change block is missing from ~/.claude/settings.json";
   return null;
 }
 

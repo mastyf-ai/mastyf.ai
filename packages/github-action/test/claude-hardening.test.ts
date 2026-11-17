@@ -82,6 +82,12 @@ describe('C1: Claude cannot switch the hooks off', () => {
     expect(runHookCommand(command, pre('Read', { file_path: './README.md' })).json).toBeNull(); // ordinary call still fine
   });
 
+  it('a missing ~/.claude/settings.json at the end counts as tampering', async () => {
+    const { r } = await started({ 'fail-on-block': 'true' });
+    await post(r.postStep(), { print: () => {} });
+    expect(process.exitCode).toBe(1);
+  });
+
   it('the post step fails a fail-on-block job when the hooks were switched off or removed', async () => {
     const a = await started({ 'fail-on-block': 'true' });
     installAsClaudeCodeAction(a.r, a.settings);
@@ -135,7 +141,7 @@ describe('I1: the hook program and node', () => {
 describe('I2: blocked built-in output keeps the fields Claude Code checks', () => {
   it('Read: the file content is replaced, the type is kept', () => {
     const read = { type: 'text', file: { filePath: '/w/notes.md', content: TAKEOVER, numLines: 1, startLine: 1, totalLines: 1 } };
-    expect(replaceFor('Read', read, M)).toEqual({ type: 'text', file: { filePath: '/w/notes.md', content: M, numLines: 1, startLine: 1, totalLines: 1 } });
+    expect(replaceFor('Read', read, M)).toEqual({ type: 'text', file: { filePath: '', content: M, numLines: 1, startLine: 1, totalLines: 1 } });
   });
 
   it('Bash: stdout carries the message, stderr is emptied', () => {
@@ -144,7 +150,7 @@ describe('I2: blocked built-in output keeps the fields Claude Code checks', () =
 
   it('WebFetch: the result is replaced, the rest kept', () => {
     const wf = { bytes: 10, code: 200, codeText: 'OK', result: TAKEOVER, durationMs: 5, url: 'https://docs.example.org' };
-    expect(replaceFor('WebFetch', wf, M)).toEqual({ ...wf, result: M });
+    expect(replaceFor('WebFetch', wf, M)).toEqual({ ...wf, result: M, url: '' });
   });
 
   it('Grep: the mode is kept, the content replaced and the file list emptied', () => {
@@ -157,6 +163,40 @@ describe('I2: blocked built-in output keeps the fields Claude Code checks', () =
 
   it('MCP tools: replaced whole', () => {
     expect(replaceFor('mcp__web__fetch', { content: [{ type: 'text', text: TAKEOVER }] }, M)).toBe(M);
+  });
+});
+
+describe('second review of the fix', () => {
+  it('kept fields hold only short identifier-like values; anything with spaces is emptied', () => {
+    const hostile = { type: TAKEOVER, status: 'ok', file: { filePath: `/w/${TAKEOVER}`, content: TAKEOVER, numLines: 1 } };
+    const out = JSON.stringify(replaceFor('Read', hostile, M)) + JSON.stringify(replaceFor('Other', hostile, M));
+    expect(out).not.toMatch(/ignore all previous/i);
+    expect((replaceFor('Other', { type: 'text', body: 'x' }, M) as any).type).toBe('text');
+  });
+
+  it('shell commands reaching .claude by variables or globs are denied', async () => {
+    const { settings } = await started();
+    const command: string = settings.hooks.PreToolUse.at(-1).hooks[0].command;
+    for (const cmd of ['cd $HOME/.claude && echo {} > settings.json', 'echo {} > ~/.cl*de/settings.json', 'rm "$HOME"/.claude/settings.json']) {
+      expect(runHookCommand(command, pre('Bash', { command: cmd })).json?.hookSpecificOutput?.permissionDecision, cmd).toBe('deny');
+    }
+  });
+
+  it('the end-of-job check needs our whole entries, the settings-change block, and no switch-off in settings.local.json', async () => {
+    for (const tamper of [
+      (s: any) => { s.hooks.PreToolUse.at(-1).hooks[0].onFailure = 'allow'; },
+      (s: any) => { delete s.hooks.ConfigChange; },
+      (s: any, r: FakeRunner) => writeFileSync(join(r.env['HOME']!, '.claude', 'settings.local.json'), JSON.stringify({ disableAllHooks: true })),
+    ]) {
+      process.exitCode = 0;
+      const { r, settings } = await started({ 'fail-on-block': 'true' });
+      const copy = JSON.parse(JSON.stringify(settings));
+      installAsClaudeCodeAction(r, copy);
+      tamper(copy, r);
+      installAsClaudeCodeAction(r, copy);
+      await post(r.postStep(), { print: () => {} });
+      expect(process.exitCode, String(tamper)).toBe(1);
+    }
   });
 });
 

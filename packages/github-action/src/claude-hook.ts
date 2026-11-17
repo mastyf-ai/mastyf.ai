@@ -22,15 +22,24 @@ function message(v: Verdict): string {
   return parts ? `Blocked by Mastyf (${parts}).` : 'Blocked by Mastyf.';
 }
 
-/** Short enum-like fields Claude Code checks the output shape by: kept as they are. */
+/** Short enum-like fields Claude Code checks the output shape by: kept, if they look like one. */
 const KEEP = new Set(['type', 'mode', 'kind', 'status']);
+const ENUM = /^[a-z][a-z0-9_-]{0,31}$/i;
+
+/** Every string that isn't `msg` or a short identifier becomes "": nothing of the response's text survives. */
+function scrub(value: unknown, msg: string): unknown {
+  if (typeof value === 'string') return value === msg || ENUM.test(value) ? value : '';
+  if (Array.isArray(value)) return value.map((v) => scrub(v, msg));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, scrub(v, msg)]));
+  return value;
+}
 
 /** The same shape with its text taken out: the first string becomes `msg`, other strings "". */
 export function replaceText(value: unknown, msg: string): unknown {
   let placed = false;
   const walk = (v: unknown, key?: string): unknown => {
     if (typeof v === 'string') {
-      if (key !== undefined && KEEP.has(key)) return v;
+      if (key !== undefined && KEEP.has(key) && ENUM.test(v)) return v;
       if (placed) return '';
       placed = true;
       return msg;
@@ -52,6 +61,10 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
  */
 export function replaceFor(tool: string, response: unknown, msg: string): unknown {
   if (tool.startsWith('mcp__')) return msg;
+  return scrub(shaped(tool, response, msg), msg);
+}
+
+function shaped(tool: string, response: unknown, msg: string): unknown {
   if (isObj(response)) {
     if (tool === 'Read' && isObj(response['file']) && typeof response['file']['content'] === 'string') {
       return { ...response, file: { ...response['file'], content: msg } };
@@ -66,7 +79,9 @@ export function replaceFor(tool: string, response: unknown, msg: string): unknow
 }
 
 /** Claude Code's own settings and this hook: a misled Claude must not switch the checks off. */
-const PROTECTED = /(^|[\\/~])\.claude([\\/]|$)|claude-hook\.c?js/i;
+// Best effort only (shell text can always be written another way): the real protections are the
+// refused settings changes and the end-of-job check. `.cl` + a glob character catches `.cl*de`.
+const PROTECTED = /\.claude|\.cl[*?[]|claude-hook/i;
 
 function touchesProtected(tool: string, args: Record<string, unknown>): boolean {
   if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(tool)) {
