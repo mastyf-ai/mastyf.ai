@@ -1,42 +1,179 @@
 {
-  "name": "mastyf-ai-vscode",
-  "displayName": "mastyf.ai — MCP Security Scanner",
+  "name": "mastyf-shield",
+  "displayName": "Mastyf Shield",
+  "description": "See whether your editor's MCP servers are routed through Mastyf Shield, and what Shield blocked and why.",
   "version": "0.1.0",
-  "description": "Scan MCP configurations for malicious servers and check trust scores inline",
-  "publisher": "mastyf-ai",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Linters", "Security", "Other"],
-  "activationEvents": ["onStartupFinished"],
+  "private": true,
+  "preview": true,
+  "publisher": "MastyfLabs",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastyf-ai/mastyf.ai.git",
+    "directory": "packages/vscode-extension"
+  },
+  "homepage": "https://www.mastyf.ai",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "mcp",
+    "security",
+    "agents",
+    "prompt injection"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": [{
-      "command": "mastyf.scanMCPConfig",
-      "title": "Mastyf: Scan MCP Configurations"
-    }],
-    "problemMatchers": [{
-      "name": "mastyf-mcp-server-security",
-      "label": "Mastyf MCP Server Security",
-      "owner": "mcp-security",
-      "pattern": [{
-        "regexp": "^(.*):(\\d+):(\\d+):\\s+(\\w+)\\s+(.+)$",
-        "file": 1,
-        "line": 2,
-        "column": 3,
-        "severity": 4,
-        "message": 5
-      }]
-    }]
+    "commands": [
+      {
+        "command": "mastyfShield.showPanel",
+        "title": "Show blocked calls",
+        "category": "Mastyf Shield"
+      },
+      {
+        "command": "mastyfShield.turnOn",
+        "title": "Turn on protection",
+        "category": "Mastyf Shield"
+      },
+      {
+        "command": "mastyfShield.openShield",
+        "title": "Open Shield",
+        "category": "Mastyf Shield"
+      },
+      {
+        "command": "mastyfShield.openDownload",
+        "title": "Get Shield",
+        "category": "Mastyf Shield"
+      },
+      {
+        "command": "mastyfShield.refresh",
+        "title": "Refresh",
+        "category": "Mastyf Shield",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mastyfShield.toggleThisEditorOnly",
+        "title": "Only this editor / all agents",
+        "category": "Mastyf Shield",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "mastyfShield.copyDetails",
+        "title": "Copy details",
+        "category": "Mastyf Shield",
+        "icon": "$(copy)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mastyfShield",
+          "title": "Mastyf Shield",
+          "icon": "media/shield.svg"
+        }
+      ]
+    },
+    "views": {
+      "mastyfShield": [
+        {
+          "id": "mastyfShield.blocks",
+          "name": "Blocked calls"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "mastyfShield.refresh",
+          "when": "view == mastyfShield.blocks",
+          "group": "navigation"
+        },
+        {
+          "command": "mastyfShield.toggleThisEditorOnly",
+          "when": "view == mastyfShield.blocks",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mastyfShield.copyDetails",
+          "when": "view == mastyfShield.blocks && viewItem == block",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mastyfShield.copyDetails",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Mastyf Shield",
+      "properties": {
+        "mastyfShield.port": {
+          "type": "number",
+          "default": 14000,
+          "description": "The port of the Shield app's local service on this PC.",
+          "scope": "machine"
+        },
+        "mastyfShield.notifyOnBlock": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when Shield blocks a call from this editor's agent.",
+          "scope": "machine"
+        },
+        "mastyfShield.pollSeconds": {
+          "type": "number",
+          "default": 15,
+          "minimum": 5,
+          "description": "How often to check Shield for new blocks while this window has focus.",
+          "scope": "machine"
+        }
+      }
+    }
   },
   "scripts": {
-    "vscode:prepublish": "tsc -p ./",
-    "build": "tsc -p ./",
-    "package": "vsce package"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.85.0",
-    "typescript": "^5.4.0"
+    "build": "node esbuild.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "node esbuild.mjs && vsce package --no-dependencies"
   },
   "dependencies": {
-    "@mastyf_ai/tool-registry": "workspace:*"
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "1.85.0",
+    "@vscode/test-electron": "2.4.1",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "ovsx": "^0.10.1",
+    "typescript": "^5.4.0",
+    "vitest": "^3.2.4"
+  },
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#141414",
+    "theme": "dark"
+  },
+  "bugs": {
+    "url": "https://github.com/mastyf-ai/mastyf.ai/issues"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In a workspace you haven't trusted, the project's own MCP settings files are not read; your user settings and Shield's blocked calls still show."
+    },
+    "virtualWorkspaces": false
   }
 }
