@@ -54,7 +54,7 @@ describe('renderSummary', () => {
     expect(row).toBeDefined();
     expect(row).toContain('&lt;script&gt;');
     expect(row).toContain('&lt;img');
-    expect(row).toContain('line | two'.replace('|', '\\|'));
+    expect(row).toContain('line | two'.replaceAll('|', '\\|'));
     expect(md).not.toContain('<script>');
     expect(md).not.toContain('<img');
   });
