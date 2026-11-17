@@ -46,6 +46,29 @@ describe('the built Action', () => {
     expect(a.branding).toEqual({ icon: 'shield', color: 'gray-dark' });
   });
 
+  it('protects Claude Code: the hook command from the written settings, run through a shell as Claude Code runs it', async () => {
+    const r = fakeRunner({ 'claude-code': 'true', 'fail-on-block': 'true' });
+    const { MASTYF_ACTION_ENGINE: _drop, ...runnerEnv } = r.env;
+    const step = (script: string, env: Record<string, string>) =>
+      spawnSync(process.execPath, [join(pkg, 'dist', script)], { env: { ...env, GITHUB_ACTIONS: 'true' }, encoding: 'utf8', timeout: 120_000 });
+    const m = step('main.cjs', runnerEnv);
+    expect(m.status, m.stdout + m.stderr).toBe(0);
+    const pid = Number(r.read('GITHUB_STATE')['pid']);
+    const settings = JSON.parse(readFileSync(r.read('GITHUB_OUTPUT')['claude-settings']!, 'utf8'));
+    const command: string = settings.hooks.PreToolUse.at(-1).hooks[0].command;
+    expect(command).toContain(join(pkg, 'dist', 'claude-hook.cjs'));
+
+    const call = { session_id: 'e2e', hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/etc/passwd' }, tool_use_id: 't1', cwd: '.' };
+    const h = spawnSync(command, { shell: true, input: JSON.stringify(call), encoding: 'utf8', timeout: 30_000, env: {} as NodeJS.ProcessEnv });
+    expect(h.status, h.stderr).toBe(0);
+    expect(JSON.parse(h.stdout).hookSpecificOutput.permissionDecision).toBe('deny');
+
+    const s = step('post.cjs', r.postStep());
+    expect(s.status).toBe(1);
+    expect(r.summary()).toContain('| Read |');
+    expect(await waitFor(() => !pidAlive(pid), 10_000)).toBe(true);
+  });
+
   it('protects agents built with the libraries for the whole job, then reports and cleans up', async () => {
     const r = fakeRunner({ 'fail-on-block': 'true' });
     const { MASTYF_ACTION_ENGINE: _drop, ...runnerEnv } = r.env; // use the engine bundled in dist/

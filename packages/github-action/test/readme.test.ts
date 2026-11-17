@@ -19,7 +19,8 @@ describe('README', () => {
     for (const [name, spec] of Object.entries(action.inputs) as [string, { default: string }][]) {
       const row = readme.split('\n').find((l) => l.startsWith(`| \`${name}\``));
       expect(row, name).toBeDefined();
-      expect(row, name).toContain(spec.default === '' ? '(built-in free policy)' : `\`${spec.default}\``);
+      if (spec.default === '') expect(row, name).toMatch(/^\| `[^`]+` \| \([^)]+\) \|/); // an empty default is described in words
+      else expect(row, name).toContain(`\`${spec.default}\``);
     }
     for (const name of Object.keys(action.outputs)) expect(readme).toContain(`\`${name}\``);
   });
@@ -29,5 +30,13 @@ describe('README', () => {
     expect(readme).toMatch(/container jobs aren't supported yet/i);
     expect(readme).toContain('v2.327.1');
     expect(readme).toContain('https://www.mastyf.ai');
+  });
+
+  it('explains Claude Code: how to turn it on, its limit, and the version it needs', () => {
+    expect(readme).toContain('## Claude Code');
+    expect(readme).toContain('settings: ${{ steps.mastyf.outputs.claude-settings }}');
+    expect(readme).toContain('anthropics/claude-code-action@v1');
+    expect(readme).toMatch(/built-in tool[^.]*can't always be replaced/);
+    expect(readme).toContain('v2.1.295');
   });
 });

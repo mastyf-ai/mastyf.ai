@@ -48,14 +48,53 @@ the job's permissions can change the workflow or skip the libraries altogether.
 | `max-body-mb` | `32` | Largest tool call or result to check, in MB (1-64). Larger ones are blocked, never let through. |
 | `show-reasons` | `false` | Add each block's reason to the summary. Off by default: a reason can quote an argument (a path, a URL), and run pages of public repositories are public. |
 | `on-error` | `fail` | `fail` stops the job if the checks can't start. `continue` warns and goes on; agents built with the libraries then start their own checks, which aren't listed in the summary. |
+| `claude-code` | `false` | Also write Claude Code settings whose hooks check every Claude Code tool call and result (see [Claude Code](#claude-code)). |
+| `claude-settings-base` | (none) | Path in your repository to your own Claude Code settings; the hooks are added to them. |
 
 ## Outputs
 
 - `url`: the checks' address (later steps also get `MASTYF_CHECK_URL` and `MASTYF_CHECK_TOKEN`).
 - `engine`: path of the bundled check engine, for MCP servers (below).
+- `claude-settings`: path of the Claude Code settings file (with `claude-code: true`).
 - `blocked-count`: tool calls blocked (or that would have been, in observe mode).
 - `redacted-count`: secrets hidden from tool results. A hidden secret never fails the job: the
   model never saw it.
+
+## Claude Code
+
+To check Claude Code run through Anthropic's Action, turn on `claude-code` and pass the settings
+file it writes:
+
+```yaml
+      - uses: mastyf-ai/protect-agent@v1
+        id: mastyf
+        with:
+          claude-code: true
+          fail-on-block: true
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          settings: ${{ steps.mastyf.outputs.claude-settings }}
+```
+
+If you already pass your own settings, give that file to `claude-settings-base` instead: the
+Action keeps everything in it and adds its two hooks. A base file that switches hooks off
+(`disableAllHooks`) is refused.
+
+- Before each tool call, the check runs; a blocked call never happens, and Claude is told
+  "Blocked by Mastyf (…)", never what was matched.
+- After each tool call, a blocked result is replaced before Claude reads it, and a secret is
+  replaced by the cleaned result.
+- If the checks can't be reached, the call is blocked and the result replaced: it fails closed.
+- Blocks are listed in the job summary with the other agents' and count for `fail-on-block`.
+
+Limit: the output of a built-in tool can't always be replaced. Claude Code only takes a
+replacement in that tool's own output format, and keeps the original otherwise. Claude then sees
+the original with the block reason beside it; the block is still recorded, listed and counted.
+Results from MCP tools are always replaced.
+
+Needs Claude Code v2.1.295 or later for hook failures (crashes, timeouts) to block the call; on
+older versions the hook still blocks anything it can check.
 
 ## MCP servers
 
@@ -101,7 +140,7 @@ To see what the checks would catch before blocking anything:
 - Needs a runner that runs Node 24 Actions: GitHub-hosted runners do; self-hosted runners need
   v2.327.1 or later (and not macOS 13.4 or earlier, or ARM32).
 - Use it once per job.
-- Coming next: Claude Code (through Anthropic's GitHub Action) and GitHub Copilot's coding agent.
+- Coming next: GitHub Copilot's coding agent.
 
 ## Paid protection
 
