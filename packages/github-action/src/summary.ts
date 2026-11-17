@@ -29,14 +29,19 @@ const OUTCOME_TEXT: Record<Block['outcome'], string> = {
 
 const FOOTER = ['', 'Free checks, run on this runner; nothing was sent to Mastyf.', 'Paid protection: [mastyf.ai](https://www.mastyf.ai)', ''].join('\n');
 
-/** Text safe inside one Markdown table cell: no HTML, no breaking the row. */
+/**
+ * Text shown exactly as written inside one Markdown table cell: no HTML, no links, images or
+ * formatting, and no breaking the row. Tool names and reasons can come from whoever controls a tool.
+ */
 function cell(text: string | undefined): string {
   return (text ?? '')
+    .replace(/\\/g, '\\\\') // first, so a backslash in the text can't undo the escapes below
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/\|/g, '\\|')
-    .replace(/`/g, '\\`')
+    .replace(/[|`[\]()!*~#]/g, (c) => `\\${c}`)
+    .replace(/:\/\//g, '&#58;//') // no bare-URL autolinks (https://...)
+    .replace(/www\./gi, (m) => `${m.slice(0, 3)}&#46;`) // nor www. autolinks
     .replace(/\r?\n|\r/g, ' ');
 }
 

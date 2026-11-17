@@ -58,6 +58,16 @@ describe('renderSummary', () => {
     expect(md).not.toContain('<script>');
     expect(md).not.toContain('<img');
   });
+
+  it('never turns a name or reason into a link, image or formatting', () => {
+    const phish: Block = { ...blocked, tool: '[click here](https://evil.example/login)', reason: '![x](https://evil.example/p.png) **bold** see https://evil.example \\| end' };
+    const md = renderSummary([phish], { ...opts, showReasons: true });
+    const row = md.split('\n').find((l) => l.includes('click here'))!;
+    expect(row).not.toMatch(/\]\(/); // no [text](url)
+    expect(row).not.toContain('https://'); // no bare autolink
+    expect(row).not.toContain('**');
+    expect(row.split(' | ').length).toBe(6); // the backslash didn't un-escape a pipe: still 6 cells
+  });
 });
 
 describe('counts', () => {
