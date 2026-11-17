@@ -58,8 +58,9 @@ describe('ensureToken', () => {
     symlinkSync(target, p);
     const t = ensureToken(opts);
     expect(readFileSync(target, 'utf8')).toBe('untouched');
+    const written = readFileSync(p, 'utf8');
     expect(lstatSync(p).isSymbolicLink()).toBe(false);
-    expect(readFileSync(p, 'utf8').trim()).toBe(t);
+    expect(written.trim()).toBe(t);
     expect(statSync(join(p, '..')).mode & 0o077).toBe(0);
   });
 
