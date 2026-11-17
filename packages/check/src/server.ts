@@ -26,6 +26,8 @@ export interface ServerOptions {
 
 interface BlockRecord extends Verdict {
   at: string;
+  /** blocked; would-block (observe mode: allowed, but would have been blocked); redacted (a secret hidden from a result). */
+  outcome: 'blocked' | 'would-block' | 'redacted';
   kind: 'call' | 'result' | 'tools';
   tool?: string;
   server?: string;
@@ -96,9 +98,12 @@ function tokenMatches(header: string | undefined, token: string): boolean {
 export async function startServer(engine: CheckEngine, opts: ServerOptions): Promise<{ url: string; close(): Promise<void> }> {
   const blocks: BlockRecord[] = [];
   const remember = (kind: BlockRecord['kind'], v: Verdict, extra: Partial<BlockRecord>): Verdict => {
-    if (v.decision === 'block') {
-      const { result: _result, ...rest } = v;
-      blocks.unshift({ ...rest, ...extra, kind, at: new Date().toISOString() });
+    const outcome: BlockRecord['outcome'] | null =
+      v.decision === 'block' ? 'blocked' : v.decision === 'redact' ? 'redacted' : v.observed ? 'would-block' : null;
+    if (outcome) {
+      // Never the result or the matched text: this list is shown on run pages and dashboards.
+      const { result: _result, match: _match, ...rest } = v;
+      blocks.unshift({ ...rest, ...extra, kind, outcome, at: new Date().toISOString() });
       if (blocks.length > BLOCKS_KEPT) blocks.length = BLOCKS_KEPT;
     }
     return v;
