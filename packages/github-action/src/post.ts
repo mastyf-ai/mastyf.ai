@@ -39,7 +39,7 @@ export async function run(env: Env = process.env, opts: { print?: Print } = {}):
   const log = getState('log', env);
 
   try {
-    const blocks = startedOk && url ? await fetchBlocks(url, env['MASTYF_CHECK_TOKEN'] ?? '') : null;
+    const blocks = startedOk && url ? await fetchBlocks(url, getState('token', env)) : null;
     appendSummary(renderSummary(blocks, { showReasons, capped: (blocks?.length ?? 0) >= KEPT, serviceStarted: startedOk }), env);
     if (blocks) {
       const n = counts(blocks);

@@ -106,7 +106,7 @@ describe('the built Action', () => {
     const printed = m.stdout + m.stderr + s.stdout + s.stderr;
     expect(printed.split(token).length - 1).toBe(1);
     expect(printed).toContain(`::add-mask::${token}`);
-    for (const file of ['GITHUB_OUTPUT', 'GITHUB_STATE'] as const) expect(JSON.stringify(r.read(file))).not.toContain(token);
+    expect(JSON.stringify(r.read('GITHUB_OUTPUT'))).not.toContain(token);
     expect(r.summary()).not.toContain(token);
   });
 });

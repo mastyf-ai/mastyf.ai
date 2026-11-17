@@ -27,7 +27,7 @@ describe('main step', () => {
     // The token is masked before anything else could print it.
     const first = r.lines.findIndex((l) => l.includes(token));
     expect(r.lines[first]).toBe(`::add-mask::${token}`);
-    expect(JSON.stringify(r.read('GITHUB_STATE'))).not.toContain(token);
+    expect(r.read('GITHUB_STATE')['token']).toBe(token); // for the post step; later steps can't change it
     expect(JSON.stringify(r.read('GITHUB_OUTPUT'))).not.toContain(token);
     expect(r.read('GITHUB_OUTPUT')['url']).toBe(exported['MASTYF_CHECK_URL']);
     expect(r.read('GITHUB_OUTPUT')['engine']).toMatch(/mastyf-check\.cjs$/);

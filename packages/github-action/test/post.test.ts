@@ -86,12 +86,21 @@ describe('post step', () => {
     expect(lines.join('\n')).toContain("couldn't confirm what was blocked");
   });
 
-  it('a tampered token or an impostor service is never trusted', async () => {
+  it('a later step rewriting MASTYF_CHECK_TOKEN changes nothing: the post step uses its own saved token', async () => {
     const { r, url, token } = await started({ 'fail-on-block': 'true' });
     await checkCall(url, token, 'read_file', { path: '/etc/passwd' });
     await post({ ...r.postStep(), MASTYF_CHECK_TOKEN: 'x'.repeat(43) }, { print: () => {} });
+    expect(r.summary()).toContain('1 tool call blocked');
     expect(process.exitCode).toBe(1);
+  });
+
+  it('a service on that address that does not know the saved token is never trusted', async () => {
+    const { r, pid } = await started({ 'fail-on-block': 'true' });
+    const state = { ...r.postStep(), STATE_token: 'y'.repeat(43) }; // as if an impostor answered
+    await post(state, { print: () => {} });
     expect(r.summary()).toContain("wasn't reachable at the end of the job");
+    expect(process.exitCode).toBe(1);
+    expect(await waitFor(() => !pidAlive(pid), 10000)).toBe(true);
   });
 
   it("when the checks never started (on-error: continue), the summary says so", async () => {

@@ -74,6 +74,8 @@ export async function run(env: Env = process.env, opts: RunOptions = {}): Promis
       url: startedEngine.url,
       log: logFile,
       started: 'true',
+      // For the post step only. Later steps can rewrite GITHUB_ENV, but not this Action's state.
+      token,
       showReasons: String(inputs.showReasons),
       failOnBlock: String(inputs.failOnBlock),
     })) {
