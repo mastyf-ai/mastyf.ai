@@ -23,7 +23,7 @@ function home(): string {
 
 async function connect(): Promise<void> {
   const env = process.env;
-  const found = (await configured(env)) ?? (await runningLocal(env, home())) ?? (await shieldClient());
+  const found = (await configured(env)) ?? (await shieldClient(env, home())) ?? (await runningLocal(env, home()));
   if (found) {
     client = found.client;
     tier = found.tier;
@@ -161,6 +161,8 @@ export interface GuardOptions {
   onUnavailable?: 'block' | 'allow';
   /** The name the checks see for this agent's tools. */
   server?: string;
+  /** This agent's name, shown in Shield's dashboard. Defaults to MASTYF_AI_AGENT. */
+  agent?: string;
 }
 
 export interface Guard {
@@ -183,6 +185,7 @@ export function createGuard(options: GuardOptions = {}): Guard {
   const current = new AsyncLocalStorage<string>();
   const sessionNow = (): string => current.getStore() ?? defaultSession;
   const server = options.server ?? 'agent';
+  const agent = options.agent ?? (process.env['MASTYF_AI_AGENT'] || undefined);
   const onUnavailable = options.onUnavailable ?? 'block';
 
   async function ask<T>(question: (c: CheckClient) => Promise<T>, unchecked: () => T, what: string, refused: () => T): Promise<T> {
@@ -216,10 +219,10 @@ export function createGuard(options: GuardOptions = {}): Guard {
     get tier() {
       return tier;
     },
-    checkCall: (tool, args) => ask((c) => c.checkCall(tool, asArguments(args), { server, session: sessionNow() }), allowUnchecked, 'tool call', () => REFUSED),
+    checkCall: (tool, args) => ask((c) => c.checkCall(tool, asArguments(args), { server, agent, session: sessionNow() }), allowUnchecked, 'tool call', () => REFUSED),
     checkResult: (tool, result, args) =>
       ask(
-        (c) => c.checkResult(tool, jsonable(result), { server, session: sessionNow(), ...(args === undefined ? {} : { arguments: asArguments(args) }) }),
+        (c) => c.checkResult(tool, jsonable(result), { server, agent, session: sessionNow(), ...(args === undefined ? {} : { arguments: asArguments(args) }) }),
         allowUnchecked,
         'tool result',
         () => REFUSED,

@@ -17,4 +17,14 @@ __all__ = ["guard_tool_node"]
 def guard_tool_node(node: ToolNode, guard: Guard | None = None) -> ToolNode:
     """A new ToolNode with the same tools, each checked by Mastyf. The original node is unchanged."""
     tools = guard_tools(list(node.tools_by_name.values()), guard=guard)
-    return ToolNode(tools, name=node.name, tags=node.tags, handle_tool_errors=node._handle_tool_errors, messages_key=node._messages_key)
+    # The private names changed between LangGraph releases (0.6 has no leading underscore).
+    def setting(name: str, default: object) -> object:
+        return getattr(node, f"_{name}", getattr(node, name, default))
+
+    return ToolNode(
+        tools,
+        name=node.name,
+        tags=node.tags,
+        handle_tool_errors=setting("handle_tool_errors", True),
+        messages_key=setting("messages_key", "messages"),
+    )

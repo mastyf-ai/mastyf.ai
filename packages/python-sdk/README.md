@@ -107,8 +107,12 @@ proxy: replace `MastyfProxy` and the old middleware with `guard_tools`, `guard_t
 
 ## Paid protection
 
-The Shield app adds Mastyf's paid checks and a dashboard of what was blocked. Sign up at
-[mastyf.ai](https://www.mastyf.ai).
+The Shield app adds Mastyf's paid checks and a dashboard of what was blocked: sign up and choose a
+plan at [mastyf.ai](https://www.mastyf.ai), then install Shield. While Shield is running on the same
+computer, this library uses it on its own, with no change to your code: your agent's calls are
+checked by Shield and appear in your Mastyf dashboard under the agent's name
+(`Guard(agent="billing-bot")`, or `MASTYF_AI_AGENT`). `guard.tier` is then `"shield"`. The library
+only talks to Shield on 127.0.0.1, and only after Shield proves it holds the key in its own file.
 
 ## Licence
 

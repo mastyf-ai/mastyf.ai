@@ -44,7 +44,7 @@ def test_a_configured_url_comes_first(fake_service, monkeypatch, with_bundle):
     assert Guard().check_call("read_file", {"path": "/etc/passwd"}).id == "configured"
 
 
-def signed_health(token: str):
+def signed_health(token: str, ident: str = "local", tier: str = "free"):
     """A health answer from a service that knows `token`."""
     import hashlib
     import hmac
@@ -53,9 +53,9 @@ def signed_health(token: str):
     def respond(path, body):
         u = urlparse(path)
         if u.path != "/v1/health":
-            return 200, {"decision": "allow", "id": "local"}
+            return 200, {"decision": "allow", "id": ident}
         nonce = parse_qs(u.query).get("nonce", [""])[0]
-        health = {"status": "ready", "tier": "free"}
+        health = {"status": "ready", "tier": tier}
         if nonce and token:
             health["proof"] = hmac.new(token.encode(), nonce.encode(), hashlib.sha256).hexdigest()
         return 200, health
@@ -79,10 +79,50 @@ def test_a_running_local_service_is_reused(fake_service, isolated_home, monkeypa
     assert svc.requests[-1]["auth"] == f"Bearer {TOKEN}"
 
 
-def test_the_shield_hook_finds_nothing_in_this_version():
-    from mastyf_ai.discovery import _shield_client
+SHIELD_TOKEN = "s" * 43
 
-    assert _shield_client() is None
+
+def write_shield_file(home, content):
+    import json
+    import os
+
+    from mastyf_ai.discovery import shield_file_path
+
+    p = shield_file_path(dict(os.environ), home)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(content))
+
+
+def test_the_shield_app_comes_before_a_free_service_once_it_proves_it_is_shield(fake_service, isolated_home, monkeypatch, with_bundle):
+    free = fake_service(signed_health(TOKEN))
+    write_token(isolated_home)
+    monkeypatch.setattr("mastyf_ai.discovery.LOCAL_URL", free.url)
+    shield = fake_service(signed_health(SHIELD_TOKEN, ident="shield", tier="shield"))
+    write_shield_file(isolated_home, {"url": shield.url, "token": SHIELD_TOKEN})
+    g = Guard()
+    assert g.check_call("x", {}).id == "shield"
+    assert g.tier == "shield"
+    assert shield.requests[-1]["auth"] == f"Bearer {SHIELD_TOKEN}"
+    assert all(r["auth"] is None for r in free.requests)
+
+
+def test_shields_token_goes_only_to_127_0_0_1_and_only_to_something_that_proves_it_is_shield(fake_service, isolated_home, with_bundle):
+    impostor = fake_service(signed_health("", ident="impostor", tier="shield"))
+    write_shield_file(isolated_home, {"url": impostor.url, "token": SHIELD_TOKEN})
+    assert Guard().check_call("read_file", {"path": "/etc/passwd"}).id != "impostor"
+    assert all(r["auth"] is None and r["path"].startswith("/v1/health") for r in impostor.requests)
+
+    from mastyf_ai.guard import _reset_for_tests
+
+    _reset_for_tests()
+    free = fake_service(signed_health(SHIELD_TOKEN, ident="free-on-shield-file", tier="free"))
+    write_shield_file(isolated_home, {"url": free.url, "token": SHIELD_TOKEN})
+    assert Guard().check_call("x", {}).id != "free-on-shield-file"
+
+    _reset_for_tests()
+    write_shield_file(isolated_home, {"url": free.url.replace("127.0.0.1", "localhost"), "token": SHIELD_TOKEN})
+    Guard().check_call("x", {})
+    assert all(r["auth"] is None for r in free.requests)
 
 
 def test_nothing_available_fails_closed_by_default(monkeypatch):
@@ -206,3 +246,15 @@ def test_shown_text_cannot_hide_behind_a_field_of_the_same_name(with_bundle):
             return TAKEOVER
 
     assert Guard().check_result("fetch_page", Answer()).blocked
+
+
+def test_the_agents_name_is_sent_with_each_check(fake_service, monkeypatch, with_bundle):
+    svc = fake_service(lambda path, body: (200, {"status": "ready", "tier": "free"}) if path.startswith("/v1/health") else (200, {"decision": "allow", "id": "c"}))
+    monkeypatch.setenv("MASTYF_CHECK_URL", svc.url)
+    monkeypatch.setenv("MASTYF_CHECK_TOKEN", TOKEN)
+    g = Guard(agent="billing-bot")
+    g.check_call("x", {})
+    g.check_result("x", "ok")
+    assert [r["body"]["agent"] for r in svc.requests if r["body"]] == ["billing-bot", "billing-bot"]
+    Guard().check_call("x", {})
+    assert "agent" not in svc.requests[-1]["body"]

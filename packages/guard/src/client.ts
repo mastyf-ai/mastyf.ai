@@ -6,7 +6,11 @@ const DEFAULT_SERVICE_LIMIT = 2 * 1024 * 1024; // what a check service accepts u
 export interface Where {
   server: string;
   session: string;
+  /** The agent's name, for Shield's dashboard. */
+  agent?: string;
 }
+
+const named = (where: Where): { agent?: string } => (where.agent ? { agent: where.agent } : {});
 
 export class CheckClient {
   readonly url: string;
@@ -26,11 +30,11 @@ export class CheckClient {
   }
 
   checkCall(tool: string, args: Record<string, unknown>, where: Where): Promise<Verdict> {
-    return this.verdict('/v1/check/call', { tool, arguments: args, server: where.server, session: where.session });
+    return this.verdict('/v1/check/call', { tool, arguments: args, server: where.server, session: where.session, ...named(where) });
   }
 
   checkResult(tool: string, result: unknown, where: Where & { arguments?: Record<string, unknown> }): Promise<Verdict> {
-    const body: Record<string, unknown> = { tool, result, server: where.server, session: where.session };
+    const body: Record<string, unknown> = { tool, result, server: where.server, session: where.session, ...named(where) };
     if (where.arguments !== undefined) body['arguments'] = where.arguments;
     return this.verdict('/v1/check/result', body);
   }
