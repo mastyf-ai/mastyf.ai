@@ -4,13 +4,17 @@
  *   mastyf-check serve [--port 4100] [--host 127.0.0.1] [--policy file] [--mode block|observe] [--log json|text]
  *   mastyf-check proxy [--policy file] [--mode block|observe] -- <command> [args...]
  *   mastyf-check test [--policy file] [--mode block|observe] <tool> '<json arguments>'
+ *   mastyf-check copilot-hook pre|post   (GitHub Copilot hook; see init-copilot)
  */
-import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { CheckEngine } from './engine';
 import { startServer, VERSION } from './server';
 import { startStdioProxy } from './stdio-proxy';
 import { ensureToken } from './token';
+import { copilotHook } from './copilot-hook';
 
 export interface Io {
   stdin: Readable;
@@ -32,6 +36,8 @@ Commands:
   serve   Start the check API on 127.0.0.1 (default port 4100).
           Options: --port <n>  --host <address>  --policy <file>  --mode block|observe  --log json|text
                    --max-body <MB>  --exit-with-parent (stop when stdin closes; used by the libraries)
+  copilot-hook pre|post
+          GitHub Copilot hook (reads the event on stdin). Set up with init-copilot.
   proxy   Put the checks in front of one MCP server on stdio:
           mastyf-check proxy [--policy <file>] [--mode block|observe] -- <command> [args...]
   test    Check one call and print the verdict (exit 2 when blocked):
@@ -149,6 +155,23 @@ export async function run(argv: string[], io: Io): Promise<RunResult> {
           server: p.flags['server'],
         });
         return { code: 0, close: proxy.close, exited: proxy.exited };
+      }
+
+      case 'copilot-hook': {
+        const kind = p.rest[0];
+        if (kind !== 'pre' && kind !== 'post') throw new Error('usage: mastyf-check copilot-hook pre|post (reads the hook event on stdin)');
+        const chunks: Buffer[] = [];
+        for await (const c of io.stdin) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c)));
+        const cwd = process.cwd();
+        const stateDir = io.env['MASTYF_COPILOT_STATE_DIR'] || join(tmpdir(), `mastyf-copilot-${createHash('sha256').update(cwd).digest('hex').slice(0, 12)}`);
+        const deadline = Number(io.env['MASTYF_COPILOT_DEADLINE_MS']);
+        const out = await copilotHook(kind, Buffer.concat(chunks).toString('utf8'), {
+          engine: io.env['MASTYF_COPILOT_ENGINE'] || process.argv[1] || '',
+          stateDir,
+          deadlineMs: Number.isFinite(deadline) && deadline > 0 ? deadline : undefined,
+        });
+        if (out) io.stdout.write(out);
+        return { code: 0 }; // nothing is left open, so the process ends right away
       }
 
       default:
