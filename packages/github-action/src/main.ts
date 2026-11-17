@@ -3,7 +3,8 @@
  * hands later steps MASTYF_CHECK_URL and MASTYF_CHECK_TOKEN, which mastyf-ai and @mastyf_ai/guard
  * use first. Nothing is sent anywhere but 127.0.0.1.
  */
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { enginePath, inContainer as detectContainer, pidAlive, startDetached, stopEngine, verifyHealth } from './engine.js';
@@ -17,11 +18,18 @@ type Print = (line: string) => void;
 export interface RunOptions {
   print?: Print;
   inContainer?: () => boolean;
+  /** Honour MASTYF_ACTION_CLAUDE_HOOK (default: only under the test runner). */
+  allowTestOverrides?: boolean;
 }
 
-/** dist/claude-hook.cjs next to the running script (MASTYF_ACTION_CLAUDE_HOOK overrides, for tests). */
-function claudeHookPath(env: Env): string {
-  return env['MASTYF_ACTION_CLAUDE_HOOK'] || join(dirname(process.argv[1] ?? '.'), 'claude-hook.cjs');
+/** dist/claude-hook.cjs next to the running script. */
+function claudeHookPath(env: Env, allowOverride: boolean): string {
+  const override = allowOverride ? env['MASTYF_ACTION_CLAUDE_HOOK'] : undefined;
+  return override || join(dirname(process.argv[1] ?? '.'), 'claude-hook.cjs');
+}
+
+function sha256(file: string): string {
+  return createHash('sha256').update(readFileSync(file)).digest('hex');
 }
 
 export async function run(env: Env = process.env, opts: RunOptions = {}): Promise<void> {
@@ -99,13 +107,18 @@ export async function run(env: Env = process.env, opts: RunOptions = {}): Promis
     setOutput('url', startedEngine.url, env);
     setOutput('engine', engine, env);
     if (inputs.claudeCode) {
+      const hookPath = claudeHookPath(env, opts.allowTestOverrides ?? process.env['VITEST'] === 'true');
       const written = writeClaudeSettings({
         dir: env['RUNNER_TEMP'] || tmpdir(),
-        hookPath: claudeHookPath(env),
+        hookPath,
         url: startedEngine.url,
         token,
         base: inputs.claudeSettingsBase,
       });
+      // For the post step: the hooks and the hook program must be unchanged at the end of the job.
+      saveState('claudeCommand', written.command, env);
+      saveState('claudeHook', hookPath, env);
+      saveState('claudeHookSha', existsSync(hookPath) ? sha256(hookPath) : '', env);
       setOutput('claude-settings', written.settings, env);
     }
     info(`Mastyf checks are on for this job (free tier, on this runner).${inputs.mode === 'observe' ? ' Observe mode: nothing is blocked, what would be is listed.' : ''}`, print);

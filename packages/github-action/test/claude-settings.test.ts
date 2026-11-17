@@ -24,14 +24,14 @@ describe('writeClaudeSettings', () => {
     for (const event of ['PreToolUse', 'PostToolUse']) {
       const e = entry(s, event);
       expect(e.matcher).toBe('*');
-      expect(e.hooks).toEqual([{ type: 'command', command: `node "${HOOK}" "http://127.0.0.1:4100" "${TOKEN}"`, timeout: 30, onFailure: 'block' }]);
+      expect(e.hooks).toEqual([{ type: 'command', command: `"${process.execPath}" "${HOOK}" "http://127.0.0.1:4100" "${TOKEN}"`, timeout: 30, onFailure: 'block' }]);
     }
   });
 
   it('writes no config file the agent could edit later: address and token are in the hook command', () => {
     const d = dir();
     const out = writeClaudeSettings({ dir: d, hookPath: HOOK, url: 'http://127.0.0.1:4100', token: TOKEN });
-    expect(Object.keys(out)).toEqual(['settings']);
+    expect(Object.keys(out).sort()).toEqual(['command', 'settings']); // no config file
     if (process.platform !== 'win32') expect(statSync(out.settings).mode & 0o077).toBe(0);
   });
 

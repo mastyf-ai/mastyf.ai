@@ -58,14 +58,16 @@ the job's permissions can change the workflow or skip the libraries altogether.
 - `claude-settings`: path of the Claude Code settings file (with `claude-code: true`).
 - `blocked-count`: tool calls blocked (or that would have been, in observe mode).
 - `redacted-count`: secrets hidden from tool results. A hidden secret never fails the job: the
-  model never saw it.
+  model never saw it (for Claude Code, see the limit under [Claude Code](#claude-code)).
 
 ## Claude Code
 
 To check Claude Code run through Anthropic's Action, turn on `claude-code` and pass the settings
-file it writes:
+file it writes. Put the Mastyf step after `actions/checkout`, so it can see the repository's own
+Claude Code settings:
 
 ```yaml
+      - uses: actions/checkout@v5
       - uses: mastyf-ai/protect-agent@v1
         id: mastyf
         with:
@@ -87,11 +89,21 @@ Action keeps everything in it and adds its two hooks. A base file that switches 
   replaced by the cleaned result.
 - If the checks can't be reached, the call is blocked and the result replaced: it fails closed.
 - Blocks are listed in the job summary with the other agents' and count for `fail-on-block`.
+- Claude can't switch the checks off during the run: settings changes are refused, writes to
+  Claude Code's settings and to Mastyf's hook are blocked, and at the end of the job the Action
+  checks the hooks were still in place. If they weren't, the summary says so and `fail-on-block`
+  fails the job. A repository whose own `.claude` settings switch hooks off is refused at the start.
+
+What this doesn't cover: Claude Code with a shell (Bash) runs commands as the job's user, so a
+Claude that has been misled into it could still work around the checks in ways that leave no
+trace. For the strongest setup, leave Bash out of Claude's allowed tools in `claude_args`.
 
 Limit: the output of a built-in tool can't always be replaced. Claude Code only takes a
-replacement in that tool's own output format, and keeps the original otherwise. Claude then sees
-the original with the block reason beside it; the block is still recorded, listed and counted.
-Results from MCP tools are always replaced.
+replacement in that tool's own output format, and keeps the original otherwise. The Action
+replaces Read, Bash, WebFetch and Grep results field by field in their formats; for other
+built-in tools, or if a format changes, Claude may see the original with the block reason beside
+it. The block is still recorded, listed and counted. Results from MCP tools are always replaced.
+Hidden secrets follow the same rule.
 
 Needs Claude Code v2.1.295 or later for hook failures (crashes, timeouts) to block the call; on
 older versions the hook still blocks anything it can check.

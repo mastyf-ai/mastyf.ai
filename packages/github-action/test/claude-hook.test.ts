@@ -25,7 +25,7 @@ beforeAll(async () => {
   const settings = JSON.parse(readFileSync(r.read('GITHUB_OUTPUT')['claude-settings']!, 'utf8'));
   token = r.read('GITHUB_ENV')['MASTYF_CHECK_TOKEN']!;
   url = r.read('GITHUB_ENV')['MASTYF_CHECK_URL']!;
-  expect(settings.hooks.PreToolUse.at(-1).hooks[0].command).toBe(`node "${HOOK}" "${url}" "${token}"`);
+  expect(settings.hooks.PreToolUse.at(-1).hooks[0].command).toBe(`"${process.execPath}" "${HOOK}" "${url}" "${token}"`);
 });
 
 afterAll(async () => {

@@ -22,34 +22,62 @@ function message(v: Verdict): string {
   return parts ? `Blocked by Mastyf (${parts}).` : 'Blocked by Mastyf.';
 }
 
+/** Short enum-like fields Claude Code checks the output shape by: kept as they are. */
+const KEEP = new Set(['type', 'mode', 'kind', 'status']);
+
 /** The same shape with its text taken out: the first string becomes `msg`, other strings "". */
 export function replaceText(value: unknown, msg: string): unknown {
   let placed = false;
-  const walk = (v: unknown): unknown => {
+  const walk = (v: unknown, key?: string): unknown => {
     if (typeof v === 'string') {
+      if (key !== undefined && KEEP.has(key)) return v;
       if (placed) return '';
       placed = true;
       return msg;
     }
-    if (Array.isArray(v)) return v.map(walk);
-    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+    if (Array.isArray(v)) return v.map((x) => walk(x));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k)]));
     return v;
   };
   if (value === null || value === undefined) return msg;
   return walk(value);
 }
 
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
 /**
- * What Claude reads instead of a blocked result. Built-in tools need their own output shape back
- * (their keys are fixed by Claude Code); an MCP tool's output is anything its server sent, keys
- * included, so it is replaced whole.
+ * What Claude reads instead of a blocked result. Claude Code only takes a replacement for a
+ * built-in tool in that tool's own output format, so the known ones are replaced field by field;
+ * an MCP tool's output is anything its server sent (keys included), so it is replaced whole.
  */
-function replacement(tool: string, response: unknown, msg: string): unknown {
-  return tool.startsWith('mcp__') ? msg : replaceText(response, msg);
+export function replaceFor(tool: string, response: unknown, msg: string): unknown {
+  if (tool.startsWith('mcp__')) return msg;
+  if (isObj(response)) {
+    if (tool === 'Read' && isObj(response['file']) && typeof response['file']['content'] === 'string') {
+      return { ...response, file: { ...response['file'], content: msg } };
+    }
+    if (tool === 'Bash' && ('stdout' in response || 'stderr' in response)) return { ...response, stdout: msg, stderr: '' };
+    if (tool === 'WebFetch' && typeof response['result'] === 'string') return { ...response, result: msg };
+    if (tool === 'Grep' && ('content' in response || 'filenames' in response)) {
+      return { ...response, ...('content' in response ? { content: msg } : {}), ...('filenames' in response ? { filenames: [] } : {}) };
+    }
+  }
+  return replaceText(response, msg);
+}
+
+/** Claude Code's own settings and this hook: a misled Claude must not switch the checks off. */
+const PROTECTED = /(^|[\\/~])\.claude([\\/]|$)|claude-hook\.c?js/i;
+
+function touchesProtected(tool: string, args: Record<string, unknown>): boolean {
+  if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(tool)) {
+    return PROTECTED.test(String(args['file_path'] ?? args['notebook_path'] ?? ''));
+  }
+  if (tool === 'Bash' || tool === 'PowerShell') return PROTECTED.test(String(args['command'] ?? ''));
+  return false;
 }
 
 function blockResult(tool: string, response: unknown, msg: string): Out {
-  const out = { decision: 'block', reason: msg, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: replacement(tool, response, msg) } };
+  const out = { decision: 'block', reason: msg, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: replaceFor(tool, response, msg) } };
   return { code: 0, stdout: JSON.stringify(out), stderr: '' };
 }
 
@@ -93,6 +121,11 @@ export async function runHook(stdin: string, url: string, token: string): Promis
   const where = { server: 'claude-code', session: String(input['session_id'] ?? '') };
 
   if (event === 'PreToolUse') {
+    if (touchesProtected(tool, args as Record<string, unknown>)) {
+      const reason = "Blocked by Mastyf (claude-code: protected-settings). Claude Code's settings and Mastyf's hook can't be changed during the run.";
+      const out = { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } };
+      return { code: 0, stdout: JSON.stringify(out), stderr: '' };
+    }
     try {
       const v = await ask(url, token, '/v1/check/call', { tool, arguments: args, ...where });
       if (v.decision !== 'block') return { code: 0, stdout: '', stderr: '' };
@@ -108,6 +141,7 @@ export async function runHook(stdin: string, url: string, token: string): Promis
     try {
       const v = await ask(url, token, '/v1/check/result', { tool, result: response ?? null, arguments: args, ...where });
       if (v.decision === 'block') return blockResult(tool, response, message(v));
+      if (v.decision === 'redact' && v.result === undefined) return blockResult(tool, response, message(v)); // no cleaned copy: never the original
       if (v.decision === 'redact') {
         const out = { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: v.result } };
         return { code: 0, stdout: JSON.stringify(out), stderr: '' };

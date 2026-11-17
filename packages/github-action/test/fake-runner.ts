@@ -39,14 +39,18 @@ export function fakeRunner(inputs: Record<string, string> = {}): FakeRunner {
   const root = mkdtempSync(join(tmpdir(), 'mastyf action runner '));
   const workspace = join(root, 'workspace');
   const temp = join(root, 'runner temp');
+  const home = join(root, 'home');
   mkdirSync(workspace);
   mkdirSync(temp);
+  mkdirSync(home);
   const files = { GITHUB_ENV: join(root, 'env'), GITHUB_OUTPUT: join(root, 'output'), GITHUB_STATE: join(root, 'state'), GITHUB_STEP_SUMMARY: join(root, 'summary.md') };
   for (const f of Object.values(files)) writeFileSync(f, '');
   const env: Record<string, string> = {
     ...files,
     GITHUB_WORKSPACE: workspace,
     RUNNER_TEMP: temp,
+    HOME: home,
+    USERPROFILE: home,
     MASTYF_ACTION_ENGINE: ENGINE,
     PATH: process.env['PATH'] ?? '',
     SYSTEMROOT: process.env['SYSTEMROOT'] ?? '',
