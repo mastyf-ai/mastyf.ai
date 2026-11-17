@@ -1,0 +1,19 @@
+{
+  "name": "@mastyf_ai/github-action",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mastyf: protect your agent. Free checks on every tool call an AI agent makes in your GitHub Actions job, run on your own runner.",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@mastyf_ai/check": "workspace:*",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.4.0",
+    "vitest": "^3.2.4"
+  }
+}
