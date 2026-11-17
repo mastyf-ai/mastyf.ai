@@ -26,7 +26,11 @@ export function readBase(path: string | undefined): Settings {
     throw new Error(`claude-settings-base ${basename(path)} isn't valid JSON (${(err as Error).message})`);
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(`claude-settings-base ${basename(path)} must be a JSON object`);
-  return parsed as Settings;
+  const s = parsed as Settings;
+  for (const key of ['disableAllHooks', 'allowManagedHooksOnly']) {
+    if (s[key]) throw new Error(`claude-settings-base ${basename(path)} sets ${key}, which would switch Mastyf's hooks off; remove it`);
+  }
+  return s;
 }
 
 export function buildSettings(base: Settings, hookCommand: string): Settings {
@@ -40,13 +44,16 @@ export function buildSettings(base: Settings, hookCommand: string): Settings {
   return { ...base, hooks };
 }
 
-export function writeClaudeSettings(opts: WriteOptions): { settings: string; config: string } {
+/**
+ * The address and token go in the hook command itself, not in a file: Claude Code reads its hooks
+ * once at start, so the agent can't later point them somewhere else. (The token is no secret from
+ * the job: every step has it in MASTYF_CHECK_TOKEN.)
+ */
+export function writeClaudeSettings(opts: WriteOptions): { settings: string } {
   const base = readBase(opts.base);
-  const config = join(opts.dir, 'mastyf-claude-hook.json');
-  writeFileSync(config, JSON.stringify({ url: opts.url, token: opts.token }), { encoding: 'utf8', mode: 0o600 });
-  if (process.platform !== 'win32') chmodSync(config, 0o600);
   const settings = join(opts.dir, 'mastyf-claude-settings.json');
-  const command = `node "${opts.hookPath}" "${config}"`;
-  writeFileSync(settings, `${JSON.stringify(buildSettings(base, command), null, 2)}\n`, 'utf8');
-  return { settings, config };
+  const command = `node "${opts.hookPath}" "${opts.url}" "${opts.token}"`;
+  writeFileSync(settings, `${JSON.stringify(buildSettings(base, command), null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  if (process.platform !== 'win32') chmodSync(settings, 0o600);
+  return { settings };
 }

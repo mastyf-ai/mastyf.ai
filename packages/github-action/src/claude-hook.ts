@@ -1,11 +1,10 @@
 /**
  * Claude Code hook (PreToolUse and PostToolUse): sends each tool call and result to this job's
  * Mastyf checks. Usage, as written into the settings by the Action:
- *   node claude-hook.cjs <config.json>
- * Fails closed: if the call can't be checked, it is blocked (exit 2).
- * Never prints the matched text, the tool's data or the token.
+ *   node claude-hook.cjs <checks URL on 127.0.0.1> <token>
+ * Fails closed: a call that can't be checked is blocked (exit 2); a result that can't be checked
+ * is replaced before Claude reads it. Never prints the matched text, the tool's data or the token.
  */
-import { readFileSync } from 'node:fs';
 
 const CANT_CHECK = "Mastyf couldn't check this tool call, so it was blocked.";
 
@@ -15,6 +14,8 @@ interface Verdict {
   rule?: string;
   result?: unknown;
 }
+
+type Out = { code: number; stdout: string; stderr: string };
 
 function message(v: Verdict): string {
   const parts = [v.layer, v.rule].filter(Boolean).join(': ');
@@ -38,11 +39,36 @@ export function replaceText(value: unknown, msg: string): unknown {
   return walk(value);
 }
 
-async function ask(config: { url: string; token: string }, path: string, body: unknown): Promise<Verdict> {
-  const res = await fetch(`${config.url}${path}`, {
+/**
+ * What Claude reads instead of a blocked result. Built-in tools need their own output shape back
+ * (their keys are fixed by Claude Code); an MCP tool's output is anything its server sent, keys
+ * included, so it is replaced whole.
+ */
+function replacement(tool: string, response: unknown, msg: string): unknown {
+  return tool.startsWith('mcp__') ? msg : replaceText(response, msg);
+}
+
+function blockResult(tool: string, response: unknown, msg: string): Out {
+  const out = { decision: 'block', reason: msg, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: replacement(tool, response, msg) } };
+  return { code: 0, stdout: JSON.stringify(out), stderr: '' };
+}
+
+/** Only this machine's checks: nothing is ever sent off the runner. */
+function loopback(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function ask(url: string, token: string, path: string, body: unknown): Promise<Verdict> {
+  if (!loopback(url) || !token) throw new Error('bad target');
+  const res = await fetch(`${url.replace(/\/+$/, '')}${path}`, {
     method: 'POST',
     redirect: 'manual',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${config.token}` },
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(25_000),
   });
@@ -52,46 +78,54 @@ async function ask(config: { url: string; token: string }, path: string, body: u
   return v;
 }
 
-export async function runHook(stdin: string, configPath: string): Promise<{ code: number; stdout: string; stderr: string }> {
+export async function runHook(stdin: string, url: string, token: string): Promise<Out> {
+  let input: Record<string, unknown>;
   try {
-    const input = JSON.parse(stdin) as Record<string, unknown>;
-    const config = JSON.parse(readFileSync(configPath, 'utf8')) as { url: string; token: string };
-    const event = input['hook_event_name'];
-    const tool = String(input['tool_name'] ?? '');
-    const rawArgs = input['tool_input'];
-    const args = rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs) ? rawArgs : { input: rawArgs ?? null };
-    const where = { server: 'claude-code', session: String(input['session_id'] ?? '') };
+    input = JSON.parse(stdin) as Record<string, unknown>;
+    if (!input || typeof input !== 'object') throw new Error('not an object');
+  } catch {
+    return { code: 2, stdout: '', stderr: CANT_CHECK };
+  }
+  const event = input['hook_event_name'];
+  const tool = String(input['tool_name'] ?? '');
+  const rawArgs = input['tool_input'];
+  const args = rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs) ? rawArgs : { input: rawArgs ?? null };
+  const where = { server: 'claude-code', session: String(input['session_id'] ?? '') };
 
-    if (event === 'PreToolUse') {
-      const v = await ask(config, '/v1/check/call', { tool, arguments: args, ...where });
+  if (event === 'PreToolUse') {
+    try {
+      const v = await ask(url, token, '/v1/check/call', { tool, arguments: args, ...where });
       if (v.decision !== 'block') return { code: 0, stdout: '', stderr: '' };
       const out = { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: message(v) } };
       return { code: 0, stdout: JSON.stringify(out), stderr: '' };
+    } catch {
+      return { code: 2, stdout: '', stderr: CANT_CHECK };
     }
-    if (event === 'PostToolUse') {
-      const response = input['tool_response'];
-      const v = await ask(config, '/v1/check/result', { tool, result: response ?? null, arguments: args, ...where });
-      if (v.decision === 'block') {
-        const msg = message(v);
-        const out = { decision: 'block', reason: msg, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: replaceText(response, msg) } };
-        return { code: 0, stdout: JSON.stringify(out), stderr: '' };
-      }
+  }
+
+  if (event === 'PostToolUse') {
+    const response = input['tool_response'];
+    try {
+      const v = await ask(url, token, '/v1/check/result', { tool, result: response ?? null, arguments: args, ...where });
+      if (v.decision === 'block') return blockResult(tool, response, message(v));
       if (v.decision === 'redact') {
         const out = { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: v.result } };
         return { code: 0, stdout: JSON.stringify(out), stderr: '' };
       }
       return { code: 0, stdout: '', stderr: '' };
+    } catch {
+      // The tool already ran: blocking now wouldn't take the result back, so replace it.
+      return blockResult(tool, response, CANT_CHECK);
     }
-    return { code: 0, stdout: '', stderr: '' }; // other events: nothing to check
-  } catch {
-    return { code: 2, stdout: '', stderr: CANT_CHECK };
   }
+
+  return { code: 0, stdout: '', stderr: '' }; // other events: nothing to check
 }
 
 async function main(): Promise<void> {
   const chunks: Buffer[] = [];
   for await (const c of process.stdin) chunks.push(c as Buffer);
-  const r = await runHook(Buffer.concat(chunks).toString('utf8'), process.argv[2] ?? '');
+  const r = await runHook(Buffer.concat(chunks).toString('utf8'), process.argv[2] ?? '', process.argv[3] ?? '');
   if (r.stdout) process.stdout.write(r.stdout);
   if (r.stderr) process.stderr.write(r.stderr);
   process.exitCode = r.code;

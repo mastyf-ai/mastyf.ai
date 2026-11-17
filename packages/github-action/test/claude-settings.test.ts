@@ -24,16 +24,24 @@ describe('writeClaudeSettings', () => {
     for (const event of ['PreToolUse', 'PostToolUse']) {
       const e = entry(s, event);
       expect(e.matcher).toBe('*');
-      expect(e.hooks).toEqual([{ type: 'command', command: `node "${HOOK}" "${out.config}"`, timeout: 30, onFailure: 'block' }]);
+      expect(e.hooks).toEqual([{ type: 'command', command: `node "${HOOK}" "http://127.0.0.1:4100" "${TOKEN}"`, timeout: 30, onFailure: 'block' }]);
     }
   });
 
-  it('keeps the token out of the settings file and in an owner-only config file', () => {
+  it('writes no config file the agent could edit later: address and token are in the hook command', () => {
     const d = dir();
     const out = writeClaudeSettings({ dir: d, hookPath: HOOK, url: 'http://127.0.0.1:4100', token: TOKEN });
-    expect(readFileSync(out.settings, 'utf8')).not.toContain(TOKEN);
-    expect(JSON.parse(readFileSync(out.config, 'utf8'))).toEqual({ url: 'http://127.0.0.1:4100', token: TOKEN });
-    if (process.platform !== 'win32') expect(statSync(out.config).mode & 0o077).toBe(0);
+    expect(Object.keys(out)).toEqual(['settings']);
+    if (process.platform !== 'win32') expect(statSync(out.settings).mode & 0o077).toBe(0);
+  });
+
+  it('refuses a base file that would switch hooks off', () => {
+    const d = dir();
+    for (const bad of [{ disableAllHooks: true }, { allowManagedHooksOnly: true }]) {
+      const base = join(d, 'off.json');
+      writeFileSync(base, JSON.stringify(bad));
+      expect(() => writeClaudeSettings({ dir: d, hookPath: HOOK, url: 'http://127.0.0.1:4100', token: TOKEN, base })).toThrow(/switch.*hooks off|hooks off/);
+    }
   });
 
   it("merges a base file: its keys and its own hooks are kept, ours added after", () => {
