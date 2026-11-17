@@ -8,9 +8,9 @@
  */
 import { spawn } from 'node:child_process';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, constants, existsSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
-import { join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 /** One HTTP request on a connection that is closed afterwards (nothing keeps the hook alive). */
 function http(url: string, opts: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs: number }): Promise<{ status: number; json: unknown }> {
@@ -38,7 +38,7 @@ const CANT_CHECK_RESULT = "Mastyf couldn't check this result, so it was withheld
 const PROTECTED_REASON = "Blocked by Mastyf (copilot: protected-hooks). The repository's Copilot hooks can't be changed during a session.";
 const READY = /listening on (http:\/\/127\.0\.0\.1:\d+)/;
 // Best effort only: shell text can always be written another way.
-const PROTECTED = /\.github[\\/]+hooks|mastyf-check\.c?js/i;
+const PROTECTED = /\.github[\\/]+hooks|mastyf-check\.c?js|mastyf-copilot-/i;
 
 export interface HookOptions {
   /** The engine bundle to start (this program). */
@@ -95,8 +95,36 @@ async function proves(s: State): Promise<boolean> {
   }
 }
 
+const POSIX = process.platform !== 'win32';
+
+/**
+ * The state folder: a real folder (not a link or junction anywhere in its last step), ours, and
+ * owner-only. Anything else is refused, so another user can't plant a service for us to trust.
+ */
+function secureDir(dir: string): void {
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const st = lstatSync(dir);
+  // Junctions on Windows don't show as links, so also compare real paths: the folder must be
+  // exactly its (real) parent plus its own name.
+  const expected = join(realpathSync(dirname(resolve(dir))), basename(resolve(dir)));
+  const same = POSIX ? realpathSync(dir) === expected : realpathSync(dir).toLowerCase() === expected.toLowerCase();
+  if (st.isSymbolicLink() || !st.isDirectory() || !same) throw new Error('state folder is not a plain folder');
+  if (POSIX) {
+    if (st.uid !== process.getuid!()) throw new Error('state folder belongs to someone else');
+    if ((st.mode & 0o077) !== 0) chmodSync(dir, 0o700);
+  }
+}
+
+/** A state file another user (or a link) put there is never trusted. */
+function ownFile(file: string): boolean {
+  const st = lstatSync(file);
+  if (st.isSymbolicLink() || !st.isFile()) return false;
+  return !POSIX || (st.uid === process.getuid!() && (st.mode & 0o077) === 0);
+}
+
 function readState(dir: string): State | null {
   try {
+    if (!ownFile(join(dir, 'state.json'))) return null;
     const s = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')) as State;
     return typeof s.url === 'string' && typeof s.token === 'string' && typeof s.pid === 'number' ? s : null;
   } catch {
@@ -108,7 +136,7 @@ async function startEngine(opts: HookOptions, until: number): Promise<State> {
   if (!existsSync(opts.engine)) throw new Error('engine missing');
   const token = randomBytes(32).toString('base64url');
   const log = join(opts.stateDir, 'engine.log');
-  const fd = openSync(log, 'a');
+  const fd = POSIX ? openSync(log, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW, 0o600) : openSync(log, 'a');
   const child = spawn(process.execPath, [opts.engine, 'serve', '--port', '0', '--max-body', '32'], {
     detached: true,
     stdio: ['ignore', fd, fd],
@@ -142,7 +170,7 @@ async function startEngine(opts: HookOptions, until: number): Promise<State> {
 
 /** The session's check service: reuse it if it proves itself, else start one (once, under a lock). */
 async function service(opts: HookOptions, until: number): Promise<State> {
-  mkdirSync(opts.stateDir, { recursive: true });
+  secureDir(opts.stateDir);
   const lock = join(opts.stateDir, 'start.lock');
   while (Date.now() < until) {
     const s = readState(opts.stateDir);

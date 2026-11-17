@@ -1,6 +1,6 @@
 /** `mastyf-check copilot-hook pre|post`, run as Copilot's coding agent runs it. */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -127,6 +127,27 @@ describe('copilot-hook', () => {
       expect(out.out.permissionDecisionReason).toContain('hooks');
     }
     expect(existsSync(join(d, 'state.json'))).toBe(false); // no engine was needed
+  });
+
+  it('a state folder that is a link (planted by someone else) is never used', () => {
+    const real = stateDir();
+    const link = join(stateDir(), 'linked-state');
+    symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir');
+    const out = hook('pre', pre('view', { path: './README.md' }), link, { MASTYF_COPILOT_DEADLINE_MS: '3000' });
+    expect(out.out.permissionDecision).toBe('deny');
+    expect(out.out.permissionDecisionReason).toBe("Mastyf couldn't check this tool call, so it was blocked.");
+    expect(existsSync(join(real, 'state.json'))).toBe(false);
+  });
+
+  it('the state folder is owner-only and joins the protected paths', () => {
+    const d = stateDir();
+    hook('pre', pre('view', { path: './README.md' }), d);
+    if (process.platform !== 'win32') {
+      expect(statSync(d).mode & 0o077).toBe(0);
+      expect(statSync(join(d, 'state.json')).mode & 0o077).toBe(0);
+    }
+    const out = hook('pre', pre('bash', { command: `echo '{}' > ${join(tmpdir(), 'mastyf-copilot-abc', 'state.json')}` }), d);
+    expect(out.out.permissionDecision).toBe('deny');
   });
 
   it('bad input is denied, and the token is never printed', () => {
