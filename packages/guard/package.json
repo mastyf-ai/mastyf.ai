@@ -50,8 +50,7 @@
     "typescript": "^5.4.0",
     "vitest": "^3.2.4",
     "@langchain/core": "^1.4.1",
-    "@mastra/core": "^1.83.0",
-    "@openai/agents": "^0.22.0",
+    "@openai/agents": "0.14.3",
     "zod": "^4.6.7"
   },
   "keywords": [
@@ -63,14 +62,10 @@
   ],
   "peerDependencies": {
     "@langchain/core": ">=0.3.0",
-    "@mastra/core": ">=1.0.0",
     "@openai/agents": ">=0.1.0"
   },
   "peerDependenciesMeta": {
     "@langchain/core": {
-      "optional": true
-    },
-    "@mastra/core": {
       "optional": true
     },
     "@openai/agents": {
