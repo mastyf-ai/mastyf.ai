@@ -120,7 +120,10 @@ const PII_PATTERNS: PatternDef[] = [
     id: 'pii-email-bulk',
     severity: 'medium',
     category: 'pii',
-    regex: /(?:[\w.+-]+@[\w.-]+\.\w{2,}[\s,;]){5,}/gi,
+    // Bounded parts (an address's local part is at most 64 characters, a domain label 63): unbounded
+    // runs re-read a long word from every position, so a 256 KB line took over a minute. One to three
+    // separator characters, so "a@x.com, b@x.com" lists are caught too.
+    regex: /(?:[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){0,8}\.[a-z]{2,24}[\s,;]{1,3}){5,}/gi,
     redactLabel: 'EMAIL',
   },
   {

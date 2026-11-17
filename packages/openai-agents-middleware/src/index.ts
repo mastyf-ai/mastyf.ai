@@ -25,6 +25,9 @@
  * the call is blocked. Set `failOpen: true` to let calls through in that case instead.
  */
 
+// Deprecated (printed once per process, when this module is first loaded).
+process.emitWarning('@mastyf_ai/openai-agents-middleware is deprecated: use @mastyf_ai/guard/openai-agents, which checks tool calls on your own machine without a proxy.', { type: 'DeprecationWarning', code: 'MASTYF_DEP_OPENAI_AGENTS_MIDDLEWARE' });
+
 export type MastyfGuardMode = 'audit' | 'warn' | 'block';
 
 export interface MastyfGuardConfig {

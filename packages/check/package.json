@@ -1,13 +1,29 @@
 {
   "name": "@mastyf_ai/check",
   "version": "0.1.0",
-  "private": true,
   "description": "Mastyf's free check service: runs the free rules on an agent's tool calls and tool results, locally.",
   "license": "AGPL-3.0-only",
   "homepage": "https://www.mastyf.ai",
-  "repository": { "type": "git", "url": "https://github.com/mastyf-ai/mastyf.ai.git", "directory": "packages/check" },
-  "engines": { "node": ">=20" },
-  "bin": { "mastyf-check": "dist/mastyf-check.cjs" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastyf-ai/mastyf.ai.git",
+    "directory": "packages/check"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "mastyf-check": "dist/mastyf-check.cjs"
+  },
+  "exports": {
+    "./bundle": "./dist/mastyf-check.cjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/mastyf-check.cjs",
+    "check-default-policy.yaml",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "node esbuild.mjs",
     "test": "vitest run"

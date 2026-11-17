@@ -1,7 +1,7 @@
 {
   "name": "@mastyf_ai/langchain-middleware",
-  "version": "0.1.2",
-  "description": "Mastyf AI security middleware for LangChain — intercepts and evaluates tool calls through the Mastyf policy proxy",
+  "version": "0.2.0",
+  "description": "Deprecated: use @mastyf_ai/guard/langchain instead.",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
