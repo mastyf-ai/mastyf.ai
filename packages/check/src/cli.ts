@@ -8,13 +8,14 @@
  */
 import { createHash } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { CheckEngine } from './engine';
 import { startServer, VERSION } from './server';
 import { startStdioProxy } from './stdio-proxy';
 import { ensureToken } from './token';
 import { copilotHook } from './copilot-hook';
+import { initCopilot, initCopilotMessage, InitError } from './init-copilot';
 
 export interface Io {
   stdin: Readable;
@@ -36,6 +37,8 @@ Commands:
   serve   Start the check API on 127.0.0.1 (default port 4100).
           Options: --port <n>  --host <address>  --policy <file>  --mode block|observe  --log json|text
                    --max-body <MB>  --exit-with-parent (stop when stdin closes; used by the libraries)
+  init-copilot [--dir <repo>] [--force]
+          Write hooks for GitHub Copilot's coding agent into a repository (.github/hooks/).
   copilot-hook pre|post
           GitHub Copilot hook (reads the event on stdin). Set up with init-copilot.
   proxy   Put the checks in front of one MCP server on stdio:
@@ -64,6 +67,7 @@ function parse(argv: string[]): Parsed {
     }
     if (a === '--help' || a === '-h') out.flags['help'] = 'true';
     else if (a === '--exit-with-parent') out.flags['exit-with-parent'] = 'true';
+    else if (a === '--force') out.flags['force'] = 'true';
     else if (a.startsWith('--')) out.flags[a.slice(2)] = argv[++i] ?? '';
     else if (!out.command) out.command = a;
     else out.rest.push(a);
@@ -155,6 +159,21 @@ export async function run(argv: string[], io: Io): Promise<RunResult> {
           server: p.flags['server'],
         });
         return { code: 0, close: proxy.close, exited: proxy.exited };
+      }
+
+      case 'init-copilot': {
+        const dir = resolve(p.flags['dir'] || process.cwd());
+        try {
+          const written = initCopilot({ dir, bundle: process.argv[1] || '', force: p.flags['force'] !== undefined });
+          say(io.stdout, initCopilotMessage(dir, written));
+          return { code: 0 };
+        } catch (err) {
+          if (err instanceof InitError) {
+            say(io.stderr, `mastyf-check: ${err.message}`);
+            return { code: 1 };
+          }
+          throw err;
+        }
       }
 
       case 'copilot-hook': {
