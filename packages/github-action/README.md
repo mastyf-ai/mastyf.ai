@@ -108,6 +108,19 @@ Hidden secrets follow the same rule.
 Needs Claude Code v2.1.295 or later for hook failures (crashes, timeouts) to block the call; on
 older versions the hook still blocks anything it can check.
 
+## GitHub Copilot's coding agent
+
+Copilot's coding agent reads hooks only from your repository, and its sessions can't download
+anything, so it gets self-contained hooks committed to the repository instead of this Action:
+
+```bash
+npx @mastyf_ai/check init-copilot
+git add .github/hooks/mastyf.json .github/hooks/mastyf/
+```
+
+Every Copilot tool call and result is then checked inside the session. Blocks show in Copilot's
+session log. Details and limits: [@mastyf_ai/check](https://www.npmjs.com/package/@mastyf_ai/check).
+
 ## MCP servers
 
 To put an MCP server your agent uses behind the free checks, start it through the engine the
@@ -152,7 +165,7 @@ To see what the checks would catch before blocking anything:
 - Needs a runner that runs Node 24 Actions: GitHub-hosted runners do; self-hosted runners need
   v2.327.1 or later (and not macOS 13.4 or earlier, or ARM32).
 - Use it once per job.
-- Coming next: GitHub Copilot's coding agent.
+- GitHub Copilot's coding agent doesn't use this Action: see below.
 
 ## Paid protection
 

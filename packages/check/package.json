@@ -22,7 +22,8 @@
   "files": [
     "dist/mastyf-check.cjs",
     "check-default-policy.yaml",
-    "LICENSE"
+    "LICENSE",
+    "README.md"
   ],
   "scripts": {
     "build": "node esbuild.mjs",
