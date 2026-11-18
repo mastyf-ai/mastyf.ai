@@ -47,12 +47,12 @@ export async function fakeService(respond: (path: string, body: any) => [number,
 }
 
 /** Health that proves it knows `token` (empty token: can't prove anything); everything else allowed. */
-export function signedHealth(token: string, id = 'local') {
+export function signedHealth(token: string, id = 'local', tier = 'free') {
   return (path: string): [number, unknown] => {
     const u = new URL(path, 'http://x');
     if (u.pathname !== '/v1/health') return [200, { decision: 'allow', id }];
     const nonce = u.searchParams.get('nonce');
-    const health: Record<string, unknown> = { status: 'ready', tier: 'free' };
+    const health: Record<string, unknown> = { status: 'ready', tier };
     if (nonce && token) health['proof'] = createHmac('sha256', token).update(nonce).digest('hex');
     return [200, health];
   };

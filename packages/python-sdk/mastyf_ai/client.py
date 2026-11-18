@@ -38,8 +38,11 @@ class CheckClient:
 
     # -- checks -----------------------------------------------------------------------------
 
-    def check_call(self, tool: str, arguments: dict[str, Any], *, server: str, session: str) -> Verdict:
-        return self._verdict("/v1/check/call", {"tool": tool, "arguments": arguments, "server": server, "session": session})
+    def check_call(self, tool: str, arguments: dict[str, Any], *, server: str, session: str, agent: str | None = None) -> Verdict:
+        body: dict[str, Any] = {"tool": tool, "arguments": arguments, "server": server, "session": session}
+        if agent:
+            body["agent"] = agent
+        return self._verdict("/v1/check/call", body)
 
     def check_result(
         self,
@@ -49,8 +52,11 @@ class CheckClient:
         arguments: dict[str, Any] | None = None,
         server: str,
         session: str,
+        agent: str | None = None,
     ) -> Verdict:
         body: dict[str, Any] = {"tool": tool, "result": result, "server": server, "session": session}
+        if agent:
+            body["agent"] = agent
         if arguments is not None:
             body["arguments"] = arguments
         return self._verdict("/v1/check/result", body)

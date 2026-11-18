@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { tokenPath, _setLocalUrlForTests } from '../src/discovery.js';
+import { shieldFilePath, tokenPath, _setLocalUrlForTests } from '../src/discovery.js';
 import { createGuard, _resetForTests, _running } from '../src/guard.js';
 import { MastyfUnavailableError, modelMessage } from '../src/verdict.js';
 import { fakeService, isolatedHome, pidAlive, signedHealth, TAKEOVER, TOKEN, waitFor, type Fake } from './helpers.js';
@@ -37,6 +37,13 @@ async function fake(respond: Parameters<typeof fakeService>[0]): Promise<Fake> {
   const f = await fakeService(respond);
   fakes.push(f);
   return f;
+}
+
+const SHIELD_TOKEN = 's'.repeat(43);
+function writeShieldFile(content: unknown): void {
+  const p = shieldFilePath(process.env, homeDir.home);
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, JSON.stringify(content));
 }
 
 function writeToken(): void {
@@ -139,6 +146,18 @@ describe('createGuard with the free engine', () => {
 });
 
 describe('where the checks come from', () => {
+  it("sends the agent's name with each check, so Shield's dashboard can tell agents apart", async () => {
+    const svc = await fake((p) => (p.startsWith('/v1/health') ? [200, { status: 'ready', tier: 'free' }] : [200, { decision: 'allow', id: 'c' }]));
+    process.env['MASTYF_CHECK_URL'] = svc.url;
+    process.env['MASTYF_CHECK_TOKEN'] = TOKEN;
+    const g = createGuard({ agent: 'billing-bot' });
+    await g.checkCall('x', {});
+    await g.checkResult('x', 'ok');
+    expect(svc.requests.filter((r) => r.body).map((r) => r.body.agent)).toEqual(['billing-bot', 'billing-bot']);
+    await createGuard().checkCall('x', {});
+    expect('agent' in svc.requests.at(-1)!.body).toBe(false);
+  });
+
   it('MASTYF_CHECK_URL comes first', async () => {
     const svc = await fake((p) => (p.startsWith('/v1/health') ? [200, { status: 'ready', tier: 'free' }] : [200, { decision: 'allow', id: 'configured' }]));
     process.env['MASTYF_CHECK_URL'] = svc.url;
@@ -153,6 +172,37 @@ describe('where the checks come from', () => {
     _setLocalUrlForTests(svc.url);
     expect((await createGuard().checkCall('x', {})).id).toBe('local');
     expect(svc.requests.at(-1)!.auth).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it('the Shield app on this PC comes before a free service, once it proves it is Shield', async () => {
+    const free = await fake(signedHealth(TOKEN));
+    writeToken();
+    _setLocalUrlForTests(free.url);
+    const shield = await fake(signedHealth(SHIELD_TOKEN, 'shield', 'shield'));
+    writeShieldFile({ url: shield.url, token: SHIELD_TOKEN });
+    const g = createGuard();
+    expect((await g.checkCall('x', {})).id).toBe('shield');
+    expect(g.tier).toBe('shield');
+    expect(shield.requests.at(-1)!.auth).toBe(`Bearer ${SHIELD_TOKEN}`);
+    expect(free.requests.some((r) => r.auth !== undefined)).toBe(false);
+  });
+
+  it("Shield's token is never sent anywhere but 127.0.0.1, or to something that can't prove it is Shield", async () => {
+    const impostor = await fake(signedHealth('', 'impostor', 'shield'));
+    writeShieldFile({ url: impostor.url, token: SHIELD_TOKEN });
+    expect((await createGuard().checkCall('read_file', { path: '/etc/passwd' })).id).not.toBe('impostor');
+    expect(impostor.requests.every((r) => r.auth === undefined && r.path.startsWith('/v1/health'))).toBe(true);
+
+    await _resetForTests();
+    const free = await fake(signedHealth(SHIELD_TOKEN, 'free-on-shield-file', 'free'));
+    writeShieldFile({ url: free.url, token: SHIELD_TOKEN });
+    expect((await createGuard().checkCall('x', {})).id).not.toBe('free-on-shield-file'); // must say tier "shield"
+
+    await _resetForTests();
+    const elsewhere = free.url.replace('127.0.0.1', 'localhost');
+    writeShieldFile({ url: elsewhere, token: SHIELD_TOKEN });
+    await createGuard().checkCall('x', {});
+    expect(free.requests.filter((r) => r.auth !== undefined)).toHaveLength(0);
   });
 
   it('something else on the local port never gets the token', async () => {

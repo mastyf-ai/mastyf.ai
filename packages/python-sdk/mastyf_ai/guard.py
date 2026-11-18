@@ -40,7 +40,7 @@ def _connect() -> None:
     """Finds a check service (see discovery) and remembers it. Raises MastyfUnavailable when there is none."""
     global _client, _tier, _started
     env = dict(os.environ)
-    found = discovery.configured(env) or discovery.running_local(env, _home()) or discovery._shield_client()
+    found = discovery.configured(env) or discovery.shield_client(env, _home()) or discovery.running_local(env, _home())
     if found:
         _client, _tier = found.client, found.tier
         return
@@ -163,12 +163,20 @@ class Guard:
     running unchecked. "allow" lets them through and logs a warning each time.
     """
 
-    def __init__(self, session: str | None = None, on_unavailable: Literal["block", "allow"] = "block", server: str = "agent"):
+    def __init__(
+        self,
+        session: str | None = None,
+        on_unavailable: Literal["block", "allow"] = "block",
+        server: str = "agent",
+        agent: str | None = None,
+    ):
         self._default_session = session or uuid.uuid4().hex
         # Per task/thread context, so concurrent runs sharing this Guard keep their own sessions.
         self._session: contextvars.ContextVar[str | None] = contextvars.ContextVar(f"mastyf_session_{id(self)}", default=None)
         self.on_unavailable = on_unavailable
         self.server = server
+        # This agent's name, shown in Shield's dashboard. Defaults to MASTYF_AI_AGENT.
+        self.agent = agent or os.environ.get("MASTYF_AI_AGENT") or None
 
     @property
     def tier(self) -> str | None:
@@ -191,11 +199,11 @@ class Guard:
             self._session.reset(token)
 
     def check_call(self, tool: str, arguments: Any) -> Verdict:
-        return self._ask(lambda c: c.check_call(tool, _arguments(arguments), server=self.server, session=self.session_id))
+        return self._ask(lambda c: c.check_call(tool, _arguments(arguments), server=self.server, session=self.session_id, agent=self.agent))
 
     def check_result(self, tool: str, result: Any, arguments: Any = None) -> Verdict:
         args = None if arguments is None else _arguments(arguments)
-        return self._ask(lambda c: c.check_result(tool, _jsonable(result), arguments=args, server=self.server, session=self.session_id))
+        return self._ask(lambda c: c.check_result(tool, _jsonable(result), arguments=args, server=self.server, session=self.session_id, agent=self.agent))
 
     def register_tools(self, tools: list[dict[str, Any]]) -> Verdict | None:
         return self._ask(
