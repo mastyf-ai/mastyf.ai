@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
+import { recentScoresQueries } from '@/lib/recent-scores';
 import type { PublishableScoreReport } from '@/lib/score-report';
 import { computeTrustGrade } from '@/lib/trust-badge-grade';
 
@@ -26,35 +26,10 @@ export async function GET(req: NextRequest) {
 
     const db = getDb();
 
-    let rows: CacheRow[];
-
-    if (search) {
-      const result = await db.execute(sql`
-        SELECT package_name, version, scan_tier, score, level, grade,
-               score_report, checks, computed_at, expires_at
-        FROM package_score_cache
-        WHERE expires_at > NOW()
-          AND package_name ILIKE ${'%' + search + '%'}
-        ORDER BY computed_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `);
-      rows = result as unknown as CacheRow[];
-    } else {
-      const result = await db.execute(sql`
-        SELECT package_name, version, scan_tier, score, level, grade,
-               score_report, checks, computed_at, expires_at
-        FROM package_score_cache
-        WHERE expires_at > NOW()
-        ORDER BY computed_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `);
-      rows = result as unknown as CacheRow[];
-    }
-
-    const totalResult = await db.execute(sql`
-      SELECT COUNT(*) as cnt FROM package_score_cache WHERE expires_at > NOW()
-    `);
-    const totalRow = (totalResult as unknown as { cnt: string }[])[0];
+    // Every package ever scored, once each at its newest score; the card shows how old it is.
+    const { list, count } = recentScoresQueries({ limit, offset, search: search || undefined });
+    const rows = (await db.execute(list)) as unknown as CacheRow[];
+    const totalRow = ((await db.execute(count)) as unknown as { cnt: string }[])[0];
     const total = parseInt(totalRow?.cnt || '0', 10);
 
     return NextResponse.json({
