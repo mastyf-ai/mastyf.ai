@@ -39,6 +39,7 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
       { href: '/research', label: 'Read the paper' },
       { href: '/docs/security-model#guarantees', label: 'Guarantees and limitations' },
       { href: '/trust', label: 'Trust center and compliance' },
+      { href: '/founders', label: 'Founders' },
       { href: '/pilot', label: '30-day guided pilot' },
       { href: '/terms', label: 'Terms of service' },
       { href: '/privacy', label: 'Privacy policy' },
