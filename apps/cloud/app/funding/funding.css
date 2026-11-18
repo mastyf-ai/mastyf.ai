@@ -1,0 +1,80 @@
+/* Funding and support: one section per backer. Each pairs a statement with the backer's mark. */
+.funding-backer__head {
+  display: grid;
+  gap: var(--s-8);
+  align-items: center;
+  margin-bottom: var(--s-6, 32px);
+}
+
+@media (min-width: 900px) {
+  .funding-backer__head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+.funding-backer__text {
+  min-width: 0;
+}
+
+.funding-backer__text h2 {
+  margin: 0 0 var(--s-4);
+}
+
+.funding-backer__lead {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-lead, 1.1rem);
+  line-height: 1.6;
+}
+
+/* The emblem sits on white in both themes: it is drawn for a light ground. */
+.funding-mark {
+  display: grid;
+  place-items: center;
+  width: 220px;
+  height: 220px;
+  padding: 26px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl, 20px);
+}
+
+.funding-mark img {
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.funding-sub {
+  margin: var(--s-8) 0 var(--s-4);
+  font-size: 1.05rem;
+}
+
+.funding-parts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--s-5);
+}
+
+.funding-parts li {
+  padding: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.funding-parts h4 {
+  margin: 0 0 var(--s-2);
+  font-size: 1rem;
+}
+
+.funding-parts p {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.6;
+}

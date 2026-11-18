@@ -21,7 +21,7 @@ const NAV_LINKS = [
   { href: '/research', label: 'Research' },
   { href: '/attack-lab', label: 'Attack Lab' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/iit-kharagpur', label: 'IIT KGP' },
+  { href: '/funding', label: 'Funding' },
 ];
 
 /** Diameter of the collapsed badge; matches `--nav-badge` in shell.css. */
