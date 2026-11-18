@@ -137,7 +137,7 @@ export function AcademicPaperHero({ standalone = false }: { standalone?: boolean
     <div className={`panel paper${standalone ? ' paper--standalone' : ''}`} id="academic-paper" data-reveal>
       <div className="paper__head">
         <div className="paper__badges">
-          <span className="badge badge-active">Open-access preprint, v{PAPER_VERSION}</span>
+          <span className="badge badge-active">Open-access preprint, {PAPER_VERSION}</span>
           <a className="badge" href={`https://doi.org/${ZENODO_DOI}`} target="_blank" rel="noopener noreferrer">
             DOI {ZENODO_DOI}
           </a>

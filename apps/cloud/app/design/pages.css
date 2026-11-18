@@ -278,6 +278,55 @@
   margin: var(--s-5) 0 0;
 }
 
+/* The founder's papers, under the reader. */
+.research-papers h2 {
+  margin: 0 0 var(--s-5);
+}
+
+.research-papers__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-5);
+}
+
+.research-paper {
+  padding: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.research-paper__date {
+  margin: 0 0 var(--s-2);
+  color: var(--ink-3);
+  font-family: var(--font-code);
+  font-size: 0.8rem;
+}
+
+.research-paper__title {
+  max-width: 62ch;
+  margin: 0 0 var(--s-3);
+  font-size: 1.1rem;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.research-paper__summary {
+  max-width: 70ch;
+  margin: 0 0 var(--s-4);
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+.research-paper__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-5);
+  margin: 0;
+}
+
 @media (max-width: 639px) {
   .reader__bar {
     grid-template-columns: auto minmax(0, 1fr);

@@ -119,7 +119,7 @@ export function Benchmarks() {
 
       <p className="bench__doi">
         <FileText size={13} strokeWidth={1.75} aria-hidden="true" />
-        Open-access preprint, v{PAPER_VERSION}.
+        Open-access preprint, {PAPER_VERSION}.
         <a href={ZENODO_URL} target="_blank" rel="noopener noreferrer">
           DOI {ZENODO_DOI}
         </a>
