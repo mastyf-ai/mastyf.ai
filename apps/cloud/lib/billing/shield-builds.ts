@@ -16,7 +16,7 @@ export type ShieldPlatformInfo = {
   secondary?: ShieldBuild;
 };
 
-export const SHIELD_VERSION = process.env.NEXT_PUBLIC_SHIELD_VERSION || '0.5.0';
+export const SHIELD_VERSION = process.env.NEXT_PUBLIC_SHIELD_VERSION || '0.6.0';
 
 export const SHIELD_PLATFORM_ORDER: ShieldPlatform[] = ['windows', 'mac', 'linux'];
 
@@ -30,7 +30,7 @@ export const SHIELD_PLATFORMS: Record<ShieldPlatform, ShieldPlatformInfo> = {
     primary: {
       arch: 'x64',
       label: 'Installer (.exe)',
-      sha256: '5bbcf34ea7163dbce2309860920ce6396f7cfe2f9cb36b0c969bab082b63307e',
+      sha256: '9201edcdb03963c24c3872cbd06622a9a59a1a91988dc91137f7923c0bb0c60a',
     },
   },
   mac: {
