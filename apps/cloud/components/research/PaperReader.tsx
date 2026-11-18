@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, ExternalLink, Minus, Plus } from 'lucide-react';
 
-const PAGE_COUNT = 15;
+const PAGE_COUNT = 42;
 const PDF_URL = '/paper/mastyf-guard.pdf';
 /** Page images rendered from the PDF (1400px wide, 612×792pt pages). */
 const pageSrc = (n: number) => `/paper/pages/page-${String(n).padStart(2, '0')}.webp`;

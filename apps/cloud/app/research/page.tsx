@@ -10,6 +10,8 @@ import {
   PAPER_SUBTITLE,
   PAPER_TITLE,
   PAPER_VERSION,
+  PAPERS,
+  RESEARCH_SQUARE_PAPER_URL,
   SSRN_PAPER_URL,
   ZENODO_DOI,
   ZENODO_URL,
@@ -30,7 +32,7 @@ export default async function ResearchPage() {
       <SiteNav session={!!session} />
       <main className="page-main">
         <header className="page-head">
-          <p className="eyebrow">Preprint, version {PAPER_VERSION}</p>
+          <p className="eyebrow">Preprint, {PAPER_VERSION}</p>
           <h1 className="page-head__title page-head__title--long">{PAPER_TITLE}</h1>
           <p className="page-head__lead">{PAPER_SUBTITLE}</p>
 
@@ -66,6 +68,10 @@ export default async function ResearchPage() {
               SSRN
               <ArrowUpRight size={14} strokeWidth={1.75} aria-hidden="true" />
             </a>
+            <a href={RESEARCH_SQUARE_PAPER_URL} target="_blank" rel="noopener noreferrer" className="btn">
+              Research Square
+              <ArrowUpRight size={14} strokeWidth={1.75} aria-hidden="true" />
+            </a>
             <CiteButton />
           </div>
         </header>
@@ -78,6 +84,27 @@ export default async function ResearchPage() {
               <ArrowRight size={13} strokeWidth={1.75} aria-hidden="true" />
             </Link>
           </p>
+        </section>
+
+        <section className="section research-papers" aria-labelledby="research-papers-title">
+          <h2 id="research-papers-title">Papers</h2>
+          <ul className="research-papers__list">
+            {PAPERS.map((p) => (
+              <li key={p.title} className="research-paper">
+                <p className="research-paper__date">{p.date}</p>
+                <h3 className="research-paper__title">{p.title}</h3>
+                <p className="research-paper__summary">{p.summary}</p>
+                <p className="research-paper__links">
+                  {p.links.map((l) => (
+                    <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer" className="link-icon">
+                      {l.label}
+                      <ArrowUpRight size={13} strokeWidth={1.75} aria-hidden="true" />
+                    </a>
+                  ))}
+                </p>
+              </li>
+            ))}
+          </ul>
         </section>
       </main>
       <SiteFooter />
