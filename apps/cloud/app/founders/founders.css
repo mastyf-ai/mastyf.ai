@@ -1,0 +1,100 @@
+/* Founders: one card per person, two columns on wide screens, one on phones. */
+.founders {
+  list-style: none;
+  /* Same width and margins as the page head above it. */
+  width: min(100% - var(--gutter) * 2, var(--content-max));
+  margin: 0 auto var(--section-pad, 96px);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: var(--s-5, 24px);
+}
+
+.founder {
+  display: flex;
+  gap: var(--s-5, 24px);
+  padding: var(--s-5, 24px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 14px);
+}
+
+.founder--placeholder {
+  border-style: dashed;
+}
+
+.founder__photo {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+
+.founder__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.founder__initials {
+  font-family: var(--font-display, inherit);
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.founder__text {
+  min-width: 0;
+}
+
+.founder__name {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--ink-strong);
+}
+
+.founder__role {
+  margin: 2px 0 10px;
+  color: var(--accent);
+  font-size: 0.92rem;
+}
+
+.founder__bio {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+.founder__links {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.founder__links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.founder__draft {
+  margin: 12px 0 0;
+  font-size: 0.8rem;
+  color: var(--warn);
+}
+
+@media (max-width: 520px) {
+  .founder {
+    flex-direction: column;
+  }
+}
