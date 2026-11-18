@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { freshnessLabel } from '@/lib/freshness';
 import Link from 'next/link';
 import { computeTrustGrade, trustGradeColor } from '@/lib/trust-badge-grade';
 import {
@@ -29,13 +30,6 @@ function daysSince(dateStr: string): number {
   return Math.max(0, Math.floor((now - then) / (1000 * 60 * 60 * 24)));
 }
 
-function freshnessLabel(days: number): string {
-  if (days <= 1) return 'Updated today';
-  if (days <= 7) return `Updated ${days}d ago`;
-  if (days <= 30) return `Updated ${Math.floor(days / 7)}w ago`;
-  if (days <= 90) return `Updated ${Math.floor(days / 30)}mo ago`;
-  return `Updated ${Math.floor(days / 365)}y ago`;
-}
 
 function freshnessClass(days: number): string {
   if (days <= 30) return 'fresh';
@@ -320,7 +314,7 @@ export function PackageGrid() {
   return (
     <>
       <div className="certified-recent-header">
-        <h2>Recently scored packages</h2>
+        <h2>Scored packages</h2>
         {total > 0 && (
           <span className="certified-recent-count">{total} packages</span>
         )}
