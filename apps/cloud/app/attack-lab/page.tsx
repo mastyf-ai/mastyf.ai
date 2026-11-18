@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { ATTACKS, BENIGN_CHECK, GENERATED, type AttackEntry } from './data';
+import { ATTACKS, BENIGN_CHECK, GENERATED, type AttackEntry, PX_RESULTS } from './data';
 import { AttackSim, HowItWorksSim } from './GateSim';
 import { Playground, ThenAndNow } from './Playground';
 import './attack-lab.css';
@@ -42,13 +42,14 @@ export default function AttackLabPage() {
           <div>
             <dt>Attacker success</dt>
             <dd>
-              <span className="alab-stats__from">25%</span> → <span className="alab-stats__to">0%</span>
+              <span className="alab-stats__from">{PX_RESULTS.agentdojo.before}</span> →{' '}
+              <span className="alab-stats__to">{PX_RESULTS.agentdojo.after}</span>
             </dd>
-            <span className="alab-stats__note">No defense vs Protocol X, AgentDojo, 249 attacked cases</span>
+            <span className="alab-stats__note">No defense vs Protocol X, AgentDojo, {PX_RESULTS.agentdojo.cases} attacked cases</span>
           </div>
           <div>
             <dt>Novel attacks generated</dt>
-            <dd>777</dd>
+            <dd>{PX_RESULTS.novelAttacks}</dd>
             <span className="alab-stats__note">By our red team, none in the model&apos;s training data</span>
           </div>
           <div>
@@ -60,7 +61,7 @@ export default function AttackLabPage() {
           </div>
           <div>
             <dt>Decision time</dt>
-            <dd>~1 s</dd>
+            <dd>{PX_RESULTS.decisionTime}</dd>
             <span className="alab-stats__note">Median, on a laptop CPU</span>
           </div>
         </dl>

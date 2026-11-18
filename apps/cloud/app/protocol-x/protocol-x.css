@@ -1,0 +1,51 @@
+/* Protocol X page: results in the head, the playground, then what it does in Shield. */
+.px-facts dd {
+  font-variant-numeric: tabular-nums;
+}
+
+.px-facts__note {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.px-try h2,
+.px-does h2 {
+  margin: 0 0 var(--s-3);
+}
+
+.px-try__lead {
+  max-width: 68ch;
+  margin: 0 0 var(--s-6, 32px);
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+.px-does__list {
+  list-style: none;
+  margin: var(--s-5) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--s-5);
+}
+
+.px-does__list li {
+  padding: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.px-does__list h3 {
+  margin: 0 0 var(--s-2);
+  font-size: 1rem;
+}
+
+.px-does__list p {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
