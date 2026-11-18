@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { createGuard, _running } from '../src/guard.js';
 import { guardTools as guardLangChain } from '../src/langchain.js';
 import { guardTools as guardMastra } from '../src/mastra.js';
-import { fakeService, isolate, TOKEN, waitFor, type Fake } from './helpers.js';
+import { fakeService, isolate, TOKEN, type Fake } from './helpers.js';
 
 await isolate({ beforeEach, afterEach });
 

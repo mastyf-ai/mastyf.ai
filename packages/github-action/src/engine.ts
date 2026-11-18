@@ -53,7 +53,8 @@ export async function startDetached(opts: StartOptions): Promise<{ pid: number; 
   if (!existsSync(opts.engine)) throw new Error(`the Mastyf check engine is missing from the Action (${opts.engine})`);
   const args = [opts.engine, 'serve', '--host', '127.0.0.1', '--port', String(opts.port), '--max-body', String(opts.maxBodyMb), '--mode', opts.mode];
   if (opts.policy) args.push('--policy', opts.policy);
-  const fd = openSync(opts.logFile, 'a');
+  // A new file only ('wx'): never write through something already at that path, such as a planted link.
+  const fd = openSync(opts.logFile, 'wx', 0o600);
   let exited = false;
   const child = spawn(process.execPath, args, {
     detached: true,

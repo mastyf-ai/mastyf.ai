@@ -70,3 +70,14 @@ describe('modelMessage', () => {
     expect(isBlocked({ decision: 'allow', id: 'y' })).toBe(false);
   });
 });
+
+describe('the service address', () => {
+  it('drops trailing slashes in linear time, even on a crafted address', async () => {
+    const { CheckClient } = await import('../src/client.js');
+    expect((new CheckClient('http://127.0.0.1:4100///', 't') as unknown as { url: string }).url).toBe('http://127.0.0.1:4100');
+    const crafted = 'http://x/' + '/'.repeat(50_000) + 'a';
+    const t0 = performance.now();
+    expect((new CheckClient(crafted, 't') as unknown as { url: string }).url).toBe(crafted);
+    expect(performance.now() - t0).toBeLessThan(50);
+  });
+});

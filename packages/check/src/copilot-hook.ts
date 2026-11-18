@@ -176,7 +176,8 @@ async function startEngine(opts: HookOptions, until: number): Promise<State> {
       const state = { url: m[1]!, token, pid };
       if (!(await proves(state, until))) break; // never save a state that hasn't proved itself
       const tmp = join(opts.stateDir, `state.${process.pid}.tmp`);
-      writeFileSync(tmp, JSON.stringify(state), { mode: 0o600 });
+      rmSync(tmp, { force: true }); // left by a hook with this pid that died
+      writeFileSync(tmp, JSON.stringify(state), { mode: 0o600, flag: 'wx' });
       renameSync(tmp, join(opts.stateDir, 'state.json'));
       return state;
     }

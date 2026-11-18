@@ -17,7 +17,10 @@ export class CheckClient {
     private readonly timeoutMs = 10_000,
     private maxBodyBytes?: number,
   ) {
-    this.url = url.replace(/\/+$/, '');
+    // No regex: /\/+$/ backtracks quadratically on an address with many slashes.
+    let end = url.length;
+    while (end > 0 && url.charCodeAt(end - 1) === 47 /* "/" */) end--;
+    this.url = url.slice(0, end);
   }
 
   /** Use the request size limit the service reported (from /v1/health). */
