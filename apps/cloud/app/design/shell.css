@@ -72,7 +72,7 @@ html.lenis body {
   --tint: var(--frame-tint);
   --accent: var(--frame-ink);
   background: var(--frame-bg);
-  border: 1px solid transparent;
+  border: 1px solid var(--frame-edge, transparent);
   border-radius: var(--r-pill);
   pointer-events: auto;
   /* `translate`, not `transform`: the entrance animation below holds the transform. */
@@ -132,11 +132,9 @@ html.lenis body {
 }
 
 /* The logo is light line art; on the light theme it is inverted with its hues kept,
-   so the lines turn ink and the gold check stays gold. */
-:root[data-theme='light'] .brand-mark,
-.nav__bar .brand-mark,
-.nav__face .brand-mark,
-.app__side .brand-mark {
+   so the lines turn ink and the gold check stays gold. The dark theme's frame is black,
+   so there it stays as drawn. */
+:root[data-theme='light'] .brand-mark {
   filter: invert(1) hue-rotate(180deg);
 }
 

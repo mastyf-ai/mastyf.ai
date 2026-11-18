@@ -19,7 +19,7 @@
   /* Lines */
   --line: #26262a;
   --line-strong: #303035;
-  --line-focus: #e5cb6c;
+  --line-focus: #b49a5e;
 
   /* Text: warm off-white and warm greys */
   --ink: #ededea;
@@ -27,19 +27,20 @@
   --ink-2: #a3a39b;
   --ink-3: #74746d;
 
-  /* Brand accent: the same yellow as the Shield app */
-  --accent: #e5cb6c;
-  --accent-hover: #edd98e;
+  /* Brand accent: a soft, muted gold, used only on buttons, links and focus (same as the Shield app) */
+  --accent: #b49a5e;
+  --accent-hover: #c4ab70;
   --accent-ink: #0a0a0b;
-  --accent-soft: rgba(229, 203, 108, 0.12);
-  --accent-line: rgba(229, 203, 108, 0.4);
+  --accent-soft: rgba(180, 154, 94, 0.12);
+  --accent-line: rgba(180, 154, 94, 0.4);
 
-  /* The navbar and dashboard sidebar, coloured like the Shield app's frame */
-  --frame-bg: #e5cb6c;
-  --frame-ink: #0a0a0b;
-  --frame-ink-2: rgba(10, 10, 11, 0.68);
-  --frame-line: rgba(10, 10, 11, 0.16);
-  --frame-tint: 10 10 11;
+  /* The navbar and dashboard sidebar: black, like the Shield app's frame */
+  --frame-bg: #0d0d0f;
+  --frame-ink: #ededea;
+  --frame-ink-2: rgba(237, 237, 234, 0.66);
+  --frame-line: rgba(237, 237, 234, 0.1);
+  --frame-tint: 237 237 234;
+  --frame-edge: rgba(237, 237, 234, 0.12);
 
   /* Meaning: allowed / held / blocked */
   --ok: #7fd28e;
@@ -149,6 +150,7 @@
   --frame-ink-2: rgba(43, 31, 20, 0.68);
   --frame-line: rgba(43, 31, 20, 0.16);
   --frame-tint: 43 31 20;
+  --frame-edge: transparent;
 
   --ok: #2a7340;
   --ok-soft: rgba(42, 115, 64, 0.11);

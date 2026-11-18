@@ -43,7 +43,7 @@
   --accent: var(--frame-ink);
   --bg: transparent;
   background: var(--frame-bg);
-  border-right: 0;
+  border-right: 1px solid var(--frame-edge, transparent);
 }
 
 .app__side::-webkit-scrollbar {
