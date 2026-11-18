@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { ArrowRight, Download } from 'lucide-react';
 import { Flip } from '@/components/ui/Flip';
 import { HeroBackdrop } from './HeroBackdrop';
-import { HeroTabs } from './HeroTabs';
 
 type Props = {
   session: boolean;
@@ -48,7 +47,6 @@ export function HeroSection(_props: Props) {
             ))}
           </dl>
         </div>
-        <HeroTabs />
       </section>
     </div>
   );
