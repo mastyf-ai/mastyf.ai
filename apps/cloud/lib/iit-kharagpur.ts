@@ -9,9 +9,6 @@ export const IIT_KGP = {
   awarded: '14 October 2026',
   reference: 'IITKGP/Seed/2026/1/11',
   office: 'Office of Innovation & Entrepreneurship, IIT Kharagpur',
-  /**
-   * The official IIT Kharagpur logo, once added under /public (e.g. '/partners/iit-kharagpur.png').
-   * While null, the page shows a plain "IIT Kharagpur" wordmark instead.
-   */
-  logo: null as string | null,
+  /** IIT Kharagpur's emblem (the Institute's own artwork; shown to state that it funds Mastyf). */
+  logo: '/partners/iit-kharagpur.svg',
 };
