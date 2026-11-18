@@ -66,5 +66,6 @@ export function safePort(value: unknown): number {
 
 /** The poll interval setting: a finite number of seconds, at least 5, otherwise 15. */
 export function safePollSeconds(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(5, value) : 15;
+  // At most an hour: past setTimeout's limit (about 24.8 days) the timer would fire at once, every time.
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(3600, Math.max(5, value)) : 15;
 }

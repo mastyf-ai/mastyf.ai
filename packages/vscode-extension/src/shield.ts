@@ -40,9 +40,23 @@ export class ShieldClient {
     this.timeoutMs = opts.timeoutMs ?? 3000;
   }
 
-  /** True when Shield's service answers with this PC's key. */
+  /** True when Shield's service answers with this PC's key (another program on the port doesn't count). */
   async answering(): Promise<boolean> {
-    return (await this.get('/api/gateway/status')) !== null;
+    return (await this.status()) !== null;
+  }
+
+  /** Shield's own version (0.6 and later report it), or null. */
+  async shieldVersion(): Promise<string | null> {
+    const v = (await this.status())?.['shield_version'];
+    return typeof v === 'string' && v ? v : null;
+  }
+
+  /** Shield's status answer: every Shield version says whether its gateway is available. */
+  private async status(): Promise<Record<string, unknown> | null> {
+    const body = await this.get('/api/gateway/status');
+    return body && typeof body === 'object' && typeof (body as Record<string, unknown>)['available'] === 'boolean'
+      ? (body as Record<string, unknown>)
+      : null;
   }
 
   /** The newest records, newest first, or null when Shield isn't answering. */
@@ -81,8 +95,12 @@ export class ShieldClient {
       const res = await this.fetchImpl(`http://127.0.0.1:${this.port}${path}`, {
         headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
         signal: controller.signal,
+        redirect: 'error', // the key must never follow a redirect anywhere else
       });
-      if (res.status !== 200) return null;
+      if (res.status !== 200) {
+        void res.body?.cancel().catch(() => {}); // release the connection
+        return null;
+      }
       return await res.json();
     } catch {
       return null; // the error may quote the request, which carries the key

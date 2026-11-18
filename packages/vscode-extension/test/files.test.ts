@@ -128,3 +128,12 @@ describe('size limit', () => {
     expect(makeFileAccess(ops).readSmallFile('C:\\Users\\u\\.claude.json')).toBe('{}');
   });
 });
+
+describe('safePollSeconds upper limit', () => {
+  it('caps the interval at an hour (a value past setTimeout\'s limit would fire at once, every time)', async () => {
+    const { safePollSeconds } = await import('../src/files');
+    expect(safePollSeconds(1e9)).toBe(3600);
+    expect(safePollSeconds(30)).toBe(30);
+    expect(safePollSeconds(1)).toBe(5);
+  });
+});

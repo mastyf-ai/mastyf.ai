@@ -1,16 +1,18 @@
 /**
  * Mastyf Shield for VS Code, Cursor and Windsurf. Shows whether this editor's MCP servers are routed
  * through the Shield app, and what Shield blocked. The extension checks nothing itself and never
- * changes Shield or any settings file.
+ * changes a settings file; "Turn on protection" asks Shield (0.6 and later) to do it, as Shield's own
+ * switch does.
  */
 import { execFile, spawn } from 'node:child_process';
 import { lstatSync, readFileSync, readlinkSync, statSync } from 'node:fs';
 import { win32 as path } from 'node:path';
 import * as vscode from 'vscode';
-import { blockDetailText, toBlockRows, type BlockRow } from './blocks';
+import { blockDetailText, fromThisEditor, toBlockRows, type BlockRow } from './blocks';
 import { makeFileAccess, safePollSeconds, safePort } from './files';
 import { findShieldExe, REG_QUERY_ARGS } from './install';
 import { BlockNotifier } from './notify';
+import { ProtectionControl } from './control';
 import { BlocksPanel, type PanelNode, type PanelState } from './panel';
 import { Poller } from './poller';
 import { editorFromAppName, settingsFilesFor, SettingsReader, type AgentId, type Env } from './settings';
@@ -32,9 +34,14 @@ const { readSmallFile, mtimeOf } = makeFileAccess({
 
 const exists = (p: string) => mtimeOf(p) !== null;
 
+/** Opens Shield at Account → Protection (Shield 0.6 and later register this link). */
+const PROTECTION_LINK = 'mastyf-shield://open/protection';
+
 function regQuery(): Promise<string> {
+  // By full path: a reg.exe in the current folder or on PATH is never run.
+  const reg = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe');
   return new Promise((resolve) => {
-    execFile('reg', REG_QUERY_ARGS, { windowsHide: true, timeout: 5000 }, (err, stdout) => resolve(err ? '' : String(stdout)));
+    execFile(reg, REG_QUERY_ARGS, { windowsHide: true, timeout: 5000 }, (err, stdout) => resolve(err ? '' : String(stdout)));
   });
 }
 
@@ -56,6 +63,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
   const client = () => new ShieldClient({ port: safePort(config().get('port')), readKey });
+  const controlFile = path.join(env.APPDATA || '', 'Mastyf', 'shield', 'control.json');
+  const control = new ProtectionControl({
+    readFile: () => {
+      try {
+        return readSmallFile(controlFile);
+      } catch {
+        return null;
+      }
+    },
+  });
 
   const reader = new SettingsReader(readSmallFile, mtimeOf);
   const notifier = new BlockNotifier();
@@ -70,9 +87,9 @@ export function activate(context: vscode.ExtensionContext): void {
   let latestRows: BlockRow[] = [];
   let lastState = '';
   let lastNote = '';
-  /** Server names in this editor's (and companions') settings files; Shield 0.5.2 records no agent per call. */
+  /** Server names in this editor's (and companions') settings files, for an older Shield that records no agent per call. */
   let myServers = new Set<string>();
-  const isMine = (row: BlockRow) => myServers.has(row.server);
+  const isMine = (row: BlockRow) => fromThisEditor(row, agents(), myServers);
 
   /** This editor, plus Claude Code and Cline when their extensions are installed. */
   const agents = (): AgentId[] => {
@@ -208,6 +225,8 @@ export function activate(context: vscode.ExtensionContext): void {
   register('mastyfShield.openShield', async () => {
     if (!windows) return vscode.env.openExternal(vscode.Uri.parse(DOWNLOAD_URL));
     if (await client().answering()) {
+      // Shield 0.6 and later bring their window to the front at Account → Protection.
+      if (await client().shieldVersion()) return vscode.env.openExternal(vscode.Uri.parse(PROTECTION_LINK));
       return vscode.window.showInformationMessage('Shield is already running; switch to its window.');
     }
     exe = findShieldExe(await regQuery(), env, exists);
@@ -218,6 +237,25 @@ export function activate(context: vscode.ExtensionContext): void {
     child.unref();
   });
   register('mastyfShield.turnOn', async () => {
+    if (windows) {
+      const result = await control.turnOn();
+      output.appendLine(`${new Date().toISOString()} turn on protection: ${result.ok ? 'done' : result.reason}`);
+      if (result.ok) {
+        const pick = await vscode.window.showInformationMessage(
+          'Shield is protecting your agents now. Reload this window so the editor starts its MCP servers through Shield.',
+          'Reload window',
+        );
+        if (pick === 'Reload window') await vscode.commands.executeCommand('workbench.action.reloadWindow');
+        return;
+      }
+      if (result.reason === 'busy') return vscode.window.showInformationMessage('Shield is already changing protection. Try again in a moment.');
+      if (result.reason === 'failed') {
+        const pick = await vscode.window.showWarningMessage("Shield couldn't turn on protection. Open Shield to see why.", 'Open Shield');
+        if (pick === 'Open Shield') await vscode.commands.executeCommand('mastyfShield.openShield');
+        return;
+      }
+      // Shield isn't running, or is older than 0.6: the steps in Shield itself.
+    }
     const pick = await vscode.window.showInformationMessage(
       'To protect this editor: open Mastyf Shield, go to Account → Protection, turn on "Route MCP servers through Shield", then reload this window.',
       'Open Shield',
