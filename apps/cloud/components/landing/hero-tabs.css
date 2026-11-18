@@ -1,0 +1,144 @@
+/* Hero tabs: the right-hand side of the hero. "How Mastyf works" shows the boundary animation behind it;
+   "Try Protocol X" covers it with the Attack Lab playground on a solid card. */
+.hero-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-width: 0;
+  margin-top: var(--s-8);
+}
+
+@media (min-width: 1100px) {
+  .hero-tabs {
+    align-self: start;
+    align-items: flex-end;
+    margin-top: 0;
+  }
+  .hero-tabs--open {
+    align-items: stretch;
+  }
+}
+
+.hero-tabs__list {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  background: var(--glass-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+@media (min-width: 1100px) {
+  .hero-tabs__list {
+    align-self: flex-end;
+  }
+}
+
+.hero-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--t, 160ms) var(--ease, ease),
+    color var(--t, 160ms) var(--ease, ease);
+}
+
+.hero-tabs__tab:hover {
+  color: var(--ink-strong);
+}
+
+.hero-tabs__tab.is-active {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+  color: var(--ink-strong);
+}
+
+.hero-tabs__tab:focus-visible {
+  outline: 2px solid var(--line-focus);
+  outline-offset: 2px;
+}
+
+.hero-tabs__paid {
+  padding: 1px 7px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-pill);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hero-tabs__hint {
+  max-width: 34ch;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  text-align: right;
+}
+
+@media (max-width: 1099px) {
+  .hero-tabs__hint {
+    text-align: left;
+  }
+}
+
+.hero-tabs__panel--px {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  max-height: min(70vh, 680px);
+  overflow-y: auto;
+  padding: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow);
+}
+
+.hero-tabs__panel[hidden] {
+  display: none;
+}
+
+.hero-px__title {
+  margin: 0;
+  color: var(--ink-strong);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.hero-px__lead {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.hero-px__more {
+  align-self: flex-start;
+}
+
+.hero-tabs__loading {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-tabs__tab {
+    transition: none;
+  }
+}
