@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mastyf-ai"
-version = "5.0.1"
+version = "5.0.2"
 description = "Mastyf's free checks for your AI agent's tools: every tool call checked before it runs, every result before the model reads it. Runs on your own machine."
 readme = "README.md"
 license = "MIT"

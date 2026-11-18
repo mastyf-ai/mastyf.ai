@@ -8,4 +8,4 @@ from .guard import Guard
 from .verdict import Verdict
 
 __all__ = ["CheckClient", "Guard", "MastyfUnavailable", "Verdict"]
-__version__ = "5.0.1"
+__version__ = "5.0.2"

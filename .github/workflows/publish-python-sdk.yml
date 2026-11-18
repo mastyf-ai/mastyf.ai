@@ -19,6 +19,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      # The tests start the free check program, which is built from packages/check.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @mastyf_ai/check --ignore-scripts
+      - run: pnpm --filter @mastyf_ai/check build
       - name: Tag matches the package version
         working-directory: packages/python-sdk
         run: |
