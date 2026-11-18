@@ -2,7 +2,7 @@
   "name": "mastyf-shield",
   "displayName": "Mastyf Shield",
   "description": "See whether your editor's MCP servers are routed through Mastyf Shield, and what Shield blocked and why.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "preview": true,
   "publisher": "MastyfLabs",
@@ -136,7 +136,8 @@
           "type": "number",
           "default": 15,
           "minimum": 5,
-          "description": "How often to check Shield for new blocks while this window has focus.",
+          "maximum": 3600,
+          "description": "How often (in seconds) to check Shield for new blocks while this window has focus.",
           "scope": "machine"
         }
       }

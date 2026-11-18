@@ -114,3 +114,25 @@ describe('ShieldClient.recentBlocks', () => {
     expect(await c.recentBlocks(25, { pageSize: 50, maxScan: 500 })).toBeNull();
   });
 });
+
+describe("ShieldClient: only Shield's own answer counts", () => {
+  it("another program on Shield's port that answers 200 is not Shield", async () => {
+    const other = new ShieldClient({ port: 14000, readKey: () => KEY, fetchImpl: fakeFetch(() => json({ hello: 'world' })).impl });
+    expect(await other.answering()).toBe(false);
+    const shield = new ShieldClient({ port: 14000, readKey: () => KEY, fetchImpl: fakeFetch(() => json({ available: true, shield_version: '0.6.0' })).impl });
+    expect(await shield.answering()).toBe(true);
+  });
+
+  it("reports Shield's own version, or null for a Shield before 0.6 that doesn't say", async () => {
+    const newer = new ShieldClient({ port: 14000, readKey: () => KEY, fetchImpl: fakeFetch(() => json({ available: false, shield_version: '0.6.0' })).impl });
+    expect(await newer.shieldVersion()).toBe('0.6.0');
+    const older = new ShieldClient({ port: 14000, readKey: () => KEY, fetchImpl: fakeFetch(() => json({ available: true })).impl });
+    expect(await older.shieldVersion()).toBeNull();
+  });
+
+  it('never follows a redirect (the key would go with it)', async () => {
+    const f = fakeFetch(() => json({ available: true }));
+    await new ShieldClient({ port: 14000, readKey: () => KEY, fetchImpl: f.impl }).answering();
+    expect(f.calls[0]!.init.redirect).toBe('error');
+  });
+});

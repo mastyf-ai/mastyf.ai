@@ -75,3 +75,27 @@ describe('blockDetailText', () => {
     expect(text).toContain('Argument: path');
   });
 });
+
+describe('fromThisEditor', () => {
+  it("uses the agent Shield recorded for the call when there is one", async () => {
+    const { fromThisEditor } = await import('../src/blocks');
+    const [row] = toBlockRows([{ ...hook, caller_agent: 'claude-code', server_name: 'shared-name' }], 1);
+    expect(fromThisEditor(row!, ['vscode', 'claude-code'], new Set())).toBe(true);
+    expect(fromThisEditor(row!, ['cursor'], new Set(['shared-name']))).toBe(false); // another agent's server with the same name
+  });
+
+  it('falls back to the server names in this editor\'s settings for an older Shield that records no agent', async () => {
+    const { fromThisEditor } = await import('../src/blocks');
+    const [row] = toBlockRows([{ ...hook, caller_agent: undefined, server_name: 'files' }], 1);
+    expect(row!.agent).toBe('unknown agent');
+    expect(fromThisEditor(row!, ['vscode'], new Set(['files']))).toBe(true);
+    expect(fromThisEditor(row!, ['vscode'], new Set(['other']))).toBe(false);
+  });
+
+  it('gives a row without a receipt id the same id on every poll', () => {
+    const r: Receipt = { ...hook, receipt_id: undefined, request_id: undefined };
+    const first = toBlockRows([r], 1)[0]!.id;
+    const later = toBlockRows([{ ...hook, receipt_id: 'newer', decision: 'BLOCK' }, r], 2)[1]!.id;
+    expect(later).toBe(first);
+  });
+});
