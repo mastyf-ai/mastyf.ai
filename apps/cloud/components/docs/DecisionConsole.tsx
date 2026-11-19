@@ -238,7 +238,7 @@ export function DecisionConsole() {
 
         <span className="status status--active console__state">
           <span className="status__mark" aria-hidden="true">●</span>
-          Enforcing <span className="unit">&lt;4.8µs</span>
+          Enforcing <span className="unit">~1.5 ms</span>
         </span>
       </div>
 
@@ -439,7 +439,7 @@ export function DecisionConsole() {
           </pre>
           <div className="console__foot">
             <span>
-              Policies are compiled into zero-allocation kernel bytecode executed in &lt;4.8µs before socket dispatch.
+              Every call is checked against your policy, in about 1.5 ms, before it reaches the tool.
             </span>
             <Link href="/developers" className="link-icon">
               Full policy SDK reference

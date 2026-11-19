@@ -31,25 +31,25 @@ export const HERO_VALUE_PILLARS = [
 export const HERO_TRUST_ITEMS = [
   { label: `Paper DOI: ${ZENODO_DOI}`, href: `https://doi.org/${ZENODO_DOI}` },
   { label: 'Mastyf Guard 1.5B (Frozen V6 Checkpoint)', href: 'https://huggingface.co/Rudraneel93/mastyf-guard-1.5b-v2-boundary-sharpened' },
-  { label: '99.52% attack defense on AgentDojo (utility parity)', href: '#evaluation' },
+  { label: '99.52% attack defense on AgentDojo, in the paper', href: '#evaluation' },
   { label: 'Complete mediation: 0 backend bytes on block', href: '#architecture' },
 ] as const;
 
 export const HERO_STATS = [
   {
     value: '99.52%',
-    label: 'AgentDojo defense',
-    detail: '629 interactive episodes · exact clean task utility parity (6/97 matching unprotected baseline)',
+    label: 'AgentDojo defense (paper)',
+    detail: 'Reported in the paper: 629 interactive episodes, clean task utility matching the unprotected baseline',
   },
   {
     value: '98.43%',
-    label: 'InjecAgent defense',
-    detail: '4,216 benchmark instances · 267.7ms P50 latency on commodity CPU',
+    label: 'InjecAgent defense (paper)',
+    detail: 'Reported in the paper: 4,216 benchmark instances, 267.7 ms median on a commodity CPU',
   },
   {
-    value: '< 4.8µs',
-    label: 'Deterministic CBAC',
-    detail: '>330,000 req/s fast-path reference monitor throughput',
+    value: '~1.5 ms',
+    label: 'Rule check',
+    detail: 'Median for one call on a laptop CPU (95th percentile about 5 ms)',
   },
   {
     value: '0 bytes',
@@ -69,7 +69,7 @@ export const PRODUCT_FAMILY = [
       'The fail-closed protection appliance and reference monitor for AI agents & MCP tools. Sits directly on the transport wire between untrusted agent cognition and privileged execution. Enforces DIFC taint tracking, CBAC capability envelopes, and the mathematical invariant: BackendExecution > 0 ==> Decision == ALLOW (0 backend bytes on non-allow).',
     bullets: [
       'Packaged macOS & Linux desktop appliance for local agents (Claude Desktop, Cursor)',
-      'High-throughput Kubernetes & cloud sidecar (>330,000 req/s fast path)',
+      'Kubernetes and cloud sidecar deployment',
       'Dynamic Information Flow Control (DIFC) session taint tracking',
       'Ed25519 / SHA-256 tamper-evident cryptographic execution ledger',
     ],
@@ -84,7 +84,7 @@ export const PRODUCT_FAMILY = [
     description:
       'The execution enforcement layer. Intercepts agent tool calls and applies deterministic capability-based access control (CBAC), relational invariants, and workflow state validation before privileged execution. Fail-closed: non-allow produces 0 backend bytes.',
     bullets: [
-      'Microsecond deterministic capability authorization (< 4.8 µs)',
+      'Deterministic capability authorization (about 1.5 ms per call)',
       'Four typed relational argument invariants (containment, scope, monotonicity, monetary clamping)',
       'Zero-byte wire isolation on non-ALLOW decisions',
       'Open-source AGPL-3.0 self-hostable core',

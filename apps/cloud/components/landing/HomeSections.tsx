@@ -122,9 +122,9 @@ export function ProductRow() {
 }
 
 const PROOF = [
-  { value: '99.52%', label: 'Attack defense, AgentDojo' },
-  { value: '98.43%', label: 'Attack defense, InjecAgent' },
-  { value: '<4.8µs', label: 'Deterministic decision' },
+  { value: '99.52%', label: 'Attack defense, AgentDojo (paper)' },
+  { value: '98.43%', label: 'Attack defense, InjecAgent (paper)' },
+  { value: '~1.5 ms', label: 'Rule check, median' },
   { value: '0 bytes', label: 'Reach a tool on block' },
 ] as const;
 

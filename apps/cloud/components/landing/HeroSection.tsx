@@ -9,7 +9,7 @@ type Props = {
 
 const FACTS = [
   { label: 'Layer', value: 'MCP tool calls' },
-  { label: 'Decision', value: 'Under 4.8 µs' },
+  { label: 'Rule check', value: '~1.5 ms' },
   { label: 'License', value: 'AGPL-3.0' },
 ] as const;
 

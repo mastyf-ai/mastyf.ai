@@ -13,8 +13,7 @@ const CLIENTS = [
 
 const STATS = [
   { value: '10+', label: 'Agent integrations' },
-  { value: '330,000+', label: 'Intercepted calls / sec' },
-  { value: '<4.8µs', label: 'Protection overhead' },
+  { value: '~1.5 ms', label: 'Rule check, median' },
 ] as const;
 
 export function Integrations() {

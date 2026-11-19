@@ -16,8 +16,9 @@ export default function PerformancePage() {
     <DocPage slug="performance">
       <DocSection id="cost" title="Performance and cost">
         <p>
-          Cloud LLM guardrails add around 850ms per tool call and bill per check. Mastyf decides locally in under 4.8µs
-          for a flat monthly price. Adjust the inputs to compare.
+          Cloud LLM guardrails add around 850 ms per tool call and bill per check. Mastyf&apos;s rules decide locally in
+          about 1.5 ms (Protocol X, when it checks a call, takes about a second) for a flat monthly price. Adjust the
+          inputs to compare.
         </p>
         <div className="doc-block">
           <CostCalculator />

@@ -215,9 +215,9 @@ export function AcademicPaperHero({ standalone = false }: { standalone?: boolean
             </div>
             <p>
               Evaluated across 6 distinct regimes totaling 6,662 instances (including UIUC InjecAgent, AgentDojo,
-              and AI Safety Bench), the integrated perimeter achieves <strong>99.52% defense</strong> on interactive
-              episodes, <strong>98.43% defense</strong> on InjecAgent at 267.7ms CPU latency, and{' '}
-              <strong>zero false alarms</strong> on benign workloads.
+              and AI Safety Bench), the paper reports <strong>99.52% defense</strong> on interactive episodes,{' '}
+              <strong>98.43% defense</strong> on InjecAgent at 267.7 ms CPU latency, and no false alarms on its
+              1,000-case benign set. These are the paper&apos;s results in its own setup.
             </p>
 
             <div className="paper__actions">
