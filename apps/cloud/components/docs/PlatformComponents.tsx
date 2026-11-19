@@ -17,7 +17,7 @@ const GATES = [
   {
     id: 2,
     name: 'CBAC invariants',
-    latency: '<4.8 µs',
+    latency: '~1.5 ms',
     title: 'Gate 2 (Deterministic CBAC Invariants):',
     body: 'Evaluates 4 relational argument constraints: destination containment, scope boundedness, privilege monotonicity, and monetary clamping.',
   },
@@ -74,8 +74,8 @@ const PILLARS = [
     id: 'gateway',
     name: 'Mastyf Gateway',
     role: 'Runtime reverse proxy',
-    body: 'High-throughput fail-closed reverse proxy for MCP JSON-RPC, stdio, and HTTP tool calls. Processes >330,000 requests/sec with sub-millisecond overhead.',
-    tags: ['MCP stdio & HTTP', 'Relational invariants', '>330k req/s fast path', 'Audit or enforce mode'],
+    body: 'High-throughput fail-closed reverse proxy for MCP JSON-RPC, stdio, and HTTP tool calls. Its rules decide in about 1.5 ms per call.',
+    tags: ['MCP stdio & HTTP', 'Relational invariants', '~1.5 ms rule check', 'Audit or enforce mode'],
     link: { href: '/developers', label: 'Explore Gateway docs' },
   },
   {
@@ -114,8 +114,8 @@ export function PlatformComponents() {
           <span className="pillar__role">Appliance and sidecar</span>
         </div>
         <p>
-          A hardware-grade reference monitor that runs as a lightweight, tamper-proof sidecar alongside your agent
-          processes. Evaluates every tool invocation across 4 deterministic gates in &lt;4.8µs. If any check fails, the
+          A reference monitor that runs as a lightweight sidecar alongside your agent processes. Evaluates every tool
+          invocation across 4 deterministic gates, in about 1.5 ms. If any check fails, the
           transport wire is severed before a single byte reaches the backend.
         </p>
         <div className="pillar__actions">
@@ -160,7 +160,7 @@ export function PlatformComponents() {
         </div>
         <p>
           Centralized dashboard and policy distribution network for enterprise agent deployments. Distribute signed
-          YAML policies across thousands of agent runners, verify Ed25519 tamper-proof audit trails, and stream events
+          YAML policies across thousands of agent runners, verify Ed25519-signed, tamper-evident audit trails, and stream events
           to your SIEM.
         </p>
         <span className="badge">SOC2, ISO 27001 ready</span>

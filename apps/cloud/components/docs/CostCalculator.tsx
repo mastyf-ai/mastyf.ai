@@ -60,9 +60,9 @@ export function CostCalculator() {
   const mastyfCost = 49 * teamSize;
   const monthlySavings = Math.max(0, cloudLlmCost - mastyfCost);
 
-  // Latency calculation: 850ms vs 4.8µs
+  // Latency calculation: 850 ms vs the rules' measured ~1.5 ms median
   const cloudHoursPerMonth = Math.round((monthlyCalls * 0.85) / 3600);
-  const mastyfSecondsPerMonth = ((monthlyCalls * 0.0000048)).toFixed(1);
+  const mastyfSecondsPerMonth = ((monthlyCalls * 0.0015)).toFixed(1);
 
   return (
     <div className="panel calc" data-reveal>
@@ -104,7 +104,7 @@ export function CostCalculator() {
               </th>
               <th scope="col">
                 Mastyf Shield sidecar
-                <span className="calc__vendor">Hardware-grade monitor</span>
+                <span className="calc__vendor">Local policy check</span>
               </th>
             </tr>
           </thead>
@@ -112,7 +112,7 @@ export function CostCalculator() {
             <tr>
               <th scope="row">Execution latency</th>
               <td data-label="Cloud guardrails" className="tone-critical">+850 ms / call</td>
-              <td data-label="Mastyf Shield" className="tone-allow">&lt; 4.8 µs (0.004 ms)</td>
+              <td data-label="Mastyf Shield" className="tone-allow">~1.5 ms rules (Protocol X ~1 s)</td>
             </tr>
             <tr>
               <th scope="row">Agent idle waiting time</th>
@@ -122,7 +122,7 @@ export function CostCalculator() {
             <tr>
               <th scope="row">Data privacy</th>
               <td data-label="Cloud guardrails" className="dim">Prompts sent to 3rd party</td>
-              <td data-label="Mastyf Shield" className="tone-allow">100% on-device local</td>
+              <td data-label="Mastyf Shield" className="tone-allow">Rules run on your device; Protocol X checks and activity records go to Mastyf</td>
             </tr>
             <tr className="calc__total">
               <th scope="row">Monthly cost</th>
