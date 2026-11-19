@@ -7,10 +7,8 @@ const root = process.cwd();
 const read = (name: string) => readFileSync(join(root, name), 'utf8');
 
 describe('the Protocol X page', () => {
-  it('has its own tab in the navigation, right after Platform', () => {
-    expect(read('components/SiteNav.tsx')).toMatch(
-      /\{ href: '\/platform', label: 'Platform' \},\s*\{ href: '\/protocol-x', label: 'Protocol X' \},/,
-    );
+  it('has its own tab, first in the navigation', () => {
+    expect(read('components/SiteNav.tsx')).toMatch(/const NAV_LINKS = \[\s*\{ href: '\/protocol-x', label: 'Protocol X' \},/);
   });
 
   it('lets visitors try it: the arena with recorded verdicts', () => {

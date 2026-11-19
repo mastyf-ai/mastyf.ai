@@ -15,7 +15,6 @@ type Props = {
 };
 
 const NAV_LINKS = [
-  { href: '/platform', label: 'Platform' },
   { href: '/protocol-x', label: 'Protocol X' },
   { href: '/docs', label: 'Docs' },
   { href: '/certified', label: 'Certified' },

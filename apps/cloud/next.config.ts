@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   eslint: { ignoreDuringBuilds: true },
   serverExternalPackages: ['better-sqlite3', 'pino'],
+  async redirects() {
+    // The Platform page was retired; its content lives in the docs.
+    return [{ source: '/platform', destination: '/docs/how-it-works', permanent: true }];
+  },
   async headers() {
     return [
       {

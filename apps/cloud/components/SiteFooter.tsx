@@ -15,7 +15,6 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
       { href: '/download', label: 'Download Shield' },
       { href: '/docs', label: 'Documentation' },
       { href: '/certified', label: 'Certified MCPs' },
-      { href: '/platform', label: 'Platform architecture' },
       { href: '/docs/how-it-works#components', label: 'Mastyf Gateway' },
       { href: '/docs/how-it-works#components', label: 'Mastyf Swarm' },
       { href: '/trust', label: 'Mastyf Trust' },
