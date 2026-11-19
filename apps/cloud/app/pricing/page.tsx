@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { SiteNav } from '@/components/SiteNav';
 import { SiteFooter } from '@/components/SiteFooter';
 import { PricingSection } from '@/components/landing/PricingSection';
+import { FreeVsPaid } from '@/components/pricing/FreeVsPaid';
 import { developerOfferFor, type DeveloperOffer } from '@/lib/billing/fulfillment';
 import { getUserOrg } from '@/lib/org-context';
 import { safeAuth } from '@/lib/safe-auth';
@@ -9,7 +10,7 @@ import { safeAuth } from '@/lib/safe-auth';
 export const metadata: Metadata = {
   title: 'Pricing — Mastyf',
   description:
-    'Free to self-host under AGPL-3.0. Paid plans add the Shield desktop app, a team Control Plane, production fleets, and enterprise deployment.',
+    'Free: the Python library, check service and policy engine on your own servers. Paid: the Shield app with Protocol X, DIFC taint tracking and the mastyf.ai dashboard.',
 };
 
 /** The launch offer for this visitor. If it can't be read the page still renders, without a count. */
@@ -33,10 +34,11 @@ export default async function PricingPage() {
         <header className="page-head">
           <h1 className="page-head__title">Pricing</h1>
           <p className="page-head__lead">
-            Free to self-host. Pay when you want the desktop app, a team workspace, or a governed fleet.
+            Free runs on your own servers. Paid adds the Shield app and Mastyf&rsquo;s hosted protection.
           </p>
         </header>
         <PricingSection signedIn={!!session} offer={offer} />
+        <FreeVsPaid />
       </main>
       <SiteFooter />
     </>

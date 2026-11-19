@@ -176,7 +176,7 @@ export function ClosingCta() {
           <Download size={16} strokeWidth={2} aria-hidden="true" />
           <Flip>Download Mastyf Shield</Flip>
         </Link>
-        <Link href="/docs/getting-started#quickstart" className="btn btn-lg" data-magnetic>
+        <Link href="/docs/getting-started#free" className="btn btn-lg" data-magnetic>
           <Terminal size={16} strokeWidth={1.75} aria-hidden="true" />
           <Flip light="var(--accent)">Quickstart</Flip>
         </Link>

@@ -17,10 +17,12 @@ export const DOC_TOPICS: DocTopic[] = [
   {
     slug: 'getting-started',
     title: 'Getting started',
-    summary: 'What Mastyf does and the fastest way to run it for desktop agents, developers and production.',
+    summary: 'Free libraries on your own servers, or the paid Shield app: what each gives you and which to pick.',
     sections: [
       { id: 'overview', label: 'Overview' },
-      { id: 'quickstart', label: 'Quickstart' },
+      { id: 'free', label: 'Free: libraries' },
+      { id: 'paid', label: 'Paid: Shield app' },
+      { id: 'which', label: 'Which one do I need?' },
     ],
   },
   {
@@ -110,7 +112,7 @@ export function docTopic(slug: string): DocTopic {
  */
 export const LEGACY_DOC_ANCHORS: Record<string, string> = {
   overview: docHref('getting-started', 'overview'),
-  quickstart: docHref('getting-started', 'quickstart'),
+  quickstart: docHref('getting-started', 'free'),
   'how-it-works': docHref('how-it-works', 'gates'),
   components: docHref('how-it-works', 'components'),
   integrations: docHref('connect', 'supported-clients'),
