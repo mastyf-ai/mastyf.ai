@@ -492,7 +492,7 @@ html.lenis body {
 
 .footer__main {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr));
   gap: var(--s-8);
   padding: var(--s-10) 0;
   border-top: 1px solid var(--line);
@@ -577,7 +577,7 @@ html.lenis body {
 
 @media (max-width: 1023px) {
   .footer__main {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .footer__brand {

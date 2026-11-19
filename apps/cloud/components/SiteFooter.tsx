@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { GITHUB_REPO_URL } from '@/lib/github-links';
+import { MARKETPLACES } from '@/lib/marketplaces';
 import { SITE_NAME } from '@/lib/product-links';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '@/lib/support';
 
@@ -44,6 +45,10 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
       { href: '/terms', label: 'Terms of service' },
       { href: '/privacy', label: 'Privacy policy' },
     ],
+  },
+  {
+    title: 'Get Mastyf',
+    links: MARKETPLACES.map((m) => ({ href: m.href, label: m.name, external: true })),
   },
 ];
 

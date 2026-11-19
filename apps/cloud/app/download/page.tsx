@@ -15,6 +15,7 @@ import {
 import { cloudDbAvailable } from '@/lib/db';
 import { CONTACT_EMAIL } from '@/lib/product-links';
 import { GITHUB_REPO_URL } from '@/lib/github-links';
+import { MARKETPLACES } from '@/lib/marketplaces';
 import { safeAuth } from '@/lib/safe-auth';
 
 const CHECKOUT_URL = '/pricing';
@@ -182,6 +183,27 @@ export default async function DownloadPage() {
                       GitHub
                       <ArrowUpRight size={13} strokeWidth={1.75} aria-hidden="true" />
                     </a>
+                  </span>
+                </li>
+                <li>
+                  <span>
+                    <strong>Where Mastyf is listed.</strong> The editor extensions lead to Shield; the libraries
+                    are free.
+                  </span>
+                  <span className="dl-alt__links">
+                    {MARKETPLACES.map((m) => (
+                      <a
+                        key={m.name}
+                        href={m.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="link-icon"
+                        title={m.what}
+                      >
+                        {m.name}
+                        <ArrowUpRight size={13} strokeWidth={1.75} aria-hidden="true" />
+                      </a>
+                    ))}
                   </span>
                 </li>
                 <li>
