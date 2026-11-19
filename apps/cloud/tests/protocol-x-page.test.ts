@@ -13,9 +13,9 @@ describe('the Protocol X page', () => {
     );
   });
 
-  it('lets visitors try it: the interactive playground with recorded verdicts', () => {
+  it('lets visitors try it: the arena with recorded verdicts', () => {
     const page = read('app/protocol-x/page.tsx');
-    expect(page).toContain('<Playground />');
+    expect(page).toContain('<PxArena />');
     expect(page).toMatch(/recorded/i);
     expect(page).toContain('href="/pricing"');
     expect(page).toContain('href="/attack-lab"');
