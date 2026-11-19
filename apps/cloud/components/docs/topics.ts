@@ -58,6 +58,17 @@ export const DOC_TOPICS: DocTopic[] = [
     sections: [{ id: 'shield-app', label: 'Shield desktop app' }],
   },
   {
+    slug: 'protocol-x',
+    title: 'Protocol X',
+    summary: 'What Protocol X checks, where it runs in Shield, and how its results were measured.',
+    sections: [
+      { id: 'what', label: 'What it is' },
+      { id: 'in-shield', label: 'What it does in Shield' },
+      { id: 'how-measured', label: 'How we measured' },
+      { id: 'limits', label: 'Limits' },
+    ],
+  },
+  {
     slug: 'performance',
     title: 'Performance and benchmarks',
     summary: 'Latency and cost against cloud guardrails, adversarial benchmark results, and how Mastyf compares.',
