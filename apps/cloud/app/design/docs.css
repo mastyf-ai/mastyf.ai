@@ -517,3 +517,7 @@ th.compare__us {
   line-height: 1.5;
 }
 
+
+.doc-block + p {
+  margin-top: var(--s-6);
+}
