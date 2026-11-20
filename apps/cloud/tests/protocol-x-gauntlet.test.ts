@@ -70,3 +70,22 @@ describe('Protocol X page', () => {
     for (const f of ['PxArena.tsx', 'PxGauntlet.tsx', 'PxDisguises.tsx']) expect(read(`app/protocol-x/${f}`)).toContain('useReducedMotion');
   });
 });
+
+describe('the page holds still while things animate', () => {
+  it('the arena only auto-plays while it is on screen', () => {
+    const src = read('app/protocol-x/PxArena.tsx');
+    expect(src).toContain('IntersectionObserver');
+    expect(src).toMatch(/if \(!auto \|\| reduced \|\| !onScreen\) return;/);
+  });
+
+  it('the arena always reserves its payload box, even before the first throw', () => {
+    expect(read('app/protocol-x/PxArena.tsx')).not.toMatch(/\{ex \? \(\s*<pre className="pxa__payload"/);
+  });
+
+  it('arena readout, payload and gauntlet ticker have fixed heights', () => {
+    const css = read('app/protocol-x/protocol-x.css') + read('app/protocol-x/protocol-x-more.css');
+    expect(css).toMatch(/\.pxa__payload \{[^}]*\n  height: /);
+    expect(css).toMatch(/\.pxa__readout \{[^}]*\n  height: /);
+    expect(css).toMatch(/\.pxg__ticker \{[^}]*white-space: nowrap/);
+  });
+});

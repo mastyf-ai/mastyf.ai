@@ -236,8 +236,11 @@
 }
 
 .pxg__ticker {
-  min-height: 1.4em;
+  height: 1.6em;
   margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-family: var(--font-code);
   font-size: 0.78rem;
   color: var(--ink-3);
@@ -481,6 +484,16 @@
 
   .px-pipe {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .pxa__readout {
+    height: 7.4rem;
+  }
+
+  .pxa__payload {
+    height: 180px;
   }
 }
 

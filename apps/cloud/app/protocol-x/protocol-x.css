@@ -326,8 +326,10 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  align-content: flex-start;
   gap: var(--s-3) var(--s-6);
-  min-height: 2.2rem;
+  height: 5rem;
+  overflow: hidden;
 }
 
 .pxa__verdict {
@@ -403,7 +405,7 @@
 }
 
 .pxa__payload {
-  max-height: 150px;
+  height: 150px;
   margin: 0;
   padding: var(--s-4);
   overflow: auto;
