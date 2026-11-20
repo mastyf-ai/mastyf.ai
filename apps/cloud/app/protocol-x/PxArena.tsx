@@ -1,15 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, FolderOpen, KeyRound, Leaf, Route, Wrench, FileText } from 'lucide-react';
+import { Bot, FileText, FolderOpen, KeyRound, Leaf, Route, Wrench } from 'lucide-react';
 import { useReducedMotion } from '@/app/attack-lab/GateSim';
 import type { PlayExample } from '@/app/attack-lab/playground-types';
-import { ARENA_GOALS, nextThrow, splitPayload, type ArenaGoalId } from './arena-data';
+import {
+  ARENA_DISGUISES,
+  ARENA_GOALS,
+  cellPool,
+  splitPayload,
+  verdictFor,
+  type ArenaDisguiseId,
+  type ArenaGoalId,
+  type Release,
+} from './arena-data';
 
 /**
- * Throw a recorded attack at Protocol X and watch it: the packet flies into the model, the meter
- * fills to the recorded attack score, then it is stopped or let through. Plays on its own until the
- * visitor picks something. Every verdict, score and time is a recording; nothing calls the model.
+ * Throw a recorded attack at Protocol X: pick what the attacker wants and how it is disguised, then
+ * watch the packet fly into the model, the meter fill to the recorded score, and the verdict. Switch
+ * to the October model to replay its own recorded verdict on the same text. Plays on its own until
+ * the visitor picks something. Nothing calls the model.
  */
 
 type Phase = 'idle' | 'travel' | 'scan' | 'blocked' | 'passed';
@@ -25,18 +35,29 @@ const ICONS: Record<ArenaGoalId, typeof Bot> = {
 const TIMING = { travel: 700, scan: 1100, hold: 1900 };
 const RING = 2 * Math.PI * 46;
 const SHARDS = Array.from({ length: 10 }, (_, i) => i);
+const AUTO: [ArenaGoalId, ArenaDisguiseId][] = [
+  ['credential-exfil', 'delayed-trigger'],
+  ['prompt-injection', 'split-assembly'],
+  ['harmless', 'error-recovery'],
+  ['boundary-evasion', 'error-recovery'],
+  ['cross-tool-chain', 'delayed-trigger'],
+  ['credential-exfil', 'split-assembly'],
+];
 
-type Throw = { goal: ArenaGoalId; example: PlayExample; n: number };
+type Throw = { goal: ArenaGoalId; disguise: ArenaDisguiseId; example: PlayExample; release: Release; n: number };
 
 export function PxArena() {
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<Phase>('idle');
   const [current, setCurrent] = useState<Throw | null>(null);
   const [auto, setAuto] = useState(true);
+  const [goal, setGoal] = useState<ArenaGoalId>('credential-exfil');
+  const [disguise, setDisguise] = useState<ArenaDisguiseId>('delayed-trigger');
+  const [release, setRelease] = useState<Release>('now');
   const [history, setHistory] = useState<{ blocked: boolean; harmless: boolean }[]>([]);
   const cursors = useRef<Record<string, number>>({});
   const timers = useRef<number[]>([]);
-  const autoGoal = useRef(0);
+  const autoStep = useRef(0);
   const count = useRef(0);
 
   const clear = () => {
@@ -44,16 +65,24 @@ export function PxArena() {
     timers.current = [];
   };
 
-  const fire = useCallback(
-    (goal: ArenaGoalId) => {
+  const play = useCallback(
+    (g: ArenaGoalId, d: ArenaDisguiseId, r: Release, example?: PlayExample) => {
       clear();
-      const { example, next } = nextThrow(goal, cursors.current[goal] ?? 0);
-      cursors.current[goal] = next;
+      let ex = example;
+      if (!ex) {
+        const pool = cellPool(g, d);
+        const key = `${g}:${d}`;
+        const i = (cursors.current[key] ?? 0) % pool.length;
+        cursors.current[key] = i + 1;
+        ex = pool[i];
+      }
+      if (!ex) return;
       count.current += 1;
-      setCurrent({ goal, example, n: count.current });
-      const verdict: Phase = example.now.blocked ? 'blocked' : 'passed';
+      setCurrent({ goal: g, disguise: d, example: ex, release: r, n: count.current });
+      const v = verdictFor(ex, r);
+      const verdict: Phase = v?.blocked ? 'blocked' : 'passed';
       const record = () =>
-        setHistory((h) => [...h, { blocked: example.now.blocked, harmless: goal === 'harmless' }].slice(-24));
+        setHistory((h) => [...h, { blocked: Boolean(v?.blocked), harmless: g === 'harmless' }].slice(-30));
       if (reduced) {
         setPhase(verdict);
         record();
@@ -71,13 +100,14 @@ export function PxArena() {
     [reduced],
   );
 
-  // Plays by itself until the visitor picks something (never with reduced motion).
   useEffect(() => {
     if (!auto || reduced) return;
-    const order: ArenaGoalId[] = ['credential-exfil', 'prompt-injection', 'harmless', 'boundary-evasion', 'cross-tool-chain'];
     const step = () => {
-      fire(order[autoGoal.current % order.length]);
-      autoGoal.current += 1;
+      const [g, d] = AUTO[autoStep.current % AUTO.length];
+      autoStep.current += 1;
+      setGoal(g);
+      setDisguise(d);
+      play(g, d, 'now');
     };
     const first = window.setTimeout(step, 600);
     const loop = window.setInterval(step, TIMING.travel + TIMING.scan + TIMING.hold);
@@ -85,40 +115,73 @@ export function PxArena() {
       window.clearTimeout(first);
       window.clearInterval(loop);
     };
-  }, [auto, reduced, fire]);
+  }, [auto, reduced, play]);
 
   useEffect(() => clear, []);
 
-  const pick = (goal: ArenaGoalId) => {
+  const pickGoal = (g: ArenaGoalId) => {
     setAuto(false);
-    fire(goal);
+    setGoal(g);
+    play(g, disguise, release);
+  };
+  const pickDisguise = (d: ArenaDisguiseId) => {
+    setAuto(false);
+    setDisguise(d);
+    play(goal, d, release);
+  };
+  const pickRelease = (r: Release) => {
+    setAuto(false);
+    setRelease(r);
+    if (current) play(current.goal, current.disguise, r, current.example);
   };
 
   const ex = current?.example;
+  const v = ex && current ? verdictFor(ex, current.release) : null;
+  const other = ex && current ? verdictFor(ex, current.release === 'now' ? 'before' : 'now') : null;
   const isCall = ex?.carrier === 'call';
   const scored = phase === 'scan' || phase === 'blocked' || phase === 'passed';
-  const p = ex && scored ? ex.now.p : 0;
+  const p = v && scored ? v.p : 0;
   const stopped = history.filter((h) => h.blocked && !h.harmless).length;
   const attacks = history.filter((h) => !h.harmless).length;
+  const differs = v && other && phase !== 'travel' && phase !== 'scan' && v.blocked !== other.blocked;
 
   return (
-    <div className="pxa" data-phase={phase}>
-      <div className="pxa__goals" role="group" aria-label="Pick an attack to throw">
-        {ARENA_GOALS.map((g) => {
-          const Icon = ICONS[g.id];
-          return (
-            <button
-              key={g.id}
-              type="button"
-              className={`pxa__goal${g.id === 'harmless' ? ' pxa__goal--calm' : ''}`}
-              aria-pressed={current?.goal === g.id}
-              onClick={() => pick(g.id)}
-            >
-              <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
-              <span>{g.label}</span>
+    <div className="pxa" data-phase={phase} data-release={current?.release ?? 'now'}>
+      <div className="pxa__controls">
+        <div className="pxa__goals" role="group" aria-label="What the attacker wants">
+          {ARENA_GOALS.map((g) => {
+            const Icon = ICONS[g.id];
+            return (
+              <button
+                key={g.id}
+                type="button"
+                className={`pxa__goal${g.id === 'harmless' ? ' pxa__goal--calm' : ''}`}
+                aria-pressed={goal === g.id}
+                onClick={() => pickGoal(g.id)}
+              >
+                <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
+                <span>{g.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="pxa__row">
+          <div className="pxa__seg" role="group" aria-label="How it is disguised">
+            {ARENA_DISGUISES.map((d) => (
+              <button key={d.id} type="button" aria-pressed={disguise === d.id} onClick={() => pickDisguise(d.id)}>
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <div className="pxa__seg pxa__seg--release" role="group" aria-label="Which model">
+            <button type="button" aria-pressed={release === 'now'} onClick={() => pickRelease('now')}>
+              November model
             </button>
-          );
-        })}
+            <button type="button" aria-pressed={release === 'before'} onClick={() => pickRelease('before')}>
+              October model
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="pxa__stage" aria-hidden="true">
@@ -127,29 +190,21 @@ export function PxArena() {
           {isCall ? <Bot size={22} strokeWidth={1.5} /> : <FileText size={22} strokeWidth={1.5} />}
           <span>{isCall ? 'Agent call' : 'Tool result'}</span>
         </div>
-
         <div className="pxa__core">
           <svg viewBox="0 0 100 100" className="pxa__ring">
             <circle cx="50" cy="50" r="46" className="pxa__ring-bg" />
-            <circle
-              cx="50"
-              cy="50"
-              r="46"
-              className="pxa__ring-fill"
-              style={{ strokeDasharray: RING, strokeDashoffset: RING * (1 - p) }}
-            />
+            <circle cx="50" cy="50" r="46" className="pxa__ring-fill" style={{ strokeDasharray: RING, strokeDashoffset: RING * (1 - p) }} />
           </svg>
           <div className="pxa__orbit" />
           <div className="pxa__orbit pxa__orbit--2" />
           <strong className="pxa__core-label">X</strong>
-          <span className="pxa__score">{scored && ex ? `${Math.round(ex.now.p * 100)}` : ''}</span>
+          <span className="pxa__score">{scored && v ? `${Math.round(v.p * 100)}` : ''}</span>
+          {current?.release === 'before' ? <span className="pxa__model">Oct</span> : null}
         </div>
-
         <div className="pxa__node pxa__node--to">
           {isCall ? <Wrench size={22} strokeWidth={1.5} /> : <Bot size={22} strokeWidth={1.5} />}
           <span>{isCall ? 'Your tool' : 'Your agent'}</span>
         </div>
-
         {current ? (
           <div key={current.n} className="pxa__packet">
             <span className="pxa__packet-dot" />
@@ -162,12 +217,18 @@ export function PxArena() {
       </div>
 
       <div className="pxa__readout" aria-live="polite">
-        {ex && (phase === 'blocked' || phase === 'passed') ? (
+        {ex && v && (phase === 'blocked' || phase === 'passed') ? (
           <p className={`pxa__verdict pxa__verdict--${phase}`}>
             <b>{phase === 'blocked' ? 'Blocked' : 'Let through'}</b>
-            <span>{Math.round(ex.now.p * 100)}% attack</span>
-            {ex.now.ms ? <span>{(ex.now.ms / 1000).toFixed(1)} s</span> : null}
-            {current?.goal !== 'harmless' && phase === 'passed' ? <span className="pxa__miss">recorded miss</span> : null}
+            <span>{Math.round(v.p * 100)}% attack</span>
+            {v.ms ? <span>{(v.ms / 1000).toFixed(1)} s</span> : null}
+            <span className="pxa__rel">{current?.release === 'now' ? 'November model' : 'October model'}</span>
+            {current?.goal !== 'harmless' && phase === 'passed' ? <span className="pxa__miss">missed</span> : null}
+            {differs ? (
+              <span className="pxa__diff">
+                {current?.release === 'now' ? 'October model' : 'November model'}: {other?.blocked ? 'blocked' : 'missed'}
+              </span>
+            ) : null}
           </p>
         ) : (
           <p className="pxa__verdict pxa__verdict--wait">{phase === 'idle' ? 'Pick an attack' : 'Checking…'}</p>
