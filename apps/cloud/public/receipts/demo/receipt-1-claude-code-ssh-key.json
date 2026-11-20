@@ -1,0 +1,23 @@
+{
+  "type": "mastyf.block-receipt",
+  "version": 1,
+  "receipt_id": "d6174aee-5464-4620-80d2-71ae02fa879a",
+  "issued_at": "2026-11-20T09:14:03.000Z",
+  "agent": "claude-code",
+  "tool": "Read",
+  "arguments_sha256": "7538e13d62e193f89365f4e7bdb16fbd5fe06e4c69dc98c25143752202474773",
+  "arguments_preview": "{\"file_path\":\"~/.ssh/id_rsa\"}",
+  "decision": "block",
+  "layer": "policy",
+  "rule": "path-guard.ssh-private-key",
+  "reason": "Reading SSH private keys is not allowed by your policy.",
+  "policy_sha256": "217363c1eb771c40524d840777e2702efe5016266f4f364fe89976ff6ff5595a",
+  "shield_version": "demo",
+  "prev_receipt_sha256": null,
+  "signature": {
+    "alg": "Ed25519",
+    "key_id": "1f12c58abfdbbca1",
+    "public_key": "SEA7FunXx0j5KfFuo9qlQzIu1c4EmrVcmjeuLnc636g=",
+    "value": "lgzmPaAH1nn5ocMS3rEGG80/fm2C3mACEfgyG0s/Wxd/e8KfDTQ9Sv37fe+NpH8sII74IsNnbfakAsFhLKxzAg=="
+  }
+}

