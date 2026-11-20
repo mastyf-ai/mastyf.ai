@@ -1,51 +1,637 @@
-/* Protocol X page: results in the head, the playground, then what it does in Shield. */
-.px-facts dd {
-  font-variant-numeric: tabular-nums;
-}
+/* Protocol X page: a big title, the arena, counting numbers, three roles, the way in. */
 
-.px-facts__note {
-  display: block;
-  margin-top: 4px;
-  color: var(--ink-3);
-  font-size: 0.78rem;
-  line-height: 1.4;
-}
-
-.px-try h2,
-.px-does h2 {
-  margin: 0 0 var(--s-3);
-}
-
-.px-try__lead {
-  max-width: 68ch;
-  margin: 0 0 var(--s-6, 32px);
-  color: var(--ink-2);
-  line-height: 1.6;
-}
-
-.px-does__list {
-  list-style: none;
-  margin: var(--s-5) 0 0;
-  padding: 0;
+.px-page {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--s-12);
+}
+
+.px-hero {
+  text-align: center;
+  padding-top: var(--s-8);
+}
+
+.px-hero__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(3.4rem, 9vw, 7.5rem);
+  letter-spacing: var(--track-display);
+  line-height: 0.95;
+  color: var(--ink-strong);
+}
+
+.px-hero__lead {
+  max-width: none;
+  margin: var(--s-4) auto 0;
+  font-size: var(--fs-lead);
+  color: var(--ink-2);
+}
+
+/* ------------------------------------------------------------ arena */
+
+.px-arena {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.px-arena__note {
+  max-width: none;
+  margin: var(--s-4) auto 0;
+  text-align: center;
+  font-size: var(--fs-meta);
+  color: var(--ink-3);
+}
+
+.px-arena__note a {
+  color: var(--ink-2);
+}
+
+.pxa {
+  display: grid;
   gap: var(--s-5);
 }
 
-.px-does__list li {
-  padding: var(--s-5);
+.pxa__goals {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-2) var(--s-3);
+}
+
+.pxa__goal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
   background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast) var(--ease),
+    background var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+
+.pxa__goal:hover {
+  border-color: var(--accent-line);
+  transform: translateY(-1px);
+}
+
+.pxa__goal:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.pxa__goal:focus-visible {
+  outline: 2px solid var(--line-focus);
+  outline-offset: 2px;
+}
+
+.pxa__goal[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pxa__goal--calm[aria-pressed="true"] {
+  border-color: var(--ok-line);
+  background: var(--ok-soft);
+}
+
+.pxa__stage {
+  position: relative;
+  height: 280px;
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-xl);
+  background:
+    radial-gradient(circle at 50% 50%, var(--accent-soft), transparent 55%),
+    var(--surface);
+  overflow: hidden;
 }
 
-.px-does__list h3 {
-  margin: 0 0 var(--s-2);
-  font-size: 1rem;
+.pxa__track {
+  position: absolute;
+  top: 50%;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--line-strong) 0 8px, transparent 8px 16px);
+  background-size: 32px 2px;
+  animation: pxa-flow 1.2s linear infinite;
 }
 
-.px-does__list p {
-  margin: 0;
+.pxa__node {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  justify-items: center;
+  gap: var(--s-2);
+  transform: translateY(-50%);
+  font-size: var(--fs-meta);
   color: var(--ink-2);
-  line-height: 1.6;
+}
+
+.pxa__node svg {
+  box-sizing: content-box;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--ink);
+  transition:
+    border-color var(--t) var(--ease),
+    box-shadow var(--t) var(--ease);
+}
+
+.pxa__node--from {
+  left: 4%;
+}
+
+.pxa__node--to {
+  right: 4%;
+}
+
+.pxa[data-phase="passed"] .pxa__node--to svg {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 6px var(--ok-soft);
+}
+
+.pxa__core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: var(--bg);
+  transform: translate(-50%, -50%);
+  transition: box-shadow var(--t) var(--ease);
+}
+
+.pxa__ring {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.pxa__ring-bg {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 3;
+}
+
+.pxa__ring-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition:
+    stroke-dashoffset 1s var(--ease),
+    stroke var(--t) var(--ease);
+}
+
+.pxa__orbit {
+  position: absolute;
+  inset: 16px;
+  border: 1px dashed var(--accent-line);
+  border-radius: 50%;
+  animation: pxa-spin 14s linear infinite;
+}
+
+.pxa__orbit--2 {
+  inset: 32px;
+  animation-duration: 9s;
+  animation-direction: reverse;
+}
+
+.pxa[data-phase="scan"] .pxa__orbit {
+  animation-duration: 1.1s;
+  border-color: var(--accent);
+}
+
+.pxa__core-label {
+  font-family: var(--font-display);
+  font-size: 2.8rem;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.pxa__score {
+  position: absolute;
+  bottom: 30px;
+  font-family: var(--font-code);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.pxa[data-phase="blocked"] .pxa__core {
+  box-shadow:
+    0 0 0 8px var(--critical-soft),
+    0 0 60px var(--critical-soft);
+  animation: pxa-shake 0.35s var(--ease);
+}
+
+.pxa[data-phase="blocked"] .pxa__ring-fill {
+  stroke: var(--critical);
+}
+
+.pxa[data-phase="blocked"] .pxa__core-label {
+  color: var(--critical);
+}
+
+.pxa[data-phase="passed"] .pxa__ring-fill {
+  stroke: var(--ok);
+}
+
+/* The packet: flies in, sits in the core while it is read, then shatters or flies on. */
+.pxa__packet {
+  position: absolute;
+  top: 50%;
+  left: 14%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface-raised);
+  font-family: var(--font-code);
+  font-size: 0.78rem;
+  color: var(--ink);
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.pxa__packet-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+
+.pxa[data-phase="travel"] .pxa__packet {
+  animation: pxa-in 0.7s cubic-bezier(0.5, 0, 0.2, 1) forwards;
+}
+
+.pxa[data-phase="scan"] .pxa__packet {
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.7);
+  opacity: 0.85;
+  animation: pxa-pulse 0.5s ease-in-out infinite alternate;
+}
+
+.pxa[data-phase="blocked"] .pxa__packet {
+  left: 50%;
+  border-color: transparent;
+  background: transparent;
+}
+
+.pxa[data-phase="blocked"] .pxa__packet-dot,
+.pxa[data-phase="blocked"] .pxa__packet-tool {
+  animation: pxa-pop 0.3s var(--ease) forwards;
+}
+
+.pxa[data-phase="passed"] .pxa__packet {
+  animation: pxa-out 0.9s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  border-color: var(--ok-line);
+}
+
+.pxa[data-phase="passed"] .pxa__packet-dot {
+  background: var(--ok);
+}
+
+.pxa__shard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  background: var(--critical);
+  opacity: 0;
+}
+
+.pxa[data-phase="blocked"] .pxa__shard {
+  animation: pxa-shard 0.8s cubic-bezier(0.2, 0.6, 0.3, 1) forwards;
+}
+
+/* ------------------------------------------------------------ readout */
+
+.pxa__readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3) var(--s-6);
+  min-height: 2.2rem;
+}
+
+.pxa__verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2) var(--s-4);
+  margin: 0;
+  font-family: var(--font-code);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+
+.pxa__verdict b {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.pxa__verdict--blocked b {
+  color: var(--critical);
+}
+
+.pxa__verdict--passed b {
+  color: var(--ok);
+}
+
+.pxa__verdict--blocked,
+.pxa__verdict--passed {
+  animation: pxa-rise 0.35s var(--ease);
+}
+
+.pxa__miss {
+  padding: 1px 8px;
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-pill);
+  color: var(--warn);
+}
+
+.pxa__tally {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-family: var(--font-code);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+
+.pxa__dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 220px;
+}
+
+.pxa__dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pxa-rise 0.3s var(--ease);
+}
+
+.pxa__dots .is-stop {
+  background: var(--critical);
+}
+
+.pxa__dots .is-miss {
+  background: var(--warn);
+}
+
+.pxa__dots .is-calm {
+  background: var(--ok);
+}
+
+.pxa__payload {
+  max-height: 150px;
+  margin: 0;
+  padding: var(--s-4);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg-sunken);
+  font-family: var(--font-code);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink-3);
+  animation: pxa-rise 0.4s var(--ease);
+}
+
+.pxa__payload mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--critical-soft);
+  color: var(--critical);
+}
+
+/* ------------------------------------------------------------ numbers, roles, way in */
+
+.pxc {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-6);
+  margin: 0;
+  text-align: center;
+}
+
+.pxc > div {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.pxc dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.pxc small {
+  font-size: 0.45em;
+  color: var(--ink-3);
+}
+
+.pxc dt {
+  margin-top: var(--s-2);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+
+.px-roles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-6);
+  text-align: center;
+}
+
+.px-roles > div {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-3);
+  color: var(--ink);
+}
+
+.px-roles svg {
+  color: var(--accent);
+}
+
+.px-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4) var(--s-5);
+  padding-bottom: var(--s-12);
+}
+
+/* ------------------------------------------------------------ motion */
+
+@keyframes pxa-flow {
+  to {
+    background-position: 32px 0;
+  }
+}
+
+@keyframes pxa-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pxa-in {
+  from {
+    left: 14%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  to {
+    left: 50%;
+  }
+}
+
+@keyframes pxa-out {
+  from {
+    left: 50%;
+  }
+  to {
+    left: 86%;
+    opacity: 0.2;
+  }
+}
+
+@keyframes pxa-pulse {
+  to {
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+}
+
+@keyframes pxa-pop {
+  to {
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+
+@keyframes pxa-shard {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(90px) rotate(90deg);
+  }
+}
+
+@keyframes pxa-shake {
+  25% {
+    transform: translate(calc(-50% - 4px), -50%);
+  }
+  75% {
+    transform: translate(calc(-50% + 4px), -50%);
+  }
+}
+
+@keyframes pxa-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (max-width: 767px) {
+  .pxa__stage {
+    height: 220px;
+  }
+
+  .pxa__core {
+    width: 116px;
+    height: 116px;
+  }
+
+  .pxa__orbit {
+    inset: 12px;
+  }
+
+  .pxa__orbit--2 {
+    inset: 24px;
+  }
+
+  .pxa__core-label {
+    font-size: 2rem;
+  }
+
+  .pxa__score {
+    bottom: 18px;
+  }
+
+  .pxa__node span {
+    display: none;
+  }
+
+  .pxa__goal {
+    padding: var(--s-2) var(--s-4);
+  }
+
+  .pxc {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .px-roles {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pxa__track,
+  .pxa__orbit,
+  .pxa__packet,
+  .pxa__core,
+  .pxa__verdict,
+  .pxa__payload,
+  .pxa__dots i,
+  .pxa__packet-dot,
+  .pxa__packet-tool,
+  .pxa__shard {
+    animation: none !important;
+  }
+
+  .pxa__ring-fill {
+    transition: none;
+  }
+
+  .pxa[data-phase="blocked"] .pxa__packet-dot,
+  .pxa[data-phase="blocked"] .pxa__packet-tool {
+    opacity: 0;
+  }
+
+  .pxa[data-phase="passed"] .pxa__packet {
+    left: 86%;
+  }
 }

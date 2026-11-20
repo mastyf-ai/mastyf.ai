@@ -87,7 +87,7 @@ const PRODUCTS = [
     name: 'Mastyf Swarm',
     tagColor: 'text-purple-400',
     desc: "Stress-tests your agent's execution boundary with 4,216 multi-turn InjecAgent jailbreak vectors before deployment.",
-    href: '/platform#swarm',
+    href: '/docs/how-it-works#components',
     cta: 'Run in CI',
   },
   {

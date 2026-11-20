@@ -17,10 +17,12 @@ export const DOC_TOPICS: DocTopic[] = [
   {
     slug: 'getting-started',
     title: 'Getting started',
-    summary: 'What Mastyf does and the fastest way to run it for desktop agents, developers and production.',
+    summary: 'Free libraries on your own servers, or the paid Shield app: what each gives you and which to pick.',
     sections: [
       { id: 'overview', label: 'Overview' },
-      { id: 'quickstart', label: 'Quickstart' },
+      { id: 'free', label: 'Free: libraries' },
+      { id: 'paid', label: 'Paid: Shield app' },
+      { id: 'which', label: 'Which one do I need?' },
     ],
   },
   {
@@ -56,6 +58,17 @@ export const DOC_TOPICS: DocTopic[] = [
     title: 'Shield desktop app',
     summary: 'The desktop sidecar that checks every MCP tool call on your machine, with no cloud round trip.',
     sections: [{ id: 'shield-app', label: 'Shield desktop app' }],
+  },
+  {
+    slug: 'protocol-x',
+    title: 'Protocol X',
+    summary: 'What Protocol X checks, where it runs in Shield, and how its results were measured.',
+    sections: [
+      { id: 'what', label: 'What it is' },
+      { id: 'in-shield', label: 'What it does in Shield' },
+      { id: 'how-measured', label: 'How we measured' },
+      { id: 'limits', label: 'Limits' },
+    ],
   },
   {
     slug: 'performance',
@@ -110,7 +123,7 @@ export function docTopic(slug: string): DocTopic {
  */
 export const LEGACY_DOC_ANCHORS: Record<string, string> = {
   overview: docHref('getting-started', 'overview'),
-  quickstart: docHref('getting-started', 'quickstart'),
+  quickstart: docHref('getting-started', 'free'),
   'how-it-works': docHref('how-it-works', 'gates'),
   components: docHref('how-it-works', 'components'),
   integrations: docHref('connect', 'supported-clients'),

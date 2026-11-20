@@ -7,15 +7,13 @@ const root = process.cwd();
 const read = (name: string) => readFileSync(join(root, name), 'utf8');
 
 describe('the Protocol X page', () => {
-  it('has its own tab in the navigation, right after Platform', () => {
-    expect(read('components/SiteNav.tsx')).toMatch(
-      /\{ href: '\/platform', label: 'Platform' \},\s*\{ href: '\/protocol-x', label: 'Protocol X' \},/,
-    );
+  it('has its own tab, first in the navigation', () => {
+    expect(read('components/SiteNav.tsx')).toMatch(/const NAV_LINKS = \[\s*\{ href: '\/protocol-x', label: 'Protocol X' \},/);
   });
 
-  it('lets visitors try it: the interactive playground with recorded verdicts', () => {
+  it('lets visitors try it: the arena with recorded verdicts', () => {
     const page = read('app/protocol-x/page.tsx');
-    expect(page).toContain('<Playground />');
+    expect(page).toContain('<PxArena />');
     expect(page).toMatch(/recorded/i);
     expect(page).toContain('href="/pricing"');
     expect(page).toContain('href="/attack-lab"');

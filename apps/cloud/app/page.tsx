@@ -5,6 +5,7 @@ import { HeroSection } from '@/components/landing/HeroSection';
 import { SeeTheDifference } from '@/components/landing/SeeTheDifference';
 import { ProtocolXSim } from '@/components/landing/ProtocolXSim';
 import { SignedReceipts } from '@/components/landing/SignedReceipts';
+import { WorksWithRibbon } from '@/components/landing/WorksWithRibbon';
 import { ExplainerVideo } from '@/components/landing/ExplainerVideo';
 import { Preloader } from '@/components/landing/Preloader';
 import { ClosingCta, HowItWorks, ProductRow, ProofRow } from '@/components/landing/HomeSections';
@@ -18,6 +19,7 @@ export default async function HomePage() {
       <SiteNav session={!!session} />
       <main id="main">
         <HeroSection session={!!session} />
+        <WorksWithRibbon />
         <ProtocolXSim />
         <SeeTheDifference />
         <HowItWorks />

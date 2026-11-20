@@ -290,7 +290,7 @@ export const PRICING_TIERS = [
   {
     id: 'community',
     audience: 'Individuals and researchers',
-    highlights: ['Self-hosted Gateway', 'YAML policy engine', 'Public MCP trust scores'],
+    highlights: ['Python library: pip install mastyf-ai', 'Policy engine on your own servers', 'Check service for any agent'],
     shortCta: 'Get it on GitHub',
     name: 'Community',
     price: '₹0',
