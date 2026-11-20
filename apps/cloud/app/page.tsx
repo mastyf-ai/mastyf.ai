@@ -4,6 +4,7 @@ import { SiteNav } from '@/components/SiteNav';
 import { HeroSection } from '@/components/landing/HeroSection';
 import { SeeTheDifference } from '@/components/landing/SeeTheDifference';
 import { ProtocolXSim } from '@/components/landing/ProtocolXSim';
+import { SignedReceipts } from '@/components/landing/SignedReceipts';
 import { ExplainerVideo } from '@/components/landing/ExplainerVideo';
 import { Preloader } from '@/components/landing/Preloader';
 import { ClosingCta, HowItWorks, ProductRow, ProofRow } from '@/components/landing/HomeSections';
@@ -20,6 +21,7 @@ export default async function HomePage() {
         <ProtocolXSim />
         <SeeTheDifference />
         <HowItWorks />
+        <SignedReceipts />
         <section className="section overview" id="overview" aria-labelledby="overview-title">
           <div className="overview__copy">
             <p className="eyebrow">Overview — 1:32</p>
