@@ -59,6 +59,17 @@ export function PxArena() {
   const timers = useRef<number[]>([]);
   const autoStep = useRef(0);
   const count = useRef(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [onScreen, setOnScreen] = useState(false);
+
+  // Auto-play only while the arena is on screen: nothing changes size above the gauntlet while it runs.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting), { threshold: 0.25 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   const clear = () => {
     timers.current.forEach((t) => window.clearTimeout(t));
@@ -101,7 +112,7 @@ export function PxArena() {
   );
 
   useEffect(() => {
-    if (!auto || reduced) return;
+    if (!auto || reduced || !onScreen) return;
     const step = () => {
       const [g, d] = AUTO[autoStep.current % AUTO.length];
       autoStep.current += 1;
@@ -115,7 +126,7 @@ export function PxArena() {
       window.clearTimeout(first);
       window.clearInterval(loop);
     };
-  }, [auto, reduced, play]);
+  }, [auto, reduced, onScreen, play]);
 
   useEffect(() => clear, []);
 
@@ -146,7 +157,7 @@ export function PxArena() {
   const differs = v && other && phase !== 'travel' && phase !== 'scan' && v.blocked !== other.blocked;
 
   return (
-    <div className="pxa" data-phase={phase} data-release={current?.release ?? 'now'}>
+    <div className="pxa" ref={rootRef} data-phase={phase} data-release={current?.release ?? 'now'}>
       <div className="pxa__controls">
         <div className="pxa__goals" role="group" aria-label="What the attacker wants">
           {ARENA_GOALS.map((g) => {
@@ -247,13 +258,13 @@ export function PxArena() {
         </div>
       </div>
 
-      {ex ? (
-        <pre className="pxa__payload" key={current?.n}>
-          {splitPayload(ex.payload, ex.hidden).map((part, i) =>
-            part.hidden ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>,
-          )}
-        </pre>
-      ) : null}
+      <pre className="pxa__payload" key={current?.n ?? 0}>
+        {ex
+          ? splitPayload(ex.payload, ex.hidden).map((part, i) =>
+              part.hidden ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>,
+            )
+          : null}
+      </pre>
     </div>
   );
 }
