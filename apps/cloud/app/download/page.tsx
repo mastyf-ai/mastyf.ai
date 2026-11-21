@@ -8,7 +8,6 @@ import { issuedLicenseSummary } from '@/lib/billing/license-keys';
 import {
   SHIELD_PLATFORM_ORDER,
   SHIELD_PLATFORMS,
-  SHIELD_VERSION,
   shieldPlatformAvailable,
   type ShieldPlatform,
 } from '@/lib/billing/shield-builds';
@@ -31,11 +30,6 @@ async function hasShieldPlan(email: string | null | undefined): Promise<boolean>
   } catch {
     return false;
   }
-}
-
-function platformsLabel(): string {
-  const soon = SHIELD_PLATFORM_ORDER.filter((id) => !shieldPlatformAvailable(id)).map((id) => SHIELD_PLATFORMS[id].name);
-  return soon.length ? `${AVAILABLE_NAMES.join(', ')} (${soon.join(' and ')} soon)` : AVAILABLE_NAMES.join(', ');
 }
 
 export const metadata = {
@@ -107,23 +101,9 @@ export default async function DownloadPage() {
           <div>
             <h1 className="page-head__title">Download Mastyf Shield</h1>
             <p className="page-head__lead">
-              A desktop app that sits between your local agents and their tools. Every tool call Claude Desktop, Cursor
-              or Windsurf makes is checked against your policy before it runs.
+              The desktop app that guards Claude Desktop, Cursor and Windsurf. Every action they take is checked
+              against your rules before it runs.
             </p>
-            <dl className="facts">
-              <div>
-                <dt>Version</dt>
-                <dd>{SHIELD_VERSION}</dd>
-              </div>
-              <div>
-                <dt>Platforms</dt>
-                <dd>{platformsLabel()}</dd>
-              </div>
-              <div>
-                <dt>Checks</dt>
-                <dd>Rules on your device, Protocol X hosted</dd>
-              </div>
-            </dl>
           </div>
 
           <GatedDownloadBox entitled={entitled} signedIn={!!session} checkoutUrl={CHECKOUT_URL} />
