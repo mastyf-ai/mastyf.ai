@@ -16,6 +16,7 @@ type Props = {
 
 const NAV_LINKS = [
   { href: '/protocol-x', label: 'Protocol X' },
+  { href: '/authority', label: 'Authority' },
   { href: '/docs', label: 'Docs' },
   { href: '/certified', label: 'Certified' },
   { href: '/research', label: 'Research' },
