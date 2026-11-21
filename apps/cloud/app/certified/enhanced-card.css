@@ -54,24 +54,16 @@
   flex-shrink: 0;
 }
 
-.certified-stat-vuln {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
+/* Stats stay neutral; only a known vulnerability is set apart, by weight rather than colour. */
+.certified-stat-vuln,
 .certified-stat-critical {
-  color: var(--critical);
+  color: var(--ink-strong);
   font-weight: 700;
 }
 
-.certified-stat-clean {
-  color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 8%, transparent);
-}
-
+.certified-stat-clean,
 .certified-stat-provenance {
-  color: var(--info);
-  background: color-mix(in srgb, var(--info) 8%, transparent);
+  color: var(--muted);
 }
 
 /* Pillar mini-badges */
@@ -117,8 +109,8 @@
 }
 
 .certified-scan-live {
-  background: color-mix(in srgb, var(--info) 10%, transparent);
-  color: var(--info);
+  background: rgb(var(--tint) / 0.08);
+  color: var(--ink-2);
 }
 
 .certified-scan-static {
@@ -131,16 +123,8 @@
   font-weight: 500;
 }
 
-.certified-freshness.fresh {
-  color: var(--ok);
-}
-
-.certified-freshness.moderate {
-  color: var(--accent);
-}
-
-.certified-freshness.stale {
-  color: var(--critical);
+.certified-freshness {
+  color: var(--muted);
 }
 
 /* Confidence badge */
@@ -157,8 +141,8 @@
 }
 
 .certified-confidence-verified {
-  color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  color: var(--ink-2);
+  background: rgb(var(--tint) / 0.06);
 }
 
 .certified-confidence-estimated {
@@ -168,23 +152,22 @@
 
 /* Risk label */
 .certified-card-risk-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 600;
   line-height: 1;
 }
 
 /* CVSS display */
 .certified-stat-cvss {
-  color: var(--critical);
+  color: var(--ink-strong);
   font-weight: 600;
   font-size: 0.7rem;
 }
 
 /* License badge */
 .certified-stat-license {
-  color: var(--info);
-  background: color-mix(in srgb, var(--info) 8%, transparent);
+  color: var(--muted);
 }
 
 /* Dimension breakdown */
@@ -221,6 +204,7 @@
 .certified-dim-fill {
   display: block;
   height: 100%;
+  background: rgb(var(--tint) / 0.4);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
@@ -272,9 +256,9 @@
 }
 
 .certified-page-btn.certified-page-active {
-  background: var(--info);
-  border-color: var(--info);
-  color: var(--bg);
+  background: linear-gradient(100deg, #c9ad6c, #f0dfb2 55%, #c9ad6c);
+  border-color: #c9ad6c;
+  color: #1a1408;
 }
 
 .certified-page-ellipsis {

@@ -929,13 +929,26 @@
   }
 }
 
+/* The one coloured thing on a card: the score, in the site's gold. Brighter gold for better
+   grades, deeper bronze for worse; the text stays dark on the light golds and light on the dark. */
 .socket-score-pill {
   display: inline-block;
   font-size: 0.8rem;
   font-weight: 700;
-  padding: 0.25rem 0.6rem;
+  padding: 0.25rem 0.7rem;
   border-radius: 999px;
-  color: #fff;
+  color: #1a1408;
+  background: linear-gradient(100deg, #c9ad6c, #f0dfb2 55%, #c9ad6c);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+.socket-score-pill[data-grade='C'] {
+  background: linear-gradient(100deg, #a88a4e, #d8bf86 55%, #a88a4e);
+}
+
+.socket-score-pill:is([data-grade='D'], [data-grade='F']) {
+  color: #f6ecd3;
+  background: linear-gradient(100deg, #5c4a26, #8a7240 55%, #5c4a26);
 }
 
 /* Legacy aliases */

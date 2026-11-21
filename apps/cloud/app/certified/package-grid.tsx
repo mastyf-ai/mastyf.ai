@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { freshnessLabel } from '@/lib/freshness';
 import Link from 'next/link';
-import { computeTrustGrade, trustGradeColor } from '@/lib/trust-badge-grade';
+import { computeTrustGrade } from '@/lib/trust-badge-grade';
 import {
   mergePackageData,
   formatDownloads,
@@ -37,35 +37,13 @@ function freshnessClass(days: number): string {
   return 'stale';
 }
 
-function getPillarScores(scoreReport: {
-  categories?: Array<{ name: string; score: number }>;
-}) {
-  const cats = scoreReport.categories ?? [];
-  const find = (names: string[]) => {
-    const found = cats.find((c) => names.some((n) => c.name.toLowerCase().includes(n.toLowerCase())));
-    return found?.score ?? 50;
-  };
-
-  return {
-    supplyChain: find(['supply chain', 'provenance', 'integrity', 'cve', 'dependency hygiene']),
-    interfaceSecurity: find(['auth', 'transport', 'tool capability']),
-    runtimeBehavior: find(['attack', 'malware', 'egress', 'response', 'live health']),
-    operationalTrust: find(['freshness', 'hygiene', 'license', 'download']),
-  };
-}
-
-function pillarColor(score: number): string {
-  if (score >= 80) return 'var(--ok)';
-  if (score >= 60) return 'var(--info)';
-  if (score >= 40) return 'var(--accent)';
-  return 'var(--critical)';
-}
-
-function riskLabel(score: number): { label: string; color: string } {
-  if (score >= 85) return { label: 'Enterprise Ready', color: 'var(--ok)' };
-  if (score >= 65) return { label: 'Production Ready', color: 'var(--info)' };
-  if (score >= 40) return { label: 'Proceed with Caution', color: 'var(--accent)' };
-  return { label: 'Critical Risk', color: 'var(--critical)' };
+/* Only the overall score carries colour (see .socket-score-pill); everything else on a card is
+   neutral, so the card reads at a glance instead of as a rainbow. */
+function riskLabel(score: number): string {
+  if (score >= 85) return 'Enterprise ready';
+  if (score >= 65) return 'Production ready';
+  if (score >= 40) return 'Proceed with caution';
+  return 'Critical risk';
 }
 
 function confidenceMark(checks: unknown[]): 'verified' | 'estimated' {
@@ -117,7 +95,6 @@ function PackageCard({ pkg }: { pkg: Package }) {
     pkg.level,
     pkg.version,
   );
-  const pillars = getPillarScores(pkg.scoreReport);
   const conf = confidenceMark(pkg.checks);
   const confPct = confidencePercent(pkg.checks);
   const freshness = daysSince(pkg.computedAt);
@@ -134,9 +111,7 @@ function PackageCard({ pkg }: { pkg: Package }) {
         <span className="certified-card-version">v{pkg.version}</span>
       </div>
 
-      <div className="certified-card-risk-label" style={{ color: risk.color }}>
-        {risk.label}
-      </div>
+      <div className="certified-card-risk-label">{risk}</div>
 
       {data.description && (
         <p className="certified-card-description">
@@ -190,25 +165,6 @@ function PackageCard({ pkg }: { pkg: Package }) {
         )}
       </div>
 
-      <div className="certified-card-pillars">
-        <span className="certified-pillar" title={`Supply Chain: ${pillars.supplyChain}/100`}>
-          <span className="certified-pillar-dot" style={{ background: pillarColor(pillars.supplyChain) }} />
-          SC
-        </span>
-        <span className="certified-pillar" title={`Interface Security: ${pillars.interfaceSecurity}/100`}>
-          <span className="certified-pillar-dot" style={{ background: pillarColor(pillars.interfaceSecurity) }} />
-          IS
-        </span>
-        <span className="certified-pillar" title={`Runtime Behavior: ${pillars.runtimeBehavior}/100`}>
-          <span className="certified-pillar-dot" style={{ background: pillarColor(pillars.runtimeBehavior) }} />
-          RB
-        </span>
-        <span className="certified-pillar" title={`Operational Trust: ${pillars.operationalTrust}/100`}>
-          <span className="certified-pillar-dot" style={{ background: pillarColor(pillars.operationalTrust) }} />
-          OT
-        </span>
-      </div>
-
       <div className="certified-card-breakdown">
         {data.categories
           .slice()
@@ -218,13 +174,7 @@ function PackageCard({ pkg }: { pkg: Package }) {
             <span key={cat.name} className="certified-dim-bar" title={`${cat.name}: ${cat.score}/100`}>
               <span className="certified-dim-label">{cat.name.replace(/([A-Z])/g, ' $1').trim()}</span>
               <span className="certified-dim-track">
-                <span
-                  className="certified-dim-fill"
-                  style={{
-                    width: `${cat.score}%`,
-                    background: pillarColor(cat.score),
-                  }}
-                />
+                <span className="certified-dim-fill" style={{ width: `${cat.score}%` }} />
               </span>
               <span className="certified-dim-score">{cat.score}</span>
             </span>
@@ -232,10 +182,7 @@ function PackageCard({ pkg }: { pkg: Package }) {
       </div>
 
       <div className="certified-package-footer">
-        <span
-          className="socket-score-pill"
-          style={{ background: trustGradeColor(grade) }}
-        >
+        <span className="socket-score-pill" data-grade={grade}>
           {pkg.score}/100 · {grade}
         </span>
         <span className="certified-card-meta">
