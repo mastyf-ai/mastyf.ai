@@ -77,19 +77,22 @@ export function DeepScanButton({ packageName, enabled, currentTier, source }: Pr
   }
 
   return (
-    <div className="pkg-scan">
+    <div className="deep-scan-block">
       <button
         type="button"
-        className="btn btn-glass"
+        className="socket-search-btn"
         onClick={() => void runDeepScan()}
         disabled={!enabled || loading}
-        title={enabled ? 'Starts the server and sends test attacks to it. Takes up to a minute.' : undefined}
       >
-        {loading ? (status === 'queued' ? 'Waiting for a scanner…' : 'Scanning…') : 'Run a live scan'}
+        {loading ? (status ? `Deep scan ${status}…` : 'Running deep scan…') : 'Run deep scan'}
       </button>
-      {!enabled ? <p className="pkg-scan__note">Live scans are paused right now.</p> : null}
+      <p className="certified-meta" style={{ marginTop: '0.5rem' }}>
+        {enabled
+          ? 'Queues a live MCP probe — may take up to 60s when a worker is running.'
+          : 'Deep scan requires cloud database and an external worker (see deployment docs).'}
+      </p>
       {error ? (
-        <p role="alert" className="pkg-scan__note pkg-scan__note--error">
+        <p role="alert" className="certified-error" style={{ marginTop: '0.5rem' }}>
           {error}
         </p>
       ) : null}
