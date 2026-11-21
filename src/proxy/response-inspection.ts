@@ -173,15 +173,28 @@ export async function inspectToolResponse(params: {
 
   // --- Handle redaction ----------------------------------------------------
   if (gate.outcome.action === 'redact' && gate.outcome.body) {
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(gate.outcome.body) as unknown;
-      (response as { result: unknown }).result = injectRedactionMeta(
-        parsed,
-        gate.outcome.redactionReasons,
-      );
+      parsed = JSON.parse(gate.outcome.body) as unknown;
     } catch {
-      /* keep upstream body on parse failure */
+      // The redacted text isn't valid any more. Forwarding the original would pass on the very secret
+      // that was found, so the result is blocked instead.
+      return {
+        blocked: true,
+        redacted: false,
+        evidence: { layer: 'answer-check' },
+        blockResponse: {
+          jsonrpc: '2.0',
+          id: requestId,
+          error: {
+            code: -32002,
+            message: 'Blocked by Mastyf AI: sensitive data in tool result could not be redacted safely',
+            data: { rule: 'response-redaction-failed' },
+          },
+        },
+      };
     }
+    (response as { result: unknown }).result = injectRedactionMeta(parsed, gate.outcome.redactionReasons);
     return { blocked: false, redacted: true, redactionReasons: gate.outcome.redactionReasons };
   }
 
