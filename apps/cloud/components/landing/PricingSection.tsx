@@ -64,12 +64,6 @@ export function PricingSection({
                 <h2 className="tier__name">
                   <Flip light="var(--accent)">{tier.name}</Flip>
                 </h2>
-                {showOffer ? (
-                  <span className="status status--active">
-                    <span className="status__mark" aria-hidden="true">●</span>
-                    Launch offer
-                  </span>
-                ) : null}
               </div>
               <p className="tier__price">
                 <span className="tier__amount">

@@ -7,27 +7,39 @@ import { SITE_NAME } from '@/lib/product-links';
 const FAQ_ITEMS = [
   {
     q: `What is ${SITE_NAME}?`,
-    a: `${SITE_NAME} is perimeter security for AI agents using MCP. It intercepts every tool call, enforces your security policy, blocks violations before execution, and provides trust scores for npm MCP packages — all from one open-source platform.`,
+    a: 'It checks every action an AI agent takes before it runs: each tool call on its way out, and each tool result before the model reads it. Anything your rules don’t allow is stopped.',
   },
   {
-    q: 'How does runtime enforcement work?',
-    a: 'Every tool call passes through three layers: pattern detection (regex, microseconds), schema validation (malformed payloads), and optional semantic LLM review (Ollama or cloud). BlockGuard enforces policy synchronously — anything that fails is blocked and logged.',
+    q: 'Is it free?',
+    a: 'The checks are free and run on your own machine: the Python library, the check program and the GitHub Copilot hooks. No account, and nothing is sent to Mastyf. The paid plans add the Shield app for desktop agents and Mastyf’s paid checks, such as Protocol X.',
   },
   {
-    q: 'What is the Security Swarm?',
-    a: 'Two coordinated swarms: CI Swarm runs on every PR with Scout, Corpus (228 fixtures), Evasion (120+ probes), Parity, and Report agents. Runtime Swarm enforces in production with BlockGuard, InstantLearner, SemanticAuditor, and Calibrator. Four feedback loops connect them.',
+    q: 'Do I need an account?',
+    a: 'Not for the free checks. Shield needs a paid plan and a licence key, which appears on your dashboard after payment.',
   },
   {
-    q: 'Do I need an account to use Mastyf?',
-    a: 'No. Mastyf Shield and Mastyf Gateway run entirely on your own local machine or self-hosted infrastructure. You do not need to register a cloud account or send your telemetry to external servers. Simply download Shield or pull the Docker image and activate with your license key.',
+    q: 'Does Mastyf see my data?',
+    a: 'The free checks send nothing to Mastyf. Shield keeps every call on your PC and sends one redacted record per call to your workspace; full arguments never leave your PC. Protocol X checks are sent to Mastyf’s servers and not stored. Shield doesn’t read your conversations with the model.',
   },
   {
-    q: 'How do I deploy mastyf.ai?',
-    a: 'For developer workstations (protecting Claude Desktop, Cursor, and Windsurf), install Mastyf Shield for macOS (.dmg), Windows (.exe), or Linux (.AppImage / .deb). For server environments and production pipelines, deploy ghcr.io/mastyf-ai/mastyf-gateway as an inline sidecar proxy.',
+    q: 'Which agents does it work with?',
+    a: 'Python agents built with LangChain, LangGraph, the OpenAI Agents SDK or your own loop; any agent in any language through the local check API; any MCP server; GitHub Copilot’s coding agent; and, with Shield, Claude Code, Cursor, VS Code, Windsurf, Cline and Claude Desktop. The docs page “Find your agent” lists them all.',
+  },
+  {
+    q: 'What happens if Mastyf can’t check a call?',
+    a: 'It is blocked. Every way of connecting fails closed by default. The Python library lets you choose to allow unchecked calls instead, with a warning each time.',
+  },
+  {
+    q: 'Does Shield run on macOS or Linux?',
+    a: 'Not yet. Shield runs on Windows 10 (build 19041 or later) and Windows 11. The free checks run on Windows, macOS and Linux.',
+  },
+  {
+    q: 'Why does Windows warn me about the installer?',
+    a: 'Shield isn’t code-signed yet. Download it only from mastyf.ai and compare its SHA-256 with the one on the download page; then choose More info, then Run anyway. Never run a copy from anywhere else.',
   },
   {
     q: 'How do I get help?',
-    a: 'Email mastyf.support@gmail.com for support, or open an issue on GitHub.',
+    a: 'Email mastyf.support@gmail.com, or open an issue on GitHub. A person reads every message.',
   },
 ];
 
@@ -75,7 +87,6 @@ export function FaqSection() {
       <div className="section__grid">
         <div className="section__aside">
           <h2 id="faq-title">Your questions, answered</h2>
-          <p>Runtime enforcement, trust scores, Security Swarm, and deployment.</p>
         </div>
         <FaqList />
       </div>
