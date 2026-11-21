@@ -1,20 +1,33 @@
-import '../score.css';
-
 export default function CertifiedPackageLoading() {
   return (
-    <main className="score-page pkg" aria-busy="true">
-      <section className="pkg-hero">
-        <div className="pkg-hero__body">
-          <div className="skeleton-line skeleton-title" />
-          <div className="skeleton-line skeleton-meta" />
-          <p className="pkg-hero__summary">Checking this package…</p>
-        </div>
-        <div className="pkg-hero__score">
-          <div className="pkg-ring" style={{ width: 200, height: 200 }}>
-            <svg width={200} height={200} viewBox="0 0 200 200" aria-hidden="true">
-              <circle className="pkg-ring__track" cx={100} cy={100} r={93} fill="none" strokeWidth={6} />
-            </svg>
+    <main className="score-page">
+      <div className="score-breadcrumb">
+        <span>Home</span>
+        <span>/</span>
+        <span>Security scores</span>
+        <span>/</span>
+        <span className="score-breadcrumb-current">Loading…</span>
+      </div>
+
+      <section className="score-hero card-elevated">
+        <div className="score-hero-grid">
+          <div className="score-ring-skeleton" aria-hidden />
+          <div style={{ flex: 1, width: '100%' }}>
+            <div className="skeleton-line skeleton-title" />
+            <div className="skeleton-line skeleton-meta" />
+            <div className="skeleton-line skeleton-badge" />
+            <p className="score-section-lead" style={{ marginTop: '1rem' }}>
+              Analyzing package security…
+            </p>
           </div>
+        </div>
+        <div className="score-stat-row">
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n} className="score-stat-card">
+              <div className="skeleton-line" style={{ width: '60%', height: '0.7rem' }} />
+              <div className="skeleton-line" style={{ width: '80%', marginTop: '0.5rem' }} />
+            </div>
+          ))}
         </div>
       </section>
     </main>

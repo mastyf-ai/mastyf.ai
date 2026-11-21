@@ -1,5 +1,4 @@
-import { Check, ChevronDown, X } from 'lucide-react';
-import type { PublishableScoreReport } from '@/lib/score-report';
+import type { ImprovementAction, PublishableIssue, PublishableScoreReport } from '@/lib/score-report';
 
 type ProbeData = {
   error?: string;
@@ -14,110 +13,168 @@ type Props = {
   probe?: ProbeData;
 };
 
-const SEVERITY: Record<string, string> = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  info: 'Note',
+const SEV_CLASS: Record<string, string> = {
+  critical: 'issue-critical',
+  high: 'issue-high',
+  medium: 'issue-medium',
+  low: 'issue-low',
+  info: 'issue-info',
 };
 
-const EFFORT: Record<string, string> = {
-  hours: 'a few hours',
-  days: 'a few days',
-  weeks: 'a few weeks',
+const PRIORITY_LABEL: Record<string, string> = {
+  immediate: 'Fix now',
+  high: 'High priority',
+  medium: 'Recommended',
+  low: 'Nice to have',
 };
 
-/**
- * The score explained: what each part contributed (one list, details on open), what a live attack
- * test found, what is wrong, and what would raise the score.
- */
+function scoreClass(score: number): string {
+  if (score >= 70) return 'good';
+  if (score >= 40) return 'warn';
+  return 'bad';
+}
+
 export function ScoreReportPanel({ report, probe }: Props) {
-  const categories = [...(report.categories ?? [])].sort(
-    (a, b) => (b.contributionPoints ?? 0) - (a.contributionPoints ?? 0),
-  );
+  const categories = report.categories ?? [];
   const issues = report.issues ?? [];
   const actions = report.improvementActions ?? [];
 
   return (
-    <>
-      <section className="pkg-section" aria-labelledby="pkg-parts">
-        <h2 id="pkg-parts">How the score adds up</h2>
-        <ul className="pkg-parts">
-          {categories.map((cat) => {
-            const points = cat.contributionPoints ?? Math.round(cat.score * (cat.weight ?? 0));
-            const weight = cat.weightPercent ?? Math.round((cat.weight ?? 0) * 100);
-            const hasDetail = Boolean(cat.plainEnglish) || cat.findings?.length > 0;
-            return (
-              <li key={cat.name}>
-                <details className="pkg-part">
-                  <summary>
-                    <span className="pkg-part__name">{cat.name}</span>
-                    <span className="pkg-part__bar" aria-hidden="true">
-                      <span style={{ width: `${cat.score}%` }} />
+    <div className="score-report">
+      <section className="score-report-card card-elevated">
+        <h2 className="score-section-title">Why this score?</h2>
+        <p className="score-report-summary">{report.summaryPlainEnglish}</p>
+
+        <h3 className="score-report-subtitle">How the {report.overallScore}/100 is calculated</h3>
+        <div className="score-table-wrap">
+          <table className="score-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Score</th>
+                <th>Weight</th>
+                <th>Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((cat) => (
+                <tr key={cat.name}>
+                  <td>{cat.name}</td>
+                  <td>
+                    <span className={`score-pill score-pill-${scoreClass(cat.score)}`}>
+                      {cat.score}/100
                     </span>
-                    <span className="pkg-part__score">
-                      {cat.score}
-                      <span className="sr-only"> out of 100</span>
-                    </span>
-                    <span className="pkg-part__points" title={`Counts for ${weight}% of the total`}>
-                      +{points}
-                    </span>
-                    {hasDetail ? <ChevronDown className="pkg-part__chev" size={16} aria-hidden="true" /> : <span />}
-                  </summary>
-                  {hasDetail ? (
-                    <div className="pkg-part__detail">
-                      {cat.plainEnglish ? <p>{cat.plainEnglish}</p> : null}
-                      {cat.findings?.length > 0 ? (
-                        <ul>
-                          {cat.findings.map((f) => (
-                            <li key={f}>{f}</li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      <p className="pkg-part__weight">Counts for {weight}% of the total.</p>
-                    </div>
-                  ) : null}
-                </details>
-              </li>
-            );
-          })}
-        </ul>
+                  </td>
+                  <td>{cat.weightPercent ?? `${Math.round((cat.weight ?? 0) * 100)}%`}</td>
+                  <td className="score-points">+{cat.contributionPoints ?? Math.round(cat.score * (cat.weight ?? 0))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
-      <section className="pkg-section" aria-labelledby="pkg-live">
-        <h2 id="pkg-live">Live attack test</h2>
+      <section className="score-report-card card-elevated">
+        <h2 className="score-section-title">Attack probe results</h2>
+        <p className="score-section-lead">
+          Live behavioral test — the scanner sends malicious payloads to the running server and measures what happened.
+        </p>
         {probe ? (
-          <ul className="pkg-probe">
-            <ProbeTile ok={!probe.error} value={probe.error ? 'Failed' : 'Started'} label="Server started and answered">
-              {probe.error}
-            </ProbeTile>
-            <ProbeTile
-              ok={(probe.rejected ?? 0) > 0}
-              value={`${probe.rejected ?? 0} of ${probe.attempted ?? 0}`}
-              label="Test attacks refused"
-            />
-            <ProbeTile ok={!probe.reflected} value={String(probe.reflected ?? 0)} label="Attacks echoed back unfiltered" />
-            <ProbeTile ok={!probe.secretLeaks} value={String(probe.secretLeaks ?? 0)} label="Secrets leaked in its output" />
-          </ul>
+          <div className="score-check-list">
+            <div className={`score-check-item ${probe.error ? 'fail' : 'pass'}`}>
+              <span className="score-check-icon" aria-hidden>{probe.error ? '✗' : '✓'}</span>
+              <div>
+                <strong>Handshake</strong>
+                <p>{probe.error ?? 'Completed successfully'}</p>
+              </div>
+            </div>
+            <div className={`score-check-item ${probe.rejected && probe.rejected > 0 ? 'pass' : 'fail'}`}>
+              <span className="score-check-icon" aria-hidden>{probe.rejected && probe.rejected > 0 ? '✓' : '✗'}</span>
+              <div>
+                <strong>Payloads rejected</strong>
+                <p>{probe.rejected ?? 0} of {probe.attempted ?? 0} malicious probe(s) blocked</p>
+              </div>
+            </div>
+            <div className={`score-check-item ${probe.reflected && probe.reflected > 0 ? 'fail' : 'pass'}`}>
+              <span className="score-check-icon" aria-hidden>{probe.reflected && probe.reflected > 0 ? '✗' : '✓'}</span>
+              <div>
+                <strong>Payloads reflected</strong>
+                <p>{probe.reflected ?? 0} malicious payload(s) reflected back unfiltered</p>
+              </div>
+            </div>
+            <div className={`score-check-item ${probe.secretLeaks && probe.secretLeaks > 0 ? 'fail' : 'pass'}`}>
+              <span className="score-check-icon" aria-hidden>{probe.secretLeaks && probe.secretLeaks > 0 ? '✗' : '✓'}</span>
+              <div>
+                <strong>Secret leaks</strong>
+                <p>{probe.secretLeaks ?? 0} environment variable(s) leaked via tool output</p>
+              </div>
+            </div>
+          </div>
         ) : (
-          <p className="pkg-quiet">
-            Not tested live yet. This score comes from the published package alone. A live scan starts the server and
-            sends test attacks to it.
-          </p>
+          <div className="score-check-list">
+            <div className="score-check-item fail">
+              <span className="score-check-icon" aria-hidden>○</span>
+              <div>
+                <strong>No live probe data</strong>
+                <p>
+                  This package was scored with a static scan only — no live MCP server was probed.
+                  Run a deep scan to capture live attack probe results.
+                </p>
+              </div>
+            </div>
+          </div>
         )}
       </section>
 
+      <section className="score-report-card">
+        <h2 className="score-section-title">Category breakdown</h2>
+        <div className="score-category-grid">
+          {categories.map((cat) => (
+            <article key={cat.name} className="score-category-card card-elevated">
+              <div className="score-category-head">
+                <strong>{cat.name}</strong>
+                <span className={`score-pill score-pill-${scoreClass(cat.score)}`}>
+                  {cat.score}/100
+                </span>
+              </div>
+              <div className="score-bar-track">
+                <div
+                  className={`score-bar-fill score-bar-${scoreClass(cat.score)}`}
+                  style={{ width: `${cat.score}%` }}
+                />
+              </div>
+              {cat.plainEnglish && (
+                <p className="score-category-plain">{cat.plainEnglish}</p>
+              )}
+              {cat.findings?.length > 0 ? (
+                <ul className="score-findings">
+                  {cat.findings.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      </section>
+
       {issues.length > 0 ? (
-        <section className="pkg-section" aria-labelledby="pkg-issues">
-          <h2 id="pkg-issues">What to fix</h2>
-          <ul className="pkg-issues">
+        <section className="score-report-card">
+          <h2 className="score-section-title">Issues found</h2>
+          <p className="score-section-lead">
+            Plain-language findings from the security scan — fix these to improve your score.
+          </p>
+          <ul className="score-issues">
             {issues.map((issue, i) => (
-              <li key={`${issue.title}-${i}`} className="pkg-issue" data-sev={issue.severity}>
-                <p className="pkg-issue__sev">{SEVERITY[issue.severity] ?? issue.severity}</p>
-                <h3>{issue.title}</h3>
+              <li key={`${issue.title}-${i}`} className={`score-issue-card card-elevated ${SEV_CLASS[issue.severity] ?? ''}`}>
+                <div className="score-issue-head">
+                  <span className="score-sev">{issue.severity}</span>
+                  <strong>{issue.title}</strong>
+                </div>
                 <p>{issue.plainEnglish}</p>
-                {issue.fixHint ? <p className="pkg-issue__fix">{issue.fixHint}</p> : null}
+                <p className="score-fix">
+                  <strong>How to fix:</strong> {issue.fixHint}
+                </p>
               </li>
             ))}
           </ul>
@@ -125,44 +182,26 @@ export function ScoreReportPanel({ report, probe }: Props) {
       ) : null}
 
       {actions.length > 0 ? (
-        <section className="pkg-section" aria-labelledby="pkg-raise">
-          <h2 id="pkg-raise">How to raise it</h2>
-          <ol className="pkg-raise">
+        <section className="score-report-card">
+          <h2 className="score-section-title">How to improve your score</h2>
+          <ol className="score-actions">
             {actions.map((action, i) => (
-              <li key={`${action.category}-${i}`}>
-                <span className="pkg-raise__gain">+{action.expectedScoreIncrease}</span>
-                <span>
-                  <p>{action.action}</p>
-                  <p className="pkg-raise__effort">Takes {EFFORT[action.effort] ?? action.effort}</p>
-                </span>
+              <li key={`${action.category}-${i}`} className="score-action-card card-elevated">
+                <div className="score-action-top">
+                  <span className="score-action-num">{i + 1}</span>
+                  <span className={`score-priority priority-${action.priority}`}>
+                    {PRIORITY_LABEL[action.priority] ?? action.priority}
+                  </span>
+                </div>
+                <p className="score-action-text">{action.action}</p>
+                <p className="score-action-meta">
+                  Est. +{action.expectedScoreIncrease} points · ~{action.effort}
+                </p>
               </li>
             ))}
           </ol>
         </section>
       ) : null}
-    </>
-  );
-}
-
-function ProbeTile({
-  ok,
-  value,
-  label,
-  children,
-}: {
-  ok: boolean;
-  value: string;
-  label: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <li className="pkg-probe__tile" data-ok={ok}>
-      <span className="pkg-probe__icon" aria-hidden="true">
-        {ok ? <Check size={14} strokeWidth={2.5} /> : <X size={14} strokeWidth={2.5} />}
-      </span>
-      <strong>{value}</strong>
-      <span>{label}</span>
-      {children ? <span className="pkg-probe__note">{children}</span> : null}
-    </li>
+    </div>
   );
 }
