@@ -1,0 +1,223 @@
+/* Home: "what happens when someone tricks your AI" (components/landing/AgentStory.tsx). */
+
+.story {
+  display: grid;
+  gap: var(--s-6);
+  min-width: 0;
+}
+
+.story > *,
+.story__body > * {
+  min-width: 0;
+}
+
+.story__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.story__body {
+  display: grid;
+  gap: var(--s-6);
+}
+
+/* On phones the task picker scrolls sideways in one line instead of wrapping into a lump. */
+@media (max-width: 639px) {
+  .story__bar {
+    margin-inline: calc(var(--gutter) * -1);
+  }
+
+  .story__bar .tablist {
+    flex-wrap: nowrap;
+    min-width: 0;
+    max-width: calc(100% - var(--gutter) * 2);
+    margin-inline: var(--gutter);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .story__bar .tab {
+    flex: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .story__body {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: var(--s-8);
+    align-items: stretch;
+  }
+}
+
+/* ---------------------------------------------------------------- the three beats */
+
+.story__beats {
+  display: grid;
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.story__beat {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-5) var(--s-6);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.story__who {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+}
+
+.story__bubble,
+.story__plain,
+.story__action,
+.story__hidden {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+.story__bubble {
+  color: var(--ink-strong);
+}
+
+.story__plain {
+  color: var(--ink-2);
+}
+
+/* Planted text: shown the way the AI read it, a line nobody meant to give it. */
+.story__beat--hidden {
+  background: var(--critical-soft);
+  border-color: var(--critical-line);
+  border-style: dashed;
+}
+
+.story__beat--hidden .story__who {
+  color: var(--critical);
+}
+
+.story__hidden-text {
+  display: block;
+  color: var(--ink-strong);
+  font-style: italic;
+}
+
+.story__action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  justify-self: start;
+  padding: var(--s-2) var(--s-4);
+  color: var(--ink-strong);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+}
+
+.story__action--bad {
+  color: var(--critical);
+  border-color: var(--critical-line);
+}
+
+/* ---------------------------------------------------------------- the two endings */
+
+.story__ends {
+  display: grid;
+  gap: var(--s-3);
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .story__ends {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.story__end {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  column-gap: var(--s-4);
+  row-gap: var(--s-1);
+  align-content: start;
+  padding: var(--s-6);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.story__end-label {
+  grid-column: 1 / -1;
+  margin-bottom: var(--s-3);
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+}
+
+.story__end-mark {
+  grid-row: 2 / span 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.story__end-title {
+  color: var(--ink-strong);
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.story__end-body {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+.story__end--without .story__end-mark {
+  color: var(--critical);
+  background: var(--critical-soft);
+}
+
+.story__end--without:not(.is-safe) {
+  border-color: var(--critical-line);
+}
+
+.story__end--without.is-safe .story__end-mark {
+  color: var(--ink-2);
+  background: var(--surface-raised);
+}
+
+.story__end--with {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.story__end--with .story__end-mark {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.story__more {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+}
+
+.story__more a {
+  color: var(--accent);
+}

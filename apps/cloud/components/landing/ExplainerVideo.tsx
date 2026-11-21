@@ -3,18 +3,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
-const SRC = '/media/mastyf-explainer.mp4';
-const POSTER = '/media/mastyf-explainer-poster.jpg';
+const SRC = '/media/mastyf-six-attacks-16x9.mp4';
+const POSTER = '/media/mastyf-six-attacks-16x9-poster.jpg';
 
-// Matches the captions burned into the video.
+// Matches the captions burned into the video (generated from the video's narration script).
 const TRANSCRIPT = [
-  "AI agents don't just answer questions. They take actions: reading files, changing code, calling APIs. Mastyf decides which of those actions actually happen.",
-  'An agent works in a loop. The model reads your request, chooses a tool, and that tool runs on your real systems: your files, your code, your data.',
-  'Without a boundary, whatever the model proposes runs. If untrusted content steers the model off course, an action outside your policy executes as easily as a safe one. And nothing records why.',
-  "With Mastyf in place, every tool call stops at the boundary first. It's checked against your policy: pattern rules, schema validation and an optional semantic review. Calls within policy pass straight through. Calls outside it are blocked before they ever reach the tool.",
-  "Mastyf sits outside the model's reasoning loop. It doesn't ask the model to police itself, and it doesn't depend on any one vendor. Working at the tool-call layer, one policy protects agents built on any model, in any client. Change your model or framework, and your policy stays the same.",
-  'Every decision is written to a tamper-evident audit log, so you can always show what your agent tried to do, and what was stopped.',
-  'Your model proposes. Mastyf decides.',
+  "Five days in November. Japan's flagship supercomputer. Twenty-two million people in France. The websites of a hundred and seventy-eight organisations. Europe's largest gas supplier. And a government, robbed for five years. Almost none of these attackers broke a lock. They used something the system already trusted.",
+  "Here is how each attack happened, and the exact moment Mastyf would have stopped it. Mastyf has two layers. Mastyf AI checks every action an AI agent takes, before it runs. Mastyf Authority puts a hard ceiling on what any account can do, whether it's a person, a server, or an AI agent.",
+  "Saturday, four thirty in the morning. Japan switches off Fugaku, its flagship supercomputer. One report says the attackers came in through a public status page. They took the details of up to four thousand, two hundred and twenty-two users, along with the private keys many had stored on the machine. Then they tried those keys on other systems. With Authority, a key only works from its owner's registered device. A copy on an attacker's laptop opens nothing. Logins from stolen keys: zero.",
+  "Same day, in France. La Poste reveals that a September attack on Maileva, its business mail service, exposed the names and home addresses of twenty-two million people. Most were never customers. They simply received a letter. Authority gives every account a damage budget, like a credit limit for data. Say, five thousand records a day. At that rate, twenty-two million records would take twelve years. Hidden among the real records are bait ones. Touch one, and the account freezes. And every record that leaves carries an invisible mark of who took it.",
+  "Monday, four twenty-one a.m. Attackers slip code into Optimizely, a tool big websites load on their pages. It goes live on the sites of a hundred and seventy-eight organisations, including the BBC, CNN, Zoom and HSBC. By the afternoon, it is copying card numbers at checkout. It swaps crypto wallet addresses. It tries to break into iPhones. The clean-up runs until almost ten at night. With Authority, a site only serves the version of a vendor's script it approved. A pinned copy. A changed script needs a second person's sign-off before any visitor sees it. Visitors served the skimmer: zero.",
+  "Tuesday. Equinor, Europe's largest gas supplier, says it is fighting an attack on its IT systems, still in progress. Production keeps running. How the attackers got in has not been made public. Authority doesn't need to know. Whatever the way in, the attacker gets the same budget as the account they took. And anything that can't be undone has to wait. Mass deletions sit in a twenty-four hour undo window. Deleting backups: seventy-two. Rewriting protected code needs a second person's passkey. One click, and it's all cancelled.",
+  "Wednesday. Bulgaria reveals that hackers had been inside its government networks since twenty twenty-one. More than a hundred and thirty gigabytes. Sixty-two million pages of documents. Nobody noticed, until a new monitoring system was switched on in August. Authority's behaviour model learns what normal work looks like for every account. A first visit to a new system stands out. So does volume that creeps up, day after day. And a patient attacker still hits the same ceiling, every single day. Five quiet years would have to get past the budget, the bait and the model, every day.",
+  "And on Monday, Google's threat intelligence team reported a first. An attacker's AI agent compared software before and after a security patch, found the flaw, wrote an exploit and launched it, with no human in the loop. Attacks at machine speed. A budget doesn't care how fast you are. A machine hits the ceiling in milliseconds, and stops there. But attackers aren't only using AI agents. They are coming for yours.",
+  "In June, researchers showed how. They hid instructions inside an ordinary-looking error report. A coding agent read it while fixing a bug, and treated it as its task, running commands and installing packages. It worked in lab tests against popular coding agents. Stopping this is the job of Mastyf AI. Here's how it works. Your agent never talks to its tools directly. Every call it makes passes through Mastyf AI on the way out. Every result passes through it on the way back. Inside is Protocol X, our decision model. It reads each one and decides in about a second, before anything runs. It judges what is being asked, not which tool. Read the project readme: allowed. Same tool, read the password file: blocked. Now the poisoned error report comes back. Protocol X spots an instruction aimed at the agent, hiding inside the data. Blocked. The agent never sees it. Our red team invents disguises the model has never seen. A fake error, demanding the attacker's step first: ninety-three percent caught. An instruction cut into harmless pieces: a hundred percent. On AgentDojo, a public benchmark for hijacking agents, attack success fell from twenty-five percent to zero, and normal tasks finished just as often. When it's unsure, it blocks.",
+  'Two layers. Mastyf AI asks: is this action what it claims to be? Mastyf Authority asks: even if it isn\'t, how much can it take? Slip past one, and you still hit the other.',
+  'Tested against twenty-eight MITRE ATT&CK techniques, twenty-two were blocked, capped, delayed or caught. On real insider data, the behaviour model caught a hundred and sixty-eight of two hundred and thirty-one insiders.',
+  'Attackers will get in. With Mastyf, what they can take is a number you choose.',
 ];
 
 function formatTime(seconds: number) {
@@ -115,7 +120,7 @@ export function ExplainerVideo() {
           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
           onDurationChange={(e) => setDuration(e.currentTarget.duration)}
           onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
-          aria-label="Mastyf overview video, with burned-in captions"
+          aria-label="Six attacks, stopped: a video with burned-in captions"
         />
         {!started || ended ? (
           <button type="button" className="video__overlay" onClick={togglePlay}>
@@ -125,7 +130,7 @@ export function ExplainerVideo() {
               ) : (
                 <Play size={15} strokeWidth={1.75} aria-hidden="true" />
               )}
-              {ended ? 'Watch again' : 'Play overview'}
+              {ended ? 'Watch again' : 'Play video'}
             </span>
           </button>
         ) : null}
@@ -162,16 +167,16 @@ export function ExplainerVideo() {
 
         <button
           type="button"
-          className={`btn btn-sm video__sound${muted ? '' : ' is-on'}`}
+          className={`icon-btn video__sound${muted ? '' : ' is-on'}`}
           onClick={toggleSound}
           aria-pressed={!muted}
+          aria-label={muted ? 'Turn sound on' : 'Turn sound off'}
         >
           {muted ? (
-            <VolumeX size={14} strokeWidth={1.75} aria-hidden="true" />
+            <VolumeX size={15} strokeWidth={1.75} aria-hidden="true" />
           ) : (
-            <Volume2 size={14} strokeWidth={1.75} aria-hidden="true" />
+            <Volume2 size={15} strokeWidth={1.75} aria-hidden="true" />
           )}
-          {muted ? 'Sound off' : 'Sound on'}
         </button>
       </div>
 
