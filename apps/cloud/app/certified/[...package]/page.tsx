@@ -8,21 +8,18 @@ import {
   PackageNotFoundError,
   resolvePackageScoreWithStale,
 } from '@/lib/package-score-resolver';
+import { ArrowDown, ArrowLeft } from 'lucide-react';
 import { BadgeEmbedGallery } from '@/components/BadgeEmbedGallery';
 import { DeepScanButton } from '@/components/DeepScanButton';
 import { PackageNotFound } from '@/components/PackageNotFound';
-import { ScanTierBadge } from '@/components/ScanTierBadge';
 import { ScoreReportPanel } from '@/components/ScoreReportPanel';
 import { ScoreRing } from '@/components/ScoreRing';
 import { computeTrustGrade } from '@/lib/trust-badge-grade';
-import { mergePackageData, formatDownloads, formatDays, checksFromMerged } from '@/lib/package-data-merge';
-import {
-  packagePathFromSegments,
-  renderTrustBadgeSvg,
-  resolveCloudBaseUrl,
-} from '@/lib/trust-badge-svg';
+import { mergePackageData, formatDownloads } from '@/lib/package-data-merge';
+import { packagePathFromSegments, resolveCloudBaseUrl } from '@/lib/trust-badge-svg';
 import '../certified.css';
 import '../socket-certified.css';
+import '../score.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,162 +72,88 @@ export default async function CertifiedPackagePage({ params }: Props) {
     }
   }
 
-  const badgeSvg = renderTrustBadgeSvg({
-    score: score.score,
-    grade,
-    packageName,
-    style: 'flat',
+  const facts: { label: string; value: string }[] = [];
+  if (data.downloads !== undefined) facts.push({ label: 'Downloads a week', value: formatDownloads(data.downloads) });
+  if (data.license)
+    facts.push({ label: 'License', value: /^see license/i.test(data.license) ? 'Custom, in its files' : data.license });
+  if (data.maintainers !== undefined) facts.push({ label: 'Maintainers', value: String(data.maintainers) });
+  if (data.packageAgeDays !== undefined) facts.push({ label: 'Age', value: formatAge(data.packageAgeDays) });
+  if (data.lastPublishedDays !== undefined)
+    facts.push({ label: 'Last update', value: data.lastPublishedDays === 0 ? 'Today' : `${formatAge(data.lastPublishedDays)} ago` });
+  if (data.depCount !== undefined) facts.push({ label: 'Dependencies', value: String(data.depCount) });
+  facts.push({ label: 'Known vulnerabilities', value: String(data.cves.total) });
+  if (data.hasRepo !== undefined) facts.push({ label: 'Public source code', value: data.hasRepo ? 'Yes' : 'No' });
+
+  const checkedOn = new Date(score.computedAt).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
   });
+  const how =
+    score.source === 'attested'
+      ? 'scanned by its maintainer and signed'
+      : score.scanTier === 'live'
+        ? 'started and tested live'
+        : 'checked from its published package';
 
   return (
-    <main className="score-page">
-      {isStale && (
-        <div style={{
-          background: 'var(--accent-soft)',
-          border: '1px solid var(--accent-line)',
-          borderRadius: '8px',
-          padding: '0.75rem 1rem',
-          marginBottom: '1rem',
-          color: 'var(--accent)',
-          fontSize: '0.9rem',
-        }}>
-          This score data may be outdated.
-        </div>
-      )}
-
-      <nav className="score-breadcrumb" aria-label="Breadcrumb">
-        <Link href="/">Home</Link>
-        <span aria-hidden>/</span>
-        <Link href="/certified">Security scores</Link>
-        <span aria-hidden>/</span>
-        <span className="score-breadcrumb-current">{packageName}</span>
+    <main className="score-page pkg">
+      <nav className="pkg-back" aria-label="Breadcrumb">
+        <Link href="/certified">
+          <ArrowLeft size={14} strokeWidth={2} aria-hidden="true" />
+          All security scores
+        </Link>
       </nav>
 
-      <section className="score-hero card-elevated">
-        <div className="score-hero-grid">
-          <div className="score-hero-ring">
-            <ScoreRing score={score.score} grade={grade} size={168} />
-          </div>
-
-          <div className="score-hero-body">
-            <p className="score-hero-eyebrow">Package trust score</p>
-            <h1 className="score-hero-title">{packageName}</h1>
-
-            <div className="score-meta-chips">
-              <span className="score-chip">{score.serverName}</span>
-              <span className="score-chip">v{score.version}</span>
-              <span className="score-chip score-chip-cap">{score.level}</span>
-              <ScanTierBadge tier={score.scanTier} source={score.source} />
-            </div>
-
-            <div
-              className="score-hero-badge"
-              dangerouslySetInnerHTML={{ __html: badgeSvg }}
-            />
-
-            <p className="score-hero-summary">{data.summary}</p>
-
-            {verification ? (
-              <p className={`score-attestation score-attestation-${verification.valid ? 'valid' : 'invalid'}`}>
-                Attestation {verification.valid ? 'valid' : verification.expired ? 'expired' : 'invalid'}
-              </p>
-            ) : null}
-
+      <section className="pkg-hero" aria-labelledby="pkg-title">
+        <div className="pkg-hero__body">
+          <h1 id="pkg-title" className="pkg-hero__title">
+            {packageName}
+          </h1>
+          {data.description ? <p className="pkg-hero__desc">{data.description}</p> : null}
+          {/* The ring already shows the score and grade, so the summary starts after them. */}
+          <p className="pkg-hero__summary">{data.summary.replace(/^Overall score:[^.]*\.\s*/i, '')}</p>
+          <p className="pkg-hero__meta">
+            Version {score.version}, {how} on {checkedOn}.
+            {verification
+              ? verification.valid
+                ? ' The maintainer’s signature checks out.'
+                : verification.expired
+                  ? ' The maintainer’s signature has expired.'
+                  : ' The maintainer’s signature does not check out.'
+              : null}
+            {isStale ? ' This score may be out of date.' : null}
+          </p>
+          <div className="pkg-hero__actions">
             <DeepScanButton
               packageName={packageName}
               enabled={isDeepScanEnabled()}
               currentTier={score.scanTier}
               source={score.source}
             />
+            <a href="#badge" className="link-icon">
+              Get the badge
+              <ArrowDown size={13} strokeWidth={1.75} aria-hidden="true" />
+            </a>
           </div>
         </div>
 
-        <div className="score-stat-row">
-          <div className="score-stat-card">
-            <span className="score-stat-label">Scored</span>
-            <strong>{new Date(score.computedAt).toLocaleString()}</strong>
-          </div>
-          <div className="score-stat-card">
-            <span className="score-stat-label">Cache expires</span>
-            <strong>{new Date(score.expiresAt).toLocaleString()}</strong>
-          </div>
-          <div className="score-stat-card">
-            <span className="score-stat-label">Scan tier</span>
-            <strong className="score-stat-cap">{score.scanTier}</strong>
-          </div>
-          <div className="score-stat-card">
-            <span className="score-stat-label">Trust level</span>
-            <strong className="score-stat-cap">{score.level}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="score-report-card card-elevated signal-summary">
-        <h2 className="score-section-title">Package signals</h2>
-        <div className="score-stat-grid">
-          {data.license ? (
-            <div className="score-stat-tile">
-              <span className="score-stat-label">License</span>
-              <strong>{data.license}</strong>
-            </div>
-          ) : null}
-          {data.downloads !== undefined ? (
-            <div className="score-stat-tile">
-              <span className="score-stat-label">Downloads / week</span>
-              <strong>{formatDownloads(data.downloads)}</strong>
-            </div>
-          ) : null}
-          {data.maintainers !== undefined ? (
-            <div className="score-stat-tile">
-              <span className="score-stat-label">Maintainers</span>
-              <strong>{data.maintainers}</strong>
-            </div>
-          ) : null}
-          {data.packageAgeDays !== undefined ? (
-            <div className="score-stat-tile">
-              <span className="score-stat-label">Package age</span>
-              <strong>{formatDays(data.packageAgeDays)}</strong>
-            </div>
-          ) : null}
-          {data.lastPublishedDays !== undefined ? (
-            <div className="score-stat-tile">
-              <span className="score-stat-label">Last published</span>
-              <strong>{formatDays(data.lastPublishedDays)} ago</strong>
-            </div>
-          ) : null}
-          {data.depCount !== undefined ? (
-            <div className="score-stat-tile">
-              <span className="score-stat-label">Direct deps</span>
-              <strong>{data.depCount}</strong>
-            </div>
-          ) : null}
-          <div className="score-stat-tile">
-            <span className="score-stat-label">CVEs known</span>
-            <strong className={data.cves.total > 0 ? 'signal-cve-bad' : 'signal-cve-clean'}>
-              {data.cves.total} (max {data.cves.maxCvss || 0} CVSS)
-            </strong>
-          </div>
-          {data.hasRepo !== undefined ? (
-            <div className="score-stat-tile">
-              <span className="score-stat-label">Source repo</span>
-              <strong>{data.hasRepo ? 'Yes' : 'No'}</strong>
-            </div>
-          ) : null}
-          {data.cveFree !== undefined ? (
-            <div className="score-stat-tile">
-              <span className="score-stat-label">CVE-free check</span>
-              <strong className={data.cveFree ? 'signal-cve-clean' : 'signal-cve-bad'}>
-                {data.cveFree ? 'Passed' : 'Failed'}
-              </strong>
-            </div>
-          ) : null}
-        </div>
-        {data.description ? (
-          <p className="score-section-lead" style={{ marginTop: '0.75rem' }}>
-            {data.description}
+        <div className="pkg-hero__score">
+          <ScoreRing score={score.score} grade={grade} />
+          <p className="pkg-hero__grade">
+            Grade {grade}, <span className="pkg-cap">{score.level}</span> level
           </p>
-        ) : null}
+        </div>
       </section>
+
+      <dl className="pkg-facts">
+        {facts.map((f) => (
+          <div key={f.label}>
+            <dt>{f.label}</dt>
+            <dd>{f.value}</dd>
+          </div>
+        ))}
+      </dl>
 
       <ScoreReportPanel
         report={{
@@ -244,52 +167,29 @@ export default async function CertifiedPackagePage({ params }: Props) {
         probe={data.probe ?? undefined}
       />
 
-      <div className="score-page-grid">
-        <section className="score-side-card card-elevated">
-          <h2 className="score-section-title">Embed badge</h2>
-          <p className="score-section-lead">
-            Pick a layout and copy markdown, HTML, RST, BBCode, or AsciiDoc for your README.
-          </p>
-          <BadgeEmbedGallery
-            cloudBaseUrl={cloudBase}
-            packageName={packageName}
-            badgeCacheKey={score.computedAt}
-          />
-        </section>
-
-        {score.source === 'attested' ? (
-          <section className="score-side-card card-elevated">
-            <h2 className="score-section-title">Maintainer attestation</h2>
-            <p className="score-section-lead">
-              This score was published with a signed attestation from a maintainer proxy scan.
-            </p>
-            <pre className="score-code-block">{`mastyf-ai certify publish \\
-  --server ${score.serverName} \\
-  --package ${packageName} \\
-  --pkg-version ${score.version} \\
+      {score.source === 'attested' ? (
+        <section className="pkg-section" aria-labelledby="pkg-attest">
+          <h2 id="pkg-attest">Published by the maintainer</h2>
+          <p>The maintainer scanned this server and published the result with a signature, using:</p>
+          <pre className="pkg-code">{`mastyf-ai certify publish \
+  --server ${score.serverName} \
+  --package ${packageName} \
+  --pkg-version ${score.version} \
   --cloud-url ${cloudBase}`}</pre>
-          </section>
-        ) : (
-          <section className="score-side-card card-elevated">
-            <h2 className="score-section-title">Improve this score</h2>
-            <p className="score-section-lead">
-              Fix the issues above, then run a deep scan or publish from your mastyf.ai proxy for a
-              maintainer-verified badge.
-            </p>
-            <ul className="score-check-list">
-              {checksFromMerged(data).map((c) => (
-                <li key={`${c.id}-${c.name}`} className={c.passed ? 'pass' : 'fail'}>
-                  <span className="score-check-icon" aria-hidden>{c.passed ? '✓' : '✗'}</span>
-                  <div>
-                    <strong>{c.name}</strong>
-                    <p>{c.details}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </div>
+        </section>
+      ) : null}
+
+      <section className="pkg-section" id="badge" aria-labelledby="pkg-badge">
+        <h2 id="pkg-badge">Show this score in your README</h2>
+        <BadgeEmbedGallery cloudBaseUrl={cloudBase} packageName={packageName} badgeCacheKey={score.computedAt} />
+      </section>
     </main>
   );
+}
+
+/** 12 days, 5 months, 2 years. */
+function formatAge(days: number): string {
+  if (days < 60) return `${days} ${days === 1 ? 'day' : 'days'}`;
+  if (days < 730) return `${Math.round(days / 30)} months`;
+  return `${Math.round(days / 365)} years`;
 }
