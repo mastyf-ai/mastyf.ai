@@ -328,7 +328,7 @@ export function SiteNav({ session }: Props) {
                 >
                   <Flip light="var(--accent)">{account.label}</Flip>
                 </Link>
-                <Link href="/download" className="btn btn-primary btn-sm nav__cta" data-magnetic data-roll>
+                <Link href="/download" className="btn btn-luxe btn-sm nav__cta" data-magnetic data-roll>
                   <Download size={13} strokeWidth={2} aria-hidden="true" />
                   <span className="nav__cta-full">
                     <Flip>Download Shield</Flip>
@@ -400,7 +400,7 @@ export function SiteNav({ session }: Props) {
             <span>Theme</span>
             <ThemeToggle />
           </div>
-          <Link href="/download" className="btn btn-primary btn-lg nav__sheet-cta">
+          <Link href="/download" className="btn btn-luxe btn-lg nav__sheet-cta">
             <Download size={15} strokeWidth={2} aria-hidden="true" />
             Download Shield
           </Link>
