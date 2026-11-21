@@ -1,0 +1,143 @@
+/* Pilot: four weeks along one line, a gold node on each, then what you get and how to start. */
+
+.pilot-weeks {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-5);
+  margin: 0;
+  padding: var(--s-8) 0 0;
+  list-style: none;
+}
+
+/* The line the weeks sit on, drawing itself in once. */
+.pilot-weeks::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #8a7240, #f0dfb2, #8a7240);
+  transform-origin: left center;
+  animation: pilot-line 1.4s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes pilot-line {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.pilot-week {
+  position: relative;
+}
+
+.pilot-week::before {
+  content: '';
+  position: absolute;
+  top: calc(var(--s-8) * -1);
+  left: 0;
+  width: 16px;
+  height: 16px;
+  background: var(--bg);
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 12px var(--accent-line);
+}
+
+.pilot-week__when {
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+}
+
+.pilot-week__title {
+  margin: var(--s-1) 0 var(--s-3);
+  font-size: 1.5rem;
+}
+
+.pilot-week p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.pilot-end {
+  display: grid;
+  gap: var(--s-8);
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .pilot-end {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--s-12);
+  }
+}
+
+.pilot-get {
+  display: grid;
+  gap: var(--s-3);
+  margin: var(--s-5) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pilot-get li {
+  position: relative;
+  padding-left: var(--s-6);
+}
+
+.pilot-get li::before {
+  content: '';
+  position: absolute;
+  top: 0.55em;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+}
+
+.pilot-start {
+  display: grid;
+  justify-items: start;
+  gap: var(--s-5);
+  padding: var(--s-8);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+}
+
+.pilot-start p {
+  margin: 0;
+  font-size: var(--fs-lead);
+}
+
+@media (max-width: 899px) {
+  .pilot-weeks {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-8);
+    padding: 0 0 0 var(--s-8);
+  }
+
+  .pilot-weeks::before {
+    top: 0;
+    bottom: 0;
+    left: 7px;
+    width: 2px;
+    height: auto;
+    background: linear-gradient(180deg, #8a7240, #f0dfb2, #8a7240);
+    transform-origin: top center;
+  }
+
+  .pilot-week::before {
+    top: 4px;
+    left: calc(var(--s-8) * -1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pilot-weeks::before {
+    animation: none;
+  }
+}
