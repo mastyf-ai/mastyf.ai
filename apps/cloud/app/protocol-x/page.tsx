@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight, Ban, Check, Flag, Server } from 'lucide-react';
+import { ArrowRight, Ban, Check, Flag, Lock, Server } from 'lucide-react';
 import { SiteNav } from '@/components/SiteNav';
 import { SiteFooter } from '@/components/SiteFooter';
 import { safeAuth } from '@/lib/safe-auth';
@@ -16,7 +16,7 @@ import './protocol-x-more.css';
 export const metadata: Metadata = {
   title: 'Protocol X — Mastyf',
   description:
-    "Protocol X is Mastyf's own model for AI agent security, included in the paid Mastyf Shield. Throw recorded attacks at it and run the whole suite.",
+    "Protocol X is Mastyf's own model for AI agent security, included in the paid Mastyf Shield. Throw recorded attacks at it, run the whole suite, and compare model releases.",
 };
 
 const pctNumber = (s: string) => Number.parseInt(s, 10) || 0;
@@ -30,6 +30,10 @@ export default async function ProtocolXPage() {
       <SiteNav session={!!session} />
       <main className="page-main px-page">
         <header className="px-hero">
+          <Link href="/pricing" className="px-paid">
+            <Lock size={14} strokeWidth={2} aria-hidden="true" />
+            Included in Mastyf Shield · paid
+          </Link>
           <h1 className="px-hero__title">Protocol X</h1>
           <p className="px-hero__lead">Throw an attack at it.</p>
         </header>
@@ -45,7 +49,7 @@ export default async function ProtocolXPage() {
           <h2 id="px-gauntlet-title" className="px-block__title">
             Now throw everything at once
           </h2>
-          <p className="px-block__lead">60 recorded attacks and 15 harmless twins.</p>
+          <p className="px-block__lead">60 recorded attacks and 15 harmless twins. Same cases, two model releases.</p>
           <PxGauntlet />
         </section>
 
@@ -53,7 +57,7 @@ export default async function ProtocolXPage() {
           <h2 id="px-disguise-title" className="px-block__title">
             Disguises it learned to see through
           </h2>
-          <p className="px-block__lead">Catch rate on the full red-team suite.</p>
+          <p className="px-block__lead">Catch rate on the full red-team suite, October model against November.</p>
           <PxDisguises />
         </section>
 

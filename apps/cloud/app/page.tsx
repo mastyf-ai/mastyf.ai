@@ -2,13 +2,13 @@ import { safeAuth } from '@/lib/safe-auth';
 import { SiteFooter } from '@/components/SiteFooter';
 import { SiteNav } from '@/components/SiteNav';
 import { HeroSection } from '@/components/landing/HeroSection';
-import { AgentStory } from '@/components/landing/AgentStory';
-import { HowItWorksScroll } from '@/components/landing/HowItWorksScroll';
+import { SeeTheDifference } from '@/components/landing/SeeTheDifference';
+import { ProtocolXSim } from '@/components/landing/ProtocolXSim';
 import { SignedReceipts } from '@/components/landing/SignedReceipts';
 import { WorksWithRibbon } from '@/components/landing/WorksWithRibbon';
 import { ExplainerVideo } from '@/components/landing/ExplainerVideo';
 import { Preloader } from '@/components/landing/Preloader';
-import { ClosingCta, ProductRow, ProofRow } from '@/components/landing/HomeSections';
+import { ClosingCta, HowItWorks, ProductRow, ProofRow } from '@/components/landing/HomeSections';
 
 export default async function HomePage() {
   const session = await safeAuth();
@@ -17,21 +17,20 @@ export default async function HomePage() {
     <>
       <Preloader />
       <SiteNav session={!!session} />
-      <main id="main" className="home">
+      <main id="main">
         <HeroSection session={!!session} />
         <WorksWithRibbon />
-        <HowItWorksScroll />
-        <section className="section" id="see-it" aria-labelledby="story-title">
-          <header className="sec-head">
-            <h2 id="story-title">What happens when someone tricks your AI</h2>
-          </header>
-          <AgentStory />
-        </section>
+        <ProtocolXSim />
+        <SeeTheDifference />
+        <HowItWorks />
         <SignedReceipts />
         <section className="section overview" id="overview" aria-labelledby="overview-title">
-          <header className="sec-head">
-            <h2 id="overview-title">Mastify your agents.</h2>
-          </header>
+          <div className="overview__copy">
+            <p className="eyebrow">Overview — 1:32</p>
+            <h2 id="overview-title">Mastyf in ninety seconds</h2>
+            <p>How agents act on your systems, what goes wrong without a boundary, and where Mastyf sits.</p>
+            <p className="overview__meta">Captions are on screen, so it works with sound off.</p>
+          </div>
           <ExplainerVideo />
         </section>
         <ProductRow />

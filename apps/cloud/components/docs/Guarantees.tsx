@@ -3,18 +3,18 @@ import { GUARANTEES_AND_LIMITATIONS } from '@/components/landing/stats';
 const EXECUTION_STATES = [
   {
     state: 'NOT_SENT',
-    name: 'Stopped',
-    body: 'The call was blocked before anything was sent. Not one byte reached the tool.',
+    name: 'Wire isolation',
+    body: 'ExecutionBytes(a) = 0. The call was rejected by CBAC, DIFC, or the Guard auditor before any socket or pipe write happened.',
   },
   {
     state: 'SENT_CHILD_NO_RESPONSE',
-    name: 'Sent, not confirmed',
-    body: 'The call went out, but no confirmed answer has come back. Steps that depend on it stay locked.',
+    name: 'Dispatched, unconfirmed',
+    body: 'ExecutionBytes(a) > 0, but no verified response has arrived. ExecutionCertainty(a) = UNKNOWN, so dependent steps stay locked.',
   },
   {
     state: 'RESPONSE_RECEIVED',
-    name: 'Confirmed',
-    body: 'A confirmed answer arrived and a receipt was made. Only now can steps that depend on it go ahead.',
+    name: 'Verified',
+    body: 'The response is verified and an execution receipt is generated. Only now can dependent workflow steps be authorized.',
   },
 ] as const;
 
@@ -25,7 +25,7 @@ export function Guarantees() {
       <div className="doc-columns">
         <div>
           <h3>Guaranteed</h3>
-          <p className="doc-note">As long as every call goes through Mastyf and Mastyf itself isn&rsquo;t tampered with:</p>
+          <p className="doc-note">Under the complete mediation axioms (A1–A6) and reference monitor integrity:</p>
           <ul className="doc-bullets doc-bullets--ok">
             {GUARANTEES_AND_LIMITATIONS.guarantees.map((item) => (
               <li key={item}>{item}</li>

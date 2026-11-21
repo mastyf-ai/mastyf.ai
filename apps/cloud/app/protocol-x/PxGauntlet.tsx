@@ -7,6 +7,7 @@ import {
   ARENA_DISGUISES,
   ARENA_GOALS,
   GAUNTLET,
+  RELEASE_LABEL,
   SUITE,
   scoreGauntlet,
   verdictFor,
@@ -16,7 +17,7 @@ import {
 /**
  * The gauntlet: every recorded case (60 attacks, 15 harmless twins) fired at one model in a few
  * seconds. Each dot lands on its goal × disguise cell as its recorded verdict comes in. Nothing calls
- * the model; every dot is the current model's recorded verdict.
+ * the model; the October run replays the October model's own recorded verdicts.
  */
 
 const STEP_MS = 85;
@@ -24,7 +25,7 @@ const ROWS = ARENA_GOALS.map((g) => g.id);
 
 export function PxGauntlet() {
   const reduced = useReducedMotion();
-  const release: Release = 'now';
+  const [release, setRelease] = useState<Release>('now');
   const [shown, setShown] = useState(0);
   const [running, setRunning] = useState(false);
   const timer = useRef<number | null>(null);
@@ -34,8 +35,9 @@ export function PxGauntlet() {
     timer.current = null;
   };
 
-  const run = () => {
+  const run = (r: Release) => {
     stop();
+    setRelease(r);
     if (reduced) {
       setShown(GAUNTLET.length);
       setRunning(false);
@@ -73,9 +75,12 @@ export function PxGauntlet() {
   return (
     <div className="pxg" data-release={release}>
       <div className="pxg__bar">
-        <button type="button" className="btn btn-primary" onClick={run} disabled={running}>
-          {done ? <RotateCcw size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
-          {done ? 'Run them again' : `Run all ${GAUNTLET.length}`}
+        <button type="button" className="btn btn-primary" onClick={() => run('now')} disabled={running}>
+          {done && release === 'now' ? <RotateCcw size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
+          Run all {GAUNTLET.length} on the November model
+        </button>
+        <button type="button" className="btn" onClick={() => run('before')} disabled={running}>
+          Same cases, October model
         </button>
       </div>
 
@@ -139,15 +144,15 @@ export function PxGauntlet() {
                 {Math.round(latestV.p * 100)}%
               </>
             ) : (
-              'Ready'
+              RELEASE_LABEL[release]
             )}
           </p>
         </div>
       </div>
 
       <p className="pxg__suite">
-        Full red-team suite: {SUITE.now.caught}/{SUITE.now.attacks} stopped, {SUITE.now.wronglyBlocked}/
-        {SUITE.now.harmless} harmless calls blocked.
+        Full red-team suite: {SUITE.now.caught}/{SUITE.now.attacks} stopped (October model {SUITE.before.caught}/
+        {SUITE.before.attacks}), {SUITE.now.wronglyBlocked}/{SUITE.now.harmless} harmless calls blocked.
       </p>
     </div>
   );

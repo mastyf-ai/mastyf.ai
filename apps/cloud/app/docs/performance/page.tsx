@@ -16,9 +16,9 @@ export default function PerformancePage() {
     <DocPage slug="performance">
       <DocSection id="cost" title="Performance and cost">
         <p>
-          Mastyf&rsquo;s rules decide on your own machine in about 1.5 ms per call. Protocol X, when it checks, takes
-          about a second. Cloud guardrails that send every call to a model add around 850 ms and bill per check. Change
-          the numbers to compare.
+          Cloud LLM guardrails add around 850 ms per tool call and bill per check. Mastyf&apos;s rules decide locally in
+          about 1.5 ms (Protocol X, when it checks a call, takes about a second) for a flat monthly price. Adjust the
+          inputs to compare.
         </p>
         <div className="doc-block">
           <CostCalculator />
@@ -26,7 +26,10 @@ export default function PerformancePage() {
       </DocSection>
 
       <DocSection id="benchmarks" title="Benchmarks">
-        <p>Results on public attack benchmarks. How each was measured is in the open-access paper.</p>
+        <p>
+          Results on standard adversarial evaluation suites, with the methodology and proofs documented in an
+          open-access preprint.
+        </p>
         <div className="doc-block">
           <Benchmarks />
         </div>
@@ -38,8 +41,9 @@ export default function PerformancePage() {
 
       <DocSection id="compare" title="How Mastyf compares">
         <p>
-          Most agent security tools watch the conversation, or read the logs after the fact. Mastyf checks each action
-          before it runs.
+          Most agent security tools moderate the conversation or audit logs after the fact. Mastyf enforces at the
+          execution boundary: it authorizes each tool call against your policy, tracks workflow state, and is tested
+          continuously by adversarial runs.
         </p>
         <div className="doc-block">
           <CompareTable />

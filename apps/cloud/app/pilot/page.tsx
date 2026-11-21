@@ -1,98 +1,95 @@
 import { Metadata } from 'next';
-import { Mail } from 'lucide-react';
+import Link from 'next/link';
 import { SiteNav } from '@/components/SiteNav';
 import { SiteFooter } from '@/components/SiteFooter';
+import { PilotLifecycleSection } from '@/components/landing/PilotLifecycleSection';
 import { safeAuth } from '@/lib/safe-auth';
-import './pilot.css';
+import '../landing.css';
 
 export const metadata: Metadata = {
-  title: '30-day pilot — Mastyf',
+  title: '30-Day Agent Security Pilot — Mastyf',
   description:
-    'Protect one AI agent end to end in 30 days: watch what Mastyf would stop, tune the rules, attack it with our recorded red-team set, then switch on blocking.',
+    'Secure one production-grade AI agent in 30 days. Deploy Mastyf Gateway in Audit Mode with zero disruption, test with Mastyf Swarm, and receive an Executive Agent Security Report for CISO sign-off.',
 };
-
-const WEEKS = [
-  {
-    week: 'Week 1',
-    title: 'Watch',
-    body: 'Mastyf runs beside one of your agents in observe mode. Nothing is blocked; you see everything it would have stopped.',
-  },
-  {
-    week: 'Week 2',
-    title: 'Tune',
-    body: 'We write rules for your tools together, from what week one showed, so normal work never gets in the way.',
-  },
-  {
-    week: 'Week 3',
-    title: 'Attack',
-    body: 'We run our recorded red-team attacks against your setup and fix whatever gets through.',
-  },
-  {
-    week: 'Week 4',
-    title: 'Enforce',
-    body: 'Blocking goes on. Every block gets a signed receipt, and you get a written summary of what was tried and stopped.',
-  },
-] as const;
-
-const YOU_GET = [
-  'A rules file for your agent’s tools',
-  'The attacks we ran, and how each one ended',
-  'Signed receipts for every block',
-  'A written summary for your security team',
-] as const;
-
-// Where pilot requests go, as before. The body lists what helps us plan.
-const PILOT_MAIL =
-  'mailto:rudraneel93@gmail.com?subject=' +
-  encodeURIComponent('Mastyf 30-day pilot') +
-  '&body=' +
-  encodeURIComponent(
-    'Company:\nThe agent you want to protect (what it does, which tools it uses):\nRoughly how many tools it connects to:\nWhen you would like to start:\n',
-  );
 
 export default async function PilotPage() {
   const session = await safeAuth();
 
   return (
-    <>
+    <div className="landing">
       <SiteNav session={!!session} />
       <main className="page-main">
-        <header className="page-head">
-          <h1 className="page-head__title">A 30-day pilot</h1>
-          <p className="page-head__lead">Protect one agent end to end, with us beside you, before rolling Mastyf out.</p>
-        </header>
-
-        <section className="section section--flush-top" aria-label="The four weeks">
-          <ol className="pilot-weeks">
-            {WEEKS.map((w) => (
-              <li key={w.week} className="pilot-week">
-                <span className="pilot-week__when">{w.week}</span>
-                <h2 className="pilot-week__title">{w.title}</h2>
-                <p>{w.body}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="section pilot-end" aria-labelledby="pilot-get-title">
-          <div>
-            <h2 id="pilot-get-title">What you have at the end</h2>
-            <ul className="pilot-get">
-              {YOU_GET.map((g) => (
-                <li key={g}>{g}</li>
-              ))}
-            </ul>
+        <div className="lp-section">
+          <div className="lp-section-header">
+            <span className="lp-pill lp-pill-gold">Guided Enterprise Engagement</span>
+            <h1>30-Day AI Agent Security Pilot</h1>
+            <p>
+              Move from experimental agent autonomy to measurable, policy-enforced execution with zero initial workflow disruption.
+            </p>
           </div>
-          <div className="pilot-start">
-            <p>Tell us about the agent you want to protect, and we will plan the four weeks with you.</p>
-            <a href={PILOT_MAIL} className="btn btn-luxe btn-lg">
-              <Mail size={16} strokeWidth={2} aria-hidden="true" />
-              Email us to start
-            </a>
+
+          <PilotLifecycleSection />
+
+          <div className="lp-pilot-form-wrap card mt-12 max-w-2xl mx-auto p-8">
+            <h3 className="text-xl font-bold mb-2 text-white">Request a Guided Pilot Slot</h3>
+            <p className="text-sm muted mb-6">
+              Our security engineering team runs a limited cohort of 5 enterprise pilots each month.
+            </p>
+
+            <form
+              action="mailto:rudraneel93@gmail.com?subject=Mastyf%2030-Day%20Agent%20Security%20Pilot%20Inquiry"
+              method="POST"
+              encType="text/plain"
+              className="flex flex-col gap-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                  Work Email
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  required
+                  placeholder="name@company.com"
+                  className="w-full px-4 py-2.5 rounded-lg bg-slate-900/80 border border-slate-700 text-white text-sm focus:border-amber-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                  Target Agent Use Case
+                </label>
+                <select
+                  name="agent_use_case"
+                  className="w-full px-4 py-2.5 rounded-lg bg-slate-900/80 border border-slate-700 text-white text-sm focus:border-amber-400 outline-none"
+                >
+                  <option value="mcp_tools">Model Context Protocol (MCP) Tools</option>
+                  <option value="coding_agents">Coding Agents (Cursor, Claude Code, GitHub Copilot)</option>
+                  <option value="internal_apis">Internal APIs / Database Execution</option>
+                  <option value="customer_facing">Customer-Facing Autonomous Workflows</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                  Estimated Number of Connected Tools
+                </label>
+                <input
+                  type="text"
+                  name="tool_count"
+                  placeholder="e.g. 5–20 tools"
+                  className="w-full px-4 py-2.5 rounded-lg bg-slate-900/80 border border-slate-700 text-white text-sm focus:border-amber-400 outline-none"
+                />
+              </div>
+
+              <button type="submit" className="btn btn-primary btn-pill mt-4 w-full py-3">
+                Submit Pilot Application →
+              </button>
+            </form>
           </div>
-        </section>
+        </div>
       </main>
       <SiteFooter />
-    </>
+    </div>
   );
 }

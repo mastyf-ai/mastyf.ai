@@ -274,16 +274,6 @@
   height: auto;
 }
 
-.research-byline {
-  margin: var(--s-5) 0 0;
-  color: var(--ink-2) !important;
-  font-size: var(--fs-meta);
-}
-
-.research-byline a {
-  color: var(--accent);
-}
-
 .research-reader__more {
   margin: var(--s-5) 0 0;
 }

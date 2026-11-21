@@ -167,7 +167,8 @@ export const ATTACKS: AttackEntry[] = [
 export const OUTLINE = [
   { id: 'how-it-works', label: 'How Protocol X works', items: [] as { id: string; label: string }[] },
   { id: 'try', label: 'Try an attack', items: [] as { id: string; label: string }[] },
-  // One entry: every attack plays in the same gallery, picked there.
-  { id: 'attacks', label: 'Every attack', items: [] as { id: string; label: string }[] },
+  { id: 'then-and-now', label: 'Then and now', items: [] as { id: string; label: string }[] },
+  { id: 'novel', label: 'Novel attacks', items: ATTACKS.filter((a) => a.section === 'novel').map((a) => ({ id: a.id, label: a.title })) },
+  { id: 'common', label: 'Common attacks', items: ATTACKS.filter((a) => a.section === 'common').map((a) => ({ id: a.id, label: a.title })) },
   { id: 'method', label: 'Method and limits', items: [] as { id: string; label: string }[] },
 ];
