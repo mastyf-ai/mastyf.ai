@@ -14,7 +14,7 @@ export default function SecurityModelPage() {
   return (
     <DocPage slug="security-model">
       <DocSection id="guarantees" title="Guarantees and limits">
-        <p>What the architecture guarantees, and the limits documented in the published research, side by side.</p>
+        <p>What Mastyf promises, and where those promises stop.</p>
         <div className="doc-block">
           <Guarantees />
         </div>
