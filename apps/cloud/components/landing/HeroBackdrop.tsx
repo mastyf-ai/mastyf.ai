@@ -15,7 +15,7 @@ export function HeroBackdrop() {
     if (!video) return;
     video.muted = true;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const small = window.matchMedia('(max-width: 1099px)');
+    const small = window.matchMedia('(max-width: 767px)');
 
     const io = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting && !reduced.matches && !small.matches) {

@@ -266,16 +266,16 @@ export const HOW_IT_WORKS = [
 /** Formal Guarantees vs. Explicit Limitations */
 export const GUARANTEES_AND_LIMITATIONS = {
   guarantees: [
-    'A tool call outside what your policy allows is never sent to the tool.',
-    'A blocked or uncertain call sends zero bytes to the tool.',
-    'A model inside Mastyf can only take permission away or ask for review. It can never grant a permission the rules didn’t.',
-    'A tool call that ran but was never confirmed can’t quietly unlock the steps that depend on it.',
+    'Under complete mediation axioms (A1–A6), no tool call outside authorized capability scopes can be dispatched to backend infrastructure.',
+    'Any blocked or uncertain tool invocation produces strictly zero bytes transmitted across the tool transport wire.',
+    'Learned semantic models (Mastyf Guard) can revoke or escalate authority, but can never synthesize or grant permission (Afinal ⊆ Astruct).',
+    'Unconfirmed tool execution (ExecutionCertainty = UNKNOWN) cannot silently advance dependent workflow state (Theorem 3).',
   ],
   limitations: [
-    'Mastyf doesn’t make the AI model itself safe. It stops a misled model’s actions from running.',
-    'Model-based checks can miss. In the paper’s tests, one missed 21.5% of in-scope manipulations before tuning, which is why the fixed rules always run too.',
-    'Taint tracking follows data the agent passes along directly. It doesn’t catch hidden channels such as timing.',
-    'Only calls that go through Mastyf are protected. A tool the agent can reach another way isn’t covered.',
+    'Mastyf does not make an autoregressive Transformer intrinsically safe; it prevents compromised model outputs from executing privileged actions.',
+    'Semantic neural auditing is distribution-bounded (empirical FNR of 21.5% on in-scope manipulations prior to boundary sharpening) and subject to adversarial evasion without deterministic invariants.',
+    'Decentralized Information Flow Control (DIFC) tracks explicit data flow channels; it does not eliminate covert timing or semantic side-channels.',
+    'Protection guarantees apply exclusively to tool execution paths routed through the Mastyf reference monitor.',
   ],
 } as const;
 
@@ -283,7 +283,7 @@ const SHIELD_PLATFORM_NAMES = SHIELD_PLATFORM_ORDER.filter(shieldPlatformAvailab
   .map((id) => SHIELD_PLATFORMS[id].name)
   .join(', ');
 
-const PROTOCOL_X_CHECKS = 'Protocol X: blocks poisoned tool results and flags risky calls';
+const PROTOCOL_X_CHECKS = 'Protocol X model checks on tool calls the rules allow';
 
 /** The plans on the pricing page, docs and dashboard. Checkout prices live in lib/billing/plans.ts. */
 export const PRICING_TIERS = [
@@ -295,15 +295,14 @@ export const PRICING_TIERS = [
     name: 'Community',
     price: '₹0',
     billing: 'Free forever · AGPL-3.0',
-    description: 'For developers and researchers who build their own agents.',
+    description: 'For individual developers, hobbyists, and researchers securing local agents.',
     bullets: [
-      'Python library for LangChain, LangGraph, the OpenAI Agents SDK and your own code',
-      'Check program: a local HTTP API for any language, and a proxy for MCP servers',
-      'Hooks for GitHub Copilot’s coding agent',
-      'Built-in guards and a YAML rules file you can change',
-      'Checks on tool results: hidden instructions blocked, secrets replaced',
-      'Public MCP trust scores',
-      'Help through GitHub issues',
+      'Self-hosted Mastyf Gateway runtime',
+      'Local YAML Policy-as-Code engine',
+      'Public MCP Trust score directory',
+      'Security Swarm community test fixtures',
+      'Local audit and decision logging',
+      'Community GitHub discussions support',
     ],
     cta: 'Get Started on GitHub',
     href: 'https://github.com/mastyf-ai/mastyf.ai',
@@ -318,13 +317,13 @@ export const PRICING_TIERS = [
     name: 'Developer Pro',
     price: formatPlanPrice('developer', 'monthly', true),
     billing: `a month for the first ${DEVELOPER_OFFER_PLACES} customers, then ${formatPlanPrice('developer')}. Or ${formatPlanPrice('developer', 'yearly', true)} a year, then ${formatPlanPrice('developer', 'yearly')}.`,
-    description: 'For one developer protecting desktop agents such as Claude Code, Cursor and VS Code.',
+    description: 'For engineers securing local coding assistants (Claude Desktop, Cursor, Windsurf).',
     bullets: [
       'One person on one device',
-      `The Shield app for ${SHIELD_PLATFORM_NAMES}`,
+      'Commercial development runtime license',
+      `Mastyf Shield Desktop for ${SHIELD_PLATFORM_NAMES}`,
       PROTOCOL_X_CHECKS,
-      'DIFC taint tracking, the argument-intent auditor and the causal gate',
-      'Signed receipts for every block',
+      'Automated DIFC taint tracking & wire severance',
       'Continuous streaming MCP CVE threat intelligence',
       'License key the moment your payment clears',
     ],

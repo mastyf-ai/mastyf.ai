@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BadgeCheck, RotateCcw, ShieldAlert, Pencil } from 'lucide-react';
+import { BadgeCheck, Download, FileJson, RotateCcw, ShieldAlert, Pencil } from 'lucide-react';
 import { DEMO_RECEIPT_DIR, DEMO_RECEIPTS } from '@/lib/receipts/demo';
 import { verifyReceipt, type BlockReceipt, type Verdict } from '@/lib/receipts/verify';
 import '@/app/design/receipts.css';
@@ -91,7 +91,16 @@ export function SignedReceipts() {
             )}
             {tampered ? 'Put it back' : 'Tamper with it'}
           </button>
+          <a className="btn btn-sm" href={`${DEMO_RECEIPT_DIR}/${demo.pdf}`} download>
+            <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+            PDF
+          </a>
+          <a className="btn btn-sm" href={`${DEMO_RECEIPT_DIR}/${demo.json}`} download>
+            <FileJson size={14} strokeWidth={1.75} aria-hidden="true" />
+            JSON
+          </a>
         </div>
+        <p className="receipts__note">Demo receipts, signed with a throwaway key. Shield signs with a key made on your machine.</p>
       </div>
 
       <article className={`receipt${tampered ? ' receipt--tampered' : ''}`} aria-live="polite">

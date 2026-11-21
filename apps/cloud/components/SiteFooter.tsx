@@ -15,10 +15,10 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
       { href: '/download', label: 'Download Shield' },
       { href: '/docs', label: 'Documentation' },
       { href: '/certified', label: 'Certified MCPs' },
-      { href: '/docs/python', label: 'Python library' },
-      { href: '/docs/check', label: 'Check program' },
-      { href: '/protocol-x', label: 'Protocol X' },
-      { href: '/attack-lab', label: 'Attack Lab' },
+      { href: '/docs/how-it-works#components', label: 'Mastyf Gateway' },
+      { href: '/docs/how-it-works#components', label: 'Mastyf Swarm' },
+      { href: '/trust', label: 'Mastyf Trust' },
+      { href: '/docs/how-it-works#components', label: 'Control plane' },
       { href: '/pricing', label: 'Pricing and license' },
     ],
   },
@@ -28,8 +28,8 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
       { href: '/solutions#mcp-security', label: 'MCP security' },
       { href: '/solutions#coding-agents', label: 'Autonomous coding agents' },
       { href: '/solutions#enterprise-agents', label: 'Enterprise data stores' },
-      { href: '/docs/getting-started', label: 'Get started' },
-      { href: '/assessment', label: 'Check your agent’s risk' },
+      { href: '/developers', label: 'Developer quickstart' },
+      { href: '/assessment', label: 'Free security assessment' },
       { href: GITHUB_REPO_URL, label: 'GitHub repository', external: true },
     ],
   },
@@ -38,7 +38,7 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
     links: [
       { href: '/research', label: 'Read the paper' },
       { href: '/docs/security-model#guarantees', label: 'Guarantees and limitations' },
-      { href: '/trust', label: 'Trust center' },
+      { href: '/trust', label: 'Trust center and compliance' },
       { href: '/funding', label: 'Funding and support' },
       { href: '/pilot', label: '30-day guided pilot' },
       { href: '/terms', label: 'Terms of service' },
@@ -73,7 +73,8 @@ export function SiteFooter() {
             <span>mastyf.ai</span>
           </div>
           <p>
-            Mastyf guards every action your AI agents take, and checks it against your rules before it runs.
+            Your AI can reason. Mastyf controls what it can execute: an externally enforced
+            security layer for AI agent tool execution.
           </p>
           <a href={SUPPORT_MAILTO} className="footer__email">
             {SUPPORT_EMAIL}

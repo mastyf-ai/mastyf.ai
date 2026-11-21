@@ -1,14 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight, Bot, Code2, GitPullRequest, Monitor, Terminal } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { LegacyDocsRedirect } from '@/components/docs/LegacyDocsRedirect';
-import { DocPaths } from '@/components/docs/DocVisuals';
 import { DOC_TOPICS, docHref } from '@/components/docs/topics';
 
 export const metadata: Metadata = {
   title: 'Docs — Mastyf',
   description:
-    'Mastyf documentation: the Python library, the check program and its API, GitHub Copilot hooks, rules, the Shield app, Protocol X, benchmarks, plans and help.',
+    'Mastyf documentation: getting started, connecting your agent, how enforcement works, the Shield app, performance, guarantees and research, plans, and help.',
 };
 
 export default function DocsIndexPage() {
@@ -17,18 +16,8 @@ export default function DocsIndexPage() {
       <LegacyDocsRedirect />
       <header className="docs__intro">
         <h1>Documentation</h1>
-        <p>Start with your agent.</p>
+        <p>How Mastyf enforces policy on agent tool calls, how to connect your agent, and how to run it.</p>
       </header>
-
-      <DocPaths
-        paths={[
-          { href: '/docs/python', title: 'Python agent', line: 'LangChain, LangGraph, OpenAI Agents or your own loop.', Icon: Code2, tag: 'Free' },
-          { href: '/docs/check', title: 'Any other language', line: 'Ask the local check API before each tool call.', Icon: Terminal, tag: 'Free' },
-          { href: '/docs/copilot', title: 'GitHub Copilot', line: 'Hooks that check Copilot’s coding agent.', Icon: GitPullRequest, tag: 'Free' },
-          { href: '/docs/shield', title: 'Claude Code, Cursor, VS Code', line: 'Shield protects them with no code changes.', Icon: Monitor, tag: 'Paid' },
-          { href: '/docs/check#mcp', title: 'An MCP server', line: 'Put the checks in front of it with one command.', Icon: Bot, tag: 'Free' },
-        ]}
-      />
 
       <ul className="doc-topics">
         {DOC_TOPICS.map((topic) => (
@@ -39,6 +28,9 @@ export default function DocsIndexPage() {
                 <ArrowRight size={14} strokeWidth={1.75} aria-hidden="true" />
               </span>
               <span className="doc-topic__summary">{topic.summary}</span>
+              {topic.sections.length > 1 ? (
+                <span className="doc-topic__sections">{topic.sections.map((s) => s.label).join(' · ')}</span>
+              ) : null}
             </Link>
           </li>
         ))}

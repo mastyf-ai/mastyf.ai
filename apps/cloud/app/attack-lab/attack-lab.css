@@ -42,9 +42,10 @@
 }
 
 .alab-stats dt {
-  color: var(--ink-2);
-  font-size: var(--fs-meta);
-  font-weight: 600;
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
 }
 
 .alab-stats dd {
@@ -86,85 +87,6 @@
   .alab-stats > div:nth-child(n + 3) {
     border-top: 1px solid var(--line);
   }
-}
-
-/* ------------------------------------------------------------ attack gallery (AttackGallery.tsx) */
-
-.alab-gallery {
-  position: relative;
-  display: grid;
-  gap: var(--s-4);
-  margin-top: var(--s-6);
-}
-
-/* Old per-attack links land here; the gallery then opens that attack. */
-.alab-gallery__anchor {
-  position: absolute;
-  top: 0;
-  scroll-margin-top: calc(var(--nav-h) + var(--nav-inset) + var(--s-6));
-}
-
-.alab-gallery__picker {
-  display: grid;
-  gap: var(--s-4);
-}
-
-.alab-gallery__group {
-  display: grid;
-  gap: var(--s-2);
-}
-
-.alab-gallery__group-label {
-  color: var(--ink-3);
-  font-size: var(--fs-meta);
-}
-
-.alab-gallery__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2);
-}
-
-.alab-gallery__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  padding: 8px 14px;
-  color: var(--ink-2);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  font: inherit;
-  font-size: var(--fs-meta);
-  cursor: pointer;
-  transition:
-    border-color var(--t-fast) var(--ease),
-    color var(--t-fast) var(--ease),
-    background-color var(--t-fast) var(--ease);
-}
-
-.alab-gallery__chip:hover {
-  color: var(--ink-strong);
-  border-color: var(--line-strong);
-}
-
-.alab-gallery__chip[aria-pressed='true'] {
-  color: var(--ink-strong);
-  background: var(--accent-soft);
-  border-color: var(--accent-line);
-}
-
-.alab-gallery__catch {
-  color: var(--ok);
-  font-size: var(--fs-label);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.alab-gallery__how {
-  max-width: 70ch;
-  margin: 0;
-  color: var(--ink-2);
 }
 
 /* ------------------------------------------------------------ attacks */
@@ -369,8 +291,9 @@
 
 .alab-steps__t {
   overflow: hidden;
-  font-weight: 600;
+  letter-spacing: var(--track-label);
   text-overflow: ellipsis;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 

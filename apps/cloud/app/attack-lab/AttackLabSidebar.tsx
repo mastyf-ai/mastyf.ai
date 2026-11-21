@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RailBrand } from '@/components/docs/RailBrand';
 import { OUTLINE } from './data';
 
 /** Every anchor on the page, in document order: each group, then the attacks under it. */
@@ -43,9 +42,7 @@ export function AttackLabSidebar() {
   }, []);
 
   return (
-    // data-lenis-prevent: the wheel scrolls this rail, not the page's smooth scroll.
-    <nav className="docs__nav" aria-label="Attack Lab" data-lenis-prevent>
-      <RailBrand />
+    <nav className="docs__nav" aria-label="Attack Lab">
       <p className="label docs__nav-title">
         <a href="#top">Attack Lab</a>
       </p>

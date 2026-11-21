@@ -41,10 +41,10 @@ export function Plans() {
 
       <div className="doc-columns">
         <div>
-          <h3>Free and open source</h3>
+          <h3>Open source core</h3>
           <p>
-            The check program and its rules engine are open source under AGPL-3.0, and the libraries under MIT. You can
-            read every line of the code that decides.
+            The Mastyf Gateway, YAML policy engine, Security Swarm fixtures, and MCP Trust directory are open source under
+            AGPL-3.0. No vendor lock-in: you can read every line of the enforcement code.
           </p>
           <a href={GITHUB_REPO_URL} className="link-icon" target="_blank" rel="noopener noreferrer">
             GitHub repository
@@ -52,10 +52,10 @@ export function Plans() {
           </a>
         </div>
         <div>
-          <h3>Paid</h3>
+          <h3>Commercial platform</h3>
           <p>
-            Paid plans add the Shield app, Protocol X, DIFC taint tracking, the argument-intent auditor, the causal gate,
-            signed receipts for every block, and your dashboard on mastyf.ai.
+            Paid plans add the Control Plane for fleets, tamper-evident audit evidence, production Mastyf Guard models,
+            compliance exports, and support SLAs.
           </p>
         </div>
       </div>
@@ -64,7 +64,7 @@ export function Plans() {
       <p>
         Payments are processed by Razorpay in Indian rupees (UPI, cards, netbanking and wallets). A monthly payment buys
         30 days of the plan for your workspace and a yearly payment buys 365, and paying again extends it. Plans do not
-        renew by themselves. Your license key for Shield appears right after the first payment and stays
+        renew by themselves. Your license key for Shield and the gateway appears right after the first payment and stays
         on the License page of your dashboard.
       </p>
       <p>
