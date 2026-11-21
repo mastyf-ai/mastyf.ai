@@ -17,9 +17,9 @@ import {
 
 /**
  * Throw a recorded attack at Protocol X: pick what the attacker wants and how it is disguised, then
- * watch the packet fly into the model, the meter fill to the recorded score, and the verdict. Switch
- * to the October model to replay its own recorded verdict on the same text. Plays on its own until
- * the visitor picks something. Nothing calls the model.
+ * watch the packet fly into the model, the meter fill to the recorded score, and the verdict. Plays
+ * on its own until the visitor picks something. Nothing calls the model; every verdict is the
+ * current model's recorded one.
  */
 
 type Phase = 'idle' | 'travel' | 'scan' | 'blocked' | 'passed';
@@ -53,7 +53,7 @@ export function PxArena() {
   const [auto, setAuto] = useState(true);
   const [goal, setGoal] = useState<ArenaGoalId>('credential-exfil');
   const [disguise, setDisguise] = useState<ArenaDisguiseId>('delayed-trigger');
-  const [release, setRelease] = useState<Release>('now');
+  const release: Release = 'now';
   const [history, setHistory] = useState<{ blocked: boolean; harmless: boolean }[]>([]);
   const cursors = useRef<Record<string, number>>({});
   const timers = useRef<number[]>([]);
@@ -140,21 +140,14 @@ export function PxArena() {
     setDisguise(d);
     play(goal, d, release);
   };
-  const pickRelease = (r: Release) => {
-    setAuto(false);
-    setRelease(r);
-    if (current) play(current.goal, current.disguise, r, current.example);
-  };
 
   const ex = current?.example;
   const v = ex && current ? verdictFor(ex, current.release) : null;
-  const other = ex && current ? verdictFor(ex, current.release === 'now' ? 'before' : 'now') : null;
   const isCall = ex?.carrier === 'call';
   const scored = phase === 'scan' || phase === 'blocked' || phase === 'passed';
   const p = v && scored ? v.p : 0;
   const stopped = history.filter((h) => h.blocked && !h.harmless).length;
   const attacks = history.filter((h) => !h.harmless).length;
-  const differs = v && other && phase !== 'travel' && phase !== 'scan' && v.blocked !== other.blocked;
 
   return (
     <div className="pxa" ref={rootRef} data-phase={phase} data-release={current?.release ?? 'now'}>
@@ -184,14 +177,6 @@ export function PxArena() {
               </button>
             ))}
           </div>
-          <div className="pxa__seg pxa__seg--release" role="group" aria-label="Which model">
-            <button type="button" aria-pressed={release === 'now'} onClick={() => pickRelease('now')}>
-              November model
-            </button>
-            <button type="button" aria-pressed={release === 'before'} onClick={() => pickRelease('before')}>
-              October model
-            </button>
-          </div>
         </div>
       </div>
 
@@ -210,7 +195,6 @@ export function PxArena() {
           <div className="pxa__orbit pxa__orbit--2" />
           <strong className="pxa__core-label">X</strong>
           <span className="pxa__score">{scored && v ? `${Math.round(v.p * 100)}` : ''}</span>
-          {current?.release === 'before' ? <span className="pxa__model">Oct</span> : null}
         </div>
         <div className="pxa__node pxa__node--to">
           {isCall ? <Wrench size={22} strokeWidth={1.5} /> : <Bot size={22} strokeWidth={1.5} />}
@@ -233,13 +217,7 @@ export function PxArena() {
             <b>{phase === 'blocked' ? 'Blocked' : 'Let through'}</b>
             <span>{Math.round(v.p * 100)}% attack</span>
             {v.ms ? <span>{(v.ms / 1000).toFixed(1)} s</span> : null}
-            <span className="pxa__rel">{current?.release === 'now' ? 'November model' : 'October model'}</span>
             {current?.goal !== 'harmless' && phase === 'passed' ? <span className="pxa__miss">missed</span> : null}
-            {differs ? (
-              <span className="pxa__diff">
-                {current?.release === 'now' ? 'October model' : 'November model'}: {other?.blocked ? 'blocked' : 'missed'}
-              </span>
-            ) : null}
           </p>
         ) : (
           <p className="pxa__verdict pxa__verdict--wait">{phase === 'idle' ? 'Pick an attack' : 'Checking…'}</p>
