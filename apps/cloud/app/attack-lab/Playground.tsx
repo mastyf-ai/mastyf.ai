@@ -55,28 +55,6 @@ function ChoiceGroup({
   );
 }
 
-function BeforeNow({ ex, harmless, sent }: { ex: PlayExample; harmless: boolean; sent: boolean }) {
-  if (!sent || !ex.before) return null;
-  const word = (blocked: boolean) => (harmless ? (blocked ? 'wrongly blocked it' : 'let it through') : blocked ? 'blocked it' : 'let it through');
-  const good = (blocked: boolean) => (harmless ? !blocked : blocked);
-  return (
-    <dl className="alab-play__releases">
-      <div>
-        <dt>{PLAYGROUND.releases.before}</dt>
-        <dd className={good(ex.before.blocked) ? 'is-good' : 'is-bad'}>
-          {word(ex.before.blocked)} <span className="dim">· {(ex.before.p * 100).toFixed(1)}%</span>
-        </dd>
-      </div>
-      <div>
-        <dt>{PLAYGROUND.releases.now}</dt>
-        <dd className={good(ex.now.blocked) ? 'is-good' : 'is-bad'}>
-          {word(ex.now.blocked)} <span className="dim">· {(ex.now.p * 100).toFixed(1)}%</span>
-        </dd>
-      </div>
-    </dl>
-  );
-}
-
 export function Playground() {
   const reduced = useReducedMotion();
   const [goal, setGoal] = useState(PLAYGROUND.goals[0].id);
@@ -223,15 +201,13 @@ export function Playground() {
                   <span className="alab-why__quote">{ex.hidden}</span>
                 </p>
               ) : null}
-              <BeforeNow ex={ex} harmless={harmless} sent={finished} />
               <div className="console__foot">
                 <span>
                   {count.now
                     ? harmless
-                      ? `Across all ${total} harmless examples of this disguise, the ${PLAYGROUND.releases.now} wrongly blocked ${count.now[0]}`
-                      : `Across all ${total} recorded attacks with this goal and disguise, the ${PLAYGROUND.releases.now} stopped ${count.now[0]}`
+                      ? `Across all ${total} harmless examples of this disguise, Protocol X wrongly blocked ${count.now[0]}.`
+                      : `Across all ${total} recorded attacks with this goal and disguise, Protocol X stopped ${count.now[0]}.`
                     : null}
-                  {count.now && count.before ? `; the ${PLAYGROUND.releases.before}, ${count.before[0]}.` : count.now ? "." : null}
                 </span>
               </div>
             </>
