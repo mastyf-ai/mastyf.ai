@@ -32,28 +32,15 @@ export default async function ResearchPage() {
       <SiteNav session={!!session} />
       <main className="page-main">
         <header className="page-head">
-          <p className="eyebrow">Preprint, {PAPER_VERSION}</p>
           <h1 className="page-head__title page-head__title--long">{PAPER_TITLE}</h1>
           <p className="page-head__lead">{PAPER_SUBTITLE}</p>
-
-          <dl className="facts">
-            <div>
-              <dt>Author</dt>
-              <dd>Rudraneel Das</dd>
-            </div>
-            <div>
-              <dt>DOI</dt>
-              <dd>
-                <a href={`https://doi.org/${ZENODO_DOI}`} target="_blank" rel="noopener noreferrer">
-                  {ZENODO_DOI}
-                </a>
-              </dd>
-            </div>
-            <div>
-              <dt>License</dt>
-              <dd>CC BY 4.0, open access</dd>
-            </div>
-          </dl>
+          <p className="research-byline">
+            Rudraneel Das, {PAPER_VERSION}. Open access under CC BY 4.0, DOI{' '}
+            <a href={`https://doi.org/${ZENODO_DOI}`} target="_blank" rel="noopener noreferrer">
+              {ZENODO_DOI}
+            </a>
+            .
+          </p>
 
           <div className="page-head__actions">
             <a href={PAPER_LOCAL_PDF_PATH} download className="btn btn-primary">
