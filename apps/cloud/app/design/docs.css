@@ -24,6 +24,83 @@
   font-weight: 600;
 }
 
+/* A topic with sections is a dropdown: the row holds the topic link and a small arrow; its
+   sections slide open beneath it. The current page's topic starts open. */
+.docs__topic-row {
+  display: flex;
+  align-items: center;
+}
+
+.docs__topic-row > .docs__topic {
+  flex: 1;
+  min-width: 0;
+}
+
+.docs__toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--s-1);
+  padding: 0;
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition:
+    color var(--t-fast) var(--ease),
+    background-color var(--t-fast) var(--ease);
+}
+
+.docs__toggle:hover {
+  color: var(--ink-strong);
+  background: rgb(var(--tint) / 0.06);
+}
+
+.docs__toggle svg {
+  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.docs__toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+/* Height animates through the grid row (0fr to 1fr), so no measuring is needed. */
+.docs__drawer {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 0.4s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.3s ease;
+}
+
+.docs__drawer.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.docs__drawer > .docs__sections {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 1023px) {
+  .docs__toggle,
+  .docs__drawer {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs__drawer,
+  .docs__toggle svg {
+    transition: none;
+  }
+}
+
 /* Sections of the current topic: indented under it on wide screens, hidden on narrow ones
    (each page lists them as it goes). */
 .docs__nav .docs__sections {
@@ -69,17 +146,99 @@
   color: var(--ink-strong);
 }
 
+/* The rail's mark shows on wide screens only; narrow screens keep the site bar's. */
+.docs__brand {
+  display: none;
+}
+
+/* Wide screens: the sidebar is a rail pinned to the left edge at full height, like the
+   dashboard's, and the site bar, the page and the footer start to its right. */
 @media (min-width: 1024px) {
-  .docs__nav {
-    position: sticky;
-    top: calc(var(--nav-h) + var(--nav-inset) + var(--s-8));
-    align-self: start;
-    max-height: calc(100vh - var(--nav-h) - var(--s-16));
-    overflow-y: auto;
+  body:has(.docs) {
+    --docs-side: 264px;
   }
 
-  .docs__nav-title {
-    margin-bottom: var(--s-3);
+  body:has(.docs) .nav {
+    left: var(--docs-side);
+  }
+
+  body:has(.docs) .footer {
+    width: min(100% - var(--docs-side) - var(--gutter) * 2, var(--content-max));
+    margin-left: calc(var(--docs-side) + var(--gutter));
+  }
+
+  .docs {
+    display: block;
+    width: auto;
+    margin: 0 0 0 var(--docs-side);
+    padding: var(--s-8) var(--gutter) var(--section-pad);
+  }
+
+  .docs > .docs__main {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  .docs__nav {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: var(--docs-side);
+    height: 100vh;
+    height: 100dvh;
+    padding: var(--s-6) var(--s-4) var(--s-8);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    /* The rail reads the frame's ink, as the dashboard's sidebar does. */
+    --ink: var(--frame-ink);
+    --ink-strong: var(--frame-ink);
+    --ink-2: var(--frame-ink-2);
+    --ink-3: var(--frame-ink-2);
+    --line: var(--frame-line);
+    --line-strong: var(--frame-line);
+    --accent: var(--frame-ink);
+    background: var(--frame-bg);
+    border-right: 1px solid var(--frame-edge, var(--frame-line));
+  }
+
+  .docs__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* The mark lives in the rail on these pages, so the site bar drops its own and fits beside it. */
+  body:has(.docs) .nav__brand {
+    display: none;
+  }
+
+  .docs__brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 var(--s-6);
+    padding: 0 var(--s-3);
+    color: var(--ink-strong);
+    font-family: var(--font-display);
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .docs__brand:hover {
+    color: var(--ink-strong);
+  }
+
+  .docs .docs__nav .docs__nav-title {
+    margin: 0 0 var(--s-5);
+    padding: 0 var(--s-3);
+    color: var(--ink-strong);
+    font-family: var(--font-display);
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 
   .docs__nav ul {
@@ -520,4 +679,386 @@ th.compare__us {
 
 .doc-block + p {
   margin-top: var(--s-6);
+}
+
+/* ------------------------------------------------------------ flow (components/docs/DocVisuals) */
+
+.doc-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-8);
+  margin: var(--s-6) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-flow__step {
+  position: relative;
+  display: grid;
+  flex: 1 1 140px;
+  gap: 2px;
+  padding: var(--s-4) var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.doc-flow__step--check {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.doc-flow__step--ok {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.doc-flow__step--stop {
+  border-color: var(--critical-line);
+}
+
+.doc-flow__label {
+  color: var(--ink-strong);
+  font-weight: 600;
+}
+
+.doc-flow__sub {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+
+/* The wire to the next step, with a pulse running along it. */
+.doc-flow__wire {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: var(--s-8);
+  height: 2px;
+  overflow: hidden;
+  background: var(--line-strong);
+}
+
+.doc-flow__wire::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -8px;
+  width: 8px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 3px;
+  box-shadow: 0 0 8px var(--accent);
+  animation: doc-flow-pulse 1.6s linear infinite;
+}
+
+@keyframes doc-flow-pulse {
+  to {
+    transform: translateX(calc(var(--s-8) + 8px));
+  }
+}
+
+@media (max-width: 639px) {
+  .doc-flow {
+    flex-direction: column;
+    gap: var(--s-5);
+  }
+
+  .doc-flow__wire {
+    top: 100%;
+    left: var(--s-6);
+    width: 2px;
+    height: var(--s-5);
+  }
+
+  .doc-flow__wire::after {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-flow__wire::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------ recorded verdicts (RecordedVerdicts) */
+
+.rv {
+  display: grid;
+  gap: var(--s-4);
+  margin: var(--s-6) 0;
+}
+
+.rv__stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+  align-items: stretch;
+  min-height: 160px;
+  animation: rv-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes rv-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.rv__in,
+.rv__out {
+  display: grid;
+  align-content: start;
+  gap: var(--s-2);
+  padding: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.rv__kind {
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+}
+
+.rv__tool {
+  color: var(--ink-strong);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.rv__input {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  word-break: break-word;
+}
+
+/* A pulse runs from the input to the verdict. */
+.rv__wire {
+  position: relative;
+  align-self: center;
+  height: 2px;
+  margin: 0 6px;
+  background: var(--line-strong);
+}
+
+.rv__wire::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--accent);
+  animation: rv-pulse 0.6s ease-in both;
+}
+
+@keyframes rv-pulse {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+}
+
+.rv__out {
+  animation: rv-verdict 0.45s 0.45s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes rv-verdict {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.rv__out--block {
+  background: var(--critical-soft);
+  border-color: var(--critical-line);
+}
+
+.rv__out--redact {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.rv__out--allow {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.rv__decision {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.rv__out--block .rv__decision {
+  color: var(--critical);
+}
+
+.rv__out--redact .rv__decision {
+  color: var(--accent);
+}
+
+.rv__out--allow .rv__decision {
+  color: var(--ok);
+}
+
+.rv__rule {
+  color: var(--ink-strong);
+  font-size: var(--fs-meta);
+}
+
+.rv__reason {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+
+.rv__dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rv__dot {
+  width: 22px;
+  height: 6px;
+  padding: 0;
+  background: var(--line-strong);
+  border: 0;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  opacity: 0.6;
+  transition:
+    opacity var(--t-fast) var(--ease),
+    width var(--t) var(--ease);
+}
+
+.rv__dot--block {
+  background: var(--critical);
+}
+
+.rv__dot--redact {
+  background: var(--accent);
+}
+
+.rv__dot--allow {
+  background: var(--ok);
+}
+
+.rv__dot[aria-pressed='true'] {
+  width: 40px;
+  opacity: 1;
+}
+
+.rv__note {
+  margin: 0;
+  color: var(--ink-3) !important;
+  font-size: var(--fs-label);
+}
+
+@media (max-width: 639px) {
+  .rv__stage {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-3);
+  }
+
+  .rv__wire {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv__stage,
+  .rv__out,
+  .rv__wire::after {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------ path cards */
+
+.doc-paths {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--s-3);
+  margin: var(--s-6) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-path {
+  position: relative;
+  display: grid;
+  gap: var(--s-2);
+  height: 100%;
+  padding: var(--s-5);
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  text-decoration: none;
+  transition:
+    border-color var(--t-fast) var(--ease),
+    transform var(--t) var(--ease);
+}
+
+.doc-path:hover,
+.doc-path:focus-visible {
+  border-color: var(--accent-line);
+  transform: translateY(-2px);
+}
+
+.doc-path__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--r);
+}
+
+.doc-path__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--ink-strong);
+  font-weight: 700;
+}
+
+.doc-path__tag {
+  padding: 1px 8px;
+  color: var(--accent);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-pill);
+}
+
+.doc-path__line {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+.doc-path__go {
+  position: absolute;
+  top: var(--s-5);
+  right: var(--s-5);
+  color: var(--ink-3);
+  transition: transform var(--t) var(--ease);
+}
+
+.doc-path:hover .doc-path__go {
+  color: var(--accent);
+  transform: translateX(3px);
 }

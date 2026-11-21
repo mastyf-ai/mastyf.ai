@@ -8,9 +8,9 @@ export type TierFeature = { name: string; what: string; status: 'available' | 'c
 export const FREE_FEATURES: TierFeature[] = [
   {
     name: 'Python library',
-    what: 'pip install mastyf-ai. Checks every tool call your agent makes; adapters for LangChain and OpenAI Agents.',
+    what: 'pip install mastyf-ai. Checks every tool call and tool result; adapters for LangChain, LangGraph and OpenAI Agents.',
     status: 'available',
-    href: 'https://pypi.org/project/mastyf-ai/',
+    href: '/docs/python',
   },
   {
     name: 'JavaScript library',
@@ -21,12 +21,13 @@ export const FREE_FEATURES: TierFeature[] = [
     name: 'Check service',
     what: 'A small HTTP service you run yourself; any agent in any language asks it before running a tool.',
     status: 'available',
-    href: '/docs/connect#custom-agent',
+    href: '/docs/check',
   },
   {
     name: 'GitHub Copilot hooks',
-    what: 'Checks Copilot agent tool calls on your machine before they run.',
+    what: 'Checks every tool call of Copilot’s coding agent in your repository before it runs.',
     status: 'available',
+    href: '/docs/copilot',
   },
   {
     name: 'Policy engine',
