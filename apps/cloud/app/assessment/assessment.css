@@ -1,0 +1,268 @@
+/* Risk check: one question at a time on a single card, then a meter and plain findings. */
+
+.page-head--center {
+  text-align: center;
+}
+
+.page-head--center .page-head__lead {
+  margin-inline: auto;
+}
+
+.assess {
+  width: min(100%, 680px);
+  margin-inline: auto;
+}
+
+.assess__progress {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: var(--s-5);
+}
+
+.assess__progress span {
+  height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  transition: background 0.5s var(--ease);
+}
+
+.assess__progress .is-now {
+  background: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.assess__progress .is-done {
+  background: linear-gradient(90deg, #8a7240, #f0dfb2);
+}
+
+:root[data-theme='light'] .assess__progress .is-done {
+  background: linear-gradient(90deg, #4a2e17, #b98a4e);
+}
+
+.assess__card {
+  padding: clamp(24px, 4vw, 40px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  animation: assess-in 0.45s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes assess-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.assess__count {
+  margin: 0;
+  color: var(--ink-3) !important;
+  font-size: var(--fs-meta);
+}
+
+.page-main .assess__q {
+  margin: var(--s-2) 0 var(--s-6);
+  font-size: clamp(1.375rem, 2.6vw, 1.75rem);
+  line-height: 1.2;
+}
+
+.assess__options {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.assess__opt {
+  display: flex;
+  gap: var(--s-4);
+  align-items: center;
+  width: 100%;
+  padding: var(--s-4) var(--s-5);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease),
+    background 0.2s var(--ease);
+}
+
+.assess__opt:hover {
+  border-color: var(--ink-3);
+}
+
+.assess__opt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.assess__opt.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* Round marks for one answer, square for several. */
+.assess__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: #1a1408;
+  border: 1.5px solid var(--ink-3);
+  border-radius: 50%;
+  transition: all 0.2s var(--ease);
+}
+
+.assess__opt[data-many] .assess__mark {
+  border-radius: 6px;
+}
+
+.assess__opt.is-on .assess__mark {
+  border-color: transparent;
+  background: linear-gradient(135deg, #f0dfb2, #c9ad6c);
+}
+
+.assess__nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--s-6);
+}
+
+.assess__back {
+  display: inline-flex;
+  gap: var(--s-2);
+  align-items: center;
+  padding: var(--s-2) 0;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--fs-meta);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.assess__back:hover {
+  color: var(--ink);
+}
+
+/* Result meter: three levels, the dot slides to yours. */
+.assess__meter {
+  --level: 0;
+  margin-bottom: var(--s-8);
+}
+
+.assess__track {
+  position: relative;
+  height: 6px;
+  background: linear-gradient(90deg, #5c4a26, #c9ad6c 55%, #f0dfb2);
+  border-radius: 999px;
+}
+
+:root[data-theme='light'] .assess__track {
+  background: linear-gradient(90deg, #d9c3a0, #7a5228 55%, #4a2e17);
+}
+
+.assess__dot {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--level) * 50%);
+  width: 20px;
+  height: 20px;
+  background: var(--bg);
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: assess-dot 1.2s cubic-bezier(0.32, 0.72, 0, 1) 0.2s both;
+}
+
+@keyframes assess-dot {
+  from {
+    left: 0;
+  }
+}
+
+.assess__levels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--s-3);
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+}
+
+.assess__levels .is-on {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.assess__findings {
+  display: grid;
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assess__findings li {
+  position: relative;
+  padding-left: var(--s-6);
+  line-height: 1.55;
+}
+
+.assess__findings li::before {
+  content: '';
+  position: absolute;
+  top: 0.6em;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+.assess__next-title {
+  margin: var(--s-8) 0 var(--s-4);
+  color: var(--ink);
+  font-size: 1.125rem;
+}
+
+.assess__next {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--s-3);
+  margin-bottom: var(--s-6);
+}
+
+.assess__path {
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-5);
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  transition:
+    border-color 0.2s var(--ease),
+    transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.assess__path:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.assess__path span {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assess__card,
+  .assess__dot {
+    animation: none;
+  }
+}
