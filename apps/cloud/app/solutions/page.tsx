@@ -1,90 +1,133 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 import { SiteNav } from '@/components/SiteNav';
 import { SiteFooter } from '@/components/SiteFooter';
+import { DocFlow, type FlowStep } from '@/components/docs/DocVisuals';
 import { safeAuth } from '@/lib/safe-auth';
-import '../landing.css';
+import './solutions.css';
 
 export const metadata: Metadata = {
-  title: 'Solutions — Mastyf AI Agent Security Platform',
+  title: 'Solutions — Mastyf',
   description:
-    'Security solutions for Model Context Protocol (MCP), autonomous coding agents (Claude Code, Cursor), enterprise database connections, and regulated AI workflows.',
+    'How Mastyf protects MCP servers, coding agents like Claude Code and Cursor, agents that work with databases and business data, and teams that need evidence for an audit.',
 };
+
+type Solution = {
+  id: string;
+  title: string;
+  risk: string;
+  flow: FlowStep[];
+  stops: string[];
+  how: { label: string; href: string }[];
+};
+
+const SOLUTIONS: Solution[] = [
+  {
+    id: 'mcp-security',
+    title: 'MCP servers',
+    risk: 'A tool server you install can return text that hijacks your agent, or quietly change what its tools do.',
+    flow: [
+      { label: 'MCP server', sub: 'returns a result' },
+      { label: 'Mastyf', sub: 'checks calls, results and tool lists', tone: 'check' },
+      { label: 'Your agent', sub: 'sees only what passed', tone: 'ok' },
+    ],
+    stops: ['Hidden instructions in tool results', 'Tools that change after you approved them', 'Calls that read secrets or send data out'],
+    how: [
+      { label: 'Put the checks in front of any MCP server', href: '/docs/check#mcp' },
+      { label: 'Score a package before you install it', href: '/certified' },
+    ],
+  },
+  {
+    id: 'coding-agents',
+    title: 'Coding agents',
+    risk: 'Claude Code, Cursor and Copilot run commands and read files on your machine. A poisoned README or error message can steer them.',
+    flow: [
+      { label: 'Coding agent', sub: 'wants to run a command' },
+      { label: 'Mastyf', sub: 'checks it first', tone: 'check' },
+      { label: 'Your machine', sub: 'runs only what is allowed', tone: 'ok' },
+    ],
+    stops: ['Reading SSH keys and .env files', 'Download-and-run commands and remote shells', 'Pushing code or files to unknown places'],
+    how: [
+      { label: 'Shield for Claude Code, Cursor and VS Code', href: '/docs/shield#connect' },
+      { label: 'Free hooks for GitHub Copilot', href: '/docs/copilot' },
+    ],
+  },
+  {
+    id: 'enterprise-agents',
+    title: 'Agents with your data',
+    risk: 'An agent that queries a database or CRM can be talked into dumping a table or sending records to someone else.',
+    flow: [
+      { label: 'Your agent', sub: 'queries your data' },
+      { label: 'Mastyf', sub: 'checks the query and where data goes', tone: 'check' },
+      { label: 'Your database', sub: 'answers safe queries only', tone: 'ok' },
+    ],
+    stops: ['Bulk dumps and destructive SQL', 'Data from untrusted places flowing out (Shield)', 'Calls to cloud metadata and private addresses'],
+    how: [
+      { label: 'Add the free checks to your Python agent', href: '/docs/python' },
+      { label: 'Any language: the check API', href: '/docs/check#api' },
+    ],
+  },
+  {
+    id: 'regulated-industries',
+    title: 'Evidence for audits',
+    risk: 'When something is blocked, you need to show what happened, and prove the record wasn’t changed afterwards.',
+    flow: [
+      { label: 'A call is blocked' },
+      { label: 'Signed receipt', sub: 'chained to the one before', tone: 'check' },
+      { label: 'Your audit', sub: 'JSON or PDF', tone: 'ok' },
+    ],
+    stops: ['Records edited after the fact', 'Receipts removed from the chain', 'Blocks with no record of why'],
+    how: [
+      { label: 'How signed receipts work', href: '/docs/shield#receipts' },
+      { label: 'What Mastyf guarantees, and what it doesn’t', href: '/docs/security-model#guarantees' },
+    ],
+  },
+];
 
 export default async function SolutionsPage() {
   const session = await safeAuth();
 
-  const solutions = [
-    {
-      id: 'mcp-security',
-      title: 'Model Context Protocol (MCP) Security',
-      tagline: 'Secure every MCP connection before execution',
-      description:
-        'Anthropic&rsquo;s Model Context Protocol gives agents ambient access to servers and tools. Mastyf Gateway intercepts JSON-RPC dispatch, verifies cryptographic HMAC tokens, and enforces destination containment so malicious prompts cannot invoke unauthorized tools.',
-      benefits: ['Zero-byte wire isolation on block', 'Live MCP package trust scanning', 'Dynamic HMAC token verification'],
-    },
-    {
-      id: 'coding-agents',
-      title: 'Autonomous Coding Agents',
-      tagline: 'Control what Claude Code, Cursor, and IDE agents can execute',
-      description:
-        'Developer agents execute terminal commands, edit repositories, and pull dependencies. Mastyf establishes strict path containment and shell command filtering, preventing prompt injection in dependencies from compromising developer machines.',
-      benefits: ['Directory sandbox containment', 'Shell pipeline injection blocking', 'Secret & API key egress prevention'],
-    },
-    {
-      id: 'enterprise-agents',
-      title: 'Enterprise ERP & Database Agents',
-      tagline: 'Connect agents to sensitive data stores without granting ungranted authority',
-      description:
-        'When agents query SQL databases or CRM platforms, untrusted inputs can trigger bulk exfiltration. Mastyf enforces Decentralized Information Flow Control (DIFC) to prevent tainted database outputs from routing to external webhooks.',
-      benefits: ['Decentralized taint tracking', 'Aggregate financial & volume clamping', 'Multi-tenant isolation'],
-    },
-    {
-      id: 'regulated-industries',
-      title: 'Regulated & High-Consequence Workflows',
-      tagline: 'Cryptographic evidence, non-repudiation, and audit certainty',
-      description:
-        'Financial services, healthcare, and government systems require verifiable assurance. Mastyf enforces Theorem 3 (Execution-Certainty Non-Advancement) and generates Ed25519-signed execution receipts for every tool call.',
-      benefits: ['Tamper-evident audit receipts', 'OWASP Agentic Top 10 alignment', 'Stateful workflow synchronization'],
-    },
-  ];
-
   return (
-    <div className="landing">
+    <>
       <SiteNav session={!!session} />
       <main className="page-main">
-        <div className="lp-section">
-          <div className="lp-section-header">
-            <span className="lp-pill lp-pill-gold">Enterprise Use Cases</span>
-            <h1>Targeted Solutions for Modern AI Agents</h1>
-            <p>
-              Whether you are securing developer IDE agents, customer-facing chatbots, or internal database orchestrators, Mastyf provides drop-in execution perimeters.
-            </p>
-          </div>
+        <header className="page-head">
+          <h1 className="page-head__title">Where Mastyf fits</h1>
+          <p className="page-head__lead">Four places AI agents get misled, and how Mastyf stops each one.</p>
+        </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 my-10">
-            {solutions.map((s) => (
-              <div key={s.id} className="card p-8">
-                <span className="lp-pill text-xs mb-3 inline-block">{s.title}</span>
-                <h3 className="text-xl font-bold text-white mb-2">{s.tagline}</h3>
-                <p className="text-xs text-slate-300 mb-6 leading-relaxed">{s.description}</p>
-                <ul className="flex flex-col gap-2 mb-6">
-                  {s.benefits.map((b) => (
-                    <li key={b} className="text-xs text-slate-400 flex items-center gap-2">
-                      <span className="text-amber-400 font-bold">✓</span>
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link href="/pilot" className="btn btn-secondary btn-sm btn-pill">
-                  Start Solution Pilot →
-                </Link>
+        {SOLUTIONS.map((s) => (
+          <section key={s.id} id={s.id} className="section solution" aria-labelledby={`${s.id}-title`}>
+            <div className="solution__text">
+              <h2 id={`${s.id}-title`}>{s.title}</h2>
+              <p className="solution__risk">{s.risk}</p>
+              <ul className="solution__stops">
+                {s.stops.map((stop) => (
+                  <li key={stop}>{stop}</li>
+                ))}
+              </ul>
+              <div className="solution__how">
+                {s.how.map((h) => (
+                  <Link key={h.href} href={h.href} className="link-icon">
+                    {h.label}
+                    <ArrowRight size={13} strokeWidth={1.75} aria-hidden="true" />
+                  </Link>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+            <DocFlow steps={s.flow} label={`${s.title}: where Mastyf sits`} />
+          </section>
+        ))}
+
+        <section className="section solution-cta">
+          <p>Rolling Mastyf out across a team?</p>
+          <Link href="/pilot" className="btn btn-luxe btn-lg">
+            Plan a 30-day pilot
+          </Link>
+        </section>
       </main>
       <SiteFooter />
-    </div>
+    </>
   );
 }
