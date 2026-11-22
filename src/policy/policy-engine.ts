@@ -27,6 +27,7 @@ import {
 } from './strategies/index.js';
 import { compilePolicyRegex, safeRegexTest, UnsafePolicyRegexError } from './regex-compile.js';
 import { MAX_REGEX_INPUT_CHARS } from '../utils/eval-bounds.js';
+import { maskPathRuns } from './path-runs.js';
 import {
   evaluateResponseDlp,
   responseDlpToLegacyDetections,
@@ -356,8 +357,10 @@ export class PolicyEngine {
           ) {
             continue;
           }
+          // A URL or file path is written in the base64 alphabet; judge each of its parts on its own.
+          const tested = rule.name === 'block-encoding-evasion' ? maskPathRuns(value) : value;
           for (const regex of compiled) {
-            if (safeRegexTest(regex, value, MAX_REGEX_INPUT_CHARS)) {
+            if (safeRegexTest(regex, tested, MAX_REGEX_INPUT_CHARS)) {
               const patternKey = `${field}:${regex.source}`;
               if (isFpWhitelisted(rule.name, patternKey)) continue;
               return {
@@ -384,7 +387,8 @@ export class PolicyEngine {
           ) {
             continue;
           }
-          if (safeRegexTest(regex, analysis.argsStr, MAX_REGEX_INPUT_CHARS)) {
+          const tested = rule.name === 'block-encoding-evasion' ? maskPathRuns(analysis.argsStr) : analysis.argsStr;
+          if (safeRegexTest(regex, tested, MAX_REGEX_INPUT_CHARS)) {
             if (isFpWhitelisted(rule.name, regex.source)) continue;
             return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Argument pattern matched in tool call (normalized)` };
           }
