@@ -8,7 +8,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import type { CheckEngine, ToolDef, Verdict } from './engine';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 const DEFAULT_MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_DEPTH = 64;
 const BLOCKS_KEPT = 200;
