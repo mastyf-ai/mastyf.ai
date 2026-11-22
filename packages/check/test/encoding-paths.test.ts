@@ -22,7 +22,8 @@ describe('paths are not mistaken for encoded payloads', () => {
     ['fetch_url', { url: 'https://gitlab.com/gitlab/gitlab/merge/requests/987654' }],
     ['read_file', { path: 'apps/cloud/app/certified/page.tsx' }],
     ['read_file', { path: 'C:/Users/manna/Documents/Projects/app/main.py' }],
-    ['git_log', { path: 'src/policy/strategies/encodingGuardStrategy' }],
+    ['git_log', { path: './src/policy/strategies/encodingGuardStrategy' }],
+    ['list_dir', { path: '/home/runner/work/project/project/src/components' }],
     ['run_shell', { command: 'cat src/policy/strategies/encodingGuardStrategy.ts' }],
   ] as const)('%s %j is allowed', async (tool, args) => {
     const v = await call(tool, args);
