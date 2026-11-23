@@ -124,6 +124,41 @@ export async function attachAuthContext(req: Request, _res: Response, next: Next
   }
 }
 
+/**
+ * Resolve a DB-backed session from raw request headers, for code paths that
+ * are not Express middleware (the dashboard's raw http handler and the
+ * WebSocket upgrade). Mirrors attachAuthContext: valid session, CSRF header
+ * on mutating requests, active user. Returns null when there is no usable
+ * session so callers can fall through to their own "401".
+ */
+export async function authenticateDbSessionHeaders(
+  headers: Record<string, string | string[] | undefined>,
+  method = 'GET',
+): Promise<{
+  identity: string;
+  dashboardRoles: string[];
+  tenantId: string;
+} | null> {
+  const cookieHeader = Array.isArray(headers['cookie']) ? headers['cookie'].join('; ') : headers['cookie'];
+  const token = parseCookies(cookieHeader)[SESSION_COOKIE_NAME];
+  if (!token) return null;
+  const session = await sessionStore.validate(token);
+  if (!session) return null;
+  if (!SAFE_METHODS.has(method.toUpperCase())) {
+    const raw = headers[CSRF_HEADER_NAME];
+    const headerToken = Array.isArray(raw) ? raw[0] : raw;
+    if (!headerToken || !timingSafeEqualStr(headerToken, session.csrfSecret)) return null;
+  }
+  const user = await userStore.findById(session.userId);
+  if (!user || user.status !== 'active') return null;
+  const access = await resolveUserAccess(user);
+  return {
+    identity: user.username,
+    dashboardRoles: access.dashboardRoles,
+    tenantId: user.tenantId || 'default',
+  };
+}
+
 /** Reject requests without a valid, CSRF-verified session. */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!req.authUser) {

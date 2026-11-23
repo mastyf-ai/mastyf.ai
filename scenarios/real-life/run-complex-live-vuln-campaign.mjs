@@ -27,7 +27,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dirname, 'output');
 mkdirSync(OUT, { recursive: true });
 
-const LEAKY_CONFIG = join(ROOT, 'mastyf-ai-configs/leaky-dogfood.json');
+const LEAKY_CONFIG = join(ROOT, 'mastyf-ai-configs/examples/leaky-dogfood.json');
 
 process.env.REAL_LIFE_METRICS_ENABLED = process.env.REAL_LIFE_METRICS_ENABLED || 'false';
 process.env.MASTYF_AI_VULN_DISCOVERY_ENABLED = 'true';
@@ -357,13 +357,13 @@ async function main() {
   const filesystem = await runFilesystemBlockCampaign();
   const leaky = await runLeakyNovelCampaign();
   const fuzzLeakyDirect = runVulnCli(
-    ['--config', 'mastyf-ai-configs/leaky-dogfood.json', '--mcp-fuzz'],
+    ['--config', 'mastyf-ai-configs/examples/leaky-dogfood.json', '--mcp-fuzz'],
     'mcp-fuzz direct on leaky-dogfood',
   );
   const fuzzEchoProxy = runVulnCli(
     [
       '--config',
-      'mastyf-ai-configs/echo-local.json',
+      'mastyf-ai-configs/examples/echo-local.json',
       '--mcp-fuzz',
       '--via-proxy',
     ],

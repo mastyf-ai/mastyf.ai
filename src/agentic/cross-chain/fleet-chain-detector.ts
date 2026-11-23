@@ -63,7 +63,14 @@ export class FleetChainDetector {
   private events = new Map<string, FleetChainEvent[]>();
   private alerts: FleetChainAlert[] = [];
 
-  constructor(private readonly store?: IndustryStandardStore) {}
+  /**
+   * @param options.sideEffects false for self-tests: alerts stay in memory and no SIEM event or
+   *   incident playbook runs, so a test chain never shows up as a real incident.
+   */
+  constructor(
+    private readonly store?: IndustryStandardStore,
+    private readonly options: { sideEffects?: boolean } = {},
+  ) {}
 
   record(params: {
     globalSessionId: string;
@@ -215,6 +222,7 @@ export class FleetChainDetector {
       collusionCorrelated,
     };
     this.alerts.push(alert);
+    if (this.options.sideEffects === false) return alert;
     this.store?.saveFleetChainAlert?.(alert);
     Logger.warn(`[FleetChainDetector] ${alert.description}`);
     void this.emitSiemAlert(alert);

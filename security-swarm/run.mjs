@@ -11,8 +11,8 @@ import './lib/gate-pro.mjs';
  * --fast   PR path (~15 min); omit for full nightly swarm
  */
 import { runStep, formatStepOutput, STEP_TIMEOUT_MS } from './lib/run-step.mjs';
-import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { synthesizeReport } from './agents/report-synthesize.mjs';
 import { resolveSwarmDir } from './lib/swarm-dir.mjs';
@@ -27,9 +27,17 @@ const REPO = join(__dir, '..');
 const OUT_DIR = resolveSwarmDir();
 const VENV_PY = join(REPO, 'adversarial-harness', '.venv', 'bin', 'python3');
 const NODE_BIN = dirname(process.execPath);
-process.env.PATH = `${NODE_BIN}:${process.env.PATH || ''}`;
+process.env.PATH = `${NODE_BIN}${delimiter}${process.env.PATH || ''}`;
 
 const FAST = process.argv.includes('--fast');
+/**
+ * What the dashboard's Run Analysis needs: audit the install and test the current policy against the
+ * attack corpus. No build, unit tests or Python parity; those check Mastyf's own source (CI), and a
+ * rebuild would replace files under the running server. Attacks that get past the rules are findings
+ * in the report, not a failed run.
+ */
+const ANALYSIS = process.argv.includes('--analysis');
+const MODE = ANALYSIS ? 'analysis' : FAST ? 'fast' : 'full';
 const FORCE_QUIET = process.argv.includes('--quiet');
 /** Never inherit stdio when stdout is not a TTY (dashboard/CI) — prevents pipe deadlocks at ~75%. */
 const LIVE = !FORCE_QUIET && process.stdout.isTTY;
@@ -43,7 +51,9 @@ function swarmLog(msg) {
   else console.log(msg);
 }
 
-const STEP_PLAN = FAST
+const STEP_PLAN = ANALYSIS
+  ? ['scout', 'corpus']
+  : FAST
   ? ['scout', 'build', 'vitest', 'corpus', 'venv', 'node-tests', 'parity']
   : ['scout', 'build', 'vitest', 'corpus', 'harness-full', 'attack-learning'];
 const TOTAL_STEPS = STEP_PLAN.length;
@@ -318,15 +328,31 @@ run('node', ['security-swarm/agents/scout.mjs'], {
   totalSteps,
 });
 
-run('pnpm', ['build:mastyf-ai'], { label: 'pnpm-build', totalSteps });
-
-ensureBetterSqlite3();
+if (!ANALYSIS) {
+  run('pnpm', ['build:mastyf-ai'], { label: 'pnpm-build', totalSteps });
+  ensureBetterSqlite3();
+}
 
 const vitestArgs = LIVE
   ? ['vitest', 'run', 'tests/policy/', 'tests/proxy/', 'tests/utils/', '--reporter=verbose']
   : ['test:policy-proxy-utils'];
 
-if (FAST && process.env.SWARM_PARALLEL_STEPS !== 'false') {
+if (ANALYSIS) {
+  const corpusReport = join(REPO, 'corpus-eval-report.json');
+  const began = Date.now();
+  run('node', ['--import', 'tsx', 'corpus/run-eval.ts'], {
+    label: 'corpus-eval',
+    totalSteps,
+    env: { MASTYF_AI_DISABLE_SEMANTIC: 'true' },
+  });
+  // It exits non-zero when an attack gets past the rules. A fresh report means the step did its job.
+  const step = steps.at(-1);
+  if (!step.ok && !step.timedOut && existsSync(corpusReport) && statSync(corpusReport).mtimeMs >= began) {
+    step.ok = true;
+    step.status = 0;
+    consecutiveFailures = 0;
+  }
+} else if (FAST && process.env.SWARM_PARALLEL_STEPS !== 'false') {
   const parallel = await runParallelSwarmSteps(
     [
       {
@@ -365,7 +391,9 @@ if (FAST && process.env.SWARM_PARALLEL_STEPS !== 'false') {
   });
 }
 
-if (!FAST) {
+if (ANALYSIS) {
+  // nothing more to run
+} else if (!FAST) {
   run('node', ['adversarial-harness/run-harness.mjs'], {
     label: 'adversarial-harness-full',
     totalSteps,
@@ -411,9 +439,9 @@ if (!FAST) {
   }
 }
 
-writeFileSync(join(OUT_DIR, 'steps.json'), JSON.stringify({ steps, mode: FAST ? 'fast' : 'full', live: LIVE }, null, 2));
+writeFileSync(join(OUT_DIR, 'steps.json'), JSON.stringify({ steps, mode: MODE, live: LIVE }, null, 2));
 
-const latest = synthesizeReport({ steps, mode: FAST ? 'fast' : 'full', gates, live: LIVE });
+const latest = synthesizeReport({ steps, mode: MODE, gates, live: LIVE });
 
 if (!latest.overall && existsSync(join(OUT_DIR, 'bypasses.json'))) {
   const bypassData = JSON.parse(readFileSync(join(OUT_DIR, 'bypasses.json'), 'utf-8'));
@@ -422,7 +450,7 @@ if (!latest.overall && existsSync(join(OUT_DIR, 'bypasses.json'))) {
       label: 'evasion-generate',
       totalSteps: totalSteps + 1,
     });
-    synthesizeReport({ steps, mode: FAST ? 'fast' : 'full', gates, live: LIVE });
+    synthesizeReport({ steps, mode: MODE, gates, live: LIVE });
   }
 }
 
@@ -450,21 +478,21 @@ if (process.env.SWARM_RED_TEAM_PERSONAS === 'true') {
   });
 }
 
-if (process.env.SWARM_THREAT_LAB === 'true') {
+if (!ANALYSIS && process.env.SWARM_THREAT_LAB === 'true') {
   run('node', ['security-swarm/agents/threat-lab.mjs'], {
     label: 'threat-lab',
     totalSteps: totalSteps + 1,
   });
 }
 
-if (process.env.SWARM_VULN_DISCOVERY === 'true') {
+if (!ANALYSIS && process.env.SWARM_VULN_DISCOVERY === 'true') {
   run('node', ['security-swarm/agents/vuln-discovery.mjs'], {
     label: 'vuln-discovery',
     totalSteps: totalSteps + 1,
   });
 }
 
-if (process.env.SWARM_THREAT_RESEARCH_AUTO === 'true') {
+if (!ANALYSIS && process.env.SWARM_THREAT_RESEARCH_AUTO === 'true') {
   run('node', ['security-swarm/agents/auto-threat-research.mjs'], {
     label: 'auto-threat-research',
     totalSteps: totalSteps + 1,
@@ -484,11 +512,11 @@ if (retention.pruned > 0 || retention.compressed > 0) {
   );
 }
 
-if (!latest.overall) {
+if (!latest.overall && !ANALYSIS) {
   const alert = await sendSwarmFailureAlert({ outDir: OUT_DIR, latest, steps });
   if (alert.sent) {
     console.log(paint('  swarm failure alert dispatched', c.yellow));
   }
 }
 
-process.exit(latest.overall ? 0 : 1);
+process.exit(ANALYSIS ? (latest.gates.steps ? 0 : 1) : latest.overall ? 0 : 1);

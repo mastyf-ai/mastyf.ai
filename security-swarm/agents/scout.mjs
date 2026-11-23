@@ -4,6 +4,7 @@
  * No mocks. Emits scout.json for gates; optional fleet findings vs baseline.
  */
 import { spawnSync } from 'node:child_process';
+import { spawnTool } from '../lib/run-step.mjs';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,7 +29,7 @@ function loadBaseline() {
 
 // Audit runtime/production deps only for swarm gating. Dev-tool advisories
 // (e.g. test runners) are tracked separately and should not fail live gates.
-const r = spawnSync('pnpm', ['audit', '--prod', '--audit-level=high', '--json'], {
+const r = spawnTool('pnpm', ['audit', '--prod', '--audit-level=high', '--json'], {
   cwd: REPO,
   encoding: 'utf-8',
   env: process.env,

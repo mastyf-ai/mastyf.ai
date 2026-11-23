@@ -68,29 +68,35 @@ export class WsBroadcaster {
       path: '/ws',
       verifyClient: (info, done) => {
         const auth = options.dashboardAuth;
-        if (auth?.isEnabled()) {
-          const result = auth.authenticateWebSocket({
+        if (!auth?.isEnabled()) {
+          done(true);
+          return;
+        }
+        void auth
+          .authenticateWebSocketAsync({
             url: info.req.url,
             headers: info.req.headers as Record<string, string | string[] | undefined>,
-          });
-          if (!result.authenticated) {
-            done(false, 4401, 'Authentication required');
-            return;
-          }
-          const license = getLicenseClient();
-          if (!license.hasFeature('websocket')) {
-            done(false, 4402, 'Live WebSocket unavailable for this deployment');
-            return;
-          }
-          const tenantId =
-            result.sessionTenantId ?? license.getTenantSlug() ?? DEFAULT_TENANT_ID;
-          (info.req as IncomingMessage & Record<string, unknown>)[WS_AUTH_KEY] = {
-            authenticated: true,
-            tenantId,
-            roles: result.roles ?? ['viewer'],
-          } satisfies WsAuthContext;
-        }
-        done(true);
+          })
+          .then((result) => {
+            if (!result.authenticated) {
+              done(false, 4401, 'Authentication required');
+              return;
+            }
+            const license = getLicenseClient();
+            if (!license.hasFeature('websocket')) {
+              done(false, 4402, 'Live WebSocket unavailable for this deployment');
+              return;
+            }
+            const tenantId =
+              result.sessionTenantId ?? license.getTenantSlug() ?? DEFAULT_TENANT_ID;
+            (info.req as IncomingMessage & Record<string, unknown>)[WS_AUTH_KEY] = {
+              authenticated: true,
+              tenantId,
+              roles: result.roles ?? ['viewer'],
+            } satisfies WsAuthContext;
+            done(true);
+          })
+          .catch(() => done(false, 4401, 'Authentication required'));
       },
     });
     this.wss.on('error', (err) => {

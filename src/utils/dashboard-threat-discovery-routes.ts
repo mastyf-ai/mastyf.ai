@@ -54,6 +54,12 @@ export async function handleDashboardThreatDiscoveryRoutes(params: {
     setCors();
     const body = await readBody(req).catch(() => ({}));
     const mode = (body as { mode?: string }).mode === 'proactive' ? 'proactive' : 'reactive';
+    const { checkLocalModel } = await import('../ai/local-model-status.js');
+    const model = await checkLocalModel();
+    if (!model.ok) {
+      writeJson(res, 424, { error: model.reason, code: 'LOCAL_MODEL_REQUIRED', llm: model });
+      return true;
+    }
     const { startThreatLabJob } = await import('./threat-discovery-runner.js');
     const result = startThreatLabJob(requestTenantId, { mode });
     if (!result.ok) {
@@ -66,6 +72,12 @@ export async function handleDashboardThreatDiscoveryRoutes(params: {
 
   if (url === '/api/threat-discovery/auto-research/run' && method === 'POST') {
     setCors();
+    const { checkLocalModel } = await import('../ai/local-model-status.js');
+    const model = await checkLocalModel();
+    if (!model.ok) {
+      writeJson(res, 424, { error: model.reason, code: 'LOCAL_MODEL_REQUIRED', llm: model });
+      return true;
+    }
     const { startAutoThreatResearchJob } = await import('./threat-discovery-runner.js');
     const result = startAutoThreatResearchJob(requestTenantId);
     if (!result.ok) {

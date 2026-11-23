@@ -15,6 +15,7 @@ import { OAuthValidator } from '../auth/oauth.js';
 import { credentialBroker } from '../auth/credential-broker.js';
 import { globalHookRegistry } from './tool-call-defense-orchestrator.js';
 import { createRateLimitHook, createPiiRedactionHook, createSensitivePathGuard, createSlackNotifierHook, createPagerDutyHook, createTimeBasedAccessHook, createGeoFencingHook, createCustomHook } from '../policy/tool-call-hooks.js';
+import { BUILTIN_DENIED_PATHS, defaultAllowedPaths } from '../policy/workspace-path-guard.js';
 import { createApprovalHook } from '../policy/approval-hook.js';
 import { createSessionRateLimitHook } from '../policy/session-rate-limit.js';
 import { getUserToolEnforcementEngine } from '../policy/strategies/user-tool-enforcement-strategy.js';
@@ -22,6 +23,8 @@ import { getPersistenceStore } from '../utils/persistence-store.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 
 let hooksInitialized = false;
+/** Folders allowed by the path guard; follows the server configs this process is running. */
+let allowedPaths: string[] = defaultAllowedPaths();
 function initBuiltinHooks(): void {
   if (hooksInitialized) return;
   hooksInitialized = true;
@@ -30,8 +33,8 @@ function initBuiltinHooks(): void {
     globalHookRegistry.registerAfter(createPiiRedactionHook(['api_key', 'password', 'secret', 'token', 'access_token', 'private_key']));
     if (process.env.MASTYF_AI_BUILTIN_PATH_GUARD_ENABLED !== 'false') {
       globalHookRegistry.registerBefore(createSensitivePathGuard(
-        ['/home/*', '/tmp/*', '/workspace/*', '/app/*'],
-        ['/etc/shadow', '/etc/ssl/private/*', '*.pem', '*.key', '.env', '.aws/*', '.ssh/*'],
+        () => allowedPaths,
+        BUILTIN_DENIED_PATHS,
       ));
     }
     // Conditional hooks — activate when env vars are set
@@ -174,6 +177,7 @@ export class ProxyManager {
   }
 
   async startAll(configs: McpServerConfig[]): Promise<void> {
+    allowedPaths = defaultAllowedPaths(configs);
     const gateway = isGatewayModeEnabled();
     if (gateway) assertGatewayStartup();
 
@@ -392,6 +396,7 @@ export class ProxyManager {
   }
 
   async reloadServers(configs: McpServerConfig[]): Promise<void> {
+    allowedPaths = defaultAllowedPaths(configs);
     Logger.info('[proxy-manager] Hot-reloading server configs…');
     await this.stopAll();
     await this.startAll(configs);

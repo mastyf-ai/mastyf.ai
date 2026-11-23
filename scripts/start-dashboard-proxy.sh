@@ -106,7 +106,7 @@ const { readdirSync, readFileSync, existsSync } = require('fs');
 const { join } = require('path');
 const root = process.cwd();
 const candidates = [
-  join(root, 'mastyf-ai-configs', 'filesystem.json'),
+  join(root, 'mastyf-ai-configs', 'examples', 'filesystem.json'),
   ...(() => {
     const dir = join(root, 'mastyf-ai-configs');
     if (!existsSync(dir)) return [];
@@ -140,7 +140,7 @@ if [ -z "$CONFIG" ] && [ "${MASTYF_AI_FLEET_MODE:-true}" != "true" ]; then
     :
   else
     echo "[dashboard-proxy] No single-server MCP config found." >&2
-    echo "  Pass a config path: pnpm dashboard:proxy -- mastyf-ai-configs/filesystem.json" >&2
+    echo "  Pass a config path: pnpm dashboard:proxy -- mastyf-ai-configs/examples/filesystem.json" >&2
     echo "  Or use Fleet Hub (default): MASTYF_AI_FLEET_MODE=true ./scripts/start-dashboard-proxy.sh" >&2
     echo "  See docs/REAL_WORLD_INTEGRATION.md" >&2
     exit 1
@@ -156,7 +156,9 @@ echo "[dashboard-proxy] Corpus replay policy: $MASTYF_AI_CORPUS_REPLAY_POLICY_PA
 
 if command -v curl >/dev/null 2>&1; then
   if ! curl -sf "${OLLAMA_BASE_URL}/api/tags" >/dev/null 2>&1; then
-    echo "[dashboard-proxy] WARNING: Ollama not reachable at $OLLAMA_BASE_URL — Auto Threat Research and semantic features need a running LLM (ollama serve)." >&2
+    echo "[dashboard-proxy] Threat Lab and Auto Research need Ollama, which is not answering at $OLLAMA_BASE_URL." >&2
+    echo "[dashboard-proxy]   1. Install it: https://ollama.com/download   2. ollama serve   3. ollama pull ${MASTYF_AI_LLM_MODEL:-qwen3:8b}" >&2
+    echo "[dashboard-proxy]   Everything else works without it." >&2
   fi
 fi
 
@@ -164,7 +166,9 @@ fi
 # Set MASTYF_AI_FLEET_MODE=false to use legacy single-proxy mode.
 if [ "${MASTYF_AI_FLEET_MODE:-true}" = "true" ]; then
   echo "[dashboard-proxy] Starting Fleet Hub (mastyf-ai start)…" >&2
-  exec node dist/cli.js start --policy "$POLICY" --blocking-mode "$BLOCKING"
+  # Agents are routed by the dashboard's protection switch, with undo. Starting up must not edit them.
+  export MASTYF_AI_FLEET_INCLUDE_IDE="${MASTYF_AI_FLEET_INCLUDE_IDE:-false}"
+  exec node dist/cli.js start --policy "$POLICY" --blocking-mode "$BLOCKING" --no-apply-ide
 fi
 
 exec node dist/cli.js proxy --config "$CONFIG" --policy "$POLICY" --blocking-mode "$BLOCKING"

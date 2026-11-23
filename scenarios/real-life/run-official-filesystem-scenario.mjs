@@ -122,7 +122,7 @@ function buildScenarios(tools) {
     scenarios.push({
       id: 'benign-read',
       name: readTool,
-      args: { path: 'sample.txt' },
+      args: { path: sampleFile },
       expect: 'pass',
     });
     scenarios.push({
@@ -145,7 +145,7 @@ function buildScenarios(tools) {
     scenarios.push({
       id: 'benign-list',
       name: listTool,
-      args: { path: 'docs' },
+      args: { path: docsDir },
       expect: 'pass',
     });
   }

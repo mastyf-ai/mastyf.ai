@@ -75,4 +75,4 @@ node scenarios/real-life/run-fleet-hub-demo.mjs
 | `~/.mastyf-ai/servers.json` | UI-managed server definitions |
 | `~/.mastyf-ai/fleet-state.json` | Running fleet PIDs, ports, local URLs |
 | `mastyf-ai-configs/*.json` | Per-server proxy configs (auto-generated) |
-| `mastyf-ai-configs/fleet-manifest-remote.json` | Remote-only coordinator manifest |
+| `mastyf-ai-configs/examples/fleet-manifest-remote.json` | Remote-only coordinator manifest |

@@ -1,3 +1,4 @@
+import { checkLocalModel, type LocalModelStatus } from '../ai/local-model-status.js';
 /**
  * Aggregated Threat Discovery hub status for dashboard API.
  */
@@ -5,7 +6,6 @@ import { getLicenseClient } from '../license/license-client.js';
 import { isCiLicenseBypass } from '../license/feature-tiers.js';
 import { isCiTokenCached } from '../license/ci-token.js';
 import {
-  ensureThreatLabLlmReady,
   threatLabEnabled,
   threatLabMode,
   threatLabMaxCandidates,
@@ -28,22 +28,15 @@ import { parseAutoResearchLogTail } from './parse-auto-research-log.js';
 import { getThreatDiscoveryJobStatus, type ThreatDiscoveryJobStatus } from './threat-discovery-runner.js';
 import { isSwarmSessionActiveForTenant, swarmDataProvenance } from './swarm-session.js';
 
-let llmCache: { at: number; ok: boolean; reason?: string; model?: string } | null = null;
-const LLM_CACHE_MS = 30_000;
+let llmCache: { at: number; status: LocalModelStatus } | null = null;
+const LLM_CACHE_MS = 4_000;
 
-async function cachedLlmHealth(): Promise<{ ok: boolean; reason?: string; model?: string }> {
+async function cachedLlmHealth(): Promise<LocalModelStatus> {
   const now = Date.now();
-  if (llmCache && now - llmCache.at < LLM_CACHE_MS) {
-    return { ok: llmCache.ok, reason: llmCache.reason, model: llmCache.model };
-  }
-  const ready = await ensureThreatLabLlmReady();
-  llmCache = {
-    at: now,
-    ok: ready.ok,
-    reason: ready.reason,
-    model: process.env.MASTYF_AI_LLM_MODEL || process.env.OLLAMA_MODEL || undefined,
-  };
-  return { ok: llmCache.ok, reason: llmCache.reason, model: llmCache.model };
+  if (llmCache && now - llmCache.at < LLM_CACHE_MS) return llmCache.status;
+  const status = await checkLocalModel();
+  llmCache = { at: now, status };
+  return status;
 }
 
 function countBy<T extends string>(

@@ -553,6 +553,51 @@ ${csrfField}
   }
 
   /**
+   * Browser sign-in goes through the DB-backed auth subsystem, whose sessions
+   * this class does not hold in memory. The dashboard server registers a
+   * resolver for them so a signed-in user is accepted on every API route and
+   * on the WebSocket, not only on /api/auth/*.
+   */
+  private externalSessionResolver:
+    | ((headers: Record<string, string | string[] | undefined>, method: string) => Promise<AuthResult | null>)
+    | null = null;
+
+  setExternalSessionResolver(
+    resolver: (headers: Record<string, string | string[] | undefined>, method: string) => Promise<AuthResult | null>,
+  ): void {
+    this.externalSessionResolver = resolver;
+  }
+
+  /** authenticate(), then the DB session resolver when the built-in checks fail. */
+  async authenticateAsync(req: {
+    url?: string;
+    headers?: Record<string, string | string[] | undefined>;
+    method?: string;
+    remoteAddress?: string;
+  }): Promise<AuthResult> {
+    const result = this.authenticate(req);
+    if (result.authenticated || !this.config.enabled || !this.externalSessionResolver) return result;
+    try {
+      const external = await this.externalSessionResolver(req.headers || {}, req.method || 'GET');
+      if (!external?.authenticated) return result;
+      const requestTenantId = resolveTenantContext({ headers: req.headers }).tenantId;
+      const bind = validateJwtTenantBinding(requestTenantId, external.sessionTenantId);
+      if (!bind.ok) return { authenticated: false, reason: bind.reason };
+      return external;
+    } catch (err) {
+      Logger.warn(`[dashboard-auth] session lookup failed: ${err instanceof Error ? err.message : String(err)}`);
+      return result;
+    }
+  }
+
+  authenticateWebSocketAsync(req: {
+    url?: string;
+    headers?: Record<string, string | string[] | undefined>;
+  }): Promise<AuthResult> {
+    return this.authenticateAsync({ ...req, method: 'GET' });
+  }
+
+  /**
    * Create a signed HMAC session token (fresh jti on every login).
    */
   private createSessionToken(

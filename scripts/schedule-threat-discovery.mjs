@@ -16,7 +16,8 @@
  *   MASTYF_AI_SCHEDULE_SWARM_INTERVAL_HOURS — how often to run full swarm (default: 24)
  *   MASTYF_AI_SCHEDULE_RUN_ONCE — exit after first cycle (default: false, for cron usage)
  */
-import { spawnSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { spawnTool } from '../security-swarm/lib/run-step.mjs';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -65,7 +66,8 @@ function log(msg) {
 
 function runCmd(cmd, args, opts = {}) {
   log(`Running: ${cmd} ${args.join(' ')}`);
-  const result = spawnSync(cmd, args, {
+  // spawnTool: pnpm on Windows is a .cmd shim that spawnSync cannot start directly.
+  const result = spawnTool(cmd, args, {
     cwd: REPO_ROOT,
     encoding: 'utf-8',
     timeout: 30 * 60 * 1000, // 30 min timeout

@@ -14,7 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const CLI = resolve(ROOT, 'dist/cli.js');
 const POLICY = resolve(ROOT, 'default-policy.yaml');
-const CONFIG = resolve(ROOT, 'mastyf-ai-configs/filesystem.json');
+const CONFIG = resolve(ROOT, 'mastyf-ai-configs/examples/filesystem.json');
 
 const MCP_FS_ROOT =
   process.env.MCP_FS_ROOT || mkdtempSync(join(tmpdir(), 'mastyf-ai-agent-'));

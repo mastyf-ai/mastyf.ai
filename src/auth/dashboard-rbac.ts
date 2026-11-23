@@ -151,6 +151,11 @@ export function permissionForRoute(method: string, url: string): DashboardRouteP
     if (m === 'PUT') return 'policy_mutate';
   }
   if (path === '/api/policy/fp/reject' && m === 'POST') return 'policy_mutate';
+  if (path === '/api/policy/history' || path.startsWith('/api/policy/history/')) return m === 'GET' ? 'read' : null;
+  if (path === '/api/cost/budget') {
+    if (m === 'GET') return 'read';
+    if (m === 'PUT') return 'policy_mutate';
+  }
   if (path.startsWith('/api/learning/')) return m === 'GET' ? 'ai' : 'ai';
   if (path.startsWith('/api/security-swarm/')) {
     if (path === '/api/security-swarm/run' && m === 'POST') return 'policy_test';
@@ -166,6 +171,7 @@ export function permissionForRoute(method: string, url: string): DashboardRouteP
   if (path === '/api/audit' || path === '/api/audit/heatmap' || path.startsWith('/api/audit?')) {
     return m === 'GET' ? 'read' : null;
   }
+  if (path === '/api/protection') return m === 'GET' ? 'read' : 'admin';
   if (path.startsWith('/api/admin/')) return m === 'GET' ? 'admin' : 'admin';
   if (path.startsWith('/api/ai/')) return m === 'GET' ? 'ai' : 'ai';
   if (path === '/api/logout') return 'read';

@@ -26,7 +26,7 @@ const WRAP_BEFORE = `"filesystem": {
 
 const WRAP_AFTER = `"filesystem": {
   "command": "<mastyf proxy wrapper>",
-  "args": ["--config", "mastyf-ai-configs/filesystem.json", "--policy", "/path/to/default-policy.yaml"]
+  "args": ["--config", "mastyf-ai-configs/examples/filesystem.json", "--policy", "/path/to/default-policy.yaml"]
 }`;
 
 const OPENAI_INSTALL = 'npm install @mastyf_ai/openai-agents-middleware';

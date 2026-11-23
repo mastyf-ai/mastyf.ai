@@ -21,8 +21,8 @@ export type MastyfAiSetupConfig = {
 };
 
 export type SetupMastyfAiConfigView = {
-  upstreamUrl: string;
-  listenPort: number;
+  upstreamUrl: string | null;
+  listenPort: number | null;
   authTokenPreview: string | null;
   configured: boolean;
   done: boolean;
@@ -133,8 +133,9 @@ export async function buildSetupStatus(projectRoot = REPO_ROOT): Promise<SetupSt
   const mastyfAiDone = !!(file.upstreamUrl && file.listenPort) || onboarding.configCount > 0;
 
   const mastyfAiConfig: SetupMastyfAiConfigView = {
-    upstreamUrl: file.upstreamUrl || 'https://api.internal.acme.co',
-    listenPort: file.listenPort ?? 8443,
+    // Unset stays unset: the dashboard shows "Not set" rather than an example address.
+    upstreamUrl: file.upstreamUrl || null,
+    listenPort: file.listenPort ?? null,
     authTokenPreview: maskToken(file.authToken || process.env.MASTYF_AI_CLOUD_API_KEY),
     configured: mastyfAiDone,
     done: mastyfAiDone,
@@ -180,10 +181,8 @@ export function connectCloudSetup(body: {
   apiKeyRotationEnabled?: boolean;
 }): { ok: boolean; launchUrl: string } {
   const url = body.controlPlaneUrl?.trim() || defaultControlPlaneUrl();
-  writeSetupFile({
-    upstreamUrl: url.replace(/\/$/, ''),
-    listenPort: 8443,
-  });
+  // Only the URL changes; the proxy's own listen port is whatever the user set.
+  writeSetupFile({ upstreamUrl: url.replace(/\/$/, '') });
   if (body.policyStrictnessPct != null) {
     process.env.MASTYF_AI_POLICY_STRICTNESS_PCT = String(body.policyStrictnessPct);
   }
