@@ -127,6 +127,25 @@ export declare class DashboardAuth {
         headers?: Record<string, string | string[] | undefined>;
     }): AuthResult;
     /**
+     * Browser sign-in goes through the DB-backed auth subsystem, whose sessions
+     * this class does not hold in memory. The dashboard server registers a
+     * resolver for them so a signed-in user is accepted on every API route and
+     * on the WebSocket, not only on /api/auth/*.
+     */
+    private externalSessionResolver;
+    setExternalSessionResolver(resolver: (headers: Record<string, string | string[] | undefined>, method: string) => Promise<AuthResult | null>): void;
+    /** authenticate(), then the DB session resolver when the built-in checks fail. */
+    authenticateAsync(req: {
+        url?: string;
+        headers?: Record<string, string | string[] | undefined>;
+        method?: string;
+        remoteAddress?: string;
+    }): Promise<AuthResult>;
+    authenticateWebSocketAsync(req: {
+        url?: string;
+        headers?: Record<string, string | string[] | undefined>;
+    }): Promise<AuthResult>;
+    /**
      * Create a signed HMAC session token (fresh jti on every login).
      */
     private createSessionToken;

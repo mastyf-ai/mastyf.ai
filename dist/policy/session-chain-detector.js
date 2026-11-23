@@ -44,7 +44,8 @@ const EXFIL_TOOLS = new Set([
     'fetch',
     'curl',
 ]);
-const ENCODE_ARG_HINTS = /\b(?:base64|btoa|encode|hex|rot13|gzip|compress)\b/i;
+/** Encoding, packing or encrypting before sending something out. */
+const ENCODE_ARG_HINTS = /\b(?:base64|base32|btoa|encode|hex|rot13|gzip|bzip2|xz|compress|xxd|od|uuencode|gpg|openssl\s+(?:enc|base64)|zip|7z)\b|\btar\s+-?[a-z]*c/i;
 const EXFIL_ARG_HINTS = /\b(?:webhook|callback|post|upload|send|forward|https?:\/\/)\b/i;
 const SENSITIVE_ARG_HINTS = /\b(?:\/etc\/passwd|\.env|\.ssh|id_rsa|credentials|secret|token|api[_-]?key)\b/i;
 function isSafeExfilUrl(text) {
@@ -93,7 +94,12 @@ function classifyNode(toolName, args, strictEgress = false) {
         toolName,
         argShapeHash: argShapeHash(args),
         sensitiveRead: READ_TOOLS.has(lower) && SENSITIVE_ARG_HINTS.test(blob),
-        encodeHint: ENCODE_TOOLS.has(lower) || ENCODE_ARG_HINTS.test(blob) || ENCODE_ARG_HINTS.test(lower),
+        // A shell or interpreter tool only counts as an encoding step when its arguments encode
+        // something, or when it ran with no arguments recorded. Treating every `bash` call as encoding
+        // made any message sent after `git status` look like encode-then-exfil.
+        encodeHint: ENCODE_ARG_HINTS.test(blob) ||
+            ENCODE_ARG_HINTS.test(lower) ||
+            (ENCODE_TOOLS.has(lower) && !blob.trim()),
         exfilHint: rawExfil && !safeRead && !isSafeExfilUrl(blob) && !isSafeExfilUrl(lower),
     };
 }

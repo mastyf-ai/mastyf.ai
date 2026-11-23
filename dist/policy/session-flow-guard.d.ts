@@ -10,7 +10,7 @@ export declare function flowSessionKey(ctx: CallContext): string;
 export declare function recordSessionToolCall(ctx: CallContext): void;
 /**
  * Block when a prior sensitive read or response DLP hit is followed by an exfil-capable tool call,
- * or when DIFC dynamic taint tracking detects cross-tool data propagation to an egress sink.
+ * or when an extension's data-flow check objects.
  */
 export declare function evaluateSessionFlowGuard(ctx: CallContext): PolicyDecision | null;
 //# sourceMappingURL=session-flow-guard.d.ts.map

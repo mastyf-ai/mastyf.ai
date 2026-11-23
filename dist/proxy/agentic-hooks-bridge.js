@@ -50,6 +50,7 @@ export function buildAgenticToolCallContext(params) {
         mcpSessionId: params.mcpSessionId,
         meta: params.meta,
         headers: params.headers,
+        localStdio: params.localStdio,
     };
 }
 //# sourceMappingURL=agentic-hooks-bridge.js.map

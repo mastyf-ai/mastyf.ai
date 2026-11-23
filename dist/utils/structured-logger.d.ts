@@ -22,6 +22,12 @@ export interface ErrorLogEntry {
     error: string;
     stack?: string;
 }
+/**
+ * Recursively sanitizes data structures for BigQuery and SIEM export.
+ * BigQuery does not support nested arrays (lists of lists / ARRAY<ARRAY<T>>).
+ * Any array containing another array is safely transformed so inner arrays are serialized to JSON strings.
+ */
+export declare function sanitizeForLogIngestion(value: unknown): unknown;
 export declare class StructuredLogger {
     static logPolicyDecision(entry: AuditLogEntry): void;
     static logBlocked(entry: BlockLogEntry): void;

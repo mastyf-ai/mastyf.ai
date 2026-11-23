@@ -427,7 +427,7 @@ ${csrfField}
      */
     createCloudSession(tenantSlug, identity, roles = ['tenant-admin']) {
         if (!this.config.jwtSecret) {
-            throw new Error('Set DASHBOARD_JWT_SECRET or MASTYF_AI_CLOUD_JWT_SECRET (same value as cloud AUTH_SECRET)');
+            throw new Error("Set DASHBOARD_JWT_SECRET to a random value of this host's own (never the cloud's AUTH_SECRET)");
         }
         Logger.info(`[dashboard-auth] Cloud session for ${identity} tenant=${tenantSlug}`);
         return this.createSessionToken(tenantSlug, roles);
@@ -437,6 +437,39 @@ ${csrfField}
      */
     authenticateWebSocket(req) {
         return this.authenticate({ ...req, method: 'GET' });
+    }
+    /**
+     * Browser sign-in goes through the DB-backed auth subsystem, whose sessions
+     * this class does not hold in memory. The dashboard server registers a
+     * resolver for them so a signed-in user is accepted on every API route and
+     * on the WebSocket, not only on /api/auth/*.
+     */
+    externalSessionResolver = null;
+    setExternalSessionResolver(resolver) {
+        this.externalSessionResolver = resolver;
+    }
+    /** authenticate(), then the DB session resolver when the built-in checks fail. */
+    async authenticateAsync(req) {
+        const result = this.authenticate(req);
+        if (result.authenticated || !this.config.enabled || !this.externalSessionResolver)
+            return result;
+        try {
+            const external = await this.externalSessionResolver(req.headers || {}, req.method || 'GET');
+            if (!external?.authenticated)
+                return result;
+            const requestTenantId = resolveTenantContext({ headers: req.headers }).tenantId;
+            const bind = validateJwtTenantBinding(requestTenantId, external.sessionTenantId);
+            if (!bind.ok)
+                return { authenticated: false, reason: bind.reason };
+            return external;
+        }
+        catch (err) {
+            Logger.warn(`[dashboard-auth] session lookup failed: ${err instanceof Error ? err.message : String(err)}`);
+            return result;
+        }
+    }
+    authenticateWebSocketAsync(req) {
+        return this.authenticateAsync({ ...req, method: 'GET' });
     }
     /**
      * Create a signed HMAC session token (fresh jti on every login).

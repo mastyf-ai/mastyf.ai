@@ -1,3 +1,4 @@
+import { type BlockEvidence } from './block-evidence.js';
 import type { PolicyEngine } from '../policy/policy-engine.js';
 /** Outcome returned to the transport layer after inspecting a tool response. */
 export interface ResponseInspectionResult {
@@ -7,6 +8,8 @@ export interface ResponseInspectionResult {
     blockResponse?: Record<string, unknown>;
     /** If redacted, the reasons that triggered redaction. */
     redactionReasons?: string[];
+    /** If blocked, what the answer check matched. */
+    evidence?: BlockEvidence;
 }
 /**
  * Inspect a JSON-RPC tool-call response for policy violations, DLP
@@ -26,5 +29,7 @@ export declare function inspectToolResponse(params: {
     transportLabel: string;
     /** Original tools/call arguments (for live exploit tap). */
     toolArguments?: Record<string, unknown>;
+    /** The session id this transport gave the defense layer for the call, if any. */
+    sessionId?: string;
 }): Promise<ResponseInspectionResult>;
 //# sourceMappingURL=response-inspection.d.ts.map

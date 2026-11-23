@@ -10,12 +10,15 @@ import { PolicyWatcher } from '../policy/policy-watcher.js';
 import { TenantPolicyRegistry } from '../policy/tenant-policy-registry.js';
 import { globalHookRegistry } from './tool-call-defense-orchestrator.js';
 import { createRateLimitHook, createPiiRedactionHook, createSensitivePathGuard, createSlackNotifierHook, createPagerDutyHook, createTimeBasedAccessHook, createGeoFencingHook, createCustomHook } from '../policy/tool-call-hooks.js';
+import { BUILTIN_DENIED_PATHS, defaultAllowedPaths } from '../policy/workspace-path-guard.js';
 import { createApprovalHook } from '../policy/approval-hook.js';
 import { createSessionRateLimitHook } from '../policy/session-rate-limit.js';
 import { getUserToolEnforcementEngine } from '../policy/strategies/user-tool-enforcement-strategy.js';
 import { getPersistenceStore } from '../utils/persistence-store.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 let hooksInitialized = false;
+/** Folders allowed by the path guard; follows the server configs this process is running. */
+let allowedPaths = defaultAllowedPaths();
 function initBuiltinHooks() {
     if (hooksInitialized)
         return;
@@ -24,7 +27,7 @@ function initBuiltinHooks() {
         globalHookRegistry.registerBefore(createRateLimitHook({ maxCallsPerMinute: 60, perUser: true }));
         globalHookRegistry.registerAfter(createPiiRedactionHook(['api_key', 'password', 'secret', 'token', 'access_token', 'private_key']));
         if (process.env.MASTYF_AI_BUILTIN_PATH_GUARD_ENABLED !== 'false') {
-            globalHookRegistry.registerBefore(createSensitivePathGuard(['/home/*', '/tmp/*', '/workspace/*', '/app/*'], ['/etc/shadow', '/etc/ssl/private/*', '*.pem', '*.key', '.env', '.aws/*', '.ssh/*']));
+            globalHookRegistry.registerBefore(createSensitivePathGuard(() => allowedPaths, BUILTIN_DENIED_PATHS));
         }
         // Conditional hooks — activate when env vars are set
         const slackUrl = process.env.MASTYF_AI_SLACK_WEBHOOK || process.env.ALERT_SLACK_WEBHOOK;
@@ -163,11 +166,11 @@ export class ProxyManager {
     /** Primary stdio handler — pool round-robin or single proxy. */
     async dispatchStdioInput(raw) {
         if (this.stdioPools.length === 1) {
-            await this.stdioPools[0].handleClientInput(raw);
+            await this.stdioPools[0].handleClientInput(raw, { localStdio: true });
             return;
         }
         if (this.stdioProxies.length === 1) {
-            await this.stdioProxies[0].handleClientInput(raw);
+            await this.stdioProxies[0].handleClientInput(raw, { localStdio: true });
         }
     }
     /** Returns summary counts for the CLI proxy command output */
@@ -180,6 +183,7 @@ export class ProxyManager {
         };
     }
     async startAll(configs) {
+        allowedPaths = defaultAllowedPaths(configs);
         const gateway = isGatewayModeEnabled();
         if (gateway)
             assertGatewayStartup();
@@ -362,6 +366,7 @@ export class ProxyManager {
             `╚══════════════════════════════════════════╝`);
     }
     async reloadServers(configs) {
+        allowedPaths = defaultAllowedPaths(configs);
         Logger.info('[proxy-manager] Hot-reloading server configs…');
         await this.stopAll();
         await this.startAll(configs);

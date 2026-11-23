@@ -12,6 +12,7 @@ export async function runToolCallPreForwardGuard(serverName, toolName, args, req
                 blocked: true,
                 code: -32001,
                 message: `Blocked by Mastyf AI: ${expanded.reason}`,
+                evidence: { layer: 'size-limit' },
             };
         }
     }
@@ -22,6 +23,7 @@ export async function runToolCallPreForwardGuard(serverName, toolName, args, req
             mcpSessionId: opts?.mcpSessionId,
             meta: opts?.meta ?? args._meta,
             headers: opts?.headers,
+            localStdio: opts?.localStdio,
         });
         const agentic = await agenticPreForwardToolCall(serverName, toolName, args, ctx);
         if (agentic.blocked) {
@@ -29,6 +31,7 @@ export async function runToolCallPreForwardGuard(serverName, toolName, args, req
                 blocked: true,
                 code: -32001,
                 message: `Blocked by Mastyf AI: ${agentic.reason || 'agentic policy'}`,
+                evidence: agentic.evidence ?? { layer: 'injection-scan' },
             };
         }
         return { blocked: false, arguments: agentic.sanitizedArgs ?? args };

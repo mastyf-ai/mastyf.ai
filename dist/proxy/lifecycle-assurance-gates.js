@@ -1,3 +1,4 @@
+import { observeToolList } from '../extensions/index.js';
 import { evaluateCveGate } from '../utils/cve-gate.js';
 import { isRugPullBlockedForCall } from './rug-pull-transport.js';
 import { evaluateToolRegistrationGate, registerToolsFromList, } from './tool-registration-gate.js';
@@ -40,5 +41,6 @@ export async function runLifecycleAssuranceGates(input) {
 }
 export function onToolsListObserved(serverName, tools) {
     registerToolsFromList(serverName, tools);
+    observeToolList(serverName, tools);
 }
 //# sourceMappingURL=lifecycle-assurance-gates.js.map

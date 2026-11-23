@@ -28,11 +28,16 @@ export class WsBroadcaster {
             path: '/ws',
             verifyClient: (info, done) => {
                 const auth = options.dashboardAuth;
-                if (auth?.isEnabled()) {
-                    const result = auth.authenticateWebSocket({
-                        url: info.req.url,
-                        headers: info.req.headers,
-                    });
+                if (!auth?.isEnabled()) {
+                    done(true);
+                    return;
+                }
+                void auth
+                    .authenticateWebSocketAsync({
+                    url: info.req.url,
+                    headers: info.req.headers,
+                })
+                    .then((result) => {
                     if (!result.authenticated) {
                         done(false, 4401, 'Authentication required');
                         return;
@@ -48,8 +53,9 @@ export class WsBroadcaster {
                         tenantId,
                         roles: result.roles ?? ['viewer'],
                     };
-                }
-                done(true);
+                    done(true);
+                })
+                    .catch(() => done(false, 4401, 'Authentication required'));
             },
         });
         this.wss.on('error', (err) => {

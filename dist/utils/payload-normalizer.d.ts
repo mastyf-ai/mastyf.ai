@@ -10,6 +10,12 @@ export interface NormalizationResult {
     original: string;
 }
 /**
+ * C:\Users\me\notes.txt and C:/Users/me/notes.txt are the same file, so judge them the same way. Without
+ * this the backslashes are unwrapped as escapes and the folder names run together into one long word,
+ * which block-encoding-evasion takes for an encoded blob.
+ */
+export declare function windowsPathToSlashes(value: string): string;
+/**
  * PayloadNormalizer applies multi-stage normalization to defeat
  * common evasion techniques targeting regex-based policy engines.
  */

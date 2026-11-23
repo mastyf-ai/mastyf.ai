@@ -6,6 +6,9 @@ import { startReportScheduler } from './report-scheduler.js';
 import { readAutopilotConfig } from './autopilot-config.js';
 import { startHealthProbeScheduler } from '../services/health-probe-scheduler.js';
 export function startAutopilotServices(historyDb, tenantId = DEFAULT_TENANT_ID, servers = []) {
+    // A proxy fronting a single server: these belong to the parent, not to one process per tool.
+    if (process.env.MASTYF_AI_FLEET_CHILD === 'true' && process.env.MASTYF_AI_AUTOPILOT_HOST !== 'true')
+        return;
     applyAutopilotEnv();
     const cfg = readAutopilotConfig();
     const autopilot = isAutopilotMode()

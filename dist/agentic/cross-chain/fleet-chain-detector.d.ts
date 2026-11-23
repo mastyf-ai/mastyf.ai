@@ -25,9 +25,16 @@ export interface FleetChainAlert {
 }
 export declare class FleetChainDetector {
     private readonly store?;
+    private readonly options;
     private events;
     private alerts;
-    constructor(store?: IndustryStandardStore | undefined);
+    /**
+     * @param options.sideEffects false for self-tests: alerts stay in memory and no SIEM event or
+     *   incident playbook runs, so a test chain never shows up as a real incident.
+     */
+    constructor(store?: IndustryStandardStore | undefined, options?: {
+        sideEffects?: boolean;
+    });
     record(params: {
         globalSessionId: string;
         agentId: string;

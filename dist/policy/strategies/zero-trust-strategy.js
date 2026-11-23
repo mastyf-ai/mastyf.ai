@@ -1,6 +1,10 @@
 import { getAgenticContainer, isAgenticEnabled } from '../../utils/agentic-container.js';
 import { getActiveSpiffeId } from '../../utils/mtls-config.js';
 import { adjustSandboxTierForZeroTrust } from '../../agentic/zero-trust/tier-adjuster.js';
+/** Only a local stdio client with no identity has nobody to ask. Anything else fails closed. */
+export function stepUpPossibleFor(raw) {
+    return Boolean(raw.agentIdentity) || raw.localStdio !== true;
+}
 export const zeroTrustStrategy = {
     name: 'zero-trust-score',
     evaluate({ normalized, raw }, deps) {
@@ -16,13 +20,16 @@ export const zeroTrustStrategy = {
             serverName: normalized.serverName,
             toolName: normalized.toolName,
             authenticated: Boolean(raw.agentIdentity),
+            // A what-if call has nobody to approve a step-up, so none is queued.
+            stepUpPossible: raw.dryRun ? false : stepUpPossibleFor(raw),
             spiffeId: getActiveSpiffeId(),
             credentialIdentity: raw.agentIdentity?.sub,
             geoRegion: raw.geoRegion,
             hourUtc: raw.hourUtc,
             dataSensitivity: /read|list|search|get/i.test(normalized.toolName) ? 'medium' : 'low',
         });
-        if (container?.sandboxEnforcer) {
+        // A low score for the local client with no identity says nothing about the server.
+        if (!raw.dryRun && container?.sandboxEnforcer && stepUpPossibleFor(raw)) {
             adjustSandboxTierForZeroTrust(container.sandboxEnforcer, {
                 serverName: normalized.serverName,
                 agentId: raw.agentIdentity?.sub,

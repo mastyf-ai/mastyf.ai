@@ -1,3 +1,10 @@
+/**
+ * ToolCallDefenseOrchestrator — unified Defense Fabric pipeline for all transports.
+ *
+ * Phases: lifecycle → pre-guard → policy → post-policy (spend + semantic).
+ */
+import { applyExtensionMeta, checkDataFlow } from '../extensions/index.js';
+import { clipMatch, layerForPhase } from './block-evidence.js';
 import { applyGeoToCallContext } from '../utils/request-geo-context.js';
 import { auditPolicyDecision } from './audit-policy-decision.js';
 import { notifyToolBlock } from '../alerting/notify-tool-block.js';
@@ -10,7 +17,6 @@ import { ToolCallHookRegistry } from '../policy/tool-call-hooks.js';
 import { getPersistenceStore } from '../utils/persistence-store.js';
 import { learningMode } from '../policy/learning-mode.js';
 import { recursiveUnwrap } from '../scanners/recursive-arg-unwrap.js';
-import { globalSessionTaintTracker } from '../policy/difc/index.js';
 export const globalHookRegistry = new ToolCallHookRegistry();
 function policyHttpStatus(decision) {
     const rateLimited = /rate\s*limit/i.test(decision.reason || '') ||
@@ -50,10 +56,12 @@ export async function evaluateToolCallDefense(input, deps) {
             code: lifecycle.code ?? -32001,
             rule: lifecycle.rule ?? 'lifecycle-gate',
             reason: lifecycle.reason ?? 'Blocked by lifecycle assurance',
+            evidence: { layer: 'lifecycle' },
             httpStatus: 403,
         };
     }
     const preGuard = await runToolCallPreForwardGuard(input.serverName, input.toolName, input.arguments, input.requestId, {
+        localStdio: input.localStdio,
         agentId: input.agentId,
         mcpSessionId: input.mcpSessionId,
         meta: input.meta,
@@ -76,6 +84,7 @@ export async function evaluateToolCallDefense(input, deps) {
             code: preGuard.code,
             rule: 'payload_or_agentic',
             reason: preGuard.message,
+            evidence: preGuard.evidence ?? { layer: 'injection-scan' },
             httpStatus: 403,
             preGuard,
         };
@@ -97,6 +106,11 @@ export async function evaluateToolCallDefense(input, deps) {
             code: -32001,
             rule: 'hook-before',
             reason: hookResult.reason ?? 'Blocked by tool-call hook',
+            evidence: {
+                layer: 'hooks',
+                ...(hookResult.match ? { match: clipMatch(hookResult.match) } : {}),
+                ...(hookResult.field ? { field: hookResult.field } : {}),
+            },
             httpStatus: 403,
         };
     }
@@ -107,16 +121,13 @@ export async function evaluateToolCallDefense(input, deps) {
         ...(effectiveArgs ?? {}),
         ...unwrapInfo.flattenedArgs,
     };
-    // --- Phase 2.5: Decentralized Information Flow Control (DIFC) Gate ----------
-    const sessionKey = `${input.tenantId || 'default'}:${input.serverName}`;
-    const difcResult = globalSessionTaintTracker.evaluateDIFC({
-        sessionKey,
+    const flowBlock = checkDataFlow({
+        sessionKey: `${input.tenantId || 'default'}:${input.serverName}`,
         toolName: input.toolName,
         args: effectiveArgs,
     });
-    if (!difcResult.allowed) {
-        const violationReason = difcResult.violation?.reason ??
-            'Blocked by Decentralized Information Flow Control (DIFC): unauthorized data flow to egress sink';
+    if (flowBlock) {
+        const violationReason = flowBlock.reason;
         if (emitTelemetry) {
             StructuredLogger.logBlocked({
                 event: 'tool_blocked',
@@ -124,12 +135,12 @@ export async function evaluateToolCallDefense(input, deps) {
                 serverName: input.serverName,
                 toolName: input.toolName,
                 reason: violationReason,
-                rule: 'difc-exfiltration-prevented',
+                rule: flowBlock.rule,
             });
             Metrics.recordProxyBlock({
                 server_name: input.serverName,
-                block_reason: 'difc_exfiltration',
-                rule: 'difc-exfiltration-prevented',
+                block_reason: 'data_flow',
+                rule: flowBlock.rule,
                 tenant_id: input.tenantId,
             });
         }
@@ -137,8 +148,9 @@ export async function evaluateToolCallDefense(input, deps) {
             allowed: false,
             phase: 'policy',
             code: -32001,
-            rule: 'difc-exfiltration-prevented',
+            rule: flowBlock.rule,
             reason: violationReason,
+            evidence: { layer: 'policy' },
             httpStatus: 403,
         };
     }
@@ -153,6 +165,7 @@ export async function evaluateToolCallDefense(input, deps) {
         agentIdentity: input.agentIdentity,
         idempotencyKey: input.idempotencyKey,
         sessionId: input.mcpSessionId,
+        localStdio: input.localStdio,
     }, input.headers);
     const decision = deps.evaluatePolicy
         ? await deps.evaluatePolicy(context)
@@ -227,9 +240,11 @@ export async function evaluateToolCallDefense(input, deps) {
             code: -32001,
             rule: decision.rule,
             reason: decision.reason,
+            evidence: decision.evidence ?? { layer: 'policy' },
             httpStatus: policyHttpStatus(decision),
         };
     }
+    applyExtensionMeta(context, input.meta);
     const gateOutcome = await runPostPolicyAllowGates(context, decision, input.serverName);
     if (isPostPolicyGateBlock(gateOutcome)) {
         if (emitTelemetry) {
@@ -242,14 +257,16 @@ export async function evaluateToolCallDefense(input, deps) {
                 rule: gateOutcome.rule ?? 'semantic_gate',
             });
         }
+        const gatePhase = gateOutcome.rule === 'unified-spend-pool' || gateOutcome.rule?.includes('budget')
+            ? 'spend'
+            : 'semantic';
         return {
             allowed: false,
-            phase: gateOutcome.rule === 'unified-spend-pool' || gateOutcome.rule?.includes('budget')
-                ? 'spend'
-                : 'semantic',
+            phase: gatePhase,
             code: -32001,
             rule: gateOutcome.rule ?? 'semantic_gate',
             reason: gateOutcome.reason,
+            evidence: { layer: layerForPhase(gatePhase) },
             httpStatus: 403,
         };
     }

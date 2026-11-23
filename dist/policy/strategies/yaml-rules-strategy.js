@@ -2,6 +2,7 @@ import { evaluateEncodingGuard } from '../encoding-guard.js';
 import { scanToolCallArguments } from '../../scanners/prompt-injection-detector.js';
 import { runTokenInspection } from '../../scanners/token-inspector.js';
 import { walkStringLeaves } from '../arg-leaf-walker.js';
+import { clipMatch } from '../../proxy/block-evidence.js';
 /** Defense in depth: allowlisted tools must still pass argument guards (adv-066 class). */
 function blockAllowlistedToolIfArgsUnsafe(ctx) {
     const encoding = evaluateEncodingGuard(ctx);
@@ -15,6 +16,7 @@ function blockAllowlistedToolIfArgsUnsafe(ctx) {
             action: 'block',
             rule: top.patternId ?? 'request-prompt-injection',
             reason: top.description ?? 'Allowlisted tool blocked: unsafe arguments',
+            evidence: { layer: 'policy', match: clipMatch(top.matched) },
         };
     }
     // Layer 4: JWT/SAML token inspection (fixes 87% token evasion)

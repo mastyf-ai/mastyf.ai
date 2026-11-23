@@ -10,6 +10,10 @@ import { resolveMastyfAiInstallRoot } from '../utils/mastyf-ai-package-root.js';
 import { applyStartEnv } from '../utils/start-env.js';
 import { Logger } from '../utils/logger.js';
 let activeSupervisor = null;
+/** Off when the dashboard's protection switch routes agents itself, so their servers are not run twice. */
+function fleetIncludesIde() {
+    return process.env.MASTYF_AI_FLEET_INCLUDE_IDE !== 'false';
+}
 export class FleetSupervisor {
     opts;
     children = [];
@@ -34,11 +38,10 @@ export class FleetSupervisor {
         activeSupervisor = this;
         const entries = discoverAllServers({
             workspaceRoot: this.workspaceRoot,
-            includeIde: this.opts.includeIde !== false,
+            includeIde: this.opts.includeIde !== false && fleetIncludesIde(),
         });
-        if (entries.length === 0) {
-            throw new Error('No MCP servers discovered. Add servers in the dashboard, run mastyf-ai onboard, or configure your IDE MCP settings.');
-        }
+        // Nothing to protect yet is a normal first state, not an error: the dashboard still starts
+        // (see below) so the user can sign in and add servers.
         const stdioEntries = entries.filter(isStdioUpstream);
         const remoteEntries = entries.filter(isRemoteUpstream);
         const portNames = [
@@ -122,6 +125,26 @@ export class FleetSupervisor {
                 urlPatches.push({ name: entry.name, localUrl });
             }
         }
+        if (!dashboardAssigned) {
+            // No protected server is hosting the dashboard, so run it on its own.
+            const host = join(this.installRoot, 'scripts', 'fleet-dashboard-host.mjs');
+            const env = { ...process.env, MASTYF_AI_FLEET_CHILD: 'true', DASHBOARD_ENABLED: 'true', METRICS_ENABLED: 'false' };
+            if (!env.MASTYF_AI_POLICY_PATH)
+                env.MASTYF_AI_POLICY_PATH = this.policyPath;
+            const child = spawn(process.execPath, [host], { cwd: this.installRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
+            child.stdout?.on('data', (buf) => {
+                const line = String(buf).trim();
+                if (line)
+                    Logger.info(`[fleet:dashboard] ${line}`);
+            });
+            child.stderr?.on('data', (buf) => {
+                const line = String(buf).trim();
+                if (line)
+                    Logger.warn(`[fleet:dashboard] ${line}`);
+            });
+            this.children.push({ name: '__dashboard__', process: child, transport: 'remote-coordinator', configPath: host });
+            dashboardAssigned = true;
+        }
         if (this.applyIde && urlPatches.length > 0) {
             try {
                 const patch = patchClientToLocalUrls({
@@ -146,7 +169,9 @@ export class FleetSupervisor {
         };
         writeFleetState(state);
         await this.startAdminServer();
-        console.log(chalk.bold('\n  Fleet Hub — all servers protected\n'));
+        console.log(chalk.bold(fleetServers.length
+            ? '\n  Fleet Hub: all servers protected\n'
+            : '\n  Fleet Hub: no MCP servers configured yet. Add one in mastyf-ai-configs/ or your agent MCP settings.\n'));
         for (const s of fleetServers) {
             console.log(chalk.dim(`    ${s.name}: ${s.localUrl}`));
         }
@@ -234,7 +259,7 @@ export class FleetSupervisor {
             this.children[coordIdx].process.kill('SIGTERM');
             this.children.splice(coordIdx, 1);
         }
-        const entries = discoverAllServers({ workspaceRoot: this.workspaceRoot });
+        const entries = discoverAllServers({ workspaceRoot: this.workspaceRoot, includeIde: fleetIncludesIde() });
         const remoteEntries = entries.filter(isRemoteUpstream);
         if (remoteEntries.length === 0)
             return;
@@ -347,7 +372,7 @@ export class FleetSupervisor {
             res.end(JSON.stringify(body));
         };
         if (url === '/status' && method === 'GET') {
-            const entries = discoverAllServers({ workspaceRoot: this.workspaceRoot });
+            const entries = discoverAllServers({ workspaceRoot: this.workspaceRoot, includeIde: fleetIncludesIde() });
             const state = readFleetState();
             json(200, { entries, fleet: state, running: this.children.length });
             return;

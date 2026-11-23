@@ -1,0 +1,1 @@
+{"version":3,"file":"manifest.d.ts","sourceRoot":"","sources":["../../src/boundary/manifest.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AAKH,OAAO,EAAE,gBAAgB,EAAE,MAAM,YAAY,CAAC;AAE9C,wBAAgB,0BAA0B,IAAI,gBAAgB,CAsD7D;AAED,wBAAgB,oBAAoB,CAAC,YAAY,CAAC,EAAE,MAAM,GAAG,gBAAgB,CAuB5E;AAED,wBAAgB,wBAAwB,CAAC,MAAM,EAAE,OAAO,CAAC,gBAAgB,CAAC,GAAG,gBAAgB,CAiC5F"}

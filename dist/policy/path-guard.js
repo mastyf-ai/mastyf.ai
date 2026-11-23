@@ -7,6 +7,11 @@ const PATH_ARG_FIELDS = new Set(['path', 'file', 'filepath', 'file_path', 'direc
 /** Paths that must never be read/list even when tools are allowlisted. */
 const SENSITIVE_PATH_PATTERNS = [
     /^\/$/,
+    // Windows, with or without a drive letter (paths are lower-cased and slash-normalized first):
+    // the registry hives that hold password hashes, the hosts file, and executables in System32.
+    /^(?:\/[a-z]:)?\/windows\/system32\/config(?:\/|$)/,
+    /^(?:\/[a-z]:)?\/windows\/system32\/drivers\/etc\/hosts$/,
+    /^(?:\/[a-z]:)?\/windows\/system32\/[^/]+\.(?:dll|exe|sys)$/,
     /^\/etc(?:\/|$)/,
     /^\/root(?:\/|$)/,
     /^\/proc(?:\/|$)/,
@@ -72,14 +77,19 @@ export function extractPathArgumentValues(args) {
     }
     return values;
 }
+/**
+ * Normalized exactly like the paths they are compared with (workspacePath). They used to be
+ * left as given, so on Windows ("C:\Users\…" vs "/c:/users/…") and on macOS ("/Users/…" vs
+ * "/users/…") no path was ever inside the workspace and every file read was blocked.
+ */
 function allowedPathPrefixes() {
     const prefixes = [];
     const workspace = process.env.MASTYF_AI_WORKSPACE?.trim();
     if (workspace)
-        prefixes.push(translatePath(workspace));
+        prefixes.push(workspacePath(workspace));
     const list = process.env.MASTYF_AI_ALLOWED_PATH_PREFIXES?.split(',').map((s) => s.trim()).filter(Boolean);
     if (list?.length)
-        prefixes.push(...list.map(translatePath));
+        prefixes.push(...list.map(workspacePath));
     return prefixes;
 }
 function isUnderPrefix(path, prefix) {
@@ -91,7 +101,20 @@ function isUnderPrefix(path, prefix) {
 }
 /** Lowercase, slash-normalize, and collapse `..` segments for consistent matching. */
 export function normalizePathForGuard(raw) {
-    let path = translatePath(translateWslPath(raw)).replace(/\\/g, '/').toLowerCase();
+    return canonicalPath(raw).toLowerCase();
+}
+/**
+ * For the workspace check, letter case counts where the file system counts it: Windows and
+ * macOS ignore it, Linux does not (/home/u/APP is a different folder from /home/u/app).
+ */
+function workspacePath(raw) {
+    const path = canonicalPath(raw);
+    const ignoresCase = process.platform === 'win32' || process.platform === 'darwin' || /^\/[a-z]:(?:\/|$)/i.test(path);
+    return ignoresCase ? path.toLowerCase() : path;
+}
+/** Slash-normalize and collapse `..` segments, keeping letter case. */
+function canonicalPath(raw) {
+    const path = translatePath(translateWslPath(raw)).replace(/\\/g, '/');
     const parts = [];
     for (const seg of path.split('/')) {
         if (!seg || seg === '.')
@@ -106,20 +129,27 @@ export function normalizePathForGuard(raw) {
 }
 export function evaluatePathGuard(paths) {
     for (const raw of paths) {
+        // "." and "./" mean the working directory. They normalize to "/", which is the filesystem root.
+        const bare = raw.trim();
+        if (bare === '.' || bare === './' || bare === '.\\')
+            continue;
         const path = normalizePathForGuard(raw);
         for (const pattern of SENSITIVE_PATH_PATTERNS) {
             if (pattern.test(path)) {
                 return {
                     block: true,
                     reason: `Sensitive path blocked: ${path}`,
+                    match: raw,
                 };
             }
         }
         const prefixes = allowedPathPrefixes();
-        if (prefixes.length > 0 && !prefixes.some((p) => isUnderPrefix(path, p))) {
+        const inWorkspace = workspacePath(raw);
+        if (prefixes.length > 0 && !prefixes.some((p) => isUnderPrefix(inWorkspace, p))) {
             return {
                 block: true,
-                reason: `Path outside allowed workspace: ${path} (allowed: ${prefixes.join(', ')})`,
+                reason: `Path outside allowed workspace: ${inWorkspace} (allowed: ${prefixes.join(', ')})`,
+                match: raw,
             };
         }
     }

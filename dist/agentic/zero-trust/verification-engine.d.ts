@@ -19,6 +19,8 @@ export interface VerificationContext {
     /** SPIFFE ID from workload API / mTLS cert when available */
     spiffeId?: string;
     credentialIdentity?: string;
+    /** False only for a local stdio caller with no identity; see stepUpPossibleFor. */
+    stepUpPossible?: boolean;
 }
 export interface VerificationScore {
     composite: number;

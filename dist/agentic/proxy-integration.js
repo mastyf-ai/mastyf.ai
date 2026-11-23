@@ -13,7 +13,7 @@
 import { createHash } from 'crypto';
 import { Logger } from '../utils/logger.js';
 import { peekMatchingAllowGrant } from '../gateway-ledger/operator-grant-peek.js';
-import { fleetChainBlockConfidenceThreshold, resolveGlobalSessionId, isEphemeralRequestSession, deriveAgentIdForFleetChain, } from '../utils/global-session-id.js';
+import { fleetChainBlockConfidenceThreshold, resolveGlobalSessionId, isEphemeralRequestSession, deriveAgentIdForFleetChain, collusionIdentity, } from '../utils/global-session-id.js';
 function resolveSessionContext(ctx, legacyAgentId) {
     if (typeof ctx === 'string') {
         const requestId = ctx;
@@ -234,7 +234,11 @@ export async function runAgenticPreForwardHooks(container, serverName, toolName,
         return { blocked: true, reason: intentCheck.reason ?? 'Intent binding violation' };
     }
     container.capabilityGraph.recordObservedCall(serverName, toolName, toolName, { argsKeys: Object.keys(args) });
-    const collusion = container.collusionDetector.record(agentId ?? globalSessionId, serverName, toolName, { sessionId: globalSessionId });
+    const localStdio = typeof sessionCtx === 'object' && sessionCtx.localStdio === true;
+    const collusionAgent = collusionIdentity(agentId, globalSessionId, localStdio);
+    const collusion = collusionAgent
+        ? container.collusionDetector.record(collusionAgent, serverName, toolName, { sessionId: globalSessionId })
+        : null;
     if (collusion && collusion.confidence >= 0.65) {
         return { blocked: true, reason: collusion.description };
     }

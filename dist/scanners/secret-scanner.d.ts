@@ -6,6 +6,8 @@ type CompiledRule = {
     regex: RegExp;
     entropy?: number;
     exclusions?: RegExp[];
+    /** A cheap test for the rule's keyword; when it fails, the rule can't match and isn't run. */
+    keyword?: RegExp;
 };
 /** Exported for tests and transparency dashboards. */
 export declare function getSecretRuleCount(): number;

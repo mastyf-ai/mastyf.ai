@@ -1,6 +1,7 @@
 /**
  * Unified MCP lifecycle + resource/prompt gating for all proxy transports.
  */
+import { observePublishedContent } from '../extensions/index.js';
 import { hasJsonRpcId, jsonRpcErrorBody } from './json-rpc-utils.js';
 import { validateMcpJsonRpcMessage } from '../validation/mcp-jsonrpc.js';
 import { gateMcpMethodResponse, recordMcpLifecycleRequest, runMcpLifecyclePreCheck, } from './mcp-lifecycle-bridge.js';
@@ -38,6 +39,7 @@ export function runMcpPrePipeline(params) {
     };
 }
 export function applyMcpResponsePipeline(params) {
+    observePublishedContent(params.method, params.result);
     const gate = gateMcpMethodResponse({ method: params.method, result: params.result });
     recordMcpLifecycleRequest({
         sessionId: params.sessionId,

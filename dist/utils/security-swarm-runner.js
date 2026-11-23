@@ -317,6 +317,8 @@ export function startSwarmAnalysis(opts = {}) {
     const args = ['security-swarm/run-analysis.mjs', '--quiet'];
     if (opts.full)
         args.push('--nightly');
+    else
+        args.push('--analysis');
     const startedAt = new Date().toISOString();
     const jobId = randomUUID();
     mkdirSync(swarmOut, { recursive: true });

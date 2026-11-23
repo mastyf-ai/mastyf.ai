@@ -1,8 +1,4 @@
-/**
- * ToolCallDefenseOrchestrator — unified Defense Fabric pipeline for all transports.
- *
- * Phases: lifecycle → pre-guard → policy → post-policy (spend + semantic).
- */
+import { type BlockEvidence } from './block-evidence.js';
 import type { IncomingHttpHeaders } from 'http';
 import type { PolicyEngine } from '../policy/policy-engine.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
@@ -26,6 +22,8 @@ export interface ToolCallDefenseInput {
     mcpSessionId?: string;
     agentId?: string;
     idempotencyKey?: string;
+    /** Set by the stdio proxy only, never from client input. */
+    localStdio?: boolean;
 }
 export type ToolCallDefenseBlocked = {
     allowed: false;
@@ -33,6 +31,8 @@ export type ToolCallDefenseBlocked = {
     code: number;
     rule: string;
     reason: string;
+    /** The layer that blocked, and what it matched when it matched literal text. */
+    evidence: BlockEvidence;
     httpStatus?: number;
     preGuard?: Extract<ToolCallPreGuardResult, {
         blocked: true;
