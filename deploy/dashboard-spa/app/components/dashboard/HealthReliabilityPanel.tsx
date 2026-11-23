@@ -18,7 +18,6 @@ import { ChartPanel } from '@/app/components/ui/ChartPanel';
 import { Badge } from '@/app/components/ui/Badge';
 import { EmptyState } from '@/app/components/ui/EmptyState';
 import { computeReliabilityRiskMetrics } from '@/lib/advanced-analytics';
-import { trackAdvancedAnalyticsEvent } from '@/lib/mastyf-ai-api';
 import { useVisuals } from './VisualsProvider';
 
 type Props = {
@@ -32,15 +31,6 @@ export function HealthReliabilityPanel({ health, refreshKey = 0 }: Props) {
   const byServer = visuals?.traffic?.byServer ?? [];
   const reliability = computeReliabilityRiskMetrics(health, byServer);
 
-  useEffect(() => {
-    if (!health) return;
-    void trackAdvancedAnalyticsEvent({
-      feature: 'reliability_risk_index',
-      metric: 'index',
-      confidence: reliability.caveat.confidence,
-      value: reliability.index,
-    });
-  }, [health, reliability.caveat.confidence, reliability.index, refreshKey]);
 
   if (!health) {
     return <EmptyState title="No health data" message="Connect proxy history database to see server health metrics." />;

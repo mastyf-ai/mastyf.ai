@@ -18,7 +18,6 @@ import {
   quarantineThreatIntel,
   dismissThreatIntel,
   rollbackAiLearning,
-  trackAdvancedAnalyticsEvent,
   type AiSuggestion,
   type SemanticOutcome,
   type ThreatIntelStatus,
@@ -164,15 +163,6 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
     abuseScores,
   );
 
-  useEffect(() => {
-    if (!prioritizedQueue.length) return;
-    void trackAdvancedAnalyticsEvent({
-      feature: 'analyst_workload_optimizer',
-      metric: 'topPriorityScore',
-      confidence: 'medium',
-      value: Number(prioritizedQueue[0].priorityScore.toFixed(2)),
-    });
-  }, [prioritizedQueue]);
 
   const onQuarantineThreat = async (id: string) => {
     if (!canMutate) {

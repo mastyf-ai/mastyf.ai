@@ -20,7 +20,6 @@ import {
 } from 'recharts';
 import {
   fetchAnalyticsSummary,
-  trackAdvancedAnalyticsEvent,
   type AnalyticsSummaryResponse,
 } from '@/lib/mastyf-ai-api';
 import { useDashboardWindow } from '../dashboard/DashboardWindowContext';
@@ -127,15 +126,6 @@ export function AnalyticsDashboardPanel({ refreshKey = 0, wsConnected = false }:
   const drift = computeDriftMetrics(data);
   const unavailable = isApiDataUnavailable(data);
 
-  useEffect(() => {
-    if (!data || unavailable) return;
-    void trackAdvancedAnalyticsEvent({
-      feature: 'drift_regime_shift',
-      metric: 'changeDetected',
-      confidence: drift.caveat.confidence,
-      value: drift.changeDetected ? 1 : 0,
-    });
-  }, [data, unavailable, drift.caveat.confidence, drift.changeDetected]);
 
   if (loading && !data) {
     return <p className="text-sm text-muted">Loading analytics…</p>;

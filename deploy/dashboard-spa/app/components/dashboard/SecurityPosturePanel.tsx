@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchCost, trackAdvancedAnalyticsEvent, type CostResponse, type SecurityResponse } from '@/lib/mastyf-ai-api';
+import { fetchCost, type CostResponse, type SecurityResponse } from '@/lib/mastyf-ai-api';
 import { CHART_AXIS, CHART_COLORS, CHART_GRID, CHART_TOOLTIP_STYLE, severityColor } from '@/lib/chartTheme';
 import { DashboardSection } from './DashboardSection';
 import { KpiCard } from './KpiCard';
@@ -70,14 +70,6 @@ export function SecurityPosturePanel({ security, refreshKey = 0, onOpenThreatDis
         : 'success';
 
   const roi = computeCostRiskRoiMetrics(cost, security);
-  useEffect(() => {
-    void trackAdvancedAnalyticsEvent({
-      feature: 'cost_of_risk_roi',
-      metric: 'netSecurityRoiUsd',
-      confidence: roi.caveat.confidence,
-      value: Number(roi.netSecurityRoiUsd.toFixed(2)),
-    });
-  }, [roi.caveat.confidence, roi.netSecurityRoiUsd]);
 
   return (
     <div className="security-posture-panel">

@@ -1,5 +1,8 @@
 'use client';
 
+import { BudgetSettingsCard } from './BudgetSettingsCard';
+import { useAuthSession } from '../AuthSessionContext';
+import { hasPermission } from '@/lib/dashboard-roles';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Area,
@@ -413,7 +416,9 @@ function BreakdownView({ tools, loading }: { tools: ToolEntry[]; loading: boolea
   );
 }
 
-function BudgetsView({ cost, loading }: { cost: CostResponse | null; loading: boolean }) {
+function BudgetsView({ cost, loading, onReload }: { cost: CostResponse | null; loading: boolean; onReload: () => void }) {
+  const { status } = useAuthSession();
+  const canEdit = hasPermission(status?.roles ?? (status?.dashboardRole ? [status.dashboardRole] : []), 'policy_mutate');
   const budgetPct = useMemo(() => {
     if (cost?.budgetUsd && cost.totalCost != null && cost.budgetUsd > 0) {
       return Math.min(100, (cost.totalCost / cost.budgetUsd) * 100);
@@ -429,12 +434,15 @@ function BudgetsView({ cost, loading }: { cost: CostResponse | null; loading: bo
 
   if (!cost) {
     return (
-      <Card title="Budgets">
-        <EmptyState
-          title="No budget data"
-          message="Connect proxy history with pricing to see budget utilization."
-        />
-      </Card>
+      <>
+        <Card title="Budgets">
+          <EmptyState
+            title="No spend data yet"
+            message="Spend appears once tool calls with token pricing are recorded. You can set the budget now."
+          />
+        </Card>
+        <BudgetSettingsCard canEdit={canEdit} onSaved={onReload} />
+      </>
     );
   }
 
@@ -467,7 +475,7 @@ function BudgetsView({ cost, loading }: { cost: CostResponse | null; loading: bo
         </Card>
       ) : (
         <Card title="Budget Usage">
-          <EmptyState title="No budget configured" message="Set a budget via proxy configuration to track spending limits." />
+          <EmptyState title="No budget set" message="Set a monthly budget below to track spend against it." />
         </Card>
       )}
 
@@ -509,12 +517,7 @@ function BudgetsView({ cost, loading }: { cost: CostResponse | null; loading: bo
         </Card>
       ) : null}
 
-      <Card title="Budget Management" subtitle="Configuration & controls">
-        <EmptyState
-          title="Budget management coming soon"
-          message="Automated budget alerts, threshold policies, and spend caps will be available in a future release."
-        />
-      </Card>
+      <BudgetSettingsCard canEdit={canEdit} onSaved={onReload} />
     </>
   );
 }
@@ -580,7 +583,7 @@ export function CostIntelligenceCenter({ view, onViewChange, refreshKey, initial
       ) : view === 'breakdown' ? (
         <BreakdownView tools={tools} loading={loading} />
       ) : (
-        <BudgetsView cost={cost} loading={loading} />
+        <BudgetsView cost={cost} loading={loading} onReload={() => void load()} />
       )}
     </section>
   );

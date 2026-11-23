@@ -1,5 +1,6 @@
 'use client';
 
+import { PolicyHistoryView } from './PolicyHistoryView';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   fetchPolicy,
@@ -54,6 +55,8 @@ export function PolicyControlCenter({ view, onViewChange, roles, lastBlocked, on
   const [policy, setPolicy] = useState<PolicyInfo | null>(null);
   const [rules, setRules] = useState<ActivePolicyRule[]>([]);
   const [draftYaml, setDraftYaml] = useState('');
+  /** Version-history id when the draft came from "Restore this version". */
+  const [restoredFrom, setRestoredFrom] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [ruleBusy, setRuleBusy] = useState<string | null>(null);
   const [ruleFilter, setRuleFilter] = useState('');
@@ -84,13 +87,17 @@ export function PolicyControlCenter({ view, onViewChange, roles, lastBlocked, on
     if (!dirty) { onAction?.('No changes to save'); return; }
     setSaving(true);
     try {
-      const result = await savePolicy(draftYaml);
-      if (result.ok) { onAction?.('Policy saved; watcher will hot-reload'); await refresh(); }
+      const result = await savePolicy(draftYaml, restoredFrom);
+      if (result.ok) {
+        onAction?.(restoredFrom ? 'Earlier version restored; the policy reloads now' : 'Policy saved; watcher will hot-reload');
+        setRestoredFrom(null);
+        await refresh();
+      }
       else { onAction?.(result.details ? `${result.error}: ${result.details}` : result.error || 'Save failed'); }
     } finally { setSaving(false); }
   };
 
-  const onDiscard = () => { setDraftYaml(policy?.yaml ?? ''); onAction?.('Discarded unsaved edits'); };
+  const onDiscard = () => { setDraftYaml(policy?.yaml ?? ''); setRestoredFrom(null); onAction?.('Discarded unsaved edits'); };
 
   const onReload = async () => {
     if (!canMutate) { onAction?.('Requires operator role'); return; }
@@ -469,12 +476,16 @@ export function PolicyControlCenter({ view, onViewChange, roles, lastBlocked, on
   );
 
   const renderHistoryView = () => (
-    <Card title="Policy History">
-      <EmptyState
-        title="Coming soon"
-        message="Policy version history tracking coming soon with Git-backed policy management"
-      />
-    </Card>
+    <PolicyHistoryView
+      currentYaml={policy?.yaml ?? ''}
+      canMutate={canMutate}
+      onOpenInEditor={(yaml, versionId, savedAt) => {
+        setDraftYaml(yaml);
+        setRestoredFrom(versionId);
+        onViewChange('editor');
+        onAction?.(`Version from ${new Date(savedAt).toLocaleString()} is in the editor. Review it, then save to restore it.`);
+      }}
+    />
   );
 
   return (

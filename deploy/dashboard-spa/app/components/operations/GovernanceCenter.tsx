@@ -226,9 +226,9 @@ export function GovernanceCenter({ roles, tenantLocked = false, onAction }: Prop
           {setupStatus?.mastyfAiConfig && (
             <div className="governance-detail">
               <span className="governance-detail-label">Proxy URL:</span>
-              <span className="governance-detail-value">{setupStatus.mastyfAiConfig.upstreamUrl}</span>
+              <span className="governance-detail-value">{setupStatus.mastyfAiConfig.upstreamUrl ?? 'Not set'}</span>
               <span className="governance-detail-label">Listen port:</span>
-              <span className="governance-detail-value">{setupStatus.mastyfAiConfig.listenPort}</span>
+              <span className="governance-detail-value">{setupStatus.mastyfAiConfig.listenPort ?? 'Not set'}</span>
             </div>
           )}
         </Card>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchCost, fetchPolicyCopilot, fetchPolicyCounterfactual, trackAdvancedAnalyticsEvent } from '@/lib/mastyf-ai-api';
+import { fetchCost, fetchPolicyCopilot, fetchPolicyCounterfactual } from '@/lib/mastyf-ai-api';
 import { hasPermission } from '@/lib/dashboard-roles';
 import { computePolicyImpactMetrics, type PolicyImpactMetrics } from '@/lib/advanced-analytics';
 
@@ -108,12 +108,6 @@ export function PolicyCopilotPanel({ roles, onAction, initialTab }: Props) {
       const avgCostPerBlockedCall = blocked / blockedCalls;
       const computed = computePolicyImpactMetrics(report as Record<string, unknown>, avgCostPerBlockedCall);
       setImpact(computed);
-      await trackAdvancedAnalyticsEvent({
-        feature: 'policy_impact_simulator',
-        metric: 'simulatedBlockDelta',
-        confidence: computed.caveat.confidence,
-        value: computed.simulatedBlockDelta,
-      });
       onAction?.(String(report.summary || 'Counterfactual complete'));
     } finally {
       setBusy(false);

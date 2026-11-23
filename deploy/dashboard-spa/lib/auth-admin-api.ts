@@ -101,7 +101,19 @@ export interface AuthSettings {
 async function asJson<T>(res: Response): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) {
-    throw new Error((data as { error?: string })?.error || `Request failed (${res.status})`);
+    const body = data as { error?: string; details?: unknown };
+    // Surface the server's specific reasons (password rules, invalid fields) rather than a generic line.
+    let detail = '';
+    if (Array.isArray(body.details)) {
+      detail = body.details.map((d) => String(d).replace(/\.?$/, '.')).join(' ');
+    } else if (body.details && typeof body.details === 'object') {
+      const fields = (body.details as { fieldErrors?: Record<string, string[]> }).fieldErrors ?? {};
+      detail = Object.entries(fields)
+        .map(([field, msgs]) => `${field}: ${(msgs ?? []).join(', ')}`)
+        .join('; ');
+    }
+    const base = body.error || `Request failed (${res.status})`;
+    throw new Error(detail ? `${base}. ${detail}` : base);
   }
   return data;
 }
@@ -118,7 +130,9 @@ export async function submitAuthSetup(input: {
   email: string;
   displayName: string;
   password: string;
-}): Promise<{ success: boolean; userId: string }> {
+  /** The dashboard API key; proves the person creating the first admin owns this install. */
+  api_key?: string;
+}): Promise<{ success: boolean; userId: string; signedIn?: boolean }> {
   const res = await mastyfAiFetch('/api/auth/setup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

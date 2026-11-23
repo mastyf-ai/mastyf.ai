@@ -48,8 +48,9 @@ export function ClientAutoMediationCard({ onAction }: { onAction?: (msg: string)
   const [desktopAgents, setDesktopAgents] = useState<ClientItem[] | null>(null);
   const [isDesktopApp, setIsDesktopApp] = useState(false);
   const [lastMediationResult, setLastMediationResult] = useState<{
-    receiptId: string;
-    generation: number;
+    /** Only what the backend returned; never invented. */
+    receiptId: string | null;
+    generation: number | null;
     timestamp: string;
   } | null>(null);
 
@@ -154,10 +155,10 @@ export function ClientAutoMediationCard({ onAction }: { onAction?: (msg: string)
       try {
         const result = await (window as any).mastyfShield.protectAllAgents();
         await refreshDesktopAgents();
-        const receiptId = 'shield_desktop_' + Math.random().toString(36).slice(2, 10);
+        // The desktop bridge does not return a control receipt; show none rather than invent one.
         setLastMediationResult({
-          receiptId,
-          generation: 1,
+          receiptId: null,
+          generation: null,
           timestamp: new Date().toLocaleTimeString(),
         });
         onAction?.(`All AI Clients Mediated · ${result.totalNewlyProtected || 0} servers protected`);
@@ -186,10 +187,8 @@ export function ClientAutoMediationCard({ onAction }: { onAction?: (msg: string)
       setBusyMessage('Applying gateway proxy wrappers and signing Ed25519 control receipt...');
       const result = await gateway.applyPlan(plan, true);
 
-      const receiptId =
-        result?.control_receipt?.receipt_id ||
-        'ctrl_' + Math.random().toString(36).slice(2, 10);
-      const generation = result?.generation || 7;
+      const receiptId: string | null = result?.control_receipt?.receipt_id ?? null;
+      const generation: number | null = typeof result?.generation === 'number' ? result.generation : null;
 
       setLastMediationResult({
         receiptId,
@@ -197,7 +196,7 @@ export function ClientAutoMediationCard({ onAction }: { onAction?: (msg: string)
         timestamp: new Date().toLocaleTimeString(),
       });
 
-      onAction?.(`Host Clients Mediated · Control Receipt: ${receiptId}`);
+      onAction?.(receiptId ? `Host clients mediated. Control receipt ${receiptId}` : 'Host clients mediated. No control receipt was returned.');
       await gateway.refetch();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
@@ -423,7 +422,14 @@ export function ClientAutoMediationCard({ onAction }: { onAction?: (msg: string)
             <span className="font-mono text-[10px] text-slate-400">{lastMediationResult.timestamp}</span>
           </div>
           <p className="text-slate-300">
-            Client configurations have been updated to route child processes through Mastyf Gateway. Ed25519 control receipt: <code className="font-mono font-bold text-emerald-400">{lastMediationResult.receiptId}</code> (Generation {lastMediationResult.generation}).
+            Client configurations have been updated to route child processes through Mastyf Gateway. {lastMediationResult.receiptId ? (
+              <>
+                Ed25519 control receipt: <code className="font-mono font-bold text-emerald-400">{lastMediationResult.receiptId}</code>
+                {lastMediationResult.generation !== null && <> (generation {lastMediationResult.generation})</>}.
+              </>
+            ) : (
+              'No control receipt was returned for this change.'
+            )}
           </p>
         </div>
       )}

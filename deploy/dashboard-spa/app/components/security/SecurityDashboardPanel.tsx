@@ -21,7 +21,7 @@ type Props = {
 
 const QUICK_NAV = [
   { workspace: 'security' as const, view: 'overview', label: 'Dashboard' },
-  { workspace: 'security' as const, view: 'threats', label: 'Threat Detection' },
+  { workspace: 'security' as const, view: 'threats', label: 'Threat Lab' },
   { workspace: 'activity' as const, view: 'audit', label: 'Audit Log' },
   { workspace: 'settings' as const, view: 'admin', label: 'Access Control' },
   { workspace: 'policy' as const, view: 'rules', label: 'Policies' },

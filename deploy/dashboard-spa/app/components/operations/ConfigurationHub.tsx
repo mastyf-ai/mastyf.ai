@@ -1,12 +1,13 @@
 'use client';
 
+import { CloudConnectionInfo } from '../setup/CloudConnectionInfo';
+import { IntegrationsStatus } from '../setup/IntegrationsStatus';
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle, Clock, AlertCircle, Cloud, Settings, Globe, Shield, Activity, Server, Key, Webhook, Database, Users, FileText, LogIn, Lock } from 'lucide-react';
 import {
   fetchSetupStatus,
   saveSetupMastyfAiConfig,
   fetchSetupCloudStatus,
-  connectSetupCloud,
   fetchTenantContext,
   fetchAdminAuditTrail,
   fetchLogs,
@@ -80,7 +81,6 @@ export function ConfigurationHub({ view, onViewChange, roles, tenantLocked = fal
   const [setupStatus, setSetupStatus] = useState<SetupStatusResponse | null>(null);
   const [cloudStatus, setCloudStatus] = useState<SetupCloudStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [cloudLoading, setCloudLoading] = useState(false);
 
   const [upstreamUrl, setUpstreamUrl] = useState('');
   const [listenPort, setListenPort] = useState('8443');
@@ -88,10 +88,6 @@ export function ConfigurationHub({ view, onViewChange, roles, tenantLocked = fal
   const [configOpen, setConfigOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [cloudUrl, setCloudUrl] = useState('');
-  const [ssoEnabled, setSsoEnabled] = useState(false);
-  const [strictness, setStrictness] = useState(50);
-  const [keyRotation, setKeyRotation] = useState(false);
 
   const [tenantId, setTenantIdLocal] = useState('default');
   const [multiTenant, setMultiTenant] = useState(false);
@@ -111,12 +107,6 @@ export function ConfigurationHub({ view, onViewChange, roles, tenantLocked = fal
     if (st?.mastyfAiConfig) {
       setUpstreamUrl(st.mastyfAiConfig.upstreamUrl || '');
       setListenPort(String(st.mastyfAiConfig.listenPort ?? 8443));
-    }
-    if (cl) {
-      setCloudUrl(cl.controlPlaneUrl || '');
-      setSsoEnabled(cl.ssoEnabled ?? false);
-      setStrictness(cl.policyStrictnessPct ?? 50);
-      setKeyRotation(cl.apiKeyRotationEnabled ?? false);
     }
     setLoading(false);
   }, []);
@@ -179,32 +169,6 @@ export function ConfigurationHub({ view, onViewChange, roles, tenantLocked = fal
     } else {
       onAction?.(res.error || 'Save failed');
     }
-  };
-
-  const onConnectCloud = async () => {
-    setCloudLoading(true);
-    const res = await connectSetupCloud({
-      controlPlaneUrl: cloudUrl,
-      ssoEnabled,
-      policyStrictnessPct: strictness,
-      apiKeyRotationEnabled: keyRotation,
-    });
-    setCloudLoading(false);
-    if (res.ok) {
-      onAction?.('Cloud connected successfully');
-      if (res.launchUrl) window.open(res.launchUrl, '_blank');
-      await loadAll();
-    } else {
-      onAction?.(res.error || 'Cloud connection failed');
-    }
-  };
-
-  const onDisconnectCloud = async () => {
-    setCloudLoading(true);
-    await connectSetupCloud({ controlPlaneUrl: '', ssoEnabled: false });
-    setCloudLoading(false);
-    onAction?.('Cloud disconnected');
-    await loadAll();
   };
 
   const applyTenant = () => {
@@ -295,52 +259,8 @@ export function ConfigurationHub({ view, onViewChange, roles, tenantLocked = fal
             )}
           </Card>
 
-          <Card title="Cloud Connection" subtitle="Connect to the mastyf.ai control plane">
-            <div className="cloud-connection" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="flex items-center gap-2">
-                <Cloud size={18} />
-                <span className="text-sm">
-                  Status:{' '}
-                  {cloudStatus?.connected ? (
-                    <Badge variant="success" dot>Connected</Badge>
-                  ) : (
-                    <Badge variant="neutral" dot>Disconnected</Badge>
-                  )}
-                </span>
-              </div>
-              {cloudStatus?.connected ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {cloudStatus.controlPlaneUrl && (
-                    <p className="text-sm text-muted">Control Plane: {cloudStatus.controlPlaneUrl}</p>
-                  )}
-                  <Button variant="danger" size="sm" onClick={() => void onDisconnectCloud()} disabled={cloudLoading}>
-                    Disconnect
-                  </Button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label className="text-sm" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    Control Plane URL
-                    <input type="url" className="input" value={cloudUrl} onChange={(e) => setCloudUrl(e.target.value)} placeholder="https://www.mastyf.ai" style={{ width: '100%' }} />
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={ssoEnabled} onChange={(e) => setSsoEnabled(e.target.checked)} />
-                    Enable SSO
-                  </label>
-                  <label className="text-sm" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    Policy Strictness ({strictness}%)
-                    <input type="range" min={0} max={100} value={strictness} onChange={(e) => setStrictness(Number(e.target.value))} />
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={keyRotation} onChange={(e) => setKeyRotation(e.target.checked)} />
-                    Auto Key Rotation
-                  </label>
-                  <Button variant="primary" size="sm" onClick={() => void onConnectCloud()} disabled={cloudLoading || !cloudUrl}>
-                    {cloudLoading ? 'Connecting…' : 'Connect to Cloud'}
-                  </Button>
-                </div>
-              )}
-            </div>
+          <Card title="Cloud connection" subtitle="Link this install to your mastyf.ai workspace">
+            <CloudConnectionInfo initial={loading ? undefined : cloudStatus} />
           </Card>
 
           <Card title="CLI Onboarding" subtitle="Quick start commands">
@@ -425,34 +345,13 @@ export function ConfigurationHub({ view, onViewChange, roles, tenantLocked = fal
                     <span style={{ marginLeft: 8 }}><Badge variant="success" dot>Live</Badge></span>
                   </>
                 ) : (
-                  <span className="text-muted">Not connected — configure in General view</span>
+                  <span className="text-muted">Not linked. See Cloud connection in General.</span>
                 )}
               </span>
             </div>
           </Card>
 
-          <Card title="Webhooks" subtitle="Configure outgoing webhook notifications">
-            <EmptyState
-              icon={Webhook}
-              title="Webhook integration"
-              message="Configure webhook endpoints for real-time event notifications."
-            />
-          </Card>
-
-          <Card title="SIEM Integration" subtitle="Forward audit logs to your SIEM">
-            <EmptyState
-              icon={FileText}
-              title="SIEM connector"
-              message="Send structured audit events to Splunk, Elastic, or other SIEM platforms."
-            />
-          </Card>
-
-          <Card>
-            <div className="flex items-center justify-center gap-2 text-sm text-muted" style={{ padding: '8px 0' }}>
-              <Activity size={16} />
-              More integrations coming soon
-            </div>
-          </Card>
+          <IntegrationsStatus />
         </div>
       )}
 
