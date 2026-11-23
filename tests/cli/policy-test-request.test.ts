@@ -23,3 +23,17 @@ describe('POST /api/policy/test body', () => {
     });
   });
 });
+
+describe('POST /api/policy/test: dry runs and tool results', () => {
+  it('only treats an explicit dryRun: true as a dry run', () => {
+    expect(policyTestRequest({ tool: 't', dryRun: true }, 'p').dryRun).toBe(true);
+    expect(policyTestRequest({ tool: 't', dryRun: 'true' }, 'p').dryRun).toBe(false);
+    expect(policyTestRequest({ tool: 't' }, 'p').dryRun).toBe(false);
+  });
+
+  it('reads a tool result as text and caps its size', () => {
+    expect(policyTestRequest({ tool: 't', result: 'hello' }, 'p').result).toBe('hello');
+    expect(policyTestRequest({ tool: 't', result: { not: 'text' } }, 'p').result).toBeUndefined();
+    expect(policyTestRequest({ tool: 't', result: 'x'.repeat(70_000) }, 'p').result).toHaveLength(64_000);
+  });
+});

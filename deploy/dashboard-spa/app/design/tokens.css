@@ -1,101 +1,119 @@
+/*
+ * Mastyf dashboard tokens.
+ *
+ * Values come from the mastyf.ai design tokens (apps/cloud/app/design/tokens.css), which are shared
+ * with the Shield app: dark is Shield's near-black with a muted gold accent, light is the website's
+ * warm paper and brown ink. Dark is the default; the header toggle sets data-theme on <html>.
+ *
+ * Variable names are the dashboard's own (used across enterprise.css and the panels); only the
+ * values changed, so every existing surface picks up the brand without per-component edits.
+ */
 :root {
-  /* ── Brand ─────────────────────────────────────────── */
-  --brand-hue: 214;
-  --brand-primary: #1d4ed8;
-  --brand-primary-hover: #1e40af;
-  --brand-primary-muted: #dbeafe;
-  --brand-primary-subtle: #eff6ff;
+  color-scheme: dark;
 
-  /* ── Neutral palette ────────────────────────────────── */
-  --gray-50: #f8fafc;
-  --gray-100: #f1f5f9;
-  --gray-200: #e2e8f0;
-  --gray-300: #cbd5e1;
-  --gray-400: #94a3b8;
-  --gray-500: #64748b;
-  --gray-600: #475569;
-  --gray-700: #334155;
-  --gray-800: #1e293b;
-  --gray-900: #0f172a;
-  --gray-950: #020617;
+  /* ── Brand: muted gold, used for actions, links, focus and the active nav item ── */
+  --brand-hue: 41;
+  --brand-primary: #b49a5e;
+  --brand-primary-hover: #c4ab70;
+  --brand-primary-muted: rgba(180, 154, 94, 0.18);
+  --brand-primary-subtle: rgba(180, 154, 94, 0.1);
+  --brand-ink: #0a0a0b; /* text on a gold button */
 
-  /* ── Surface & Background ────────────────────────────── */
-  --bg: #f1f4f9;
-  --bg-elevated: #ffffff;
-  --bg-surface: #ffffff;
-  --bg-muted: #eef2f6;
-  --bg-subtle: #f4f7fb;
-  --bg-hover: #e6eaf0;
-  --bg-active: #dce1e9;
+  /* ── Neutral ramp (warm greys, light to dark) ── */
+  --gray-50: #f7f7f3;
+  --gray-100: #ededea;
+  --gray-200: #c9c9c2;
+  --gray-300: #a3a39b;
+  --gray-400: #74746d;
+  --gray-500: #5c5c56;
+  --gray-600: #3a3a3f;
+  --gray-700: #303035;
+  --gray-800: #222226;
+  --gray-900: #151518;
+  --gray-950: #0a0a0b;
 
-  --border: #e2e6ed;
-  --border-light: #edf1f7;
-  --border-strong: #c8ced9;
+  /* ── Surfaces ── */
+  --bg: #0a0a0b;
+  --bg-elevated: #151518;
+  --bg-surface: #151518;
+  --bg-muted: #18181b;
+  --bg-subtle: #111113;
+  --bg-hover: #222226;
+  --bg-active: #2a2a2f;
+  --bg-frame: #0d0d0f; /* header */
+
+  --border: #26262a;
+  --border-light: #222225;
+  --border-strong: #303035;
   --border-accent: var(--brand-primary);
 
-  /* ── Text ────────────────────────────────────────────── */
-  --text: #0b1830;
-  --text-secondary: #3d4f66;
-  --text-tertiary: #5e6f85;
-  --text-muted: #7b8ba0;
-  --text-faint: #99a8bb;
-  --text-inverse: #ffffff;
+  /* ── Text ── */
+  --text: #ededea;
+  --text-strong: #f7f7f3;
+  --text-secondary: #c4c4bc;
+  --text-tertiary: #a3a39b;
+  --text-muted: #8f8f88;
+  --text-faint: #62625c;
+  --text-inverse: #0a0a0b;
 
-  /* ── Semantic colors ─────────────────────────────────── */
-  --success: #059669;
-  --success-muted: #d1fae5;
-  --success-subtle: #ecfdf5;
-  --success-text: #065f46;
+  /* ── Meaning: allowed / held / blocked ── */
+  --success: #7fd28e;
+  --success-muted: rgba(127, 210, 142, 0.14);
+  --success-subtle: rgba(127, 210, 142, 0.08);
+  --success-text: #9fe0aa;
 
-  --warning: #d97706;
-  --warning-muted: #fef3c7;
-  --warning-subtle: #fffbeb;
-  --warning-text: #92400e;
+  --warning: #ee9150;
+  --warning-muted: rgba(238, 145, 80, 0.14);
+  --warning-subtle: rgba(238, 145, 80, 0.08);
+  --warning-text: #f3ad7c;
 
-  --danger: #dc2626;
-  --danger-muted: #fee2e2;
-  --danger-subtle: #fef2f2;
-  --danger-text: #991b1b;
+  --danger: #ef6b5b;
+  --danger-muted: rgba(239, 107, 91, 0.15);
+  --danger-subtle: rgba(239, 107, 91, 0.08);
+  --danger-text: #f49285;
 
-  --info: #2563eb;
-  --info-muted: #dbeafe;
-  --info-subtle: #eff6ff;
-  --info-text: #1e40af;
+  --info: #7cb4d8;
+  --info-muted: rgba(124, 180, 216, 0.14);
+  --info-subtle: rgba(124, 180, 216, 0.08);
+  --info-text: #a2cbe6;
 
-  --neutral: var(--gray-500);
-  --neutral-muted: var(--gray-100);
-  --neutral-subtle: var(--gray-50);
+  --neutral: #a3a39b;
+  --neutral-muted: rgba(163, 163, 155, 0.12);
+  --neutral-subtle: rgba(163, 163, 155, 0.06);
 
-  /* ── Severity colors (security context) ──────────────── */
-  --severity-critical: #7f1d1d;
-  --severity-critical-bg: #fef2f2;
-  --severity-critical-border: #fecaca;
-  --severity-high: #991b1b;
-  --severity-high-bg: #fef2f2;
-  --severity-high-border: #fecaca;
-  --severity-medium: #92400e;
-  --severity-medium-bg: #fffbeb;
-  --severity-medium-border: #fde68a;
-  --severity-low: #6b7280;
-  --severity-low-bg: #f9fafb;
-  --severity-low-border: #e5e7eb;
-  --severity-info: #1e40af;
-  --severity-info-bg: #eff6ff;
-  --severity-info-border: #bfdbfe;
+  /* ── Severity ── */
+  --severity-critical: #f49285;
+  --severity-critical-bg: rgba(239, 107, 91, 0.16);
+  --severity-critical-border: rgba(239, 107, 91, 0.45);
+  --severity-high: #ef6b5b;
+  --severity-high-bg: rgba(239, 107, 91, 0.1);
+  --severity-high-border: rgba(239, 107, 91, 0.35);
+  --severity-medium: #f3ad7c;
+  --severity-medium-bg: rgba(238, 145, 80, 0.1);
+  --severity-medium-border: rgba(238, 145, 80, 0.35);
+  --severity-low: #a3a39b;
+  --severity-low-bg: rgba(163, 163, 155, 0.08);
+  --severity-low-border: rgba(163, 163, 155, 0.25);
+  --severity-info: #a2cbe6;
+  --severity-info-bg: rgba(124, 180, 216, 0.1);
+  --severity-info-border: rgba(124, 180, 216, 0.32);
 
-  /* ── Typography ──────────────────────────────────────── */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  /* ── Type: Bricolage Grotesque for headings and big numbers, IBM Plex Sans for reading,
+        IBM Plex Mono only for tool calls, payloads and code ── */
+  --font-display: var(--font-poppins, 'Poppins'), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-poppins, 'Poppins'), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-plex-mono, 'IBM Plex Mono'), ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
-  --text-2xs: 10px;
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-base: 13px;
-  --text-md: 14px;
-  --text-lg: 16px;
-  --text-xl: 20px;
-  --text-2xl: 24px;
-  --text-3xl: 30px;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+  --text-4xl: 48px;
 
   --weight-normal: 400;
   --weight-medium: 500;
@@ -105,14 +123,15 @@
   --leading-none: 1;
   --leading-tight: 1.25;
   --leading-normal: 1.5;
-  --leading-relaxed: 1.6;
+  --leading-relaxed: 1.65;
 
   --letter-spacing-tight: -0.02em;
+  --letter-spacing-display: -0.035em;
   --letter-spacing-normal: 0;
-  --letter-spacing-wide: 0.04em;
-  --letter-spacing-wider: 0.06em;
+  --letter-spacing-wide: 0.01em;
+  --letter-spacing-wider: 0.02em;
 
-  /* ── Spacing (4px base) ──────────────────────────────── */
+  /* ── Spacing (4px base) ── */
   --space-0: 0px;
   --space-1: 4px;
   --space-1-5: 6px;
@@ -130,37 +149,38 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* ── Border radius ───────────────────────────────────── */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
+  /* ── Shape: pills for controls, soft cards, larger radius for big panels ── */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 22px;
   --radius-full: 9999px;
 
-  /* ── Shadows ─────────────────────────────────────────── */
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.03);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.1);
-  --shadow-xl: 0 12px 40px rgba(15, 23, 42, 0.14);
-  --shadow-2xl: 0 24px 64px rgba(15, 23, 42, 0.18);
+  /* ── Elevation: dark surfaces separate by border and tone, not soft grey shadows ── */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.55);
+  --shadow-2xl: 0 28px 64px rgba(0, 0, 0, 0.6);
 
-  /* ── Transitions ─────────────────────────────────────── */
-  --transition-fast: 100ms ease;
-  --transition-base: 150ms ease;
-  --transition-slow: 250ms ease;
+  /* ── Motion ── */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --transition-fast: 120ms var(--ease);
+  --transition-base: 200ms var(--ease);
+  --transition-slow: 320ms var(--ease);
   --transition-modal: 300ms cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* ── Layout ──────────────────────────────────────────── */
+  /* ── Layout ── */
   --sidebar-width: 232px;
   --sidebar-collapsed-width: 56px;
-  --topbar-height: 68px;
-  --content-max: 1280px;
+  --topbar-height: 60px;
+  --content-max: 1240px;
   --content-padding: var(--space-6);
   --panel-gap: var(--space-4);
 
-  /* ── Z-index scale ───────────────────────────────────── */
+  /* ── Z-index ── */
   --z-sidebar: 30;
   --z-topbar: 20;
   --z-backdrop: 25;
@@ -169,34 +189,194 @@
   --z-toast: 70;
   --z-tooltip: 80;
 
-  /* ── Chart tokens ────────────────────────────────────── */
-  --chart-1: #1d4ed8;
-  --chart-2: #059669;
-  --chart-3: #d97706;
-  --chart-4: #7c3aed;
-  --chart-5: #dc2626;
-  --chart-6: #0891b2;
-  --chart-7: #ea580c;
-  --chart-8: #6b7280;
-  --chart-allow: #059669;
-  --chart-block: #dc2626;
-  --chart-flag: #d97706;
-  --chart-cost: #7c3aed;
-  --chart-grid: #e5e9f0;
-  --chart-axis: #94a3b8;
+  /* ── Charts: gold first, then the meaning colours, then warm neutrals ── */
+  --chart-1: #b49a5e;
+  --chart-2: #7fd28e;
+  --chart-3: #ee9150;
+  --chart-4: #7cb4d8;
+  --chart-5: #ef6b5b;
+  --chart-6: #c9b48a;
+  --chart-7: #d48fb0;
+  --chart-8: #74746d;
+  --chart-allow: #7fd28e;
+  --chart-block: #ef6b5b;
+  --chart-flag: #ee9150;
+  --chart-cost: #b49a5e;
+  --chart-grid: #26262a;
+  --chart-axis: #74746d;
+  --chart-tooltip-bg: #1b1b1f;
+
+  /* ── Heatmap ── */
+  --viz-heatmap-empty: rgba(237, 237, 234, 0.04);
+  --viz-heatmap-low: rgba(180, 154, 94, 0.2);
+  --viz-heatmap-mid: rgba(180, 154, 94, 0.42);
+  --viz-heatmap-high: rgba(180, 154, 94, 0.66);
+  --viz-heatmap-max: rgba(180, 154, 94, 0.9);
+
+  /* ── Risk gauge ── */
+  --risk-low: #7fd28e;
+  --risk-moderate: #e2c071;
+  --risk-elevated: #ee9150;
+  --risk-high: #ef6b5b;
+  --risk-critical: #f49285;
+}
+
+/*
+ * Aliases for names some panels use that were never defined (they rendered with no colour).
+ * They point at the tokens above, so both themes cover them.
+ */
+:root {
+  --text-primary: var(--text);
+  --muted: var(--text-muted);
+  --accent: var(--brand-primary);
+  --background: var(--bg);
+  --surface-raised: var(--bg-muted);
+  --card-bg: var(--bg-elevated);
+  --card-border: var(--border);
+  --brand-danger: var(--danger);
+  --brand-success: var(--success);
+  --brand-secondary: var(--text-tertiary);
+  --bg-danger: var(--danger-subtle);
+  --bg-success: var(--success-subtle);
+  --font-size-sm: var(--text-sm);
+  --chart-accent: var(--chart-1);
+  --chart-warn: var(--chart-flag);
+  --chart-teal: var(--chart-4);
+  --chart-purple: var(--chart-7);
+  --chart-orange: var(--chart-3);
+  --chart-neutral: var(--chart-8);
+  --chart-tooltip-border: var(--border-strong);
+  /* Names used by the restored component styles (components.css) and the Shield app's build */
+  --accent-muted: var(--brand-primary-muted);
+  --accent-strong: var(--brand-primary-hover);
+  --surface-elevated: var(--bg-elevated);
+  --warn: var(--warning);
+  --warn-muted: var(--warning-muted);
+  --paper-3: var(--bg-muted);
+  --text-body: var(--text-secondary);
+  --text-label: var(--text-muted);
+  --text-dim: var(--text-faint);
+  --rule-strong: var(--border-strong);
+}
+
+/*
+ * Light: the mastyf.ai website. Off-white paper, white cards, brown-black ink, bronze accent.
+ * Text colours stay at or above WCAG AA on bg, bg-elevated and bg-muted.
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --brand-primary: #603d20;
+  --brand-primary-hover: #4a2e17;
+  --brand-primary-muted: rgba(96, 61, 32, 0.14);
+  --brand-primary-subtle: rgba(96, 61, 32, 0.07);
+  --brand-ink: #ffffff;
+
+  --gray-50: #fbf8f4;
+  --gray-100: #f1eae1;
+  --gray-200: #e4d7c5;
+  --gray-300: #dccfbd;
+  --gray-400: #a8977f;
+  --gray-500: #75634f;
+  --gray-600: #5f4d3b;
+  --gray-700: #4a3a2b;
+  --gray-800: #3a2a1c;
+  --gray-900: #2b1f14;
+  --gray-950: #1d140c;
+
+  --bg: #f7f2ec;
+  --bg-elevated: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-muted: #fbf8f4;
+  --bg-subtle: #f3ede5;
+  --bg-hover: #f1eae1;
+  --bg-active: #e9dfd2;
+  --bg-frame: #e4d7c5;
+
+  --border: #eee5d9;
+  --border-light: #f3ede5;
+  --border-strong: #dccfbd;
+
+  --text: #3a2a1c;
+  --text-strong: #2b1f14;
+  --text-secondary: #4f3e2d;
+  --text-tertiary: #5f4d3b;
+  --text-muted: #75634f;
+  --text-faint: #8f7d68;
+  --text-inverse: #ffffff;
+
+  --success: #2a7340;
+  --success-muted: rgba(42, 115, 64, 0.12);
+  --success-subtle: rgba(42, 115, 64, 0.06);
+  --success-text: #235f35;
+
+  --warning: #a24f17;
+  --warning-muted: rgba(162, 79, 23, 0.12);
+  --warning-subtle: rgba(162, 79, 23, 0.06);
+  --warning-text: #874213;
+
+  --danger: #ab3426;
+  --danger-muted: rgba(171, 52, 38, 0.11);
+  --danger-subtle: rgba(171, 52, 38, 0.05);
+  --danger-text: #8f2b1f;
+
+  --info: #2a628a;
+  --info-muted: rgba(42, 98, 138, 0.11);
+  --info-subtle: rgba(42, 98, 138, 0.05);
+  --info-text: #234f70;
+
+  --neutral: #5f4d3b;
+  --neutral-muted: rgba(95, 82, 66, 0.1);
+  --neutral-subtle: rgba(95, 82, 66, 0.05);
+
+  --severity-critical: #8f2b1f;
+  --severity-critical-bg: rgba(171, 52, 38, 0.12);
+  --severity-critical-border: rgba(171, 52, 38, 0.4);
+  --severity-high: #ab3426;
+  --severity-high-bg: rgba(171, 52, 38, 0.07);
+  --severity-high-border: rgba(171, 52, 38, 0.3);
+  --severity-medium: #874213;
+  --severity-medium-bg: rgba(162, 79, 23, 0.07);
+  --severity-medium-border: rgba(162, 79, 23, 0.3);
+  --severity-low: #5f4d3b;
+  --severity-low-bg: rgba(95, 82, 66, 0.05);
+  --severity-low-border: rgba(95, 82, 66, 0.2);
+  --severity-info: #234f70;
+  --severity-info-bg: rgba(42, 98, 138, 0.07);
+  --severity-info-border: rgba(42, 98, 138, 0.28);
+
+  --shadow-xs: none;
+  --shadow-sm: 0 1px 2px rgba(96, 61, 32, 0.06);
+  --shadow-md: 0 12px 32px rgba(96, 61, 32, 0.12);
+  --shadow-lg: 0 16px 40px rgba(96, 61, 32, 0.14);
+  --shadow-xl: 0 20px 48px rgba(96, 61, 32, 0.16);
+  --shadow-2xl: 0 28px 64px rgba(96, 61, 32, 0.18);
+
+  --chart-1: #603d20;
+  --chart-2: #2a7340;
+  --chart-3: #a24f17;
+  --chart-4: #2a628a;
+  --chart-5: #ab3426;
+  --chart-6: #9c7a3c;
+  --chart-7: #8a4f6c;
+  --chart-8: #a8977f;
+  --chart-allow: #2a7340;
+  --chart-block: #ab3426;
+  --chart-flag: #a24f17;
+  --chart-cost: #603d20;
+  --chart-grid: #eee5d9;
+  --chart-axis: #8f7d68;
   --chart-tooltip-bg: #ffffff;
 
-  /* ── Data visualization ──────────────────────────────── */
-  --viz-heatmap-empty: rgba(148, 163, 184, 0.06);
-  --viz-heatmap-low: rgba(37, 99, 235, 0.15);
-  --viz-heatmap-mid: rgba(37, 99, 235, 0.35);
-  --viz-heatmap-high: rgba(37, 99, 235, 0.6);
-  --viz-heatmap-max: rgba(37, 99, 235, 0.85);
+  --viz-heatmap-empty: rgba(96, 61, 32, 0.04);
+  --viz-heatmap-low: rgba(96, 61, 32, 0.14);
+  --viz-heatmap-mid: rgba(96, 61, 32, 0.3);
+  --viz-heatmap-high: rgba(96, 61, 32, 0.5);
+  --viz-heatmap-max: rgba(96, 61, 32, 0.74);
 
-  /* ── Risk score gauge ────────────────────────────────── */
-  --risk-low: #059669;
-  --risk-moderate: #d97706;
-  --risk-elevated: #ea580c;
-  --risk-high: #dc2626;
-  --risk-critical: #7f1d1d;
+  --risk-low: #2a7340;
+  --risk-moderate: #8a6a14;
+  --risk-elevated: #a24f17;
+  --risk-high: #ab3426;
+  --risk-critical: #8f2b1f;
 }

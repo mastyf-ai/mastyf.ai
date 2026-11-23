@@ -1,5 +1,6 @@
 export type WorkspaceId =
   | 'dashboard'
+  | 'overview'
   | 'activity'
   | 'security'
   | 'policy'
@@ -30,6 +31,10 @@ export const WORKSPACE_CONFIG: Record<WorkspaceId, {
   views?: Array<{ id: string; label: string }>;
 }> = {
   dashboard: {
+    label: 'Home',
+    icon: 'Home',
+  },
+  overview: {
     label: 'Dashboard',
     icon: 'LayoutDashboard',
   },
@@ -49,7 +54,7 @@ export const WORKSPACE_CONFIG: Record<WorkspaceId, {
     badge: 0,
     views: [
       { id: 'overview', label: 'Posture Overview' },
-      { id: 'threats', label: 'Threat Detection' },
+      { id: 'threats', label: 'Threat Lab' },
       { id: 'intel', label: 'Threat Intel' },
       { id: 'vulns', label: 'Vuln Discovery' },
       { id: 'swarm', label: 'Swarm Analysis' },
@@ -147,7 +152,7 @@ export const NAV_SECTIONS: Array<{
   label: string;
   items: WorkspaceId[];
 }> = [
-  { label: 'Overview', items: ['dashboard'] },
+  { label: 'Overview', items: ['dashboard', 'overview'] },
   { label: 'Security', items: ['activity', 'security'] },
   { label: 'Governance', items: ['policy', 'cost', 'servers'] },
   { label: 'Assurance', items: ['compliance'] },
@@ -157,6 +162,7 @@ export const NAV_SECTIONS: Array<{
 export const DEFAULT_WORKSPACE: WorkspaceId = 'dashboard';
 export const DEFAULT_VIEW: Partial<Record<WorkspaceId, string>> = {
   dashboard: undefined,
+  overview: undefined,
   activity: 'realtime',
   security: 'overview',
   policy: 'rules',
@@ -221,3 +227,42 @@ export const LEGACY_VIEW_MAP: Record<string, string> = {
   'auto-research': 'intel',
   'agent-overview': 'overview',
 };
+
+/**
+ * The three top tabs, laid out like the Mastyf Shield app: Home, Security Center and Engineering.
+ * Security Center and Engineering show their workspaces in a grouped left sidebar.
+ */
+export type TopTabId = 'home' | 'security-center' | 'engineering';
+
+export const TOP_TABS: Array<{
+  id: TopTabId;
+  label: string;
+  groups: Array<{ label: string; items: WorkspaceId[] }>;
+}> = [
+  { id: 'home', label: 'Home', groups: [{ label: 'Home', items: ['dashboard'] }] },
+  {
+    id: 'security-center',
+    label: 'Security Center',
+    groups: [
+      { label: 'Overview', items: ['activity'] },
+      { label: 'Protection', items: ['security', 'policy'] },
+      { label: 'Records', items: ['logs'] },
+    ],
+  },
+  {
+    id: 'engineering',
+    label: 'Engineering',
+    groups: [
+      { label: 'Overview', items: ['overview'] },
+      { label: 'Governance', items: ['servers', 'cost', 'compliance'] },
+      { label: 'System', items: ['settings', 'help'] },
+    ],
+  },
+];
+
+export function tabForWorkspace(ws: WorkspaceId): TopTabId {
+  for (const tab of TOP_TABS) {
+    if (tab.groups.some((g) => g.items.includes(ws))) return tab.id;
+  }
+  return 'engineering';
+}

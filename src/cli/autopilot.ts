@@ -109,7 +109,7 @@ export function runAutopilotStart(opts: {
     process.exit(1);
   }
 
-  const defaultConfigPath = join(projectRoot, 'mastyf-ai-configs', 'filesystem.json');
+  const defaultConfigPath = join(projectRoot, 'mastyf-ai-configs', 'examples', 'filesystem.json');
   const config = opts.config || (existsSync(defaultConfigPath) ? defaultConfigPath : undefined);
 
   const args = ['proxy', '--policy', opts.policy || cfg.policyPath, '--blocking-mode', cfg.blockingMode];

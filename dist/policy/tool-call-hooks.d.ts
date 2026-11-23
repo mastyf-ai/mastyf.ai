@@ -29,10 +29,13 @@ export interface BeforeToolCallHook {
     name: string;
     version?: string;
     priority: number;
+    /** `match` and `field`: the argument text a refusal was based on, when there was one. */
     beforeToolCall(context: HookContext): Promise<{
         allowed: boolean;
         reason?: string;
         modifiedArgs?: Record<string, unknown>;
+        match?: string;
+        field?: string;
     }>;
 }
 export interface AfterToolCallHook {
@@ -64,6 +67,8 @@ export declare class ToolCallHookRegistry {
         allowed: boolean;
         reason?: string;
         args?: Record<string, unknown>;
+        match?: string;
+        field?: string;
     }>;
     runAfterHooks(context: HookContext, result: ToolCallResult): Promise<{
         allowed: boolean;
@@ -83,7 +88,8 @@ export declare function createRateLimitHook(options: {
     perUser?: boolean;
 }): BeforeToolCallHook;
 export declare function createPiiRedactionHook(fields: string[]): AfterToolCallHook;
-export declare function createSensitivePathGuard(allowedPaths: string[], deniedPaths: string[]): BeforeToolCallHook;
+/** Refuses tool calls whose path arguments are denied or outside the allowed folders (see workspace-path-guard.ts). */
+export declare function createSensitivePathGuard(allowedPaths: string[] | (() => string[]), deniedPaths: string[]): BeforeToolCallHook;
 export declare function createSlackNotifierHook(webhookUrl: string): BeforeToolCallHook;
 export declare function createSlackBlockNotifierHook(webhookUrl: string): AfterToolCallHook;
 export declare function createPagerDutyHook(routingKey: string): AfterToolCallHook;

@@ -68,7 +68,7 @@ export function pickMastyfAiConfig(opts: PickMastyfAiConfigOptions = {}): string
   const seen = new Set<string>();
   for (const root of roots) {
     const candidates = [
-      join(root, 'mastyf-ai-configs', 'filesystem.json'),
+      join(root, 'mastyf-ai-configs', 'examples', 'filesystem.json'),
       ...listJsonConfigs(join(root, 'mastyf-ai-configs')),
     ];
     for (const p of candidates) {

@@ -51,7 +51,7 @@ When Next (`:3000`) rewrites `/api/*` to the BFF, a crashed proxy leaves the app
 chmod +x scripts/watch-dashboard-proxy.sh
 ./scripts/watch-dashboard-proxy.sh
 # optional config arg:
-# ./scripts/watch-dashboard-proxy.sh mastyf-ai-configs/filesystem.json
+# ./scripts/watch-dashboard-proxy.sh mastyf-ai-configs/examples/filesystem.json
 ```
 
 - Restarts `scripts/start-dashboard-proxy.sh` on exit with exponential backoff (2s → 30s).

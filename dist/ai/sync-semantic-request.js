@@ -1,4 +1,5 @@
 import { LlmAssistant } from './llm-assistant.js';
+import { activeRequestClassifier } from '../extensions/index.js';
 import { scoreLocalSemanticText } from './local-semantic-classifier.js';
 import { isEnterpriseMode, isLocalSemanticEnabledForTenant, isSyncSemanticRequestEnabledForTenant, isSyncSemanticRequestLlmEnabledForTenant, } from '../tenant/tenant-semantic-config.js';
 import { isSemanticLlmConfigured, isSemanticStrictMode, reportSemanticDegradation, } from '../utils/semantic-layer.js';
@@ -51,6 +52,47 @@ export async function evaluateSyncSemanticRequest(input) {
                 reason: local.reasoning,
             };
         }
+    }
+    // An extension's classifier replaces the LLM verdict when one is active.
+    const classifier = activeRequestClassifier();
+    if (isSyncSemanticRequestLlmEnabledForTenant(tenantId) && classifier) {
+        const verdict = await classifier.classify(input.context.toolName, input.context.arguments ?? {});
+        if (verdict) {
+            Metrics.recordSemanticScanDuration('sync_request', verdict.latencyMs, verdict.unsure ? 'classifier_unsure_block' : verdict.block ? 'classifier_block' : 'classifier_allow');
+            return {
+                block: verdict.block,
+                result: {
+                    suspicious: verdict.block,
+                    confidence: verdict.confidence,
+                    categories: verdict.unsure ? ['classifier-unsure'] : verdict.block ? ['classifier-unsafe'] : ['none'],
+                    reasoning: verdict.reasoning,
+                },
+                source: 'classifier',
+                rule: verdict.unsure ? 'semantic-classifier-unsure' : 'semantic-sync-request',
+                reason: verdict.reasoning,
+            };
+        }
+        reportSemanticDegradation('sync_request_classifier_unavailable', {
+            serverName: input.context.serverName,
+            toolName: input.context.toolName,
+            tenantId,
+        });
+        if (isSemanticStrictMode(tenantId) || shouldFailClosedOnSemanticDegrade(riskTier)) {
+            return {
+                block: true,
+                result: noop,
+                source: 'none',
+                rule: 'semantic-degraded',
+                reason: `Classifier unavailable (${isSemanticStrictMode(tenantId) ? 'strict mode' : `fail-closed: ${riskTier}`})`,
+            };
+        }
+        return {
+            block: false,
+            result: noop,
+            source: 'none',
+            rule: 'semantic-sync-request',
+            reason: 'classifier unavailable',
+        };
     }
     if (!isSyncSemanticRequestLlmEnabledForTenant(tenantId) || !isSemanticLlmConfigured()) {
         if (shouldFailClosedOnSemanticDegrade(riskTier)) {

@@ -26,7 +26,8 @@ export const zeroTrustStrategy: PolicyStrategy = {
       serverName: normalized.serverName,
       toolName: normalized.toolName,
       authenticated: Boolean(raw.agentIdentity),
-      stepUpPossible: stepUpPossibleFor(raw),
+      // A what-if call has nobody to approve a step-up, so none is queued.
+      stepUpPossible: raw.dryRun ? false : stepUpPossibleFor(raw),
       spiffeId: getActiveSpiffeId(),
       credentialIdentity: raw.agentIdentity?.sub,
       geoRegion: raw.geoRegion,
@@ -35,7 +36,7 @@ export const zeroTrustStrategy: PolicyStrategy = {
     });
 
     // A low score for the local client with no identity says nothing about the server.
-    if (container?.sandboxEnforcer && stepUpPossibleFor(raw)) {
+    if (!raw.dryRun && container?.sandboxEnforcer && stepUpPossibleFor(raw)) {
       adjustSandboxTierForZeroTrust(container.sandboxEnforcer, {
         serverName: normalized.serverName,
         agentId: raw.agentIdentity?.sub,

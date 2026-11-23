@@ -99,7 +99,7 @@ async function runIdeManagedStart(opts: StartOptions, installRoot: string): Prom
     console.error(chalk.red('\nNo single-server Mastyf AI MCP config found.\n'));
     console.error(chalk.dim('  1. mastyf-ai start              (Fleet Hub — recommended)'));
     console.error(chalk.dim('  2. mastyf-ai onboard --apply'));
-    console.error(chalk.dim('  3. mastyf-ai start --ide-managed --config mastyf-ai-configs/filesystem.json\n'));
+    console.error(chalk.dim('  3. mastyf-ai start --ide-managed --config mastyf-ai-configs/examples/filesystem.json\n'));
     process.exit(1);
   }
 

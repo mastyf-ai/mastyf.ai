@@ -75,7 +75,7 @@ rsync -a --delete \
   "$ROOT/mastyf_gateway/" "$STACK/gateway/"
 
 cp -f "$ROOT/default-policy.yaml" "$STACK/policy/default-policy.yaml"
-cp -f "$ROOT/mastyf-ai-configs/filesystem.json" "$STACK/configs/filesystem.json"
+cp -f "$ROOT/mastyf-ai-configs/examples/filesystem.json" "$STACK/configs/filesystem.json"
 cp -f "$APP/legal/"*.md "$STACK/legal/"
 cp -f "$APP/python-requirements-slim.txt" "$STACK/python-requirements-slim.txt"
 

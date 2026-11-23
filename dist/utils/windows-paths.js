@@ -7,15 +7,25 @@ export function quotePathForPowerShell(filePath) {
 /** Mastyf AI proxy wrapper script for the current platform. */
 export function resolveMastyfAiProxyWrapper(projectRoot) {
     if (process.platform === 'win32') {
-        return path.join(projectRoot, 'mastyf-ai-proxy.ps1');
+        return path.join(projectRoot, 'scripts', 'mastyf-ai-proxy.ps1');
     }
     return path.join(projectRoot, 'scripts', 'mastyf-ai-proxy.sh');
 }
 /** MCP client JSON entry for a wrapped upstream server (handles paths with spaces). */
-export function buildWrappedMcpServerEntry(projectRoot, singleConfigPath, policyPath, extraEnv) {
+export function buildWrappedMcpServerEntry(projectRoot, singleConfigPath, policyPath, extraEnv, nodeCommand) {
     const wrapperScript = resolveMastyfAiProxyWrapper(projectRoot);
     const proxyArgs = ['--config', singleConfigPath, '--policy', policyPath];
     const env = extraEnv && Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {};
+    if (nodeCommand) {
+        return {
+            command: nodeCommand,
+            args: [path.join(projectRoot, 'dist', 'cli.js'), 'proxy', ...proxyArgs, '--blocking-mode', 'block'],
+            transport: 'stdio',
+            type: 'stdio',
+            // One proxy per server: without this, UI-managed servers get merged in and the start fails.
+            env: { ...extraEnv, MASTYF_AI_FLEET_CHILD: 'true' },
+        };
+    }
     if (process.platform === 'win32') {
         return {
             command: 'powershell.exe',

@@ -45,10 +45,10 @@ export class StdioConnectionPool {
         return this.workers[0];
     }
     /** Round-robin handleClientInput across pool workers. */
-    async handleClientInput(raw) {
+    async handleClientInput(raw, source) {
         const worker = this.workers[this.next % this.workers.length];
         this.next++;
-        await worker.handleClientInput(raw);
+        await worker.handleClientInput(raw, source);
     }
     kill() {
         for (const w of this.workers)

@@ -58,13 +58,40 @@ export function sanitizeSpawnOutput(text) {
  * @param {object} opts
  * @returns {import('node:child_process').SpawnSyncReturns<string|Buffer>}
  */
+/**
+ * On Windows, pnpm/npm/npx are .cmd shims, which Node only starts through a shell (spawning
+ * them directly fails at once, so every swarm step "failed in 0.0s"). Step commands and
+ * arguments are fixed in this repo, never user input; arguments with spaces are quoted.
+ */
+export function windowsSpawnPlan(cmd, args, platform = process.platform, env = process.env) {
+  // Under `pnpm run`, npm_execpath is pnpm's own entry script: run it with this Node. No shell,
+  // no PATH lookup, works the same everywhere (including Corepack-only installs).
+  const execpath = env.npm_execpath || '';
+  if (cmd === 'pnpm' && /pnpm(\.c?js)?$/i.test(execpath) && /\.c?js$/i.test(execpath)) {
+    return { cmd: process.execPath, args: [execpath, ...args], shell: false };
+  }
+  const direct = platform !== 'win32' || cmd === process.execPath || /^node(\.exe)?$/i.test(cmd) || /\.(exe|com)$/i.test(cmd);
+  if (direct) return { cmd, args, shell: false };
+  const quote = (a) => (/[\s"&|<>^()]/.test(a) ? `"${String(a).replace(/"/g, '""')}"` : String(a));
+  // One command line (not cmd + args) so Node does not warn about unescaped shell args.
+  return { cmd: [quote(cmd), ...args.map(quote)].join(' '), args: [], shell: true };
+}
+
+/** spawnSync with the same Windows/pnpm handling as runStep, for agents that call pnpm directly. */
+export function spawnTool(cmd, args, options = {}) {
+  const plan = windowsSpawnPlan(cmd, args);
+  return spawnSync(plan.cmd, plan.args, { ...options, shell: plan.shell });
+}
+
 export function runStep(cmd, args, opts = {}) {
   const label = opts.label ?? [cmd, ...args].join(' ');
   const timeoutMs = resolveStepTimeoutMs(label, opts.stepKey, opts.timeoutMs);
   const maxBuffer = opts.maxBuffer ?? DEFAULT_MAX_BUFFER;
   const live = opts.live === true;
 
-  const r = spawnSync(cmd, args, {
+  const plan = windowsSpawnPlan(cmd, args);
+  const r = spawnSync(plan.cmd, plan.args, {
+    shell: plan.shell,
     cwd: opts.cwd,
     encoding: live ? undefined : 'utf-8',
     timeout: timeoutMs,

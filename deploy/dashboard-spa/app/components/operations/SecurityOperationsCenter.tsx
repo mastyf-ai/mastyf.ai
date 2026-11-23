@@ -56,6 +56,7 @@ import { SocSwarmAnalysisView } from './SocSwarmAnalysisView';
 import { SocAiLearningView } from './SocAiLearningView';
 import { useThreatDiscoveryJobs } from '@/lib/use-threat-discovery-jobs';
 import { ThreatDiscoveryJobStatus } from '../ThreatDiscoveryJobStatus';
+import { OllamaSetup } from '@/app/components/OllamaSetup';
 import { ThreatLabWorkbench } from '../ThreatLabWorkbench';
 import ThreatFeedsPanel from './ThreatFeedsPanel';
 import { useDashboardWindow } from '../dashboard/DashboardWindowContext';
@@ -83,7 +84,7 @@ type Props = {
 
 const VIEW_TABS = [
   { id: 'overview' as const, label: 'Posture Overview' },
-  { id: 'threats' as const, label: 'Threat Detection' },
+  { id: 'threats' as const, label: 'Threat Lab' },
   { id: 'intel' as const, label: 'Threat Intel' },
   { id: 'vulns' as const, label: 'Vuln Discovery' },
   { id: 'swarm' as const, label: 'Swarm Analysis' },
@@ -93,8 +94,8 @@ const VIEW_TABS = [
 ];
 
 const THREAT_SUB_TABS: { id: ThreatDiscoverySubTab; label: string }[] = [
-  { id: 'overview', label: 'Pipeline' },
   { id: 'threat-lab', label: 'Threat Lab' },
+  { id: 'overview', label: 'Pipeline' },
   { id: 'auto-research', label: 'Auto Research' },
   { id: 'rug-pull', label: 'Rug-Pull' },
   { id: 'auto-corpus', label: 'Auto-Corpus' },
@@ -366,7 +367,7 @@ function ThreatsView({
   onClearThreatLabContext?: () => void;
   onAction?: (msg: string) => void;
 }) {
-  const [subTab, setSubTab] = useState<ThreatDiscoverySubTab>(threatDiscoverySubTab || 'overview');
+  const [subTab, setSubTab] = useState<ThreatDiscoverySubTab>(threatDiscoverySubTab || 'threat-lab');
   const canMutate = hasPermission(roles, 'policy_mutate');
   const {
     status,
@@ -382,6 +383,8 @@ function ThreatsView({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
+  const [modelNudge, setModelNudge] = useState(0);
+  const checkModel = useCallback(() => { void refreshDiscovery(); }, [refreshDiscovery]);
 
   useEffect(() => {
     if (threatDiscoverySubTab) setSubTab(threatDiscoverySubTab);
@@ -419,6 +422,7 @@ function ThreatsView({
       await refreshDiscovery();
     } else {
       onAction?.(res.error || 'Failed to start Threat Lab');
+      if (status?.llm && !status.llm.ok) setModelNudge((n) => n + 1);
     }
     setBusy('');
   };
@@ -480,6 +484,10 @@ function ThreatsView({
         onChange={(id) => setSubTab(id as ThreatDiscoverySubTab)}
       />
 
+      {subTab === 'threat-lab' || subTab === 'auto-research' || subTab === 'overview' ? (
+        <OllamaSetup llm={status?.llm} onCheck={checkModel} nudge={modelNudge} />
+      ) : null}
+
       {subTab === 'threat-lab' ? (
         <ThreatLabWorkbench
           candidates={candidates}
@@ -496,7 +504,10 @@ function ThreatsView({
           }}
           onRefresh={() => void load()}
           onClearContext={onClearThreatLabContext}
-          onRunStarted={onAction}
+          onRunStarted={(msg) => {
+            onAction?.(msg);
+            if (status?.llm && !status.llm.ok && /ollama|local model/i.test(msg)) setModelNudge((n) => n + 1);
+          }}
         />
       ) : null}
 

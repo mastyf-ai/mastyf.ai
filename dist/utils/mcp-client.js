@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawnUpstream } from './spawn-upstream.js';
 import { createInterface } from 'readline';
 import { randomUUID } from 'crypto';
 import http from 'http';
@@ -32,7 +32,7 @@ export class McpClient {
         return new Promise((resolve) => {
             let child;
             try {
-                child = spawn(cmd, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
+                child = spawnUpstream(cmd, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
             }
             catch (err) {
                 return resolve({ success: false, authRequired: false, latencyMs: Date.now() - start, error: `Spawn failed: ${err instanceof Error ? err.message : String(err)}` });

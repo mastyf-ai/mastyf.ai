@@ -5,40 +5,13 @@ type Props = {
   statusIsError?: boolean;
 };
 
-export function DashboardShell({ status = 'Loading…', statusIsError = false }: Props) {
+/** Shown while the dashboard loads or checks the session. */
+export function DashboardShell({ status = 'Loading', statusIsError = false }: Props) {
   return (
-    <div className="shell" style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ textAlign: 'center', padding: 48 }}>
-        <div className="card" style={{ padding: 32, maxWidth: 400, margin: '0 auto' }}>
-          <div style={{ margin: '0 auto 16px', width: 52 }}>
-            <BrandLogo size={52} />
-          </div>
-          <p className={`text-sm ${statusIsError ? 'text-danger' : 'text-muted'}`}>
-            {status}
-          </p>
-          <div
-            style={{
-              marginTop: 24,
-              height: 8,
-              maxWidth: 240,
-              margin: '24px auto 0',
-              background: 'var(--bg-muted)',
-              borderRadius: 4,
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                width: '40%',
-                height: '100%',
-                background: 'var(--brand-primary)',
-                borderRadius: 4,
-                animation: 'pulse-dot 1.2s ease-in-out infinite',
-              }}
-            />
-          </div>
-        </div>
-      </div>
+    <div className="boot" role="status" aria-live="polite">
+      <BrandLogo size={44} />
+      <p className={statusIsError ? 'boot-text error' : 'boot-text'}>{status}</p>
+      {!statusIsError && <span className="boot-bar" aria-hidden="true"><span /></span>}
     </div>
   );
 }

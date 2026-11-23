@@ -2,12 +2,14 @@
  * Bridge from proxy transports to agentic container hooks.
  */
 import type { IncomingHttpHeaders } from 'http';
+import type { BlockEvidence } from './block-evidence.js';
 import { type AgenticToolCallContext } from '../agentic/proxy-integration.js';
 export type { AgenticToolCallContext };
 export declare function agenticPreForwardToolCall(serverName: string, toolName: string, args: Record<string, unknown> | undefined, ctx: AgenticToolCallContext | string, legacyAgentId?: string): Promise<{
     blocked: boolean;
     sanitizedArgs?: Record<string, unknown>;
     reason?: string;
+    evidence?: BlockEvidence;
 }>;
 export declare function agenticRecordDeniedToolCall(params: {
     serverName: string;
@@ -36,5 +38,6 @@ export declare function buildAgenticToolCallContext(params: {
     mcpSessionId?: string;
     meta?: Record<string, unknown>;
     headers?: IncomingHttpHeaders | Record<string, string | string[] | undefined>;
+    localStdio?: boolean;
 }): AgenticToolCallContext;
 //# sourceMappingURL=agentic-hooks-bridge.d.ts.map

@@ -477,6 +477,71 @@ program
         process.exit(1);
     }
 });
+program
+    .command('connect')
+    .description('Protect the AI agents on this machine: routes their MCP servers through Mastyf AI')
+    .option('--key <key>', 'Workspace key from your mastyf.ai dashboard')
+    .option('--print-config <name>', 'Print the config entry for an agent Mastyf AI does not recognise')
+    .option('--command <command>', 'With --print-config: the MCP server command line')
+    .option('--url <url>', 'With --print-config: the MCP server URL')
+    .option('--project-root <path>', 'Use this package root instead of installing the runtime')
+    .action(async (opts) => {
+    const os = await import('node:os');
+    const { announce, connect, printableConfig, readConnectState } = await import('./connect/connect.js');
+    const { ensureRuntime } = await import('./connect/runtime.js');
+    const home = os.homedir();
+    const version = cliVersion();
+    try {
+        const projectRoot = opts.projectRoot ? path.resolve(opts.projectRoot) : ensureRuntime({ home, version });
+        if (opts.printConfig) {
+            if (!opts.command && !opts.url)
+                throw new Error('--print-config needs --command or --url');
+            const [command, ...args] = (opts.command ?? '').trim().split(/\s+/);
+            const upstream = opts.url ? { url: opts.url } : { command: command, args };
+            if (opts.url)
+                console.error(chalk.yellow('URL-based servers are NOT protected yet; this is the direct entry.'));
+            console.log(printableConfig({ projectRoot, nodeCommand: process.execPath, home, server: opts.printConfig, upstream }));
+            return;
+        }
+        const result = connect({ home, projectRoot, nodeCommand: process.execPath, key: opts.key });
+        for (const c of result.connected)
+            console.error(chalk.green(`${c.id}: protected ${c.wrapped.join(', ')}`));
+        for (const f of result.failed)
+            console.error(chalk.yellow(`${f.id}: skipped, file left unchanged (${f.reason})`));
+        for (const n of result.notProtected)
+            console.error(chalk.yellow(`${n.id}: ${n.server} is NOT protected: it can\'t be routed through Mastyf AI yet`));
+        if (result.connected.length === 0 && result.failed.length === 0) {
+            console.error(chalk.yellow('Nothing new to protect. For other agents, use: connect --print-config <name> --command "<cmd>"'));
+        }
+        else {
+            console.error(chalk.dim('Restart your agent to apply. Undo any time with: disconnect'));
+        }
+        const state = readConnectState(home);
+        if (state?.key) {
+            const site = process.env.MASTYF_AI_CONTROL_PLANE_URL || 'https://www.mastyf.ai';
+            const ok = await announce({ key: state.key, instanceId: state.instanceId, version, baseUrl: site, hostname: os.hostname() });
+            if (!ok)
+                console.error(chalk.yellow('Could not reach mastyf.ai; protection is on, the web page will catch up.'));
+        }
+    }
+    catch (err) {
+        console.error(chalk.red(err.message));
+        process.exit(1);
+    }
+});
+program
+    .command('disconnect')
+    .description('Undo connect: restore the MCP servers it wrapped')
+    .action(async () => {
+    const os = await import('node:os');
+    const { disconnect } = await import('./connect/connect.js');
+    const { restored, left, failed } = disconnect({ home: os.homedir() });
+    console.error(chalk.green(`Restored: ${restored.join(', ') || '(none)'}`));
+    if (left.length)
+        console.error(chalk.yellow(`Left as they are, changed since connect: ${left.join(', ')}`));
+    if (failed.length)
+        console.error(chalk.red(`Could not restore (run disconnect again once the file is readable): ${failed.join(', ')}`));
+});
 const aiCmd = program
     .command('ai')
     .description('AI learning utilities (rollback, diagnostics)');
@@ -492,6 +557,23 @@ aiCmd
         }
         console.error(chalk.red(result.reason || 'Rollback failed'));
         process.exit(1);
+    });
+});
+program
+    .command('dashboard-key')
+    .description('Show the key you sign in to the local dashboard with (created on first start)')
+    .option('--path', 'Print only where the key file is, not the key')
+    .action((opts) => {
+    import('./utils/dashboard-api-key.js').then(({ dashboardApiKeyPath, ensureLocalDashboardApiKey }) => {
+        const file = dashboardApiKeyPath();
+        if (opts.path) {
+            process.stdout.write(`${file}\n`);
+            return;
+        }
+        // Creates the key if Mastyf has never been started, so a first-time user always gets one.
+        const key = ensureLocalDashboardApiKey();
+        process.stderr.write(`Dashboard key (from ${file}). Paste it on the sign-in screen at http://localhost:${process.env['DASHBOARD_PORT'] || '4000'}\n`);
+        process.stdout.write(`${key}\n`);
     });
 });
 program
@@ -748,6 +830,8 @@ program
     .action(async (opts) => {
     const { applyProxyRuntimeDefaults } = await import('./utils/start-env.js');
     applyProxyRuntimeDefaults();
+    const { startExtensions } = await import('./extensions/index.js');
+    await startExtensions();
     if (opts.unsafeNoTls) {
         process.env['MASTYF_AI_ALLOW_PLAINTEXT_UPSTREAM'] = 'true';
         console.error(chalk.yellow.bold('⚠ --unsafe-no-tls: upstream MCP traffic may use cleartext HTTP (development only)'));
@@ -878,6 +962,9 @@ program
     let policyWatcher;
     let useWatcherForManager = false;
     if (opts.policy) {
+        // The dashboard's policy routes read this. Without it they ignore --policy and open
+        // default-policy.yaml in the current folder.
+        process.env['MASTYF_AI_POLICY_PATH'] = path.resolve(opts.policy);
         try {
             // Use PolicyWatcher for hot-reload + actual policy object for dashboard
             policyWatcher = new PolicyWatcher(opts.policy);
@@ -1472,5 +1559,7 @@ program.action(async () => {
     }
     program.outputHelp();
 });
+const { loadExtensions } = await import('./extensions/index.js');
+await loadExtensions(program);
 program.parse();
 //# sourceMappingURL=cli.js.map

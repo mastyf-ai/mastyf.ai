@@ -6,8 +6,8 @@ export type MastyfAiSetupConfig = {
     updatedAt?: string;
 };
 export type SetupMastyfAiConfigView = {
-    upstreamUrl: string;
-    listenPort: number;
+    upstreamUrl: string | null;
+    listenPort: number | null;
     authTokenPreview: string | null;
     configured: boolean;
     done: boolean;

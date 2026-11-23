@@ -1,3 +1,4 @@
+import { checkPath } from './workspace-path-guard.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
 import type { AgentIdentity } from '../auth/auth-types.js';
 
@@ -271,38 +272,38 @@ export function createPiiRedactionHook(fields: string[]): AfterToolCallHook {
   };
 }
 
-export function createSensitivePathGuard(allowedPaths: string[], deniedPaths: string[]): BeforeToolCallHook {
+/** Arguments that always name a file or folder. */
+const PATH_KEYS = ['path', 'file', 'directory', 'source', 'target', 'file_path', 'filePath'];
+
+/** Refuses tool calls whose path arguments are denied or outside the allowed folders (see workspace-path-guard.ts). */
+export function createSensitivePathGuard(allowedPaths: string[] | (() => string[]), deniedPaths: string[]): BeforeToolCallHook {
   return {
     name: 'builtin-sensitive-path-guard',
     priority: 5,
     async beforeToolCall(context: HookContext): Promise<{ allowed: boolean; reason?: string; modifiedArgs?: Record<string, unknown>; match?: string; field?: string }> {
       const args = context.tool.arguments;
+      const allowed = typeof allowedPaths === 'function' ? allowedPaths() : allowedPaths;
+      const values: Array<[string, unknown]> = [];
 
-      for (const pathKey of ['path', 'file', 'directory', 'source', 'target']) {
-        const pathValue = args[pathKey];
-        if (pathValue === undefined || pathValue === null) continue;
+      for (const key of PATH_KEYS) {
+        if (args[key] !== undefined && args[key] !== null) values.push([key, args[key]]);
+      }
+      const many = args['paths'];
+      if (many !== undefined && many !== null) {
+        for (const v of Array.isArray(many) ? many : [many]) values.push(['paths', v]);
+      }
+      // "destination" can also be a plain word (a city, a queue), so only path-like values are checked.
+      const dest = args['destination'];
+      if (typeof dest === 'string' && /[\\/]/.test(dest)) values.push(['destination', dest]);
+
+      for (const [field, value] of values) {
         // A path must be a string. An object or array (e.g. { "$gt": "" }) used to skip both
         // lists below entirely and reach the tool, which may interpret it as a query.
-        if (typeof pathValue !== 'string') {
-          return { allowed: false, reason: `Path argument "${pathKey}" must be a string, got ${Array.isArray(pathValue) ? 'array' : typeof pathValue}` };
+        if (typeof value !== 'string') {
+          return { allowed: false, reason: `Path argument "${field}" must be a string, got ${Array.isArray(value) ? 'array' : typeof value}` };
         }
-
-        for (const denied of deniedPaths) {
-          const regex = new RegExp(denied.replace(/\*/g, '.*'));
-          if (regex.test(pathValue)) {
-            return { allowed: false, reason: `Access to path matching "${denied}" denied: ${pathValue}`, match: pathValue, field: pathKey };
-          }
-        }
-
-        if (allowedPaths.length > 0) {
-          const isAllowed = allowedPaths.some(p => {
-            const regex = new RegExp(p.replace(/\*/g, '.*'));
-            return regex.test(pathValue);
-          });
-          if (!isAllowed) {
-            return { allowed: false, reason: `Path not in allowed list: ${pathValue}`, match: pathValue, field: pathKey };
-          }
-        }
+        const reason = checkPath(value, allowed, deniedPaths);
+        if (reason) return { allowed: false, reason, match: value, field };
       }
 
       return { allowed: true };

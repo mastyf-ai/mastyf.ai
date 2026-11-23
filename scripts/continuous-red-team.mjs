@@ -7,7 +7,8 @@
  * Compares against baseline, alerts on detection regression >5%.
  * Outputs: reports/red-team/mitre-attack-heatmap.json, reports/red-team/regression-alert.json
  */
-import { spawnSync, execSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
+import { spawnTool } from '../security-swarm/lib/run-step.mjs';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -35,7 +36,8 @@ const MITRE_TECHNIQUES = {
 };
 
 function runCmd(cmd, args) {
-  const result = spawnSync(cmd, args, { cwd: REPO_ROOT, encoding: 'utf-8', timeout: 300_000 });
+  // spawnTool: pnpm on Windows is a .cmd shim that spawnSync cannot start directly.
+  const result = spawnTool(cmd, args, { cwd: REPO_ROOT, encoding: 'utf-8', timeout: 300_000 });
   return { ok: result.status === 0, status: result.status, stdout: result.stdout || '' };
 }
 

@@ -5,6 +5,13 @@ export interface PolicyTestOptions {
   args: string;
   server?: string;
   blockingMode?: string;
+  /** What-if evaluation with no side effects (see CallContext.dryRun). */
+  dryRun?: boolean;
+  /**
+   * When set, check this text as the tool's *result* (what the server sent back to the agent)
+   * instead of checking a call. Same checks the proxy runs on every response.
+   */
+  result?: string;
 }
 
 /**
@@ -25,5 +32,7 @@ export function policyTestRequest(
     args: JSON.stringify(args && typeof args === 'object' ? args : {}),
     server: String(body.server || 'dashboard-test'),
     blockingMode: mode ? String(mode) : undefined,
+    dryRun: body.dryRun === true,
+    result: typeof body.result === 'string' ? body.result.slice(0, 64_000) : undefined,
   };
 }

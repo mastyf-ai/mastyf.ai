@@ -390,6 +390,7 @@ export function startSwarmAnalysis(opts: {
   const swarmOut = ensureTenantSwarmDir(tenantId);
   const args = ['security-swarm/run-analysis.mjs', '--quiet'];
   if (opts.full) args.push('--nightly');
+  else args.push('--analysis');
 
   const startedAt = new Date().toISOString();
   const jobId = randomUUID();

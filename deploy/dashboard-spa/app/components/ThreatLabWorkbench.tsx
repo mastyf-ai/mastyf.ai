@@ -5,7 +5,6 @@ import {
   acceptThreatLabCandidate,
   rejectThreatLabCandidate,
   runThreatLab,
-  trackAdvancedAnalyticsEvent,
   type AutoCorpusEntry,
   type ThreatLabCandidate,
 } from '@/lib/mastyf-ai-api';
@@ -106,14 +105,6 @@ export function ThreatLabWorkbench({
   const conversion = computeThreatConversionFromCandidates(candidates, semanticTpCount);
   const pendingCount = candidates.filter((c) => !c.reviewStatus || c.reviewStatus === 'pending').length;
 
-  useEffect(() => {
-    void trackAdvancedAnalyticsEvent({
-      feature: 'threat_policy_conversion',
-      metric: 'conversionRatePct',
-      confidence: conversion.caveat.confidence,
-      value: Number(conversion.conversionRatePct.toFixed(2)),
-    });
-  }, [conversion.caveat.confidence, conversion.conversionRatePct]);
 
   const onAccept = async (id: string) => {
     if (!canMutate) {

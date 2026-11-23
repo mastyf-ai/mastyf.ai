@@ -11,7 +11,7 @@ export interface ClassificationInput {
     toolName: string;
     arguments: Record<string, unknown>;
     categoryHint?: string;
-    difcContext?: {
+    provenance?: {
         tainted?: boolean;
         dataOrigins?: string[];
         secrecyTags?: string[];

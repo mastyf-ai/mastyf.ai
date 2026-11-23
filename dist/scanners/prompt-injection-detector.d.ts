@@ -3,6 +3,8 @@ export interface InjectionFinding {
     patternId: string;
     description: string;
     matchPreview: string;
+    /** The text the pattern matched, after decoding. */
+    matched?: string;
 }
 interface InjectionPattern {
     id: string;

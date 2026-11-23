@@ -34,6 +34,18 @@ declare function clientIp(req: Request): string;
  * report "already authenticated" state.
  */
 export declare function attachAuthContext(req: Request, _res: Response, next: NextFunction): Promise<void>;
+/**
+ * Resolve a DB-backed session from raw request headers, for code paths that
+ * are not Express middleware (the dashboard's raw http handler and the
+ * WebSocket upgrade). Mirrors attachAuthContext: valid session, CSRF header
+ * on mutating requests, active user. Returns null when there is no usable
+ * session so callers can fall through to their own "401".
+ */
+export declare function authenticateDbSessionHeaders(headers: Record<string, string | string[] | undefined>, method?: string): Promise<{
+    identity: string;
+    dashboardRoles: string[];
+    tenantId: string;
+} | null>;
 /** Reject requests without a valid, CSRF-verified session. */
 export declare function requireAuth(req: Request, res: Response, next: NextFunction): void;
 /** Reject requests whose user lacks the given permission key. */

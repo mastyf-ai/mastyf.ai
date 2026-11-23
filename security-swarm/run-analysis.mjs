@@ -11,7 +11,8 @@ import './lib/gate-pro.mjs';
  */
 import { runStep } from './lib/run-step.mjs';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runOfficialFilesystemScenario } from '../scenarios/real-life/run-official-filesystem-scenario.mjs';
@@ -35,6 +36,8 @@ const SKIP_LIVE = process.argv.includes('--skip-live');
 const SKIP_SWARM =
   process.argv.includes('--skip-swarm') || process.env.MASTYF_AI_SWARM_SKIP_GATES === 'true';
 const QUIET = process.argv.includes('--quiet');
+/** Dashboard runs: test this install and its policy, not Mastyf's source code. See run.mjs --analysis. */
+const ANALYSIS = process.argv.includes('--analysis');
 const RUN_CONTINUOUS = process.argv.includes('--continuous');
 const SKIP_CONTINUOUS = process.argv.includes('--skip-continuous') || process.env.MASTYF_AI_SWARM_SKIP_CONTINUOUS === 'true';
 
@@ -137,6 +140,30 @@ See **analysis.txt** for full per-scenario breakdown.
   writeFileSync(summaryPath, swarmMd);
 }
 
+/**
+ * The live scenario sends real attacks through a real proxy. Its calls are tests, so they go to a
+ * throwaway history and home: the dashboard's own numbers must only ever show the user's traffic.
+ */
+async function withScratchHistory(fn) {
+  const keep = { MASTYF_AI_DB_PATH: process.env.MASTYF_AI_DB_PATH, MASTYF_AI_HOME: process.env.MASTYF_AI_HOME };
+  const dir = mkdtempSync(join(tmpdir(), 'mastyf-swarm-live-'));
+  process.env.MASTYF_AI_DB_PATH = join(dir, 'history.db');
+  process.env.MASTYF_AI_HOME = join(dir, 'home');
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(keep)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* the proxy may still be closing its database */
+    }
+  }
+}
+
 async function main() {
   mkdirSync(SWARM_DIR, { recursive: true });
   if (QUIET && existsSync(JOB_LOG_PATH)) {
@@ -186,7 +213,7 @@ async function main() {
       if (FULL && !process.env.REAL_LIFE_BURST_REPEATS) {
         process.env.REAL_LIFE_BURST_REPEATS = '20';
       }
-      const liveReport = await runOfficialFilesystemScenario();
+      const liveReport = await withScratchHistory(() => runOfficialFilesystemScenario());
       liveOk = liveReport.summary?.allPassed ?? false;
       if (liveReport.summary?.scenariosRun === 0) {
         log(`Live MCP skipped: ${liveReport.summary?.error || 'no tools discovered'}`);
@@ -237,9 +264,11 @@ async function main() {
 
     if (!SKIP_SWARM) {
       setPhase('swarm');
-      const swarmArgs = NIGHTLY ? ['--quiet'] : ['--fast', '--quiet'];
+      const swarmArgs = NIGHTLY ? ['--quiet'] : ANALYSIS ? ['--analysis', '--quiet'] : ['--fast', '--quiet'];
       log(
-        NIGHTLY
+        ANALYSIS && !NIGHTLY
+          ? 'Testing your policy against the attack corpus…'
+          : NIGHTLY
           ? 'Swarm gates (nightly): corpus + full adversarial harness — typically 30–60 min, output streams below…'
           : 'Swarm gates (fast): corpus + harness parity — typically 5–20 min on this machine…',
       );

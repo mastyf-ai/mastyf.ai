@@ -484,6 +484,8 @@ export type AuthStatus = {
   licenseStatus?: string;
   cloudBillingUrl?: string | null;
   upgradeUrl?: string | null;
+  /** Paid Shield plan, as answered by the control plane. `tier` only says whether API gating is unlocked. */
+  plan?: 'free' | 'paid';
   features?: string[];
 };
 
@@ -575,7 +577,7 @@ export async function loginDashboard(body: {
   password?: string;
   api_key?: string;
   csrfToken?: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; error?: string; mustChangePassword?: boolean }> {
   const headers: MastyfAiHeaders = { 'Content-Type': 'application/json' };
   if (body.csrfToken) headers['X-CSRF-Token'] = body.csrfToken;
   const res = await mastyfAiFetch('/api/login', {
@@ -587,8 +589,8 @@ export async function loginDashboard(body: {
       api_key: body.api_key,
     }),
   });
-  const data = (await res.json()) as { success?: boolean; error?: string };
-  return { success: !!data.success && res.ok, error: data.error };
+  const data = (await res.json()) as { success?: boolean; error?: string; mustChangePassword?: boolean };
+  return { success: !!data.success && res.ok, error: data.error, mustChangePassword: data.mustChangePassword === true };
 }
 
 export async function logoutDashboard(): Promise<void> {
@@ -726,26 +728,6 @@ export async function fetchDashboardInsights(
   return body;
 }
 
-export async function trackAdvancedAnalyticsEvent(event: {
-  feature: string;
-  metric?: string;
-  confidence?: 'high' | 'medium' | 'low';
-  value?: number | string;
-}): Promise<void> {
-  const headers = await buildMutatingHeaders();
-  try {
-    await mastyfAiFetch('/api/dashboard/analytics/telemetry', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        ...event,
-        timestamp: new Date().toISOString(),
-      }),
-    });
-  } catch {
-    /* best-effort analytics only */
-  }
-}
 
 export async function downloadInsightsBriefing(
   scope: 'overview' | 'cost' | 'security' | 'audit' | 'ai',
@@ -815,7 +797,7 @@ async function parseApiErrorMessage(
     if (body?.error?.includes('Dashboard API disabled')) {
       return (
         'Dashboard REST API is disabled. From the repo run: ' +
-        'pnpm build:mastyf-ai && pnpm dashboard:proxy -- mastyf-ai-configs/filesystem.json ' +
+        'pnpm build:mastyf-ai && pnpm dashboard:proxy -- mastyf-ai-configs/examples/filesystem.json ' +
         '(sets MASTYF_AI_CI_BYPASS_LICENSE). Open http://localhost:4000/ — not a separate Next dev port unless you use ?apiBase=http://localhost:4000'
       );
     }
@@ -1065,10 +1047,92 @@ export async function testPolicy(payload: {
       tool: payload.tool,
       arguments: payload.arguments,
       server: payload.server || 'dashboard-test',
+      // A simulation: every rule runs, but no step-up approval is queued.
+      dryRun: true,
     }),
   });
   if (!res.ok) return null;
   return (await res.json()) as Record<string, unknown>;
+}
+
+export type RuleCheckResult = {
+  action: 'allow' | 'block' | 'warn' | 'redact' | string;
+  rule: string;
+  reason: string;
+  mode: string;
+  elapsedMs?: number;
+};
+
+/**
+ * Run one tool call, or one tool result, through this install's own policy (the free rule engine),
+ * as a dry run. Returns an error string instead of throwing so callers can show it.
+ */
+export async function checkWithLocalRules(input:
+  | { kind: 'call'; tool: string; arguments: Record<string, unknown>; server?: string }
+  | { kind: 'result'; tool: string; result: string; server?: string },
+): Promise<{ ok: true; result: RuleCheckResult } | { ok: false; status: number; error: string }> {
+  const headers = await buildMutatingHeaders();
+  const body =
+    input.kind === 'call'
+      ? { tool: input.tool, arguments: input.arguments, server: input.server || 'playground', dryRun: true }
+      : { tool: input.tool, result: input.result, server: input.server || 'playground', dryRun: true };
+  const res = await mastyfAiFetch('/api/policy/test', { method: 'POST', headers, body: JSON.stringify(body) });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const reason = typeof data.reason === 'string' ? data.reason : typeof data.error === 'string' ? data.error : `HTTP ${res.status}`;
+    return { ok: false, status: res.status, error: reason };
+  }
+  return { ok: true, result: data as unknown as RuleCheckResult };
+}
+
+export type AgentInventory = {
+  scannedAt: string;
+  agents: Array<{
+    id: string;
+    name: string;
+    configPath: string;
+    servers: Array<{ name: string; transport: 'stdio' | 'http'; protected: boolean }>;
+  }>;
+  totals: { agents: number; servers: number; protectedServers: number };
+};
+
+/** AI agents found on this machine and the MCP servers each runs (names only). */
+export async function fetchAgentInventory(): Promise<AgentInventory | null> {
+  const res = await mastyfAiFetch('/api/agents/inventory');
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as AgentInventory & { available?: boolean });
+}
+
+export interface ProtectionStatus {
+  enabled: boolean;
+  changedAt: string | null;
+  watching: boolean;
+  lastScanAt: string;
+  agents: Array<{
+    id: string;
+    name: string;
+    configPath: string;
+    servers: Array<{ name: string; transport: 'stdio' | 'http'; protected: boolean; via: 'mastyf' | 'other' | null }>;
+  }>;
+  totals: { agents: number; servers: number; protectedServers: number };
+  notProtected: Array<{ id: string; server: string }>;
+  events: Array<{ at: string; kind: 'on' | 'off' | 'protected' | 'restored' | 'failed'; agent?: string; servers?: string[]; message?: string }>;
+}
+
+/** Which agents and MCP servers are on this computer, and whether protection is on. */
+export async function fetchProtection(): Promise<ProtectionStatus | null> {
+  const res = await mastyfAiFetch('/api/protection');
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as ProtectionStatus & { available?: boolean });
+}
+
+/** Turn protection on (route every local MCP server through Mastyf) or off (restore the agents' settings). */
+export async function setProtection(enabled: boolean): Promise<ProtectionStatus> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/protection', { method: 'POST', headers, body: JSON.stringify({ enabled }) });
+  const body = (await res.json().catch(() => ({}))) as ProtectionStatus & { error?: string };
+  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+  return body;
 }
 
 export async function fetchPolicyCopilot(goal: string, availableTools?: string[]): Promise<Record<string, unknown> | null> {
@@ -1381,8 +1445,13 @@ export async function reloadPolicy(): Promise<boolean> {
   return res.ok;
 }
 
-export async function savePolicy(yaml: string): Promise<{ ok: boolean; error?: string; details?: string }> {
+export async function savePolicy(
+  yaml: string,
+  /** Set when this save restores a version from Version history; recorded in the history. */
+  restoredFrom?: string | null,
+): Promise<{ ok: boolean; error?: string; details?: string }> {
   const headers = await buildMutatingHeaders();
+  if (restoredFrom) headers['X-Mastyf-Ai-Policy-Restored-From'] = restoredFrom;
   const res = await mastyfAiFetch('/api/policy', {
     method: 'PUT',
     headers,
@@ -1992,7 +2061,13 @@ export type ThreatDiscoveryStatus = {
     autoResearchEnabled: boolean;
     autoResearchConfig: Record<string, unknown>;
   };
-  llm: { ok: boolean; reason?: string; model?: string };
+  llm: {
+    ok: boolean;
+    reason?: string;
+    model?: string;
+    state?: 'ready' | 'not-installed' | 'not-running' | 'model-missing' | 'disabled';
+    endpoint?: string;
+  };
   pipeline: {
     queued: number;
     writesThisHour: number;
@@ -2155,7 +2230,7 @@ export async function fetchThreatDiscoveryStatus(): Promise<{
     return {
       status: null,
       error:
-        'Threat Discovery API not found — run `pnpm exec tsc && pnpm dashboard:build`, then restart `pnpm dashboard:proxy mastyf-ai-configs/filesystem.json`.',
+        'Threat Discovery API not found — run `pnpm exec tsc && pnpm dashboard:build`, then restart `pnpm dashboard:proxy mastyf-ai-configs/examples/filesystem.json`.',
     };
   }
   if (res.status === 402) {
@@ -2177,7 +2252,7 @@ export async function fetchThreatAutomationSummary(): Promise<{
     return {
       status: null,
       error:
-        'Threat Discovery automation summary API not found — run `pnpm exec tsc && pnpm dashboard:build`, then restart `pnpm dashboard:proxy mastyf-ai-configs/filesystem.json`.',
+        'Threat Discovery automation summary API not found — run `pnpm exec tsc && pnpm dashboard:build`, then restart `pnpm dashboard:proxy mastyf-ai-configs/examples/filesystem.json`.',
     };
   }
   if (res.status === 402) {
@@ -2193,9 +2268,11 @@ export async function fetchThreatAutomationSummary(): Promise<{
 export async function runThreatLab(
   mode: 'reactive' | 'proactive' = 'reactive',
 ): Promise<{ ok: boolean; error?: string; jobId?: string }> {
+  // Like every other action, this needs the CSRF token.
+  const headers = await buildMutatingHeaders();
   const res = await mastyfAiFetch('/api/threat-discovery/threat-lab/run', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ mode }),
   });
   const body = (await res.json()) as { error?: string; jobId?: string };
@@ -2571,8 +2648,9 @@ export async function restoreSecurityThreat(
 }
 
 export type SetupMastyfAiConfig = {
-  upstreamUrl?: string;
-  listenPort?: number;
+  /** null until the user saves a proxy target. */
+  upstreamUrl?: string | null;
+  listenPort?: number | null;
   authTokenPreview?: string | null;
   configured?: boolean;
 };
@@ -2622,7 +2700,7 @@ export type SetupCloudStatus = {
 };
 
 export async function fetchSetupCloudStatus(): Promise<SetupCloudStatus | null> {
-  const res = await mastyfAiFetch('/api/cloud/status');
+  const res = await mastyfAiFetch('/api/setup/cloud-status');
   if (!res.ok) return null;
   return (await res.json()) as SetupCloudStatus;
 }
@@ -2634,7 +2712,7 @@ export async function connectSetupCloud(body: {
   apiKeyRotationEnabled?: boolean;
 }): Promise<{ ok: boolean; launchUrl?: string; error?: string }> {
   const headers = await buildMutatingHeaders();
-  const res = await mastyfAiFetch('/api/cloud/connect', {
+  const res = await mastyfAiFetch('/api/setup/cloud/connect', {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

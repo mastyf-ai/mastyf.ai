@@ -29,7 +29,7 @@ function waitReady(child, timeoutMs = 15_000) {
 }
 
 async function main() {
-  const demoDir = join(root, 'mastyf-ai-configs');
+  const demoDir = join(root, 'mastyf-ai-configs', 'examples');
   mkdirSync(demoDir, { recursive: true });
 
   const serversJson = join(homedir(), '.mastyf-ai', 'servers.json');

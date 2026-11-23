@@ -31,6 +31,18 @@ import { fingerprintJsonRpcToolsList, } from './rug-pull-transport.js';
 import { createStreamingEconomicsState, inspectStreamingEconomicsChunk, } from './streaming-economics.js';
 import { injectIntoUpstreamHeaders, runWithExtractedTraceAsync, withMcpToolCallSpan, } from './trace-context.js';
 import { isRpcBatch, validateMcpMessage, } from './http-proxy-security.js';
+/** Set by this proxy on a message as it moves through. A client must not be able to supply them. */
+const INTERNAL_MESSAGE_FIELDS = ['_defenseTenantId', '_spendReservationId', '_rotatedSessionToken'];
+function dropInternalFields(msg) {
+    for (const field of INTERNAL_MESSAGE_FIELDS)
+        delete msg[field];
+}
+/** The message as the upstream server should see it. */
+function upstreamBody(msg) {
+    const copy = { ...msg };
+    dropInternalFields(copy);
+    return JSON.stringify(copy);
+}
 export class StreamableHttpProxyServer {
     opts;
     httpServer = null;
@@ -126,6 +138,7 @@ export class StreamableHttpProxyServer {
         return runWithExtractedTraceAsync(req.headers, () => this.processMessageTraced(msg, req));
     }
     async processMessageTraced(msg, req) {
+        dropInternalFields(msg);
         const { runMcpPrePipeline, applyMcpResponsePipeline, mcpResponseBlockJson } = await import('./mcp-request-pipeline.js');
         const pre = runMcpPrePipeline({
             msg,
@@ -165,11 +178,11 @@ export class StreamableHttpProxyServer {
                 toolName: msg.params?.name ?? 'unknown',
                 tenantId: relayTenantId,
                 transport: 'streamable-http',
-            }, () => this.relayToUpstream(JSON.stringify(msg), req, {
+            }, () => this.relayToUpstream(upstreamBody(msg), req, {
                 tenantId: msg._defenseTenantId ?? relayTenantId,
                 spendReservationId: msg._spendReservationId,
             }))
-            : await this.relayToUpstream(JSON.stringify(msg), req);
+            : await this.relayToUpstream(upstreamBody(msg), req);
         if (msg.method === 'tools/call') {
             releaseProxyInflight(this.opts.serverName);
         }
@@ -184,11 +197,14 @@ export class StreamableHttpProxyServer {
         if (msg.method === 'tools/call' && upstream.result != null) {
             const params = msg.params;
             const toolName = params?.name || 'unknown';
-            let tenantId = 'default';
+            // The tenant the defense layer checked this call under, so that the two see the same session.
+            let tenantId = msg._defenseTenantId ?? 'default';
             try {
-                tenantId = resolveTenantContext({
-                    headers: req.headers,
-                }).tenantId;
+                tenantId =
+                    msg._defenseTenantId ??
+                        resolveTenantContext({
+                            headers: req.headers,
+                        }).tenantId;
             }
             catch {
                 /* use default */
@@ -202,6 +218,7 @@ export class StreamableHttpProxyServer {
                 policyEngine: this.opts.policy,
                 transportLabel: 'streamable-http',
                 toolArguments: params?.arguments,
+                sessionId: pre.session.sessionId,
             });
             if (inspected.blocked && inspected.blockResponse) {
                 return inspected.blockResponse;

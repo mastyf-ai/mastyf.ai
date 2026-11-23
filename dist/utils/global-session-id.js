@@ -46,6 +46,16 @@ export function fleetChainBlockConfidenceThreshold() {
 export function isEphemeralRequestSession(globalSessionId) {
     return globalSessionId.startsWith('req:');
 }
+/**
+ * Who the collusion detector should attribute a call to, or null to skip it. A local stdio proxy
+ * serves one client, so its per-request ids would read as many agents colluding. Anonymous network
+ * callers stay tracked.
+ */
+export function collusionIdentity(agentId, globalSessionId, localStdio = false) {
+    if (agentId?.trim())
+        return agentId.trim();
+    return localStdio && isEphemeralRequestSession(globalSessionId) ? null : globalSessionId;
+}
 /** Derive agent id for fleet chain events when JWT sub is absent. */
 export function deriveAgentIdForFleetChain(globalSessionId, agentId) {
     if (agentId?.trim())

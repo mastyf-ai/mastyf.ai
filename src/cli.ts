@@ -651,6 +651,24 @@ aiCmd
   });
 
 program
+  .command('dashboard-key')
+  .description('Show the key you sign in to the local dashboard with (created on first start)')
+  .option('--path', 'Print only where the key file is, not the key')
+  .action((opts: { path?: boolean }) => {
+    import('./utils/dashboard-api-key.js').then(({ dashboardApiKeyPath, ensureLocalDashboardApiKey }) => {
+      const file = dashboardApiKeyPath();
+      if (opts.path) {
+        process.stdout.write(`${file}\n`);
+        return;
+      }
+      // Creates the key if Mastyf has never been started, so a first-time user always gets one.
+      const key = ensureLocalDashboardApiKey();
+      process.stderr.write(`Dashboard key (from ${file}). Paste it on the sign-in screen at http://localhost:${process.env['DASHBOARD_PORT'] || '4000'}\n`);
+      process.stdout.write(`${key}\n`);
+    });
+  });
+
+program
   .command('doctor')
   .description('Check DB path, policy, dashboard/AI env — quick onboarding diagnostics')
   .option('--policy <path>', 'Policy YAML to verify', 'default-policy.yaml')

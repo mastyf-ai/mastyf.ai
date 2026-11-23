@@ -28,7 +28,8 @@ function loadJson(name) {
 }
 
 function visualsSummaryLine(visuals) {
-  if (!visuals?.traffic?.hasData && visuals?.instantLearning?.source === 'none') return '';
+  if (!visuals) return '';
+  if (!visuals.traffic?.hasData && visuals.instantLearning?.source === 'none') return '';
   const parts = [];
   if (visuals.traffic?.hasData) {
     parts.push(

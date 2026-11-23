@@ -13,7 +13,7 @@ export interface SyncSemanticRequestInput {
 export interface SyncSemanticRequestResult {
     block: boolean;
     result: SemanticAuditResult;
-    source: 'local' | 'llm' | 'none';
+    source: 'local' | 'classifier' | 'llm' | 'none';
     rule: string;
     reason: string;
 }

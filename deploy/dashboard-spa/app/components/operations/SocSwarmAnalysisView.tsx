@@ -171,7 +171,7 @@ export function SocSwarmAnalysisView({ roles = [], refreshKey, onAction }: Props
 
       <div className="grid grid-12" style={{ marginBottom: 'var(--space-5)' }}>
         <div className="col-span-8">
-          <Card title="Run Security Swarm" subtitle="Autonomous red-team replay — feeds Threat Detection and Threat Intel">
+          <Card title="Run Security Swarm" subtitle="Autonomous red-team replay — feeds Threat Lab and Threat Intel">
             {!canRun ? (
               <p className="text-sm text-muted">Sign in with policy_test role to start analysis.</p>
             ) : (

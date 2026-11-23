@@ -55,6 +55,7 @@ import { ComplianceEvidenceRunner } from './agentic/compliance/compliance-eviden
 import { BehaviorFingerprintEngine } from './agentic/biometrics/behavior-fingerprint.js';
 import { getConfigProvenanceChain } from './agentic/provenance/config-provenance-chain.js';
 import { FleetChainDetector } from './agentic/cross-chain/fleet-chain-detector.js';
+import { setExtensionBlockListener } from './extensions/index.js';
 import { DigitalTwinCapture } from './agentic/digital-twin/twin-capture.js';
 import { ZeroTrustVerificationEngine } from './agentic/zero-trust/verification-engine.js';
 import { ReputationNetwork } from './agentic/reputation/reputation-network.js';
@@ -147,6 +148,17 @@ export async function createContainer(dbPath) {
     behaviorCollector.setFingerprintEngine(behaviorFingerprint);
     const configProvenance = getConfigProvenanceChain(industryStore);
     const fleetChainDetector = new FleetChainDetector(industryStore);
+    setExtensionBlockListener((event) => {
+        fleetChainDetector.record({
+            globalSessionId: event.sessionId ?? `${event.tenantId ?? 'default'}:${event.serverName}`,
+            agentId: 'unknown',
+            serverName: event.serverName,
+            toolName: event.toolName,
+            eventType: event.rule,
+            blocked: true,
+            arguments: event.arguments,
+        });
+    });
     const digitalTwin = new DigitalTwinCapture(industryStore);
     const zeroTrustEngine = new ZeroTrustVerificationEngine(reputationEngine, behaviorFingerprint, intentEngine, certifier, approvalGate);
     const responseDlp = new ResponseDlpScanner();

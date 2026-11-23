@@ -1,10 +1,11 @@
+import { checkLocalModel } from '../ai/local-model-status.js';
 /**
  * Aggregated Threat Discovery hub status for dashboard API.
  */
 import { getLicenseClient } from '../license/license-client.js';
 import { isCiLicenseBypass } from '../license/feature-tiers.js';
 import { isCiTokenCached } from '../license/ci-token.js';
-import { ensureThreatLabLlmReady, threatLabEnabled, threatLabMode, threatLabMaxCandidates, threatLabSemanticEnabled, } from '../ai/threat-lab.js';
+import { threatLabEnabled, threatLabMode, threatLabMaxCandidates, threatLabSemanticEnabled, } from '../ai/threat-lab.js';
 import { getThreatResearchConfig, getThreatResearchQueueStatus, threatResearchAutoEnabled, } from '../ai/threat-research-pipeline.js';
 import { countProcessedFingerprints } from '../ai/auto-corpus-writer.js';
 import { readThreatLabCandidates, readThreatLabCandidatesUngated, readAutoCorpusManifest, } from './swarm-artifacts.js';
@@ -12,20 +13,14 @@ import { parseAutoResearchLogTail } from './parse-auto-research-log.js';
 import { getThreatDiscoveryJobStatus } from './threat-discovery-runner.js';
 import { isSwarmSessionActiveForTenant, swarmDataProvenance } from './swarm-session.js';
 let llmCache = null;
-const LLM_CACHE_MS = 30_000;
+const LLM_CACHE_MS = 4_000;
 async function cachedLlmHealth() {
     const now = Date.now();
-    if (llmCache && now - llmCache.at < LLM_CACHE_MS) {
-        return { ok: llmCache.ok, reason: llmCache.reason, model: llmCache.model };
-    }
-    const ready = await ensureThreatLabLlmReady();
-    llmCache = {
-        at: now,
-        ok: ready.ok,
-        reason: ready.reason,
-        model: process.env.MASTYF_AI_LLM_MODEL || process.env.OLLAMA_MODEL || undefined,
-    };
-    return { ok: llmCache.ok, reason: llmCache.reason, model: llmCache.model };
+    if (llmCache && now - llmCache.at < LLM_CACHE_MS)
+        return llmCache.status;
+    const status = await checkLocalModel();
+    llmCache = { at: now, status };
+    return status;
 }
 function countBy(items) {
     const out = {};

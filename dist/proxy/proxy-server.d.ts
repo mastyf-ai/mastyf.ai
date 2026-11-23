@@ -46,6 +46,7 @@ export declare class McpProxyServer {
     private spawnEnv;
     constructor(command: string, args: string[], env: Record<string, string>, db: IDatabase, serverName?: string, policyEngine?: PolicyEngine, authValidator?: OAuthValidator, requestTimeoutMs?: number, maxRestarts?: number, tenantPolicyRegistry?: TenantPolicyRegistry);
     private breakerFor;
+    private spawnFailure;
     private spawnChild;
     get stdin(): NodeJS.WritableStream | null;
     private setupStdout;
@@ -62,7 +63,10 @@ export declare class McpProxyServer {
      * Called when the AI client writes a request to be proxied.
      * Pipeline: Payload guard → Auth → Circuit Breaker → Policy + RBAC → Forward.
      */
-    handleClientInput(raw: string): Promise<void>;
+    /** `localStdio` is passed only by the reader of this process's stdin, never by the HTTP relays. */
+    handleClientInput(raw: string, source?: {
+        localStdio?: boolean;
+    }): Promise<void>;
     private processClientInput;
     /** Atomically swap the active policy engine (used by hot-reload) */
     setPolicyEngine(engine: PolicyEngine): void;

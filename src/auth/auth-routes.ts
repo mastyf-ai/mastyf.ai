@@ -8,6 +8,7 @@
  * the generic protected-route gate is applied (see soc-api-server.ts).
  */
 import type { Express, Request, Response } from 'express';
+import { timingSafeEqual } from 'crypto';
 import { z } from 'zod';
 import { userStore } from './user-store.js';
 import { roleStore, permissionCatalog } from './role-store.js';
@@ -64,6 +65,10 @@ const setupSchema = z.object({
 const loginSchema = z.object({
   username: z.string().min(1).max(254),
   password: z.string().min(1).max(256),
+});
+
+const apiKeyLoginSchema = z.object({
+  api_key: z.string().trim().min(16).max(512),
 });
 
 const createUserSchema = z.object({
@@ -150,6 +155,15 @@ export function registerAuthRoutes(app: Express): void {
         res.status(403).json({ error: 'Setup has already been completed and is permanently disabled' });
         return;
       }
+      // Whoever reaches the port first must not be able to claim the admin account. The key file
+      // is readable only by the person who started Mastyf, so it proves they own this install.
+      if (process.env['DASHBOARD_API_KEY']?.trim() && !dashboardApiKeyMatches(req.body?.api_key)) {
+        res.status(401).json({
+          error: 'Paste the dashboard API key to create the first account. It is in the file dashboard_api_key in your Mastyf home folder (~/.mastyf).',
+          apiKeyRequired: true,
+        });
+        return;
+      }
       const parsed = setupSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
@@ -191,7 +205,18 @@ export function registerAuthRoutes(app: Express): void {
         userAgent: req.header('user-agent') || null,
       });
 
-      res.status(201).json({ success: true, userId: user.id });
+      // Sign the new administrator straight in.
+      const session = await sessionStore.create({
+        userId: user.id,
+        tenantId,
+        ipAddress: clientIp(req),
+        userAgent: req.header('user-agent') || null,
+        ttlMinutes: settings.sessionTimeoutMinutes,
+      });
+      setSessionCookies(res, session.token, session.csrfSecret, settings.sessionTimeoutMinutes);
+      await userStore.recordSuccessfulLogin(user.id, clientIp(req));
+
+      res.status(201).json({ success: true, userId: user.id, signedIn: true });
     } catch (err) {
       handleError(res, err);
     }
@@ -236,14 +261,94 @@ export function registerAuthRoutes(app: Express): void {
 
   // ── Login / logout / me ──────────────────────────────────────────────────
 
+  /** True when `presented` is this dashboard's API key (constant-time compare). */
+  function dashboardApiKeyMatches(presented: unknown): boolean {
+    const expected = process.env['DASHBOARD_API_KEY']?.trim();
+    if (!expected || typeof presented !== 'string') return false;
+    const given = presented.trim();
+    return given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+  }
+
+  /**
+   * Sign in with the dashboard API key ($MASTYF_HOME/dashboard_api_key, provisioned by the start
+   * scripts). Whoever holds the key already has full API access, so the session belongs to the
+   * workspace's first active administrator. Before setup has created one, the user is sent to setup.
+   */
+  async function loginWithApiKey(
+    req: Request,
+    res: Response,
+    presented: string,
+    tenantId: string,
+    ip: string,
+    userAgent: string | null,
+  ): Promise<void> {
+    if (!dashboardApiKeyMatches(presented)) {
+      await auditLog.write({
+        tenantId,
+        action: AUDIT_ACTIONS.LOGIN_FAILURE,
+        result: 'failure',
+        ipAddress: ip,
+        userAgent,
+        metadata: { reason: 'bad_api_key' },
+      });
+      res.status(401).json({ success: false, error: 'That API key does not match this dashboard' });
+      return;
+    }
+
+    let owner: Awaited<ReturnType<typeof userStore.findById>> = null;
+    for (const user of await userStore.list(tenantId)) {
+      if (user.status !== 'active') continue;
+      const access = await resolveUserAccess(user);
+      if (access.dashboardRoles.includes('admin') || access.dashboardRoles.includes('tenant-admin')) {
+        owner = user;
+        break;
+      }
+    }
+    if (!owner) {
+      res.status(409).json({
+        success: false,
+        setupRequired: true,
+        error: 'Create the first administrator account before signing in with the API key',
+      });
+      return;
+    }
+
+    const settings = await authSettingsStore.get(tenantId);
+    const session = await sessionStore.create({
+      userId: owner.id,
+      tenantId,
+      ipAddress: ip,
+      userAgent,
+      ttlMinutes: settings.sessionTimeoutMinutes,
+    });
+    setSessionCookies(res, session.token, session.csrfSecret, settings.sessionTimeoutMinutes);
+    await userStore.recordSuccessfulLogin(owner.id, ip);
+    await auditLog.write({
+      tenantId,
+      userId: owner.id,
+      username: owner.username,
+      action: AUDIT_ACTIONS.LOGIN_SUCCESS,
+      result: 'success',
+      ipAddress: ip,
+      userAgent,
+      metadata: { method: 'api_key' },
+    });
+    res.json({ success: true, mustChangePassword: false });
+  }
+
   async function loginHandler(req: Request, res: Response): Promise<void> {
     const tenantId = getTenantId(req);
     const ip = clientIp(req);
     const userAgent = req.header('user-agent') || null;
     try {
+      const apiKeyLogin = apiKeyLoginSchema.safeParse(req.body);
+      if (apiKeyLogin.success && !req.body?.username) {
+        await loginWithApiKey(req, res, apiKeyLogin.data.api_key, tenantId, ip, userAgent);
+        return;
+      }
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) {
-        res.status(400).json({ error: 'Username and password are required' });
+        res.status(400).json({ error: 'Enter a username and password, or the dashboard API key' });
         return;
       }
       const { username, password } = parsed.data;

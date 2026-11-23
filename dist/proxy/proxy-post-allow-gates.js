@@ -5,6 +5,7 @@ import { tryReserveSpend, releaseReservedSpend } from '../services/unified-spend
 import { getEstimatedSemanticCostUsd } from '../services/tenant-budget.js';
 import { isSemanticAsyncEnabledForTenant, isSyncSemanticRequestLlmEnabledForTenant, } from '../tenant/tenant-semantic-config.js';
 import { flowSessionKey } from '../policy/session-flow-guard.js';
+import { checkToolCall } from '../extensions/index.js';
 import { runSemanticPipelineAfterPolicyAllow, } from './semantic-proxy-hooks.js';
 function estimateUsd(context) {
     const tokens = context.requestTokens ?? 0;
@@ -22,6 +23,10 @@ export function isPostPolicyGateBlock(outcome) {
     return !!outcome && 'block' in outcome && outcome.block === true;
 }
 export async function runPostPolicyAllowGates(context, decision, serverName) {
+    const extensionBlock = checkToolCall(context);
+    if (extensionBlock) {
+        return { block: true, rule: extensionBlock.rule, reason: extensionBlock.reason, metricCategory: 'semantic_sync_request' };
+    }
     const estimatedUsd = estimateUsd(context);
     const reserve = await tryReserveSpend({
         tenantId: context.tenantId,

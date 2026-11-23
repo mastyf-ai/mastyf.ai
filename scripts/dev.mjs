@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const config = process.argv[2] || 'mastyf-ai-configs/testbed-memory.json';
+const config = process.argv[2] || 'mastyf-ai-configs/examples/testbed-memory.json';
 const policy = process.argv[3] || 'default-policy.yaml';
 
 const proc = spawn('npx', [

@@ -327,6 +327,7 @@ function matchInjectionPatterns(decodedBody, seen, criticalOnly = false) {
             patternId: pattern.id,
             description: pattern.description,
             matchPreview: `...${preview.slice(0, 100)}...`,
+            matched: match[0],
         });
     }
     return findings;

@@ -13,6 +13,20 @@ const ZERO_WIDTH_RE = /[\u200B-\u200F\uFEFF\u00AD\u2060-\u2064\u061C\u180E\u034F
 export function stripZeroWidthCharacters(input) {
     return input.replace(ZERO_WIDTH_RE, '');
 }
+/** A whole value that is one plain Windows path: drive, then folders of two or more ordinary characters. */
+const PLAIN_WINDOWS_PATH = /^[A-Za-z]:(?:\\[\w .,@+~()-]{2,255})+\\?$/;
+/** Escape sequences that spell out other characters; a value holding one is decoded, never taken as a path. */
+const SPELLED_ESCAPE = /\\(?:u[0-9a-f]{4}|u\{|x[0-9a-f]{2}|U[0-9a-f]{8}|[0-7]{3})/i;
+/**
+ * C:\Users\me\notes.txt and C:/Users/me/notes.txt are the same file, so judge them the same way. Without
+ * this the backslashes are unwrapped as escapes and the folder names run together into one long word,
+ * which block-encoding-evasion takes for an encoded blob.
+ */
+export function windowsPathToSlashes(value) {
+    if (!PLAIN_WINDOWS_PATH.test(value) || SPELLED_ESCAPE.test(value))
+        return value;
+    return value.replace(/\\/g, '/');
+}
 /**
  * PayloadNormalizer applies multi-stage normalization to defeat
  * common evasion techniques targeting regex-based policy engines.
@@ -291,7 +305,7 @@ export class PayloadNormalizer {
      * until stable or maxDepth reached. Used before prompt-injection / semantic regex.
      */
     deobfuscateRecursive(input, maxDepth = this.maxDepth) {
-        let current = input.replace(ZERO_WIDTH_RE, ' ');
+        let current = windowsPathToSlashes(input.replace(ZERO_WIDTH_RE, ' '));
         let depth = 0;
         while (depth < maxDepth) {
             const before = current;

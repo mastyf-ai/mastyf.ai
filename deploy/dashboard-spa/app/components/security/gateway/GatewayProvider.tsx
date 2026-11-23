@@ -1133,7 +1133,8 @@ export function GatewayProvider({ children }: { children: React.ReactNode }) {
       if (Array.isArray(result.tool_events) && result.tool_events.length > 0) {
         setReceipts((prev) => {
           const newItems: ReceiptData[] = result.tool_events.map((e: any) => ({
-            receipt_id: e.receipt_hash || `rec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            // No hash means the gateway issued no receipt; keep it empty instead of inventing an id.
+            receipt_id: e.receipt_hash || '',
             decision: e.decision,
             tool_name: e.tool_name,
             reason_code: e.reason_code,

@@ -4,6 +4,7 @@ import * as Metrics from './metrics.js';
 import { broadcastDashboardEvent, emitFlowStep } from './dashboard-events.js';
 import { enqueueAuditWrite, initAuditWriteQueue } from '../database/audit-write-queue.js';
 import { commitSpend, releaseReservedSpend } from '../services/unified-spend-pool.js';
+import { recordActivity } from '../telemetry/activity-uploader.js';
 const MAX_BLOCK_REASON_CHARS = parseInt(process.env.MASTYF_AI_AUDIT_MAX_BLOCK_REASON_CHARS || '4096', 10);
 /** Trim oversized audit fields before queue/DB write (L-2). */
 export function compactCallRecordForPersistence(record) {
@@ -76,6 +77,7 @@ export async function persistCallRecord(db, record, msg, serverEnv, serverArgs) 
         }
         : undefined;
     enqueueAuditWrite({ record: enriched, costRecord: costJob });
+    recordActivity(enriched, msg);
     if (enriched.costUsd && enriched.costUsd > 0) {
         void commitSpendFromRecord(enriched);
     }

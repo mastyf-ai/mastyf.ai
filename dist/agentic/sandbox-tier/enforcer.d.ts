@@ -4,6 +4,11 @@
 import { IndustryStandardStore } from '../../database/industry-standard-store.js';
 import type { Container } from '../../container.js';
 export type SandboxTier = 'shadow' | 'redact' | 'allow';
+/**
+ * The tier a server starts in. New servers forward with protection on; shadow, which forwards
+ * nothing, is opt-in through MASTYF_AI_DEFAULT_SANDBOX_TIER.
+ */
+export declare function resolveDefaultSandboxTier(env?: NodeJS.ProcessEnv): SandboxTier;
 export interface SandboxScope {
     scopeType: 'agent' | 'tool' | 'server';
     scopeId: string;

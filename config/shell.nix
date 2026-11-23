@@ -42,7 +42,7 @@ pkgs.mkShell {
     echo "─────────────────────────────────────"
     echo ""
     echo "Run: pnpm install && pnpm build"
-    echo "Run: pnpm dev -- --config mastyf-ai-configs/testbed-memory.json"
+    echo "Run: pnpm dev -- --config mastyf-ai-configs/examples/testbed-memory.json"
     echo ""
     export PATH="$PWD/node_modules/.bin:$PATH"
   '';

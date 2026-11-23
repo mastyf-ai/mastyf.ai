@@ -117,6 +117,12 @@ export interface CallContext {
   agentIdentity?: import('../auth/auth-types.js').AgentIdentity;
   /** Set by the stdio proxy only, never from client input. */
   localStdio?: boolean;
+  /**
+   * A what-if evaluation (dashboard Test & Simulate, the Protocol X playground). Every rule still
+   * runs, but nothing with a side effect happens: no step-up approval is queued and no sandbox tier
+   * changes, because no real caller is waiting on the answer.
+   */
+  dryRun?: boolean;
   /** Optional idempotency key from params._meta or HTTP header */
   idempotencyKey?: string;
   /** Transport/conversation session id (e.g. MCP `mcp-session-id`) used to scope session-flow history. */

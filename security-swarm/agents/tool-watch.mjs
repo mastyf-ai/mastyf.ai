@@ -2,7 +2,7 @@
 /**
  * ToolWatch Swarm agent — MCP server tool/schema integrity monitoring.
  */
-import { spawnSync } from 'node:child_process';
+import { spawnTool } from '../lib/run-step.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
@@ -21,7 +21,7 @@ if (!existsSync(script)) {
   process.exit(1);
 }
 
-const r = spawnSync('pnpm', ['exec', 'tsx', script], {
+const r = spawnTool('pnpm', ['exec', 'tsx', script], {
   cwd: REPO,
   stdio: 'inherit',
   env: process.env,

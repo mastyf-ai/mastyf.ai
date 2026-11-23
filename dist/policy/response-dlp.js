@@ -83,7 +83,10 @@ const PII_PATTERNS = [
         id: 'pii-email-bulk',
         severity: 'medium',
         category: 'pii',
-        regex: /(?:[\w.+-]+@[\w.-]+\.\w{2,}[\s,;]){5,}/gi,
+        // Bounded parts (an address's local part is at most 64 characters, a domain label 63): unbounded
+        // runs re-read a long word from every position, so a 256 KB line took over a minute. One to three
+        // separator characters, so "a@x.com, b@x.com" lists are caught too.
+        regex: /(?:[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){0,8}\.[a-z]{2,24}[\s,;]{1,3}){5,}/gi,
         redactLabel: 'EMAIL',
     },
     {
@@ -178,8 +181,14 @@ function collectPatternFindings(text, patterns) {
     }
     return out;
 }
-/** Context-aware: redact value after password:/api_key:/secret: labels. */
-const LABELED_SECRET_RE = /\b((?:password|passwd|api[_-]?key|secret|token|credential)s?)\s*[:=]\s*(\S+)/gi;
+/**
+ * Context-aware: redact the value after a password:/api_key:/secret: style label, including compound
+ * names such as AWS_SECRET_ACCESS_KEY or db-password (the keyword is one segment of the name).
+ * The value stops at whitespace, a quote, a backslash or a separator, so redacting inside
+ * JSON-encoded text keeps it valid JSON (an escaped "\n" ends the value). Values already redacted
+ * are left alone.
+ */
+const LABELED_SECRET_RE = /(?<![A-Za-z0-9])((?:[A-Za-z0-9]+[_-])*(?:password|passwd|api[_-]?key|secret|token|credential)s?(?:[_-][A-Za-z0-9]+)*)\s*[:=]\s*(?!\[REDACTED)([^\s"'\\,;]+)/gi;
 function redactLabeledSecrets(text) {
     const reasons = [];
     const out = text.replace(LABELED_SECRET_RE, (_full, label) => {
@@ -188,14 +197,33 @@ function redactLabeledSecrets(text) {
     });
     return { text: out, reasons };
 }
+/**
+ * Replaces each found span with one marker. Several detectors often flag the same secret (an AWS key
+ * is an aws-access-key, an aws-access-token and a content-aws-key); overlapping spans are merged first,
+ * so each secret becomes a single marker and no marker is cut into by another.
+ */
 function redactSpans(text, findings) {
     const spans = findings
         .filter((f) => f.start != null && f.end != null && f.end > f.start)
-        .sort((a, b) => (b.start - a.start));
+        .map((f) => ({ start: f.start, end: f.end, ruleId: f.ruleId }))
+        .sort((a, b) => a.start - b.start || b.end - a.end);
+    const merged = [];
+    for (const s of spans) {
+        const last = merged[merged.length - 1];
+        if (last && s.start < last.end) {
+            // Name the merged span after the widest finding in it.
+            if (s.end - s.start > last.end - last.start)
+                last.ruleId = s.ruleId;
+            last.end = Math.max(last.end, s.end);
+        }
+        else {
+            merged.push({ ...s });
+        }
+    }
     let out = text;
-    for (const f of spans) {
-        const label = f.ruleId.replace(/^[^-]+-/, '').toUpperCase().slice(0, 12);
-        out = out.slice(0, f.start) + `[REDACTED:${label}]` + out.slice(f.end);
+    for (const s of merged.reverse()) {
+        const label = s.ruleId.replace(/^[^-]+-/, '').toUpperCase().slice(0, 12);
+        out = out.slice(0, s.start) + `[REDACTED:${label}]` + out.slice(s.end);
     }
     return out;
 }
@@ -288,15 +316,19 @@ export function evaluateResponseDlp(toolName, serverName, responseBody) {
     let redactedBody;
     const redactionReasons = [];
     if (mode === 'redact') {
-        let working = inspectText;
+        // Spans first: their offsets refer to inspectText, so nothing may change the text before them.
+        let working = findings.length > 0 ? redactSpans(inspectText, findings) : inspectText;
         const labeled = redactLabeledSecrets(working);
         working = labeled.text;
         redactionReasons.push(...labeled.reasons);
-        if (findings.length > 0) {
-            working = redactSpans(working, findings);
+        if (findings.length > 0)
             redactionReasons.push(...buildRedactionReasons(findings));
-        }
-        if (labeled.reasons.length > 0 || findings.length > 0) {
+        // A serious finding with no span (an injected instruction, an exfiltration marker) can't be cut
+        // out. Passing the text on as "redacted" would hand it to the model unchanged, so no redacted body
+        // is offered and the response gate's block checks decide. The same goes for a redaction that
+        // removed nothing.
+        const unredactable = findings.some((f) => (f.start == null || f.end == null) && (f.severity === 'critical' || f.severity === 'high'));
+        if (!unredactable && working !== inspectText) {
             redactedBody = working;
         }
     }

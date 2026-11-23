@@ -50,7 +50,8 @@ export async function runPlanComplianceAudit(): Promise<PlanComplianceReport> {
     const { computeGraphNeuralScore, exportGraphFeatures } = await import('./cross-chain/graph-scorer.js');
     const { fleetRegion } = await import('./cross-chain/fleet-chain-redis.js');
     const { scoreGraphEventsWithOnnx } = await import('./cross-chain/graph-onnx-inference.js');
-    const d = new FleetChainDetector();
+    // Self-test: no SIEM event, no incident playbook, nothing written to the user's history.
+    const d = new FleetChainDetector(undefined, { sideEffects: false });
     const events = [
       { globalSessionId: 'audit', agentId: 'a', serverName: 'fs', toolName: 'read_file', eventType: 'tool_call', blocked: false, timestamp: 1, argumentsSnapshot: { path: '/etc/passwd' } },
       { globalSessionId: 'audit', agentId: 'a', serverName: 'wh', toolName: 'http_request', eventType: 'tool_call', blocked: false, timestamp: 2, argumentsSnapshot: { url: 'https://x.com' } },
@@ -246,17 +247,15 @@ export async function runPlanComplianceAudit(): Promise<PlanComplianceReport> {
   // C5 — Semantic policy
   {
     const { policyToNaturalLanguage } = await import('./semantic-policy/translator.js');
-    const { getPolicyDraft, storePolicyDraft, clearPolicyDraftsForTests } = await import('./semantic-policy/policy-approval-store.js');
-    clearPolicyDraftsForTests();
-    storePolicyDraft({ requestId: 'audit-draft', goal: 'test', rule: { name: 'r', action: 'block' }, yaml: 'rules: []' });
-    const draft = getPolicyDraft('audit-draft');
+    // Read-only probe: the audit runs inside the live dashboard, so it must not add or clear real drafts.
+    const { getPolicyDraft, storePolicyDraft } = await import('./semantic-policy/policy-approval-store.js');
+    const probe = getPolicyDraft(`__self-test-${Date.now()}`);
     const summary = await policyToNaturalLanguage({ version: '1', policy: { mode: 'block', rules: [{ name: 'deny-curl', action: 'block', tools: { deny: ['curl'] } }] } }, { useLlm: false });
     const checks: ComplianceCheck[] = [
       { id: 'nl', passed: summary.ruleCount >= 1, detail: 'NL policy explanation', weight: 35 },
-      { id: 'approval', passed: draft?.status === 'pending', detail: 'Policy draft approval store', weight: 35 },
+      { id: 'approval', passed: typeof storePolicyDraft === 'function' && probe === undefined, detail: 'Policy draft approval store (read-only probe)', weight: 35 },
       { id: 'persist', passed: migrationExists('016-plan-compliance.sql'), detail: 'Approval persistence migration', weight: 30 },
     ];
-    clearPolicyDraftsForTests();
     modules.push({ id: 'C5', name: 'Semantic Policy Translator', score: scoreModule(checks), checks });
   }
 

@@ -23,7 +23,7 @@ import { registerFederationRoutes } from '../auth/federation/federation-routes.j
 import { DbFederationStore } from '../auth/federation/db-federation-store.js';
 import { handleNewApiRoutes } from './dashboard-new-api-routes.js';
 import { getPersistenceStore, PersistenceStore } from './persistence-store.js';
-import { attachAuthContext, requireAuth as requireDbAuth } from '../auth/auth-middleware.js';
+import { attachAuthContext, authenticateDbSessionHeaders, requireAuth as requireDbAuth } from '../auth/auth-middleware.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
 import type { UiMcpServerConfig } from './mcp-server-config.js';
 import {
@@ -33,6 +33,7 @@ import {
 import {
   assertTenantAdminScope,
   canAccessRoute,
+  type DashboardRole,
 } from '../auth/dashboard-rbac.js';
 import { resolveTenantContext, InvalidTenantIdError, isMultiTenantModeEnabled, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { tenantRateLimitKey } from './redis-rate-limiter.js';
@@ -61,6 +62,7 @@ import {
 } from './db-aggregate.js';
 import { computeCostTrend, fetchCircuitBreakerStates } from './tui-sources.js';
 import { REPO_ROOT } from './security-swarm-runner.js';
+import { createHash } from 'crypto';
 import { available, unavailable, defaultPolicyPath, parseCostBudgetUsd } from './dashboard-live-data.js';
 import { cachedDashboardQuery, dashboardQueryCacheKey } from './dashboard-query-cache.js';
 import { computeBurnRatePerHour, computeProjectedMonthly } from './cost-metrics.js';
@@ -438,8 +440,12 @@ export async function startDashboardServer(
 
   function licenseStatusPayload() {
     const tier = licenseClient.getTier();
-    const upgradeUrl = licenseClient.getCloudBillingUrl() ?? null;
+    // The pricing page is where a free install upgrades; a cloud-linked install gets its own billing link.
+    const upgradeUrl = licenseClient.getCloudBillingUrl() || `${DEFAULT_CLOUD_CONSOLE_URL}/pricing`;
     const openCore = isOpenCoreEnabled();
+    // `tier` only says whether API gating is unlocked (always, on open source). Whether this
+    // install has a paid Shield plan is the control plane's answer alone.
+    const plan: 'free' | 'paid' = licenseClient.hasPaidPlan() ? 'paid' : 'free';
 
     if (!openCore && !isLicenseEnforcementEnabled()) {
       return {
@@ -452,6 +458,7 @@ export async function startDashboardServer(
         licenseStatus: 'not_enforced',
         cloudBillingUrl: null,
         upgradeUrl,
+        plan,
         features: [] as string[],
       };
     }
@@ -468,6 +475,7 @@ export async function startDashboardServer(
       licenseStatus: state?.status ?? (licensed ? 'active' : 'community'),
       cloudBillingUrl: licenseClient.getCloudBillingUrl() ?? null,
       upgradeUrl,
+      plan,
       features: state?.features ?? [],
     };
   }
@@ -508,6 +516,20 @@ export async function startDashboardServer(
 
   const auth = dashboardAuth || new DashboardAuth();
   const authRequired = dashboardEnabled && auth.requiresAuthentication();
+  if ((process.env['MASTYF_AI_AUTH_DISABLED'] || '').toLowerCase() !== 'true') {
+    // Browser sign-in creates DB-backed sessions (src/auth/session-store.ts);
+    // let every API route and the WebSocket accept them, not only /api/auth/*.
+    auth.setExternalSessionResolver(async (headers, method) => {
+      const session = await authenticateDbSessionHeaders(headers, method);
+      if (!session) return null;
+      return {
+        authenticated: true,
+        identity: session.identity,
+        roles: session.dashboardRoles as DashboardRole[],
+        sessionTenantId: session.tenantId,
+      };
+    });
+  }
 
   if (authRequired && auth.isConfigured()) {
     Logger.info('[dashboard] Dashboard authentication enabled');
@@ -835,7 +857,9 @@ export async function startDashboardServer(
     const scopedKey = tenantRateLimitKey(tenantId, ip);
     const attempts = apiRateLimiter.get(scopedKey) ?? 0;
     if (attempts >= limit) return false;
-    apiRateLimiter.set(scopedKey, attempts + 1);
+    // Fixed one-minute window: keep the entry's original expiry. Refreshing it on every request
+    // meant a dashboard that polls never saw its window close, so a normal session hit 429s.
+    apiRateLimiter.set(scopedKey, attempts + 1, { noUpdateTTL: true });
     return true;
   }
 
@@ -1160,7 +1184,7 @@ export async function startDashboardServer(
         method === 'GET' && (url === '/api/health' || url === '/api/gateway/bff-info');
       const authResult = publicUnauth
         ? { authenticated: true, identity: 'public' }
-        : auth.authenticate({ url, headers: req.headers, method });
+        : await auth.authenticateAsync({ url, headers: req.headers, method });
       if (!authResult.authenticated) {
         setCors();
         if (req.headers['accept']?.includes('text/html')) {
@@ -1322,6 +1346,9 @@ export async function startDashboardServer(
           const tmpPath = `${policyPath}.dashboard-${process.pid}.tmp`;
           writeFileSync(tmpPath, nextYaml.endsWith('\n') ? nextYaml : `${nextYaml}\n`, 'utf-8');
           renameSync(tmpPath, policyPath);
+          // Rule switches and deletions belong in Version history too, not only editor saves.
+          const { recordPolicyEdit } = await import('./dashboard-settings-store.js');
+          recordPolicyEdit(requestTenantId, yaml, nextYaml.endsWith('\n') ? nextYaml : `${nextYaml}\n`, authResult.identity || null);
         } catch (err) {
           writeJson(res, 500, { error: 'Failed to write policy file', details: err instanceof Error ? err.message : String(err) });
           return;
@@ -1383,6 +1410,9 @@ export async function startDashboardServer(
           const tmpPath = `${policyPath}.dashboard-${process.pid}.tmp`;
           writeFileSync(tmpPath, nextYaml.endsWith('\n') ? nextYaml : `${nextYaml}\n`, 'utf-8');
           renameSync(tmpPath, policyPath);
+          // Rule switches and deletions belong in Version history too, not only editor saves.
+          const { recordPolicyEdit } = await import('./dashboard-settings-store.js');
+          recordPolicyEdit(requestTenantId, yaml, nextYaml.endsWith('\n') ? nextYaml : `${nextYaml}\n`, authResult.identity || null);
         } catch (err) {
           writeJson(res, 500, { error: 'Failed to write policy file', details: err instanceof Error ? err.message : String(err) });
           return;
@@ -1477,6 +1507,15 @@ export async function startDashboardServer(
           writeJson(res, 400, { error: 'Policy signature validation failed', details: sigCheck.reason });
           return;
         }
+        const { recordPolicyVersion, listPolicyVersions } = await import('./dashboard-settings-store.js');
+        try {
+          // First save from the dashboard: keep the file as it was, so it can be restored.
+          if (listPolicyVersions(requestTenantId, 1).length === 0 && existsSync(policyPath)) {
+            recordPolicyVersion(requestTenantId, readFileSync(policyPath, 'utf-8'), null, 'before-first-save');
+          }
+        } catch {
+          /* history is best-effort; never block a save on it */
+        }
         try {
           mkdirSync(dirname(policyPath), { recursive: true });
           const tmpPath = `${policyPath}.dashboard-${process.pid}.tmp`;
@@ -1503,9 +1542,23 @@ export async function startDashboardServer(
         } catch {
           /* best-effort */
         }
+        let versionId: string | null = null;
+        try {
+          const savedYaml = yaml.endsWith('\n') ? yaml : `${yaml}\n`;
+          const restoredFrom = String(req.headers['x-mastyf-ai-policy-restored-from'] || '').trim();
+          versionId = recordPolicyVersion(
+            requestTenantId,
+            savedYaml,
+            authResult.identity || null,
+            restoredFrom ? 'restore' : 'save',
+          )?.id ?? null;
+        } catch {
+          /* best-effort */
+        }
         writeJson(res, 200, {
           status: 'ok',
           path: policyPath,
+          versionId,
           message: 'Policy saved; watcher reloads on file change',
         });
         const auditor = getPolicyAuditor();
@@ -1525,6 +1578,63 @@ export async function startDashboardServer(
             metadata: { user: authResult.identity, action: 'save', mode: parsePolicyConfig(parsed).policy.mode },
           });
         });
+        return;
+      }
+
+      if (url === '/api/policy/history' && method === 'GET') {
+        setCors();
+        const { listPolicyVersions, recordPolicyVersion } = await import('./dashboard-settings-store.js');
+        const policyPath = defaultPolicyPath();
+        let currentSha: string | null = null;
+        if (existsSync(policyPath)) {
+          const current = readFileSync(policyPath, 'utf-8');
+          currentSha = createHash('sha256').update(current).digest('hex');
+          // Nothing saved yet: start the history with the policy as it is on disk.
+          if (listPolicyVersions(requestTenantId, 1).length === 0) {
+            recordPolicyVersion(requestTenantId, current, null, 'before-first-save');
+          }
+        }
+        const versions = listPolicyVersions(requestTenantId).map((v) => ({ ...v, current: v.sha256 === currentSha }));
+        writeJson(res, 200, available({ versions, policyPath }));
+        return;
+      }
+
+      if (url.startsWith('/api/policy/history/') && method === 'GET') {
+        setCors();
+        const id = decodeURIComponent(url.slice('/api/policy/history/'.length));
+        const { readPolicyVersion } = await import('./dashboard-settings-store.js');
+        const version = readPolicyVersion(requestTenantId, id);
+        if (!version) {
+          writeJson(res, 404, { error: 'No saved policy version with that id' });
+          return;
+        }
+        writeJson(res, 200, available({ ...version.meta, yaml: version.yaml }));
+        return;
+      }
+
+      if (url === '/api/cost/budget' && method === 'GET') {
+        setCors();
+        const { readCostBudget } = await import('./dashboard-settings-store.js');
+        writeJson(res, 200, available({ ...readCostBudget(requestTenantId) }));
+        return;
+      }
+
+      if (url === '/api/cost/budget' && method === 'PUT') {
+        setCors();
+        const body = await readBody(req);
+        const raw = body.monthlyUsd;
+        const monthlyUsd = raw === null || raw === '' || raw === undefined ? null : Number(raw);
+        try {
+          const { writeCostBudget } = await import('./dashboard-settings-store.js');
+          const saved = writeCostBudget(
+            requestTenantId,
+            { monthlyUsd, alertAtPct: Number(body.alertAtPct) },
+            authResult.identity || null,
+          );
+          writeJson(res, 200, available({ ...saved }));
+        } catch (err) {
+          writeJson(res, 400, { error: err instanceof Error ? err.message : 'Invalid budget' });
+        }
         return;
       }
 
@@ -1548,9 +1658,12 @@ export async function startDashboardServer(
       if (url === '/api/policy/test' && method === 'POST') {
         setCors();
         const body = await readBody(req);
-        const { policyTestRequest, runPolicyTest } = await import('../cli/policy-test.js');
+        const { policyTestRequest, runPolicyTest, runPolicyResultTest } = await import('../cli/policy-test.js');
         const policyPath = process.env['MASTYF_AI_POLICY_PATH'] || 'default-policy.yaml';
-        const result = runPolicyTest(policyTestRequest(body, policyPath));
+        const opts = policyTestRequest(body, policyPath);
+        const result = opts.result !== undefined
+          ? await runPolicyResultTest({ ...opts, result: opts.result })
+          : runPolicyTest(opts);
         writeJson(res, 200, result);
         return;
       }
@@ -2171,7 +2284,7 @@ export async function startDashboardServer(
       if (url === '/metrics') {
         setCors();
         if (auth.requiresAuthentication() && process.env['DASHBOARD_METRICS_PUBLIC'] !== 'true') {
-          const metricsAuth = auth.authenticate({ url, headers: req.headers, method });
+          const metricsAuth = await auth.authenticateAsync({ url, headers: req.headers, method });
           if (!metricsAuth.authenticated) {
             writeJson(res, 401, { error: 'Authentication required for metrics' });
             return;
@@ -3247,10 +3360,17 @@ export async function startDashboardServer(
           const pricingModel = active
             ? `${active.displayName} (${active.source})`
             : 'per-call stored rates';
-          const budgetUsd = parseCostBudgetUsd();
+          const { readCostBudget, budgetForWindow } = await import('./dashboard-settings-store.js');
+          const budget = readCostBudget(requestTenantId);
+          const budgetUsd = budgetForWindow(budget.monthlyUsd, windowDays);
           const budgetAlerts: string[] = [];
-          if (budgetUsd != null && totalCost != null && totalCost > budgetUsd) {
-            budgetAlerts.push(`Spend $${totalCost.toFixed(4)} exceeds budget $${budgetUsd.toFixed(2)}`);
+          if (budgetUsd != null && totalCost != null) {
+            const pct = (totalCost / budgetUsd) * 100;
+            if (pct >= 100) {
+              budgetAlerts.push(`Spend $${totalCost.toFixed(4)} is over the budget of $${budgetUsd.toFixed(2)} for this period`);
+            } else if (pct >= budget.alertAtPct) {
+              budgetAlerts.push(`Spend is at ${pct.toFixed(0)}% of the budget for this period (alert at ${budget.alertAtPct}%)`);
+            }
           }
           writeJson(res, 200, available({
             serverReports: reps,
@@ -3258,6 +3378,9 @@ export async function startDashboardServer(
             projectedMonthly,
             burnRatePerHour,
             budgetUsd,
+            budgetMonthlyUsd: budget.monthlyUsd,
+            budgetAlertAtPct: budget.alertAtPct,
+            budgetSource: budget.source,
             budgetAlerts,
             pricingModel,
             costCoverage: displayCoverage,
@@ -4113,6 +4236,65 @@ export async function startDashboardServer(
         });
         if (handled) return;
       }
+      if (url === '/api/integrations/status' && method === 'GET') {
+        setCors();
+        // Which outbound integrations are switched on. Read from the environment the exporters and
+        // alerters use; names and booleans only, never a URL, token or password.
+        const env = (k: string) => (process.env[k] ?? '').trim();
+        const on = (k: string) => env(k) === 'true';
+        const { getSlackWebhookUrl, getPagerDutyRoutingKey } = await import('../alerting/alert-env.js');
+        writeJson(res, 200, available({
+          siem: {
+            enabled: on('MASTYF_AI_SIEM_ENABLED') || on('MASTYF_AI_SIEM_EXPORT_ENABLED'),
+            protocol: env('MASTYF_AI_SIEM_PROTOCOL') || env('MASTYF_AI_SIEM_EXPORT_FORMAT') || null,
+            endpointConfigured: Boolean(env('MASTYF_AI_SIEM_ENDPOINT') || env('MASTYF_AI_SIEM_EXPORT_PATH')),
+            connectors: {
+              splunk: on('MASTYF_AI_SIEM_SPLUNK_ENABLED'),
+              elastic: on('MASTYF_AI_SIEM_ELASTIC_ENABLED'),
+              otel: on('MASTYF_AI_SIEM_OTEL_ENABLED'),
+              file: on('MASTYF_AI_SIEM_EXPORT_ENABLED'),
+            },
+          },
+          alerts: {
+            slack: Boolean(getSlackWebhookUrl()),
+            pagerduty: Boolean(getPagerDutyRoutingKey()),
+            generic: Boolean(env('ALERT_GENERIC_WEBHOOK')),
+          },
+        }));
+        return;
+      }
+
+      if (url === '/api/agents/inventory' && method === 'GET') {
+        setCors();
+        const { scanAgentInventory } = await import('../auto-discovery/agent-inventory.js');
+        writeJson(res, 200, available({ ...scanAgentInventory() }));
+        return;
+      }
+
+      // The protection switch (src/connect/protection.ts). Turning it on edits the MCP settings of the
+      // agents on this machine, so it is admin-only; turning it off restores them.
+      if (url === '/api/protection' && (method === 'GET' || method === 'POST')) {
+        setCors();
+        const { getProtectionService } = await import('../connect/protection.js');
+        const { resolveMastyfAiInstallRoot } = await import('./mastyf-ai-package-root.js');
+        const protection = getProtectionService(resolveMastyfAiInstallRoot());
+        try {
+          if (method === 'GET') {
+            writeJson(res, 200, available({ ...protection.status() }));
+            return;
+          }
+          const body = await readBody(req);
+          if (typeof body.enabled !== 'boolean') {
+            writeJson(res, 400, { error: 'enabled must be true or false' });
+            return;
+          }
+          writeJson(res, 200, available({ ...(body.enabled ? protection.enable() : protection.disable()) }));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
+
       if (url === '/api/onboarding/status' && method === 'GET') {
         setCors();
         const { getOnboardingStatus } = await import('./server-registry.js');
@@ -5958,6 +6140,15 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
       return;
     }
     server.listen(port, bindHost, () => {
+      // Resume watching if the user left protection on. Never in tests: it edits real agent settings.
+      if (!process.env.VITEST && process.env.NODE_ENV !== 'test') {
+        void import('../connect/protection.js')
+          .then(async ({ getProtectionService }) => {
+            const { resolveMastyfAiInstallRoot } = await import('./mastyf-ai-package-root.js');
+            getProtectionService(resolveMastyfAiInstallRoot()).start();
+          })
+          .catch((err: unknown) => Logger.warn(`[protection] not started: ${err instanceof Error ? err.message : String(err)}`));
+      }
       server.removeListener('error', onError);
       Logger.info(`[dashboard] Listening on http://${bindHost}:${port}/ (set DASHBOARD_BIND=0.0.0.0 to expose)`);
       resolve(port);

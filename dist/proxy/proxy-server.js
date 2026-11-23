@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawnUpstream } from '../utils/spawn-upstream.js';
 import { createInterface } from 'readline';
 import { randomUUID } from 'crypto';
 import { TokenCounter, countAudioTokensInPayload, countImageTokensInPayload, extractModelFromPayload, } from '../utils/token-counter.js';
@@ -18,6 +18,7 @@ import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
 import { RequestIdLock } from '../utils/request-id-lock.js';
 import { scanMultimodalContent } from '../scanners/multimodal-content-scanner.js';
 import { isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { observeToolResult } from '../extensions/index.js';
 import { inspectToolResponse as sharedInspectToolResponse } from './response-inspection.js';
 import { flowSessionKey, } from '../policy/session-flow-guard.js';
 import { recordSensitiveResponseAccess } from '../policy/session-flow-store.js';
@@ -137,13 +138,31 @@ export class McpProxyServer {
     breakerFor(tenantId = DEFAULT_TENANT_ID) {
         return getCircuitBreaker(tenantId || this.defaultTenantId, this.serverName);
     }
+    spawnFailure = null;
     spawnChild() {
-        this.child = spawn(this.spawnCommand, this.spawnArgs, {
+        const child = spawnUpstream(this.spawnCommand, this.spawnArgs, {
             env: this.spawnEnv,
             stdio: ['pipe', 'pipe', 'pipe'],
         });
+        this.child = child;
         this.child.on('spawn', () => {
+            this.spawnFailure = null;
             this.restartCount = 0; // reset after successful start
+        });
+        // Without a listener, a command that can't start takes the whole proxy down.
+        child.on('error', (err) => {
+            if (child.pid !== undefined && err.code !== 'ENOENT') {
+                Logger.warn(`[proxy:${this.serverName}] Child process error: ${err.message}`);
+                return;
+            }
+            const message = `Upstream MCP server '${this.serverName}' could not start: ${err.message}`;
+            this.spawnFailure = message;
+            this.failAllPendingRequests(-32005, message);
+            Logger.error(`[proxy:${this.serverName}] ${message}`);
+            StructuredLogger.logError({ event: 'proxy_error', serverName: this.serverName, error: message });
+        });
+        child.stdin?.on('error', (err) => {
+            Logger.debug(`[proxy:${this.serverName}] child stdin error: ${err.message}`);
         });
         this.child.on('exit', (code, signal) => {
             if (signal !== 'SIGTERM') {
@@ -250,6 +269,14 @@ export class McpProxyServer {
                     tenantId: reqCtx.tenantId || this.defaultTenantId,
                     spendReservationId: reqCtx.spendReservationId,
                 };
+                if (msg?.result && isResponseScanSkipped()) {
+                    observeToolResult({
+                        tenantId: reqCtx.tenantId,
+                        serverName: this.serverName,
+                        toolName: reqCtx.requestToolName || 'unknown',
+                        result: msg.result,
+                    });
+                }
                 if (msg?.result && !isResponseScanSkipped()) {
                     const inspected = await sharedInspectToolResponse({
                         response: msg,
@@ -470,7 +497,8 @@ export class McpProxyServer {
      * Called when the AI client writes a request to be proxied.
      * Pipeline: Payload guard → Auth → Circuit Breaker → Policy + RBAC → Forward.
      */
-    async handleClientInput(raw) {
+    /** `localStdio` is passed only by the reader of this process's stdin, never by the HTTP relays. */
+    async handleClientInput(raw, source) {
         let requestKey;
         try {
             const peek = JSON.parse(raw);
@@ -491,10 +519,22 @@ export class McpProxyServer {
             catch {
                 // non-JSON handled in processClientInput
             }
-            return runWithExtractedTraceAsync(traceHeaders, () => this.processClientInput(raw));
+            return runWithExtractedTraceAsync(traceHeaders, () => this.processClientInput(raw, source?.localStdio === true));
         }));
     }
-    async processClientInput(inboundRaw) {
+    async processClientInput(inboundRaw, localStdio = false) {
+        if (this.spawnFailure) {
+            // Answer rather than leave the agent waiting on a server that never started.
+            try {
+                const msg = JSON.parse(inboundRaw);
+                if (hasJsonRpcId(msg.id))
+                    this.sendError(msg.id, -32005, this.spawnFailure);
+            }
+            catch {
+                // Non-JSON has nothing to answer
+            }
+            return;
+        }
         let raw = inboundRaw;
         // ── Payload size guard ──────────────────────────────────
         const rawGuard = checkRawPayloadSize(raw);
@@ -515,6 +555,26 @@ export class McpProxyServer {
         const proxyStartTime = Date.now();
         try {
             const msg = JSON.parse(raw);
+            // Every check below inspects one message's method and id. A JSON-RPC batch (an array)
+            // has neither, so it used to be forwarded unchecked, tools/call entries and all.
+            // Refuse it: answer each request in it, forward nothing.
+            if (Array.isArray(msg)) {
+                Logger.warn(`[Proxy] JSON-RPC batch rejected (${msg.length} messages) on ${this.serverName}`);
+                for (const entry of msg) {
+                    if (entry && typeof entry === 'object' && hasJsonRpcId(entry.id)) {
+                        this.sendError(entry.id, -32600, 'Mastyf AI: JSON-RPC batch requests are not supported; send each request on its own');
+                    }
+                }
+                return;
+            }
+            // tools/call is a request. Without an id the policy checks below (which answer by id)
+            // were skipped, yet the call was still forwarded and the tool ran. Drop it.
+            if (msg?.method === 'tools/call' && !hasJsonRpcId(msg.id)) {
+                const toolName = String(msg.params?.name ?? 'unknown');
+                Logger.warn(`[Proxy] tools/call without an id dropped (tool '${toolName}' on ${this.serverName})`);
+                this.recordDeniedCall(toolName, 0, Date.now() - proxyStartTime, 'tools-call-without-id', 'tools/call sent as a notification (no id)');
+                return;
+            }
             let initAuth;
             if (msg.method === 'initialize') {
                 initAuth = OAuthValidator.extractAuthFromMcpMessage(msg);
@@ -529,9 +589,12 @@ export class McpProxyServer {
                     : true,
                 fallbackSessionKey: this.mcpSessionId ?? undefined,
             });
-            if (pre.blocked && hasJsonRpcId(msg.id)) {
-                const err = pre.response.error;
-                this.sendError(msg.id, err?.code ?? -32001, err?.message ?? 'MCP pre-pipeline blocked request');
+            if (pre.blocked) {
+                // A blocked notification has no id to answer, but it must not be forwarded either.
+                if (hasJsonRpcId(msg.id)) {
+                    const err = pre.response.error;
+                    this.sendError(msg.id, err?.code ?? -32001, err?.message ?? 'MCP pre-pipeline blocked request');
+                }
                 return;
             }
             if (!pre.blocked) {
@@ -841,6 +904,8 @@ export class McpProxyServer {
                         tenantId,
                         agentIdentity,
                         idempotencyKey,
+                        meta: msg.params?._meta,
+                        localStdio,
                     }, {
                         policyEngine: engine,
                         db: this.db,

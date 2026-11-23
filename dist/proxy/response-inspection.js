@@ -4,11 +4,13 @@
  * metrics, redaction-meta injection, and block-response generation.
  */
 import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { clipMatch } from './block-evidence.js';
 import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { injectRedactionMeta } from '../utils/redaction-meta.js';
 import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
+import { observeToolResult, recordToolOutput } from '../extensions/index.js';
 /**
  * Inspect a JSON-RPC tool-call response for policy violations, DLP
  * matches, and semantic threats.
@@ -19,6 +21,9 @@ import * as Metrics from '../utils/metrics.js';
 export async function inspectToolResponse(params) {
     const { response, toolName, serverName, requestId, tenantId, policyEngine, transportLabel } = params;
     const result = response.result;
+    // Before anything can return: a redacted reply still reaches the agent, and so does a skipped scan.
+    if (result != null)
+        observeToolResult({ tenantId, sessionId: params.sessionId, serverName, toolName, result });
     if (result == null || isResponseScanSkipped()) {
         return { blocked: false, redacted: false };
     }
@@ -37,9 +42,11 @@ export async function inspectToolResponse(params) {
                 rule: 'result-prompt-injection',
                 requestId: String(requestId),
             });
+            const matched = clipMatch(scan.matchedText);
             return {
                 blocked: true,
                 redacted: false,
+                evidence: { layer: 'answer-check', ...(matched ? { match: matched } : {}), confidence: scan.confidence },
                 blockResponse: {
                     jsonrpc: '2.0',
                     id: requestId,
@@ -125,13 +132,29 @@ export async function inspectToolResponse(params) {
     }
     // --- Handle redaction ----------------------------------------------------
     if (gate.outcome.action === 'redact' && gate.outcome.body) {
+        let parsed;
         try {
-            const parsed = JSON.parse(gate.outcome.body);
-            response.result = injectRedactionMeta(parsed, gate.outcome.redactionReasons);
+            parsed = JSON.parse(gate.outcome.body);
         }
         catch {
-            /* keep upstream body on parse failure */
+            // The redacted text isn't valid any more. Forwarding the original would pass on the very secret
+            // that was found, so the result is blocked instead.
+            return {
+                blocked: true,
+                redacted: false,
+                evidence: { layer: 'answer-check' },
+                blockResponse: {
+                    jsonrpc: '2.0',
+                    id: requestId,
+                    error: {
+                        code: -32002,
+                        message: 'Blocked by Mastyf AI: sensitive data in tool result could not be redacted safely',
+                        data: { rule: 'response-redaction-failed' },
+                    },
+                },
+            };
         }
+        response.result = injectRedactionMeta(parsed, gate.outcome.redactionReasons);
         return { blocked: false, redacted: true, redactionReasons: gate.outcome.redactionReasons };
     }
     // --- Handle block --------------------------------------------------------
@@ -149,19 +172,7 @@ export async function inspectToolResponse(params) {
             },
         };
     }
-    // --- Ingest tool response into DIFC Session Taint Tracker ------------------
-    try {
-        const { globalSessionTaintTracker } = await import('../policy/difc/taint-tracker.js');
-        const sessionKey = `${tenantId || 'default'}:${serverName}`;
-        globalSessionTaintTracker.ingestToolResponse({
-            sessionKey,
-            toolName,
-            output: result,
-        });
-    }
-    catch (err) {
-        Logger.debug(`[${transportLabel}] DIFC taint ingest error: ${String(err)}`);
-    }
+    recordToolOutput({ sessionKey: `${tenantId || 'default'}:${serverName}`, toolName, output: result });
     return { blocked: false, redacted: false };
 }
 //# sourceMappingURL=response-inspection.js.map

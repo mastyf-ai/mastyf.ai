@@ -50,6 +50,12 @@ type Props = {
   canMutate?: boolean;
 };
 
+/** First non-empty line of an error, so a stack trace does not flood the card. */
+function firstLine(text: string | undefined | null): string {
+  const line = (text ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+  return line.length > 220 ? `${line.slice(0, 217)}...` : line;
+}
+
 function formatTime(ts: number): string {
   try {
     return new Date(ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -267,11 +273,17 @@ export function ActivityCenter({
                     <div className="text-sm text-muted">
                       {swarmState.state === 'running' && `Phase: ${swarmState.phaseLabel} (${swarmState.progressPct}%)`}
                       {swarmState.state === 'done' && 'Last analysis completed'}
-                      {swarmState.state === 'failed' && `Failed: ${swarmState.error || 'unknown'}`}
+                      {swarmState.state === 'failed' && 'Last analysis failed'}
                       {swarmState.state === 'idle' && 'Ready'}
                     </div>
                   )}
                 </div>
+                {swarmState?.state === 'failed' && (
+                  <details className="swarm-error mt-3">
+                    <summary>{firstLine(swarmState.error) || 'No error message was recorded.'}</summary>
+                    {swarmState.error && swarmState.error.includes('\n') && <pre className="code-block">{swarmState.error}</pre>}
+                  </details>
+                )}
                 {swarmLatest?.findings && swarmLatest.findings.length > 0 && (
                   <div className="mt-3">
                     <p className="font-semibold text-sm mb-1">Latest findings</p>

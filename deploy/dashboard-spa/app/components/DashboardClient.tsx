@@ -44,6 +44,7 @@ import type { AuthStatus } from '@/lib/mastyf-ai-api';
 import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
 
 import { ExecutiveDashboard } from './dashboard/ExecutiveDashboard';
+import { ShieldHome } from './home/ShieldHome';
 import { ActivityCenter } from './operations/ActivityCenter';
 import { SecurityOperationsCenter } from './operations/SecurityOperationsCenter';
 import { PolicyControlCenter } from './operations/PolicyControlCenter';
@@ -107,7 +108,8 @@ export function DashboardClient() {
   const pollFailuresRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
 
-  const ws = useDashboardWs(ready, sessionKey);
+  const [signedIn, setSignedIn] = useState(false);
+  const ws = useDashboardWs(ready && signedIn, sessionKey);
   const { toast } = useToast();
   const { windowParam, windowLabel } = useCurrentWindowDays();
   const visualsPollMs = windowLabel === '1h' ? 10_000 : REST_POLL_MS;
@@ -144,31 +146,32 @@ export function DashboardClient() {
 
   const refreshAll = useCallback(async () => {
     try {
-      const [auditRes, metricsRes, costRes, secRes, healthRes, fleetRes, authRes] =
-        await Promise.all([
-          fetchAudit({ windowParam, limit: 100, action: auditAction || undefined, server: auditServer || undefined }),
-          fetchAggregateMetrics(windowParam),
-          fetchCost(windowParam),
-          fetchSecurity(),
-          fetchHealth(),
-          fetchFleetInstances(),
-          fetchAuthStatus(),
-        ]);
-      if (authRes) { setAuthStatus(authRes); if (authRes.roles) setRoles(authRes.roles); }
-      if (auditRes) setAudit(auditRes);
-      if (metricsRes) setMetrics(metricsRes);
-      if (costRes) setCost(costRes);
-      if (secRes) setSecurity(secRes);
-      if (healthRes) setHealth(healthRes);
-      setFleetMeta(fleetRes);
+      // Nothing to load until someone is signed in; the sign-in screen handles that state.
+      const authRes = await fetchAuthStatus();
+      setAuthStatus(authRes);
+      if (authRes.roles) setRoles(authRes.roles);
+      if (authRes.authRequired && !authRes.authenticated && authRes.authConfigured) return;
+      // Each result is shown as soon as it arrives, so one slow endpoint (the security scan can
+      // take a while) never holds back the request numbers. A failed call counts as "no data".
+      const settle = <T,>(p: Promise<T>, apply: (v: T) => void): Promise<T | null> =>
+        p.then((v) => { apply(v); return v; }).catch(() => null);
+      const core = Promise.all([
+        settle(fetchAudit({ windowParam, limit: 100, action: auditAction || undefined, server: auditServer || undefined }), (v) => { if (v) setAudit(v); }),
+        settle(fetchAggregateMetrics(windowParam), (v) => { if (v) setMetrics(v); }),
+        settle(fetchCost(windowParam), (v) => { if (v) setCost(v); }),
+      ]);
+      void settle(fetchSecurity(), (v) => { if (v) setSecurity(v); });
+      void settle(fetchHealth(), (v) => { if (v) setHealth(v); });
+      void settle(fetchFleetInstances(), (v) => setFleetMeta(v));
+      const [auditRes, metricsRes, costRes] = await core;
 
       if (!auditRes && !metricsRes && !costRes) {
         pollFailuresRef.current += 1;
-        if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) { setApiUnreachable(true); applyStatus('API unavailable — check proxy on :4000', true); }
+        if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) { setApiUnreachable(true); applyStatus('Not connected: the Mastyf service on port 4000 is not answering', true); }
       } else {
         pollFailuresRef.current = 0;
         setApiUnreachable(false);
-        applyStatus('Connected — live data from proxy', false);
+        applyStatus(`Connected. Data refreshed ${new Date().toLocaleTimeString()}`, false);
         setRefreshTick(t => t + 1);
       }
     } catch { pollFailuresRef.current += 1; if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) setApiUnreachable(true); }
@@ -193,11 +196,11 @@ export function DashboardClient() {
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !signedIn) return;
     void refreshAll();
     const interval = window.setInterval(() => void refreshAll(), REST_POLL_MS);
     return () => window.clearInterval(interval);
-  }, [ready, sessionKey, refreshAll]);
+  }, [ready, signedIn, sessionKey, refreshAll]);
 
   if (!ready) return <DashboardShell />;
 
@@ -215,12 +218,13 @@ export function DashboardClient() {
     </>
   );
 
-  const statusBar = (
+  // Only shown when there is something to report: a connection problem or an action's result.
+  const statusBar = statusIsError || statusMsg ? (
     <span className={statusIsError ? 'text-danger' : ''}>
-      {status}
-      {statusMsg && <span className="text-info" style={{ marginLeft: 12 }}>{statusMsg}</span>}
+      {statusIsError ? status : null}
+      {statusMsg && <span className="text-info" style={{ marginLeft: statusIsError ? 12 : 0 }}>{statusMsg}</span>}
     </span>
-  );
+  ) : null;
 
   const openThreatLab = (ctx: ThreatLabContext) => {
     setThreatLabContext(ctx);
@@ -240,7 +244,7 @@ export function DashboardClient() {
   };
 
   return (
-    <LoginGate onAuthenticated={() => setSessionKey(k => k + 1)}>
+    <LoginGate onAuthenticated={() => setSessionKey(k => k + 1)} onSession={setSignedIn}>
       <DashboardWindowProvider>
         <DashboardRegionProvider>
           <VisualsProvider refreshKey={refreshTick} pollMs={visualsPollMs}>
@@ -252,7 +256,6 @@ export function DashboardClient() {
               statusBar={statusBar}
               connection={connection}
               wsConnected={ws.connected}
-              wsEventCount={ws.entries.length}
               onRefresh={() => void refreshAll()}
               onDownloadReport={undefined}
               reportLoading={reportLoading}
@@ -260,14 +263,27 @@ export function DashboardClient() {
               {apiUnreachable && (
                 <div className="banner banner-warning" role="status">
                   <div className="banner-content">
-                    <div className="banner-title">API Unreachable</div>
-                    <div>mastyf.ai API not reachable. Ensure the proxy is running on port 4000 with DASHBOARD_ENABLED=true.</div>
+                    <div className="banner-title">The Mastyf service is not answering</div>
+                    <div>Start it from the Mastyf folder with <code>pnpm dashboard:proxy</code>, then refresh this page. The dashboard reads from it on port 4000.</div>
                   </div>
                 </div>
               )}
 
               {/* DASHBOARD */}
               {workspace === 'dashboard' && (
+                <ShieldHome
+                  metrics={metrics}
+                  loaded={refreshTick > 0}
+                  fleet={fleetMeta}
+                  health={health}
+                  connection={connection}
+                  refreshKey={refreshTick}
+                  onNavigate={(ws, view) => navigate(ws, view)}
+                />
+              )}
+
+              {/* ENGINEERING / DASHBOARD: the full executive overview */}
+              {workspace === 'overview' && (
                 <ExecutiveDashboard
                   refreshKey={refreshTick}
                   onNavigateAdvanced={(ws, view) => navigate(ws as WorkspaceId, view)}

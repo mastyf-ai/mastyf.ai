@@ -22,7 +22,9 @@ export declare class StdioConnectionPool {
     start(): Promise<void>;
     getPrimary(): McpProxyServer;
     /** Round-robin handleClientInput across pool workers. */
-    handleClientInput(raw: string): Promise<void>;
+    handleClientInput(raw: string, source?: {
+        localStdio?: boolean;
+    }): Promise<void>;
     kill(): void;
 }
 //# sourceMappingURL=stdio-connection-pool.d.ts.map

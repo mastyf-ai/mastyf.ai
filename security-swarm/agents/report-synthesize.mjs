@@ -167,8 +167,10 @@ export function synthesizeReport(input) {
   const scout = load(join(OUT_DIR, 'scout.json'));
   const vulnDiscovery = load(join(OUT_DIR, 'vuln-discovery.json'));
   const corpus = load(join(REPO, 'corpus-eval-report.json'));
-  const parity = load(join(REPO, 'adversarial-harness', 'reports', 'parity-report.json'));
-  const harness = load(join(REPO, 'adversarial-harness', 'reports', 'harness-summary.json'));
+  // An analysis run does not execute the parity harness, so older reports must not be read as its result.
+  const analysis = mode === 'analysis';
+  const parity = analysis ? null : load(join(REPO, 'adversarial-harness', 'reports', 'parity-report.json'));
+  const harness = analysis ? null : load(join(REPO, 'adversarial-harness', 'reports', 'harness-summary.json'));
   const promotions = load(join(OUT_DIR, 'evasion-promotions.json'));
   const proxyTierBenchmarks = readProxyTierBenchmarks();
 
@@ -203,7 +205,7 @@ export function synthesizeReport(input) {
     (parity.agreementRate ?? 0) >= (gates.parity?.minOverallAgreementRate ?? 0.97);
   const stepsOk = steps.every((s) => s.ok !== false);
 
-  const harnessReport = load(join(REPO, 'adversarial-harness', 'reports', 'test_harness_report.json'));
+  const harnessReport = analysis ? null : load(join(REPO, 'adversarial-harness', 'reports', 'test_harness_report.json'));
 
   const bypasses = [];
   if (parity?.mismatches) {
@@ -281,7 +283,16 @@ export function synthesizeReport(input) {
       summary: `${netNew.length} net-new bypass(es) vs baseline manifest`,
     });
   }
-  if (corpus && !corpusOk) {
+  if (analysis && corpus) {
+    for (const cat of corpus.byCategory ?? []) {
+      if (cat.fn > 0) {
+        findings.push({ severity: 'medium', source: 'attack corpus', summary: `${cat.fn} of ${cat.tp + cat.fn} ${cat.category} attacks got past your rules` });
+      }
+      if (cat.fp > 0) {
+        findings.push({ severity: 'medium', source: 'attack corpus', summary: `${cat.fp} harmless ${cat.category} calls were blocked` });
+      }
+    }
+  } else if (corpus && !corpusOk) {
     findings.push({
       severity: 'critical',
       source: 'corpus',
@@ -321,7 +332,7 @@ export function synthesizeReport(input) {
     },
     gates: {
       corpus: corpusOk,
-      parity: parityOk,
+      ...(analysis ? {} : { parity: parityOk }),
       steps: stepsOk,
       scout: scout?.ok ?? scout?.audit?.ok ?? true,
       vulnDiscovery: vulnOk,
@@ -339,7 +350,7 @@ export function synthesizeReport(input) {
     performance: {
       tiers: proxyTierBenchmarks,
     },
-    overall: corpusOk && parityOk && stepsOk && bypassGateOk && vulnOk,
+    overall: corpusOk && (analysis || parityOk) && stepsOk && bypassGateOk && vulnOk,
     steps,
     scout,
     vulnDiscovery: vulnDiscovery
