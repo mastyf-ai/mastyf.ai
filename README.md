@@ -4,19 +4,16 @@
 </picture>
 
 <p align="center">
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/mastyf-ai/mastyf.ai/ci.yml?branch=main&style=flat-square&label=CI&labelColor=151518"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/corpus-eval.yml"><img alt="Attack corpus" src="https://img.shields.io/github/actions/workflow/status/mastyf-ai/mastyf.ai/corpus-eval.yml?style=flat-square&label=attack%20corpus&labelColor=151518"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://img.shields.io/github/actions/workflow/status/mastyf-ai/mastyf.ai/codeql.yml?style=flat-square&label=CodeQL&labelColor=151518"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/gitleaks.yml"><img alt="Secret scan" src="https://img.shields.io/github/actions/workflow/status/mastyf-ai/mastyf.ai/gitleaks.yml?style=flat-square&label=secret%20scan&labelColor=151518"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-b49a5e?style=flat-square&labelColor=151518"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/blob/main/package.json"><img alt="Version" src="https://img.shields.io/github/package-json/v/mastyf-ai/mastyf.ai?style=flat-square&label=version&color=b49a5e&labelColor=151518"></a>
+  <a href="#free-and-shield"><img alt="Free, no account needed" src="https://img.shields.io/badge/free-no%20account%20needed-b49a5e?style=flat-square&labelColor=151518"></a>
+  <a href="#quick-start"><img alt="Runs on Windows, macOS and Linux" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-5c5c56?style=flat-square&labelColor=151518"></a>
+  <a href="#connect-your-agents"><img alt="Protects Claude Code, Cursor, VS Code and more" src="https://img.shields.io/badge/protects-Claude%20Code%20%C2%B7%20Cursor%20%C2%B7%20VS%20Code%20%C2%B7%20more-5c5c56?style=flat-square&labelColor=151518"></a>
+  <a href="https://doi.org/10.5281/zenodo.22179415"><img alt="Paper DOI" src="https://img.shields.io/badge/paper-10.5281%2Fzenodo.22179415-5c5c56?style=flat-square&labelColor=151518"></a>
   <br>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/mastyf-ai/mastyf.ai?style=flat-square&color=b49a5e&labelColor=151518"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/mastyf-ai/mastyf.ai?style=flat-square&color=b49a5e&labelColor=151518"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/graphs/commit-activity"><img alt="Commits per month" src="https://img.shields.io/github/commit-activity/m/mastyf-ai/mastyf.ai?style=flat-square&color=b49a5e&labelColor=151518"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/mastyf-ai/mastyf.ai?style=flat-square&color=5c5c56&labelColor=151518"></a>
-  <img alt="Runs on Windows, macOS and Linux" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-5c5c56?style=flat-square&labelColor=151518">
-  <a href="https://doi.org/10.5281/zenodo.22179415"><img alt="DOI" src="https://img.shields.io/badge/paper-10.5281%2Fzenodo.22179415-5c5c56?style=flat-square&labelColor=151518"></a>
+  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/corpus-eval.yml"><img alt="Attack corpus" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/corpus-eval.yml/badge.svg"></a>
+  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/codeql.yml/badge.svg"></a>
+  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/gitleaks.yml"><img alt="Secret scan" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/gitleaks.yml/badge.svg"></a>
 </p>
 
 <p align="center">
@@ -301,31 +298,10 @@ Below the playground, pick an everyday task (summarize a web page, debug a confi
 
 ## Results
 
-<table>
-  <tr>
-    <td width="50%">
-
-```mermaid
-xychart-beta
-  title "AgentDojo: attacks that succeeded (%)"
-  x-axis ["No defense", "With Protocol X"]
-  y-axis "Succeeded (%)" 0 --> 30
-  bar [25, 0]
-```
-
-</td>
-    <td width="50%">
-
-```mermaid
-pie showData
-  title Free rules alone, 293 corpus attacks
-  "Blocked" : 285
-  "Missed" : 8
-```
-
-</td>
-  </tr>
-</table>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/results-dark.svg">
+  <img alt="AgentDojo: 25% of attacks succeeded with no defense, 0% with Protocol X. Free rules alone on the corpus: 285 of 293 attacks blocked (97.3%), 8 missed, 79 of 79 harmless calls allowed." src="docs/assets/readme/results-light.svg" width="100%">
+</picture>
 
 | Measure | Result | Source |
 |---------|--------|--------|

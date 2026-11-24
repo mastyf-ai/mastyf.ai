@@ -276,6 +276,55 @@ def architecture(t, logo):
     return svg(W, H, 'Where Mastyf sits', 'Agents such as Claude Code, Cursor and VS Code start their MCP servers through the Mastyf proxy, which checks every call with your rules, an optional model and a result check, then forwards allowed calls. Decisions go to history.db, read by the dashboard, Threat Lab and the Security Swarm.', '\n'.join(out), style)
 
 
+# ── Results charts ──────────────────────────────────────────────────────────────────────────────
+def results(t):
+    """Left: AgentDojo attacker success without and with Protocol X. Right: the free rules on the local corpus."""
+    W, H = 1280, 380
+    style = """.grow{transform-box:fill-box;transform-origin:bottom;animation:grow 1.1s cubic-bezier(.16,1,.3,1) both}
+@keyframes grow{from{transform:scaleY(0)}}
+.ring{animation:ring 1.4s cubic-bezier(.16,1,.3,1) both}
+@media (prefers-reduced-motion: reduce){.grow,.ring{animation:none}}"""
+    out = [f'<rect width="{W}" height="{H}" rx="18" fill="{t["bg"]}"/>']
+    # Left panel
+    out.append(f'<rect x="24" y="24" width="604" height="332" rx="16" fill="{t["card"]}" stroke="{t["rule"]}"/>')
+    out.append(text(48, 66, 'AgentDojo: attacks that succeeded', 20, t['ink'], weight=700))
+    out.append(text(48, 92, '249 attacked cases, from the paper', 14, t['dim']))
+    base, top = 312, 128
+    scale = (base - top) / 30  # 0 to 30 %
+    for v in (0, 10, 20, 30):
+        y = base - v * scale
+        out.append(f'<line x1="96" y1="{y:.1f}" x2="600" y2="{y:.1f}" stroke="{t["rule"]}" stroke-dasharray="{"0" if v == 0 else "3 5"}"/>')
+        out.append(text(84, round(y + 5, 1), f'{v}%', 13, t['dim'], anchor='end'))
+    bars = [('No defense', 25, t['block']), ('With Protocol X', 0, t['allow'])]
+    for i, (label, v, c) in enumerate(bars):
+        x = 160 + i * 230
+        h = max(v * scale, 3)
+        out.append(f'<rect class="grow" style="animation-delay:{0.2 + i * 0.15:.2f}s" x="{x}" y="{base - h:.1f}" width="120" height="{h:.1f}" rx="6" fill="{c}"/>')
+        out.append(text(x + 60, round(base - h - 12, 1), f'{v}%', 26, c, weight=800, anchor='middle'))
+        out.append(text(x + 60, base + 30, label, 15, t['body'], anchor='middle'))
+    # Right panel: donut
+    out.append(f'<rect x="652" y="24" width="604" height="332" rx="16" fill="{t["card"]}" stroke="{t["rule"]}"/>')
+    out.append(text(676, 66, 'Free rules alone, on the attack corpus', 20, t['ink'], weight=700))
+    out.append(text(676, 92, 'corpus/run-eval.ts on this repository, no model', 14, t['dim']))
+    cx, cy, r = 800, 222, 86
+    import math
+    circ = 2 * math.pi * r
+    blocked = 285 / 293
+    out.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{t["block"]}" stroke-opacity=".85" stroke-width="26"/>')
+    out.append(f'<style>@keyframes ring{{from{{stroke-dashoffset:{circ:.1f}}}}}</style>')
+    out.append(f'<circle class="ring" cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{t["allow"]}" stroke-width="26" '
+               f'stroke-dasharray="{circ * blocked:.1f} {circ:.1f}" transform="rotate(-90 {cx} {cy})"/>')
+    out.append(text(cx, cy + 4, '97.3%', 30, t['ink'], weight=800, anchor='middle'))
+    out.append(text(cx, cy + 28, 'blocked', 14, t['dim'], anchor='middle'))
+    rows = [(t['allow'], '285 attacks blocked', 'of 293 in the corpus'), (t['block'], '8 attacks missed', 'deserialization and edge cases'), (t['gold'], '79 of 79 harmless calls', 'allowed, no false positives')]
+    for i, (c, a, b) in enumerate(rows):
+        y = 162 + i * 58
+        out.append(f'<circle cx="942" cy="{y - 5}" r="7" fill="{c}"/>')
+        out.append(text(960, y, a, 17, t['ink'], weight=600))
+        out.append(text(960, y + 22, b, 14, t['dim']))
+    return svg(W, H, 'Results', 'AgentDojo: 25% of attacks succeeded with no defense and 0% with Protocol X. Free rules alone on the corpus: 285 of 293 attacks blocked (97.3%), 8 missed, 79 of 79 harmless calls allowed.', '\n'.join(out), style)
+
+
 def main():
     for name, t in THEMES.items():
         logo = mark_png(t['ink'])
@@ -284,6 +333,7 @@ def main():
             f'stats-{name}.svg': stats(t),
             f'decide-{name}.svg': decide(t),
             f'architecture-{name}.svg': architecture(t, logo),
+            f'results-{name}.svg': results(t),
         }
         for fn, body in files.items():
             with open(os.path.join(HERE, fn), 'w', encoding='utf-8', newline='\n') as fh:
