@@ -7,5 +7,5 @@ contact_links:
     url: https://github.com/mastyf-ai/mastyf.ai/discussions
     about: Questions, setup help and early ideas go in Discussions.
   - name: Send us a review or feedback
-    url: mailto:mastyf.support@gmail.com
-    about: Tried Mastyf? Tell us what worked, what broke, and what you want it to catch next.
+    url: https://github.com/mastyf-ai/mastyf.ai/blob/main/CONTRIBUTING.md#reviews-and-feedback
+    about: Tried Mastyf? Email your review to mastyf.support@gmail.com. What worked, what broke, and what you want it to catch next.
