@@ -32,6 +32,7 @@ import {
 } from './auth-middleware.js';
 import { AUDIT_ACTIONS } from './rbac-types.js';
 import { Logger } from '../utils/logger.js';
+import { createAttemptLimiter } from './attempt-limiter.js';
 
 const DEFAULT_TENANT = 'default';
 
@@ -140,6 +141,9 @@ const settingsSchema = z.object({
 });
 
 export function registerAuthRoutes(app: Express): void {
+  // 20 tries per 15 minutes per address for sign-in and first-run setup.
+  const attempts = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
+
   // ── Setup ──────────────────────────────────────────────────────────────
 
   app.get('/api/auth/setup/status', async (req: Request, res: Response) => {
@@ -148,7 +152,7 @@ export function registerAuthRoutes(app: Express): void {
     res.json({ setupRequired: !complete });
   });
 
-  app.post('/api/auth/setup', async (req: Request, res: Response) => {
+  app.post('/api/auth/setup', attempts, async (req: Request, res: Response) => {
     const tenantId = getTenantId(req);
     try {
       if (await setupState.isComplete(tenantId)) {
@@ -452,9 +456,9 @@ export function registerAuthRoutes(app: Express): void {
     }
   }
 
-  app.post('/api/auth/login', loginHandler);
+  app.post('/api/auth/login', attempts, loginHandler);
   // Back-compat alias — the SPA's existing loginDashboard() calls /api/login.
-  app.post('/api/login', loginHandler);
+  app.post('/api/login', attempts, loginHandler);
 
   async function logoutHandler(req: Request, res: Response): Promise<void> {
     try {
