@@ -8,6 +8,7 @@ import {
   filterRelatedMonitorThreats,
   filterVisibleMonitorThreats,
   threatDisplayFingerprint,
+  threatSource,
   type SecurityThreatRow,
 } from '../../src/utils/security-dashboard.js';
 import {
@@ -21,6 +22,22 @@ describe('buildSecurityDashboard', () => {
     expect(payload.available).toBe(false);
     expect(payload.threats).toEqual([]);
     expect(payload.layers).toHaveLength(4);
+  });
+});
+
+describe('threatSource', () => {
+  it('names the real server and tool the threat came through', () => {
+    expect(threatSource('files', 'read_text_file')).toBe('files · read_text_file');
+  });
+
+  it('never makes up a network address', () => {
+    for (const [server, tool] of [['files', 'read_text_file'], ['github', 'create_issue'], ['db', '']]) {
+      expect(threatSource(server, tool)).not.toMatch(/\b\d{1,3}(?:\.\d{1,3}){3}\b/);
+    }
+  });
+
+  it('falls back to the server alone when the tool is unknown', () => {
+    expect(threatSource('files', '')).toBe('files');
   });
 });
 
@@ -46,7 +63,7 @@ describe('filterVisibleMonitorThreats', () => {
       id: 'THR-1',
       threatKey: 'block:fs:read:2026-07-03 10:55:17',
       type: 'Semantic Prompt Injection',
-      source: '10.13.195.218',
+      source: 'files · read_text_file',
       severity: 'critical',
       status: 'blocked',
     };
@@ -54,7 +71,7 @@ describe('filterVisibleMonitorThreats', () => {
       id: 'THR-2',
       threatKey: 'block:fs:read:2026-07-03 10:55:19',
       type: 'Semantic Prompt Injection',
-      source: '10.13.195.218',
+      source: 'files · read_text_file',
       severity: 'critical',
       status: 'blocked',
     };
@@ -73,7 +90,7 @@ describe('filterRelatedMonitorThreats', () => {
     id: 'THR-1',
     threatKey: 'block:fs:read:2026-07-01 10:55:17',
     type: 'Semantic Prompt Injection',
-    source: '10.13.195.218',
+    source: 'files · read_text_file',
     severity: 'critical',
     status: 'blocked',
   };
@@ -81,7 +98,7 @@ describe('filterRelatedMonitorThreats', () => {
     id: 'THR-2',
     threatKey: 'block:fs:read:2026-07-03 10:55:19',
     type: 'Semantic Prompt Injection',
-    source: '10.13.195.218',
+    source: 'files · read_text_file',
     severity: 'critical',
     status: 'blocked',
   };
@@ -89,7 +106,7 @@ describe('filterRelatedMonitorThreats', () => {
     id: 'THR-3',
     threatKey: 'block:db:query:2026-07-03 10:55:19',
     type: 'SQL Injection Attempt',
-    source: '10.1.2.3',
+    source: 'files · write_file',
     severity: 'high',
     status: 'blocked',
   };
@@ -117,7 +134,7 @@ describe('collectBulkQuarantineTargets', () => {
         id: 'THR-1',
         threatKey: 'semantic:a',
         type: 'Semantic Prompt Injection',
-        source: '10.1.1.1',
+        source: 'github · create_issue',
         severity: 'critical',
         status: 'blocked',
       },
@@ -128,7 +145,7 @@ describe('collectBulkQuarantineTargets', () => {
         id: 'THR-2',
         threatKey: 'semantic:b',
         type: 'Semantic Prompt Injection',
-        source: '10.1.1.1',
+        source: 'github · create_issue',
         severity: 'critical',
         status: 'blocked',
       },
@@ -136,7 +153,7 @@ describe('collectBulkQuarantineTargets', () => {
         id: 'THR-3',
         threatKey: 'block:other',
         type: 'SQL Injection Attempt',
-        source: '10.2.2.2',
+        source: 'db · query',
         severity: 'high',
         status: 'blocked',
       },
