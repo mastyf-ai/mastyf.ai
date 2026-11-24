@@ -325,7 +325,34 @@ def results(t):
     return svg(W, H, 'Results', 'AgentDojo: 25% of attacks succeeded with no defense and 0% with Protocol X. Free rules alone on the corpus: 285 of 293 attacks blocked (97.3%), 8 missed, 79 of 79 harmless calls allowed.', '\n'.join(out), style)
 
 
+# ── Badges ──────────────────────────────────────────────────────────────────────────────────────
+# Kept in the repository: GitHub's image proxy often times out fetching shields.io badges.
+BADGES = {
+    'license': ('license', 'AGPL-3.0', '#b49a5e'),
+    'free': ('free', 'no account needed', '#b49a5e'),
+    'platforms': ('runs on', 'Windows · macOS · Linux', '#5c5c56'),
+    'agents': ('protects', 'Claude Code · Cursor · VS Code · more', '#5c5c56'),
+    'paper': ('paper', '10.5281/zenodo.22179415', '#5c5c56'),
+}
+
+
+def badge(label, message, colour):
+    cw = 6.6  # average character width at 11px
+    lw = round(len(label) * cw + 14)
+    mw = round(len(message) * cw + 14)
+    w = lw + mw
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20" role="img" aria-label="{esc(label)}: {esc(message)}">'
+            f'<title>{esc(label)}: {esc(message)}</title>'
+            f'<rect width="{lw}" height="20" fill="#151518"/><rect x="{lw}" width="{mw}" height="20" fill="{colour}"/>'
+            f'<g font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" fill="#fff">'
+            f'<text x="{lw / 2}" y="14" text-anchor="middle">{esc(label)}</text>'
+            f'<text x="{lw + mw / 2}" y="14" text-anchor="middle">{esc(message)}</text></g></svg>\n')
+
+
 def main():
+    for name, (label, message, colour) in BADGES.items():
+        with open(os.path.join(HERE, f'badge-{name}.svg'), 'w', encoding='utf-8', newline='\n') as fh:
+            fh.write(badge(label, message, colour))
     for name, t in THEMES.items():
         logo = mark_png(t['ink'])
         files = {

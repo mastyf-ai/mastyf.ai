@@ -4,11 +4,11 @@
 </picture>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-b49a5e?style=flat-square&labelColor=151518"></a>
-  <a href="#free-and-shield"><img alt="Free, no account needed" src="https://img.shields.io/badge/free-no%20account%20needed-b49a5e?style=flat-square&labelColor=151518"></a>
-  <a href="#quick-start"><img alt="Runs on Windows, macOS and Linux" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-5c5c56?style=flat-square&labelColor=151518"></a>
-  <a href="#connect-your-agents"><img alt="Protects Claude Code, Cursor, VS Code and more" src="https://img.shields.io/badge/protects-Claude%20Code%20%C2%B7%20Cursor%20%C2%B7%20VS%20Code%20%C2%B7%20more-5c5c56?style=flat-square&labelColor=151518"></a>
-  <a href="https://doi.org/10.5281/zenodo.22179415"><img alt="Paper DOI" src="https://img.shields.io/badge/paper-10.5281%2Fzenodo.22179415-5c5c56?style=flat-square&labelColor=151518"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="docs/assets/readme/badge-license.svg"></a>
+  <a href="#free-and-shield"><img alt="Free, no account needed" src="docs/assets/readme/badge-free.svg"></a>
+  <a href="#quick-start"><img alt="Runs on Windows, macOS and Linux" src="docs/assets/readme/badge-platforms.svg"></a>
+  <a href="#connect-your-agents"><img alt="Protects Claude Code, Cursor, VS Code and more" src="docs/assets/readme/badge-agents.svg"></a>
+  <a href="https://doi.org/10.5281/zenodo.22179415"><img alt="Paper DOI" src="docs/assets/readme/badge-paper.svg"></a>
   <br>
   <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/corpus-eval.yml"><img alt="Attack corpus" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/corpus-eval.yml/badge.svg"></a>
