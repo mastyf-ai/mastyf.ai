@@ -12,6 +12,7 @@ import { verifyPassword, validatePasswordAgainstPolicy } from './password.js';
 import { requireAuth, requirePermission, setSessionCookies, clearSessionCookies, parseCookies, clientIp, SESSION_COOKIE_NAME, CSRF_COOKIE_NAME, CSRF_HEADER_NAME, } from './auth-middleware.js';
 import { AUDIT_ACTIONS } from './rbac-types.js';
 import { Logger } from '../utils/logger.js';
+import { createAttemptLimiter } from './attempt-limiter.js';
 const DEFAULT_TENANT = 'default';
 function getTenantId(req) {
     return (req.header('x-mastyf-ai-tenant') || req.header('x-tenant-id') || DEFAULT_TENANT).trim() || DEFAULT_TENANT;
@@ -105,13 +106,15 @@ const settingsSchema = z.object({
     allowSelfRegistration: z.boolean().optional(),
 });
 export function registerAuthRoutes(app) {
+    // 20 tries per 15 minutes per address for sign-in and first-run setup.
+    const attempts = createAttemptLimiter({ max: 20, windowMs: 15 * 60 * 1000 });
     // ── Setup ──────────────────────────────────────────────────────────────
     app.get('/api/auth/setup/status', async (req, res) => {
         const tenantId = getTenantId(req);
         const complete = await setupState.isComplete(tenantId);
         res.json({ setupRequired: !complete });
     });
-    app.post('/api/auth/setup', async (req, res) => {
+    app.post('/api/auth/setup', attempts, async (req, res) => {
         const tenantId = getTenantId(req);
         try {
             if (await setupState.isComplete(tenantId)) {
@@ -389,9 +392,9 @@ export function registerAuthRoutes(app) {
             handleError(res, err);
         }
     }
-    app.post('/api/auth/login', loginHandler);
+    app.post('/api/auth/login', attempts, loginHandler);
     // Back-compat alias — the SPA's existing loginDashboard() calls /api/login.
-    app.post('/api/login', loginHandler);
+    app.post('/api/login', attempts, loginHandler);
     async function logoutHandler(req, res) {
         try {
             const cookies = parseCookies(req.headers.cookie);
