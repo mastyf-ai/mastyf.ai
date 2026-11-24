@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="196" viewBox="0 0 1280 196" role="img" aria-labelledby="t d">
+<title id="t">Results</title><desc id="d">99.52% agentdojo: attacks stopped with Protocol X, 629 episodes; 98.43% injecagent: attacks stopped with Protocol X, 4,216 cases; ~1.5 ms per call: median rule check on a laptop CPU; 0 bytes on block: reach the tool when a call is stopped; 285 / 293 free rules: corpus attacks blocked, no harmless call stopped</desc>
+<style>.c{animation:c .8s cubic-bezier(.16,1,.3,1) both}@keyframes c{from{opacity:0;transform:translateY(10px)}}
+@media (prefers-reduced-motion: reduce){.c{animation:none}}</style>
+<g class="c" style="animation-delay:0.00s">
+<rect x="0.0" y="1" width="244.8" height="194" rx="14" fill="#ffffff" stroke="#e4d7c5"/>
+<text x="22.0" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="42" fill="#7a5130" font-weight="800" letter-spacing="-1.5">99.52%</text>
+<text x="24.0" y="104" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#2b1f14" letter-spacing="2">AGENTDOJO</text>
+<text x="24.0" y="146" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">attacks stopped with</text>
+<text x="24.0" y="168" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">Protocol X, 629 episodes</text>
+</g>
+<g class="c" style="animation-delay:0.12s">
+<rect x="258.8" y="1" width="244.8" height="194" rx="14" fill="#ffffff" stroke="#e4d7c5"/>
+<text x="280.8" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="42" fill="#7a5130" font-weight="800" letter-spacing="-1.5">98.43%</text>
+<text x="282.8" y="104" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#2b1f14" letter-spacing="2">INJECAGENT</text>
+<text x="282.8" y="146" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">attacks stopped with</text>
+<text x="282.8" y="168" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">Protocol X, 4,216 cases</text>
+</g>
+<g class="c" style="animation-delay:0.24s">
+<rect x="517.6" y="1" width="244.8" height="194" rx="14" fill="#ffffff" stroke="#e4d7c5"/>
+<text x="539.6" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="42" fill="#7a5130" font-weight="800" letter-spacing="-1.5">~1.5 ms</text>
+<text x="541.6" y="104" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#2b1f14" letter-spacing="2">PER CALL</text>
+<text x="541.6" y="146" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">median rule check</text>
+<text x="541.6" y="168" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">on a laptop CPU</text>
+</g>
+<g class="c" style="animation-delay:0.36s">
+<rect x="776.4" y="1" width="244.8" height="194" rx="14" fill="#ffffff" stroke="#e4d7c5"/>
+<text x="798.4" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="42" fill="#7a5130" font-weight="800" letter-spacing="-1.5">0 bytes</text>
+<text x="800.4" y="104" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#2b1f14" letter-spacing="2">ON BLOCK</text>
+<text x="800.4" y="146" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">reach the tool when</text>
+<text x="800.4" y="168" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">a call is stopped</text>
+</g>
+<g class="c" style="animation-delay:0.48s">
+<rect x="1035.2" y="1" width="244.8" height="194" rx="14" fill="#ffffff" stroke="#e4d7c5"/>
+<text x="1057.2" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="42" fill="#7a5130" font-weight="800" letter-spacing="-1.5">285 / 293</text>
+<text x="1059.2" y="104" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#2b1f14" letter-spacing="2">FREE RULES</text>
+<text x="1059.2" y="146" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">corpus attacks blocked,</text>
+<text x="1059.2" y="168" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" fill="#4f3e2d">no harmless call stopped</text>
+</g>
+</svg>

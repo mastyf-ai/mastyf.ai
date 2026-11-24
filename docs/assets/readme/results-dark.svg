@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="380" viewBox="0 0 1280 380" role="img" aria-labelledby="t d">
+<title id="t">Results</title><desc id="d">AgentDojo: 25% of attacks succeeded with no defense and 0% with Protocol X. Free rules alone on the corpus: 285 of 293 attacks blocked (97.3%), 8 missed, 79 of 79 harmless calls allowed.</desc>
+<style>.grow{transform-box:fill-box;transform-origin:bottom;animation:grow 1.1s cubic-bezier(.16,1,.3,1) both}
+@keyframes grow{from{transform:scaleY(0)}}
+.ring{animation:ring 1.4s cubic-bezier(.16,1,.3,1) both}
+@media (prefers-reduced-motion: reduce){.grow,.ring{animation:none}}</style>
+<rect width="1280" height="380" rx="18" fill="#0a0a0b"/>
+<rect x="24" y="24" width="604" height="332" rx="16" fill="#151518" stroke="#26262a"/>
+<text x="48" y="66" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" fill="#f7f7f3" font-weight="700">AgentDojo: attacks that succeeded</text>
+<text x="48" y="92" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#8f8f88">249 attacked cases, from the paper</text>
+<line x1="96" y1="312.0" x2="600" y2="312.0" stroke="#26262a" stroke-dasharray="0"/>
+<text x="84" y="317.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#8f8f88" text-anchor="end">0%</text>
+<line x1="96" y1="250.7" x2="600" y2="250.7" stroke="#26262a" stroke-dasharray="3 5"/>
+<text x="84" y="255.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#8f8f88" text-anchor="end">10%</text>
+<line x1="96" y1="189.3" x2="600" y2="189.3" stroke="#26262a" stroke-dasharray="3 5"/>
+<text x="84" y="194.3" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#8f8f88" text-anchor="end">20%</text>
+<line x1="96" y1="128.0" x2="600" y2="128.0" stroke="#26262a" stroke-dasharray="3 5"/>
+<text x="84" y="133.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#8f8f88" text-anchor="end">30%</text>
+<rect class="grow" style="animation-delay:0.20s" x="160" y="158.7" width="120" height="153.3" rx="6" fill="#ef6b5b"/>
+<text x="220" y="146.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="26" fill="#ef6b5b" font-weight="800" text-anchor="middle">25%</text>
+<text x="220" y="342" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" fill="#c4c4bc" text-anchor="middle">No defense</text>
+<rect class="grow" style="animation-delay:0.35s" x="390" y="309.0" width="120" height="3.0" rx="6" fill="#7fd28e"/>
+<text x="450" y="297" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="26" fill="#7fd28e" font-weight="800" text-anchor="middle">0%</text>
+<text x="450" y="342" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" fill="#c4c4bc" text-anchor="middle">With Protocol X</text>
+<rect x="652" y="24" width="604" height="332" rx="16" fill="#151518" stroke="#26262a"/>
+<text x="676" y="66" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" fill="#f7f7f3" font-weight="700">Free rules alone, on the attack corpus</text>
+<text x="676" y="92" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#8f8f88">corpus/run-eval.ts on this repository, no model</text>
+<circle cx="800" cy="222" r="86" fill="none" stroke="#ef6b5b" stroke-opacity=".85" stroke-width="26"/>
+<style>@keyframes ring{from{stroke-dashoffset:540.4}}</style>
+<circle class="ring" cx="800" cy="222" r="86" fill="none" stroke="#7fd28e" stroke-width="26" stroke-dasharray="525.6 540.4" transform="rotate(-90 800 222)"/>
+<text x="800" y="226" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="30" fill="#f7f7f3" font-weight="800" text-anchor="middle">97.3%</text>
+<text x="800" y="250" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#8f8f88" text-anchor="middle">blocked</text>
+<circle cx="942" cy="157" r="7" fill="#7fd28e"/>
+<text x="960" y="162" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="17" fill="#f7f7f3" font-weight="600">285 attacks blocked</text>
+<text x="960" y="184" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#8f8f88">of 293 in the corpus</text>
+<circle cx="942" cy="215" r="7" fill="#ef6b5b"/>
+<text x="960" y="220" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="17" fill="#f7f7f3" font-weight="600">8 attacks missed</text>
+<text x="960" y="242" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#8f8f88">deserialization and edge cases</text>
+<circle cx="942" cy="273" r="7" fill="#c4ab70"/>
+<text x="960" y="278" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="17" fill="#f7f7f3" font-weight="600">79 of 79 harmless calls</text>
+<text x="960" y="300" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#8f8f88">allowed, no false positives</text>
+</svg>

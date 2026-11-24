@@ -95,29 +95,29 @@ export function ExecutiveDashboard({ refreshKey, onNavigateAdvanced }: Executive
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [sum, met, heal, sec, cst, aud, ins] = await Promise.all([
-      fetchExecutiveSummary(windowParam).catch(() => null),
-      fetchAggregateMetrics(windowParam).catch(() => null),
-      fetchHealth().catch(() => null),
-      fetchSecurity().catch(() => null),
-      fetchCost(windowParam).catch(() => null),
-      fetchAudit({ windowParam, limit: 20 }).catch(() => null),
-      fetchDashboardInsights('overview', windowParam).catch(() => null),
+    // Each section shows as soon as its own data arrives: one slow request must not hold up the rest.
+    const fill = <T,>(p: Promise<T | null>, set: (v: T) => void) =>
+      p.then((v) => { if (v) set(v); }).catch(() => undefined);
+    const core = Promise.all([
+      fill(fetchExecutiveSummary(windowParam), setSummary),
+      fill(fetchAggregateMetrics(windowParam), setMetrics),
+    ]).then(() => setLoading(false));
+    await Promise.all([
+      core,
+      fill(fetchHealth(), setHealth),
+      fill(fetchSecurity(), setSecurity),
+      fill(fetchCost(windowParam), setCost),
+      fill(fetchAudit({ windowParam, limit: 20 }), setAudit),
+      fill(fetchDashboardInsights('overview', windowParam), setInsights),
     ]);
-    if (sum) setSummary(sum);
-    if (met) setMetrics(met);
-    if (heal) setHealth(heal);
-    if (sec) setSecurity(sec);
-    if (cst) setCost(cst);
-    if (aud) setAudit(aud);
-    if (ins) setInsights(ins);
-    setLoading(false);
   }, [windowParam]);
 
   useEffect(() => {
     void loadData();
   }, [loadData, refreshKey]);
 
+  /** First load still running: show that, not "unavailable" (which means a request failed). */
+  const pending = loading && !metrics && !summary;
   const totalRequests = summary?.totalRequests ?? metrics?.totalRequests ?? 0;
   const blockedRequests = summary?.blockedRequests ?? metrics?.blockedRequests ?? 0;
   const passRate = summary?.passRatePct ?? metrics?.passRate;
@@ -153,13 +153,13 @@ export function ExecutiveDashboard({ refreshKey, onNavigateAdvanced }: Executive
       <div className="kpi-grid">
         <KpiCard
           label="Total Requests"
-          value={unavailableKpiValue(metrics ?? summary, totalRequests)}
+          value={pending ? '…' : unavailableKpiValue(metrics ?? summary, totalRequests)}
           accent="info"
           delta={summary?.comparison?.totalRequests ? {
             value: `${Math.abs(summary.comparison.totalRequests.deltaPct || 0).toFixed(1)}%`,
             direction: summary.comparison.totalRequests.direction,
           } : undefined}
-          secondary={unavailableKpiSecondary(metrics ?? summary, formatWindowSubtitle(windowLabel))}
+          secondary={pending ? 'Loading' : unavailableKpiSecondary(metrics ?? summary, formatWindowSubtitle(windowLabel))}
         >
           {spark?.totalCalls?.length ? (
             <KpiSparkline data={spark.totalCalls} color={CHART_SERIES.accent} ariaLabel="Request trend" />

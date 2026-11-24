@@ -114,7 +114,12 @@ function run(cmd, args, opts = {}) {
 
 function mergeRealLifeSummary(liveReport) {
   const summaryPath = join(SWARM_DIR, 'summary.md');
-  let swarmMd = existsSync(summaryPath) ? readFileSync(summaryPath, 'utf-8') : '';
+  let swarmMd = '';
+  try {
+    swarmMd = readFileSync(summaryPath, 'utf-8');
+  } catch {
+    /* no summary yet */
+  }
   const liveSection = `
 ## Track B — Live official filesystem MCP
 
