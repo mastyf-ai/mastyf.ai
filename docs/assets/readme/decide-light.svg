@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="432" viewBox="0 0 1280 432" role="img" aria-labelledby="t d">
+<title id="t">How one tool call is decided</title><desc id="d">Six steps before a tool call runs: well formed, your rules, model review, forwarded, result checked, recorded.</desc>
+<style>.pulse{animation:run 6s linear infinite}@keyframes run{0%{transform:translateX(0);opacity:0}6%{opacity:1}90%{opacity:1}100%{transform:translateX(1212px);opacity:0}}
+@media (prefers-reduced-motion: reduce){.pulse{animation:none;opacity:0}}</style>
+<rect width="1280" height="432" rx="18" fill="#fbf8f4"/>
+<text x="24" y="46" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#75634f" letter-spacing="3">HOW ONE TOOL CALL IS DECIDED · BEFORE IT RUNS</text>
+<line x1="24" y1="92" x2="1256" y2="92" stroke="#e4d7c5" stroke-width="2" stroke-dasharray="2 6"/>
+<circle class="pulse" cx="34" cy="92" r="5" fill="#7a5130"/>
+<g>
+<rect x="24.0" y="118" width="190.3" height="214" rx="16" fill="#ffffff" stroke="#e4d7c5"/>
+<circle cx="54.0" cy="152" r="15" fill="none" stroke="#7a5130" stroke-width="1.6"/>
+<text x="54.0" y="157" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#7a5130" text-anchor="middle">1</text>
+<text x="42.0" y="204" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" fill="#2b1f14" font-weight="700">Well formed?</text>
+<text x="42.0" y="234" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">Malformed, oversized and</text>
+<text x="42.0" y="255" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">invalid calls stop here</text>
+<rect x="38.0" y="282" width="162.3" height="32" rx="8" fill="rgba(171,52,38,0.09)" stroke="#ab3426" stroke-opacity="0.55"/>
+<text x="119.2" y="303" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="12.5" fill="#ab3426" font-weight="700" text-anchor="middle" letter-spacing="1.2">BLOCK</text>
+</g>
+<path d="M216.3 152 l12 0" stroke="#75634f" stroke-width="1.5"/>
+<path d="M224.3 147 l5 5 l-5 5" fill="none" stroke="#75634f" stroke-width="1.5"/>
+<g>
+<rect x="232.3" y="118" width="190.3" height="214" rx="16" fill="#ffffff" stroke="#e4d7c5"/>
+<circle cx="262.3" cy="152" r="15" fill="none" stroke="#7a5130" stroke-width="1.6"/>
+<text x="262.3" y="157" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#7a5130" text-anchor="middle">2</text>
+<text x="250.3" y="204" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" fill="#2b1f14" font-weight="700">Your rules</text>
+<text x="250.3" y="234" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">Paths, secrets, injection,</text>
+<text x="250.3" y="255" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">shell, encoding: ~1.5 ms</text>
+<rect x="246.3" y="282" width="162.3" height="32" rx="8" fill="rgba(171,52,38,0.09)" stroke="#ab3426" stroke-opacity="0.55"/>
+<text x="327.5" y="303" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="12.5" fill="#ab3426" font-weight="700" text-anchor="middle" letter-spacing="1.2">BLOCK</text>
+</g>
+<path d="M424.7 152 l12 0" stroke="#75634f" stroke-width="1.5"/>
+<path d="M432.7 147 l5 5 l-5 5" fill="none" stroke="#75634f" stroke-width="1.5"/>
+<g>
+<rect x="440.7" y="118" width="190.3" height="214" rx="16" fill="#ffffff" stroke="#e4d7c5"/>
+<circle cx="470.7" cy="152" r="15" fill="none" stroke="#7a5130" stroke-width="1.6"/>
+<text x="470.7" y="157" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#7a5130" text-anchor="middle">3</text>
+<text x="458.7" y="204" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" fill="#2b1f14" font-weight="700">Model review</text>
+<text x="458.7" y="234" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">Local model, or Protocol X</text>
+<text x="458.7" y="255" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">in Shield, reads context</text>
+<rect x="454.7" y="282" width="162.3" height="32" rx="8" fill="rgba(171,52,38,0.09)" stroke="#ab3426" stroke-opacity="0.55"/>
+<text x="535.8" y="303" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="12.5" fill="#ab3426" font-weight="700" text-anchor="middle" letter-spacing="1.2">BLOCK</text>
+</g>
+<path d="M633.0 152 l12 0" stroke="#75634f" stroke-width="1.5"/>
+<path d="M641.0 147 l5 5 l-5 5" fill="none" stroke="#75634f" stroke-width="1.5"/>
+<g>
+<rect x="649.0" y="118" width="190.3" height="214" rx="16" fill="#ffffff" stroke="#e4d7c5"/>
+<circle cx="679.0" cy="152" r="15" fill="none" stroke="#7a5130" stroke-width="1.6"/>
+<text x="679.0" y="157" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#7a5130" text-anchor="middle">4</text>
+<text x="667.0" y="204" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" fill="#2b1f14" font-weight="700">Forwarded</text>
+<text x="667.0" y="234" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">Only now does the call</text>
+<text x="667.0" y="255" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">reach the MCP server</text>
+<rect x="663.0" y="282" width="162.3" height="32" rx="8" fill="rgba(42,115,64,0.10)" stroke="#2a7340" stroke-opacity="0.55"/>
+<text x="744.2" y="303" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="12.5" fill="#2a7340" font-weight="700" text-anchor="middle" letter-spacing="1.2">ALLOW</text>
+</g>
+<path d="M841.3 152 l12 0" stroke="#75634f" stroke-width="1.5"/>
+<path d="M849.3 147 l5 5 l-5 5" fill="none" stroke="#75634f" stroke-width="1.5"/>
+<g>
+<rect x="857.3" y="118" width="190.3" height="214" rx="16" fill="#ffffff" stroke="#e4d7c5"/>
+<circle cx="887.3" cy="152" r="15" fill="none" stroke="#7a5130" stroke-width="1.6"/>
+<text x="887.3" y="157" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#7a5130" text-anchor="middle">5</text>
+<text x="875.3" y="204" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" fill="#2b1f14" font-weight="700">Result checked</text>
+<text x="875.3" y="234" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">Poisoned output is caught</text>
+<text x="875.3" y="255" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">before the agent sees it</text>
+<rect x="871.3" y="282" width="162.3" height="32" rx="8" fill="rgba(171,52,38,0.09)" stroke="#ab3426" stroke-opacity="0.55"/>
+<text x="952.5" y="303" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="12.5" fill="#ab3426" font-weight="700" text-anchor="middle" letter-spacing="1.2">BLOCK</text>
+</g>
+<path d="M1049.7 152 l12 0" stroke="#75634f" stroke-width="1.5"/>
+<path d="M1057.7 147 l5 5 l-5 5" fill="none" stroke="#75634f" stroke-width="1.5"/>
+<g>
+<rect x="1065.7" y="118" width="190.3" height="214" rx="16" fill="#ffffff" stroke="#e4d7c5"/>
+<circle cx="1095.7" cy="152" r="15" fill="none" stroke="#7a5130" stroke-width="1.6"/>
+<text x="1095.7" y="157" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#7a5130" text-anchor="middle">6</text>
+<text x="1083.7" y="204" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" fill="#2b1f14" font-weight="700">Recorded</text>
+<text x="1083.7" y="234" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">Audit log, signed receipt</text>
+<text x="1083.7" y="255" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#4f3e2d">and your dashboard</text>
+<rect x="1079.7" y="282" width="162.3" height="32" rx="8" fill="rgba(122,81,48,0.08)" stroke="#7a5130" stroke-opacity="0.55"/>
+<text x="1160.8" y="303" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace" font-size="12.5" fill="#7a5130" font-weight="700" text-anchor="middle" letter-spacing="1.2">LOGGED</text>
+</g>
+<text x="24" y="376" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="17" fill="#4f3e2d">A call that fails any check never runs: 0 bytes reach the tool, and the agent gets a policy error with the reason.</text>
+<text x="24" y="404" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" fill="#75634f">Steps 1, 2, 4, 5 and 6 are free. Step 3 uses a local model if you run one, or Protocol X with Shield.</text>
+</svg>
