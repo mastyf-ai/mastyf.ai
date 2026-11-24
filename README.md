@@ -127,9 +127,10 @@ The dashboard always asks you to sign in, even on your own computer, so no other
 
 | Step | What to do |
 |---|---|
-| **1. Get your key** | Run `pnpm dashboard:key`. It prints the key Mastyf created on first start, and where it is stored. Treat it like a password. |
-| **2. Create your account** | Open http://localhost:4000, paste the key, choose a username, email and a password (12 characters or more, with upper and lower case, a number and a symbol). |
-| **3. Sign in from then on** | With the key, or with your username and password. Other people can get accounts under **Settings, Users**. |
+| **1. Start Mastyf** | In the `mastyf.ai` folder, run `pnpm dashboard:proxy` (on Windows, from Git Bash, or `node dist/cli.js start --policy default-policy.yaml --blocking-mode block` from PowerShell). Leave this terminal open: the dashboard runs only while it does. |
+| **2. Get your key** | In a second terminal, in the same folder, run `pnpm dashboard:key`. It prints the key Mastyf created the first time it started, and where it is stored. Treat it like a password. |
+| **3. Create your account** | Open **http://localhost:4000**, paste the key, then choose a username, email and password (12 characters or more, with upper and lower case, a number and a symbol). You land on Home, signed in. |
+| **Next time** | Run `pnpm dashboard:proxy` again, open http://localhost:4000 and sign in with the key or your username and password. Other people can get accounts under **Settings, Users**. |
 
 <details id="if-something-goes-wrong">
 <summary><b>If something goes wrong</b></summary>
