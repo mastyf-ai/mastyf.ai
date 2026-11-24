@@ -3,7 +3,12 @@
   "arguments": {
     "title": "test"
   },
-  "expected": "block",
+  "expected": "pass",
   "category": "edge-cases",
-  "ruleHint": "deny-github-write"
+  "ruleHint": "deny-github-write",
+  "relabelled": {
+    "from": "block",
+    "on": "2026-11-24",
+    "why": "deny-github-write-tools now blocks destructive repository actions only (delete_repository, delete_branch). Opening an issue is not destructive."
+  }
 }
