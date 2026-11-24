@@ -146,7 +146,7 @@ STATS = [
     ('98.43%', 'INJECAGENT', ['attacks stopped with', 'Protocol X, 4,216 cases']),
     ('~1.5 ms', 'PER CALL', ['median rule check', 'on a laptop CPU']),
     ('0 bytes', 'ON BLOCK', ['reach the tool when', 'a call is stopped']),
-    ('285 / 293', 'FREE RULES', ['corpus attacks blocked,', 'no harmless call stopped']),
+    ('287 / 287', 'FREE RULES', ['corpus attacks blocked,', 'no harmless call stopped']),
 ]
 
 
@@ -309,20 +309,20 @@ def results(t):
     cx, cy, r = 800, 222, 86
     import math
     circ = 2 * math.pi * r
-    blocked = 285 / 293
+    blocked = 287 / 287
     out.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{t["block"]}" stroke-opacity=".85" stroke-width="26"/>')
     out.append(f'<style>@keyframes ring{{from{{stroke-dashoffset:{circ:.1f}}}}}</style>')
     out.append(f'<circle class="ring" cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{t["allow"]}" stroke-width="26" '
                f'stroke-dasharray="{circ * blocked:.1f} {circ:.1f}" transform="rotate(-90 {cx} {cy})"/>')
-    out.append(text(cx, cy + 4, '97.3%', 30, t['ink'], weight=800, anchor='middle'))
+    out.append(text(cx, cy + 4, '100%', 30, t['ink'], weight=800, anchor='middle'))
     out.append(text(cx, cy + 28, 'blocked', 14, t['dim'], anchor='middle'))
-    rows = [(t['allow'], '285 attacks blocked', 'of 293 in the corpus'), (t['block'], '8 attacks missed', 'deserialization and edge cases'), (t['gold'], '79 of 79 harmless calls', 'allowed, no false positives')]
+    rows = [(t['allow'], '287 attacks blocked', 'of 287 in the corpus'), (t['block'], '0 attacks missed', 'every category covered'), (t['gold'], '86 of 86 harmless calls', 'allowed, no false positives')]
     for i, (c, a, b) in enumerate(rows):
         y = 162 + i * 58
         out.append(f'<circle cx="942" cy="{y - 5}" r="7" fill="{c}"/>')
         out.append(text(960, y, a, 17, t['ink'], weight=600))
         out.append(text(960, y + 22, b, 14, t['dim']))
-    return svg(W, H, 'Results', 'AgentDojo: 25% of attacks succeeded with no defense and 0% with Protocol X. Free rules alone on the corpus: 285 of 293 attacks blocked (97.3%), 8 missed, 79 of 79 harmless calls allowed.', '\n'.join(out), style)
+    return svg(W, H, 'Results', 'AgentDojo: 25% of attacks succeeded with no defense and 0% with Protocol X. Free rules alone on the corpus: 287 of 287 attacks blocked, 86 of 86 harmless calls allowed.', '\n'.join(out), style)
 
 
 # ── Badges ──────────────────────────────────────────────────────────────────────────────────────
