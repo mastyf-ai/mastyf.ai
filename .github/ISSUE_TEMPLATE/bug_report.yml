@@ -1,0 +1,47 @@
+name: Bug report
+description: Something doesn't work as it should. Not for security issues.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Is this a security issue?** If an attack gets past Mastyf, a secret leaks, or the dashboard can be reached or changed without signing in, **do not file it here.** Report it privately: [open a private advisory](https://github.com/mastyf-ai/mastyf.ai/security/advisories/new) or email mastyf.support@gmail.com. See [SECURITY.md](https://github.com/mastyf-ai/mastyf.ai/blob/main/SECURITY.md).
+  - type: checkboxes
+    id: not-security
+    attributes:
+      label: Before you file
+      options:
+        - label: This is not a security vulnerability, and it does not include a working bypass of Mastyf's protection.
+          required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. pnpm dashboard:proxy
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove API keys, tokens, file contents and anything else private before pasting.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: e.g. 4.1.14, or the commit hash from git log -1
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: e.g. Windows 11, Node 22, Claude Code / Cursor / own LangGraph agent

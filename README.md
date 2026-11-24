@@ -48,6 +48,8 @@ AI agents read your files, run shell commands, push code and call APIs, on their
 | **A security researcher** who wants to break it | [Try an attack against Protocol X](#try-an-attack-against-protocol-x), [Threat Lab](#threat-lab), [Security Swarm](#where-mastyf-sits) | 10 min |
 | **Running agents for a team** | [Enterprise deployment](docs/ENTERPRISE_DEPLOYMENT.md): Redis, Postgres, Helm, Google Agent Gateway | |
 | **A contributor** | [CONTRIBUTING.md](CONTRIBUTING.md) | |
+| **Someone who found a vulnerability or a bypass** | Report it privately, never in a public issue: [SECURITY.md](SECURITY.md) or mastyf.support@gmail.com | |
+| **Someone who tried it** | We'd love your review: mastyf.support@gmail.com | |
 
 ## See it work
 

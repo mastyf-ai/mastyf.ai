@@ -14,9 +14,12 @@ If you're running an older version, we recommend upgrading before reporting an i
 
 Please **do not** report security vulnerabilities through public GitHub issues.
 
-Instead, report them privately by emailing:
+Instead, report them privately, in either of these ways:
 
-**[mastyf.support@gmail.com](mailto:mastyf.support@gmail.com)**
+* Email **[mastyf.support@gmail.com](mailto:mastyf.support@gmail.com)**
+* Open a [private security advisory](https://github.com/mastyf-ai/mastyf.ai/security/advisories/new) on GitHub (only you and the maintainers can see it)
+
+This includes **bypasses**. If a prompt, payload, path or sequence of tool calls gets past Mastyf's protection in the current release, that is a vulnerability: please don't post it in issues, pull requests or Discussions, even as a test case. Once it's fixed, we'll gladly take a pull request adding it to the attack corpus, with credit to you.
 
 Please include as much information as possible:
 

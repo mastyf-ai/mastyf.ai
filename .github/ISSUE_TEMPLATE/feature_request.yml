@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest something Mastyf should do or catch.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+  - type: markdown
+    attributes:
+      value: |
+        Want Mastyf to catch a new kind of attack? Describe the attack class here. If you have a working example that gets past the current release, report it privately instead: [SECURITY.md](https://github.com/mastyf-ai/mastyf.ai/blob/main/SECURITY.md).
