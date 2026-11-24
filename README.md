@@ -5,9 +5,10 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="docs/assets/readme/badge-license.svg"></a>
-  <a href="#free-and-shield"><img alt="Free, no account needed" src="docs/assets/readme/badge-free.svg"></a>
+  <a href="#free-and-shield"><img alt="Runs locally, no account needed" src="docs/assets/readme/badge-free.svg"></a>
   <a href="#quick-start"><img alt="Runs on Windows, macOS and Linux" src="docs/assets/readme/badge-platforms.svg"></a>
-  <a href="#connect-your-agents"><img alt="Protects Claude Code, Cursor, VS Code and more" src="docs/assets/readme/badge-agents.svg"></a>
+  <br>
+  <a href="#connect-your-agents"><img alt="Works with Claude Code, Cursor, VS Code and more" src="docs/assets/readme/badge-agents.svg"></a>
   <a href="https://doi.org/10.5281/zenodo.22179415"><img alt="Paper DOI" src="docs/assets/readme/badge-paper.svg"></a>
   <br>
   <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml/badge.svg"></a>

@@ -327,32 +327,58 @@ def results(t):
 
 # ── Badges ──────────────────────────────────────────────────────────────────────────────────────
 # Kept in the repository: GitHub's image proxy often times out fetching shields.io badges.
+# Same shape as GitHub's own workflow badges (20 px, 3 px corners, grey label) so the row reads as one
+# set, with a mid-grey label that shows on both light and dark pages.
+ICONS = {  # 12 x 12, stroked in white
+    'scale': 'M6 1.5v9M3 10.5h6M1.5 3.5h9M3 3.5 1.5 7a1.5 1.5 0 0 0 3 0L3 3.5M9 3.5 7.5 7a1.5 1.5 0 0 0 3 0L9 3.5',
+    'shield': 'M6 1 2 2.5v3C2 8 3.8 10.2 6 11c2.2-.8 4-3 4-5.5v-3L6 1ZM4.2 6l1.3 1.3L8 4.8',
+    'screen': 'M1.5 2h9v6.5h-9zM6 8.5v2M4 10.5h4',
+    'plug': 'M4 1v3M8 1v3M2.5 4h7v2.2A3.5 3.5 0 0 1 6 9.7 3.5 3.5 0 0 1 2.5 6.2ZM6 9.7V11',
+    'doc': 'M3 1h4l2.5 2.5V11H3ZM7 1v2.5h2.5M4.5 6h3M4.5 8h3',
+}
 BADGES = {
-    'license': ('license', 'AGPL-3.0', '#b49a5e'),
-    'free': ('free', 'no account needed', '#b49a5e'),
-    'platforms': ('runs on', 'Windows · macOS · Linux', '#5c5c56'),
-    'agents': ('protects', 'Claude Code · Cursor · VS Code · more', '#5c5c56'),
-    'paper': ('paper', '10.5281/zenodo.22179415', '#5c5c56'),
+    'license': ('scale', 'license', 'AGPL-3.0', '#b49a5e', '#111111'),
+    'free': ('shield', 'runs locally', 'no account needed', '#2e7d4f', '#ffffff'),
+    'platforms': ('screen', 'platforms', 'Windows · macOS · Linux', '#3e5c76', '#ffffff'),
+    'agents': ('plug', 'agents', 'Claude Code · Cursor · VS Code · +3', '#3e5c76', '#ffffff'),
+    'paper': ('doc', 'paper', '10.5281/zenodo.22179415', '#7a5130', '#ffffff'),
 }
 
 
-def badge(label, message, colour):
-    cw = 6.6  # average character width at 11px
-    lw = round(len(label) * cw + 14)
-    mw = round(len(message) * cw + 14)
+def text_width(s, size=11):
+    """Width of the text in Verdana, which GitHub and shields.io badges use; estimated if the font is missing."""
+    try:
+        from PIL import ImageFont
+        for name in ('verdana.ttf', 'Verdana.ttf', 'DejaVuSans.ttf'):
+            try:
+                return ImageFont.truetype(name, size).getlength(s)
+            except OSError:
+                continue
+    except ImportError:
+        pass
+    return len(s) * 6.8
+
+
+def badge(icon, label, message, colour, ink):
+    pad, gap, icon_w = 6, 4, 12
+    lw = round(pad + icon_w + gap + text_width(label) + pad)
+    mw = round(pad + text_width(message) + pad)
     w = lw + mw
+    font = 'Verdana,Geneva,DejaVu Sans,sans-serif'
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20" role="img" aria-label="{esc(label)}: {esc(message)}">'
             f'<title>{esc(label)}: {esc(message)}</title>'
-            f'<rect width="{lw}" height="20" fill="#151518"/><rect x="{lw}" width="{mw}" height="20" fill="{colour}"/>'
-            f'<g font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" fill="#fff">'
-            f'<text x="{lw / 2}" y="14" text-anchor="middle">{esc(label)}</text>'
-            f'<text x="{lw + mw / 2}" y="14" text-anchor="middle">{esc(message)}</text></g></svg>\n')
+            f'<clipPath id="r"><rect width="{w}" height="20" rx="3"/></clipPath>'
+            f'<g clip-path="url(#r)"><rect width="{lw}" height="20" fill="#4a4a50"/><rect x="{lw}" width="{mw}" height="20" fill="{colour}"/></g>'
+            f'<path d="{ICONS[icon]}" transform="translate({pad} 4)" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'<g font-family="{font}" font-size="11">'
+            f'<text x="{pad + icon_w + gap}" y="14" fill="#fff">{esc(label)}</text>'
+            f'<text x="{lw + pad}" y="14" fill="{ink}">{esc(message)}</text></g></svg>\n')
 
 
 def main():
-    for name, (label, message, colour) in BADGES.items():
+    for name, spec in BADGES.items():
         with open(os.path.join(HERE, f'badge-{name}.svg'), 'w', encoding='utf-8', newline='\n') as fh:
-            fh.write(badge(label, message, colour))
+            fh.write(badge(*spec))
     for name, t in THEMES.items():
         logo = mark_png(t['ink'])
         files = {
