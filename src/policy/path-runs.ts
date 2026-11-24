@@ -20,6 +20,15 @@ const BASE64_RUN = /[A-Za-z0-9+/]{20,}={0,2}/g;
 /** A URL scheme (https://, file://, git+ssh://) in the text just before a run. */
 const URL_SCHEME = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"'<>]*$/;
 
+/**
+ * The text before a run is the start of a rooted path that runs, without a break, up to the run:
+ * `C:/Users/Public/mastyf-` before `demo/workspace/...`. The token has to begin at a quote, a space or
+ * the start of the text, with a drive (`C:/`, `C:\\`), `~/`, `./`, `../` or `/`, and contain only path
+ * characters after that. A folder name with a dash in it splits a path into several runs, and only the
+ * first one starts with '/'.
+ */
+const ROOTED_PATH_BEFORE = /(?:^|[\s"'`<>(\[,=])(?:[A-Za-z]:(?:\/|\\{1,2})|~\/|\.{1,2}\/|\/)[A-Za-z0-9._~\-/\\]*$/;
+
 /** A file extension right after a run (.tsx, .py, .json). */
 const FILE_EXTENSION = /^\.[A-Za-z0-9]{1,10}(?![A-Za-z0-9])/;
 
@@ -83,13 +92,15 @@ export function isPathLikeRun(run: string): boolean {
 /**
  * True when the run sits where a path does: after a URL scheme (`https://github.com/...`: the run is
  * the domain ending and path), at the root of a path (it starts with '/': `/home/...`, `C:/Users/...`,
- * `~/...`, `./...`), or right before a file extension (`.../page.tsx`). A bare string in an argument
+ * `~/...`, `./...`), right before a file extension (`.../page.tsx`), or further along a rooted path
+ * (`C:/Users/Public/mastyf-demo/workspace/...`: the run after the dash). A bare string in an argument
  * has none of these.
  */
 export function isInPathPosition(text: string, start: number, run: string): boolean {
   if (run.startsWith('/')) return true;
   if (FILE_EXTENSION.test(text.slice(start + run.length, start + run.length + 12))) return true;
-  return URL_SCHEME.test(text.slice(Math.max(0, start - 512), start));
+  const before = text.slice(Math.max(0, start - 512), start);
+  return URL_SCHEME.test(before) || ROOTED_PATH_BEFORE.test(before);
 }
 
 /**
