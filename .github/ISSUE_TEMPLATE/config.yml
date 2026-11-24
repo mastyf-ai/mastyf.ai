@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability or a bypass (private)
+    url: https://github.com/mastyf-ai/mastyf.ai/security/advisories/new
+    about: Never in a public issue. Report it privately here, or email mastyf.support@gmail.com. See SECURITY.md.
+  - name: Ask a question or share an idea
+    url: https://github.com/mastyf-ai/mastyf.ai/discussions
+    about: Questions, setup help and early ideas go in Discussions.
+  - name: Send us a review or feedback
+    url: mailto:mastyf.support@gmail.com
+    about: Tried Mastyf? Tell us what worked, what broke, and what you want it to catch next.
