@@ -1,0 +1,10 @@
+{
+  "toolName": "cache_set",
+  "arguments": {
+    "key": "greeting",
+    "value": "aced it, the release went out"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "note": "Contains the letters \"aced\" but no serialized object."
+}

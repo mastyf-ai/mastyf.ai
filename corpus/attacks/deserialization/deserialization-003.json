@@ -1,10 +1,11 @@
 {
-  "toolName": "execute_code",
+  "toolName": "cache_set",
   "arguments": {
-    "code": "import pickle; pickle.loads(data)",
-    "language": "python"
+    "key": "session",
+    "value": "rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAAAeAA="
   },
   "expected": "block",
   "category": "deserialization",
-  "ruleHint": "python-pickle"
+  "ruleHint": "block-java-deserialization",
+  "note": "A complete java.util.HashMap written by ObjectOutputStream, base64 encoded."
 }

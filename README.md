@@ -4,16 +4,15 @@
 </picture>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-b49a5e?style=flat-square&labelColor=151518"></a>
-  <a href="#free-and-shield"><img alt="Free, no account needed" src="https://img.shields.io/badge/free-no%20account%20needed-b49a5e?style=flat-square&labelColor=151518"></a>
-  <a href="#quick-start"><img alt="Runs on Windows, macOS and Linux" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-5c5c56?style=flat-square&labelColor=151518"></a>
-  <a href="#connect-your-agents"><img alt="Protects Claude Code, Cursor, VS Code and more" src="https://img.shields.io/badge/protects-Claude%20Code%20%C2%B7%20Cursor%20%C2%B7%20VS%20Code%20%C2%B7%20more-5c5c56?style=flat-square&labelColor=151518"></a>
-  <a href="https://doi.org/10.5281/zenodo.22179415"><img alt="Paper DOI" src="https://img.shields.io/badge/paper-10.5281%2Fzenodo.22179415-5c5c56?style=flat-square&labelColor=151518"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="docs/assets/readme/badge-license.svg"></a>
+  <a href="#free-and-shield"><img alt="Runs locally, no account needed" src="docs/assets/readme/badge-free.svg"></a>
+  <a href="#quick-start"><img alt="Runs on Windows, macOS and Linux" src="docs/assets/readme/badge-platforms.svg"></a>
   <br>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/corpus-eval.yml"><img alt="Attack corpus" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/corpus-eval.yml/badge.svg"></a>
+  <a href="#connect-your-agents"><img alt="Works with Claude Code, Cursor, VS Code and more" src="docs/assets/readme/badge-agents.svg"></a>
+  <a href="https://doi.org/10.5281/zenodo.22179415"><img alt="Paper DOI" src="docs/assets/readme/badge-paper.svg"></a>
+  <br>
   <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/codeql.yml/badge.svg"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/gitleaks.yml"><img alt="Secret scan" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/gitleaks.yml/badge.svg"></a>
+  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/mcp-fuzzer-ci.yml"><img alt="MCP protocol fuzzer" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/mcp-fuzzer-ci.yml/badge.svg"></a>
 </p>
 
 <p align="center">
@@ -34,7 +33,7 @@ AI agents read your files, run shell commands, push code and call APIs, on their
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/stats-dark.svg">
-  <img alt="Results: 99.52% of AgentDojo attacks stopped and 98.43% of InjecAgent attacks stopped with Protocol X; about 1.5 ms per rule check; 0 bytes reach a tool when a call is stopped; 285 of 293 corpus attacks blocked by the free rules with no harmless call stopped." src="docs/assets/readme/stats-light.svg" width="100%">
+  <img alt="Results: 99.52% of AgentDojo attacks stopped and 98.43% of InjecAgent attacks stopped with Protocol X; about 1.5 ms per rule check; 0 bytes reach a tool when a call is stopped; 287 of 287 corpus attacks blocked by the free rules with no harmless call stopped." src="docs/assets/readme/stats-light.svg" width="100%">
 </picture>
 
 > [!NOTE]
@@ -169,6 +168,11 @@ stateDiagram-v2
 | **Turning off** | Puts the original server entries back. Entries you changed yourself in the meantime are left alone. |
 | **Left as they are** | Servers already behind another Mastyf (such as the Shield app), remote URL servers, servers inside a Claude Code project, and servers that use agent variables such as `${workspaceFolder}`. |
 
+> [!TIP]
+> **Adding a server to Claude Code?** Use the user scope, so protection picks it up within seconds:
+> `claude mcp add --scope user files -- npx -y @modelcontextprotocol/server-filesystem ~/projects`.
+> Servers added with the default scope belong to one project and are left as they are.
+
 From the command line, `node dist/cli.js connect` and `node dist/cli.js disconnect` do the same once. For an agent Mastyf does not know, `node dist/cli.js connect --print-config <name> --command "<server command>"` prints the entry to paste into its settings.
 
 > [!TIP]
@@ -300,7 +304,7 @@ Below the playground, pick an everyday task (summarize a web page, debug a confi
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/results-dark.svg">
-  <img alt="AgentDojo: 25% of attacks succeeded with no defense, 0% with Protocol X. Free rules alone on the corpus: 285 of 293 attacks blocked (97.3%), 8 missed, 79 of 79 harmless calls allowed." src="docs/assets/readme/results-light.svg" width="100%">
+  <img alt="AgentDojo: 25% of attacks succeeded with no defense, 0% with Protocol X. Free rules alone on the corpus: 287 of 287 attacks blocked, 86 of 86 harmless calls allowed." src="docs/assets/readme/results-light.svg" width="100%">
 </picture>
 
 | Measure | Result | Source |
@@ -310,7 +314,7 @@ Below the playground, pick an everyday task (summarize a web page, debug a confi
 | Novel red-team attacks tested | **777** | Mastyf red-team suite, none in the model's training data |
 | Ordinary tool calls allowed | **40 of 40** | Benign corpus scored on the same day |
 | Rule check, median | **about 1.5 ms** | Laptop CPU, 95th percentile about 5 ms |
-| Local corpus, rules only | **285 of 293** attacks blocked, **79 of 79** harmless allowed | `node --import tsx corpus/run-eval.ts` on this repository. The 8 misses are in the deserialization and edge-case sets. |
+| Local corpus, rules only | **287 of 287** attacks blocked, **86 of 86** harmless allowed | `node --import tsx corpus/run-eval.ts` on this repository. |
 | Bytes reaching a tool on block | **0** | Complete mediation |
 
 ---
@@ -371,7 +375,7 @@ flowchart TB
 | CI agent | What it does |
 |-------|-------------|
 | Scout | SAST scan, dependency audit, config review |
-| Corpus | Runs every attack and harmless fixture in `corpus/` (372 today) against the current policy |
+| Corpus | Runs every attack and harmless fixture in `corpus/` (373 today) against the current policy |
 | Evasion | Runs 120+ bypass probes and generates new ones with a model |
 | Parity | Checks the Node and Python engines make identical decisions |
 | Proxy | Live stdio MCP session tests against a running proxy |

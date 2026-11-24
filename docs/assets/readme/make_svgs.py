@@ -146,7 +146,7 @@ STATS = [
     ('98.43%', 'INJECAGENT', ['attacks stopped with', 'Protocol X, 4,216 cases']),
     ('~1.5 ms', 'PER CALL', ['median rule check', 'on a laptop CPU']),
     ('0 bytes', 'ON BLOCK', ['reach the tool when', 'a call is stopped']),
-    ('285 / 293', 'FREE RULES', ['corpus attacks blocked,', 'no harmless call stopped']),
+    ('287 / 287', 'FREE RULES', ['corpus attacks blocked,', 'no harmless call stopped']),
 ]
 
 
@@ -309,23 +309,76 @@ def results(t):
     cx, cy, r = 800, 222, 86
     import math
     circ = 2 * math.pi * r
-    blocked = 285 / 293
+    blocked = 287 / 287
     out.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{t["block"]}" stroke-opacity=".85" stroke-width="26"/>')
     out.append(f'<style>@keyframes ring{{from{{stroke-dashoffset:{circ:.1f}}}}}</style>')
     out.append(f'<circle class="ring" cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{t["allow"]}" stroke-width="26" '
                f'stroke-dasharray="{circ * blocked:.1f} {circ:.1f}" transform="rotate(-90 {cx} {cy})"/>')
-    out.append(text(cx, cy + 4, '97.3%', 30, t['ink'], weight=800, anchor='middle'))
+    out.append(text(cx, cy + 4, '100%', 30, t['ink'], weight=800, anchor='middle'))
     out.append(text(cx, cy + 28, 'blocked', 14, t['dim'], anchor='middle'))
-    rows = [(t['allow'], '285 attacks blocked', 'of 293 in the corpus'), (t['block'], '8 attacks missed', 'deserialization and edge cases'), (t['gold'], '79 of 79 harmless calls', 'allowed, no false positives')]
+    rows = [(t['allow'], '287 attacks blocked', 'of 287 in the corpus'), (t['block'], '0 attacks missed', 'every category covered'), (t['gold'], '86 of 86 harmless calls', 'allowed, no false positives')]
     for i, (c, a, b) in enumerate(rows):
         y = 162 + i * 58
         out.append(f'<circle cx="942" cy="{y - 5}" r="7" fill="{c}"/>')
         out.append(text(960, y, a, 17, t['ink'], weight=600))
         out.append(text(960, y + 22, b, 14, t['dim']))
-    return svg(W, H, 'Results', 'AgentDojo: 25% of attacks succeeded with no defense and 0% with Protocol X. Free rules alone on the corpus: 285 of 293 attacks blocked (97.3%), 8 missed, 79 of 79 harmless calls allowed.', '\n'.join(out), style)
+    return svg(W, H, 'Results', 'AgentDojo: 25% of attacks succeeded with no defense and 0% with Protocol X. Free rules alone on the corpus: 287 of 287 attacks blocked, 86 of 86 harmless calls allowed.', '\n'.join(out), style)
+
+
+# ── Badges ──────────────────────────────────────────────────────────────────────────────────────
+# Kept in the repository: GitHub's image proxy often times out fetching shields.io badges.
+# Same shape as GitHub's own workflow badges (20 px, 3 px corners, grey label) so the row reads as one
+# set, with a mid-grey label that shows on both light and dark pages.
+ICONS = {  # 12 x 12, stroked in white
+    'scale': 'M6 1.5v9M3 10.5h6M1.5 3.5h9M3 3.5 1.5 7a1.5 1.5 0 0 0 3 0L3 3.5M9 3.5 7.5 7a1.5 1.5 0 0 0 3 0L9 3.5',
+    'shield': 'M6 1 2 2.5v3C2 8 3.8 10.2 6 11c2.2-.8 4-3 4-5.5v-3L6 1ZM4.2 6l1.3 1.3L8 4.8',
+    'screen': 'M1.5 2h9v6.5h-9zM6 8.5v2M4 10.5h4',
+    'plug': 'M4 1v3M8 1v3M2.5 4h7v2.2A3.5 3.5 0 0 1 6 9.7 3.5 3.5 0 0 1 2.5 6.2ZM6 9.7V11',
+    'doc': 'M3 1h4l2.5 2.5V11H3ZM7 1v2.5h2.5M4.5 6h3M4.5 8h3',
+}
+BADGES = {
+    'license': ('scale', 'license', 'AGPL-3.0', '#b49a5e', '#111111'),
+    'free': ('shield', 'runs locally', 'no account needed', '#2e7d4f', '#ffffff'),
+    'platforms': ('screen', 'platforms', 'Windows · macOS · Linux', '#3e5c76', '#ffffff'),
+    'agents': ('plug', 'agents', 'Claude Code · Cursor · VS Code · +3', '#3e5c76', '#ffffff'),
+    'paper': ('doc', 'paper', '10.5281/zenodo.22179415', '#7a5130', '#ffffff'),
+}
+
+
+def text_width(s, size=11):
+    """Width of the text in Verdana, which GitHub and shields.io badges use; estimated if the font is missing."""
+    try:
+        from PIL import ImageFont
+        for name in ('verdana.ttf', 'Verdana.ttf', 'DejaVuSans.ttf'):
+            try:
+                return ImageFont.truetype(name, size).getlength(s)
+            except OSError:
+                continue
+    except ImportError:
+        pass
+    return len(s) * 6.8
+
+
+def badge(icon, label, message, colour, ink):
+    pad, gap, icon_w = 6, 4, 12
+    lw = round(pad + icon_w + gap + text_width(label) + pad)
+    mw = round(pad + text_width(message) + pad)
+    w = lw + mw
+    font = 'Verdana,Geneva,DejaVu Sans,sans-serif'
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20" role="img" aria-label="{esc(label)}: {esc(message)}">'
+            f'<title>{esc(label)}: {esc(message)}</title>'
+            f'<clipPath id="r"><rect width="{w}" height="20" rx="3"/></clipPath>'
+            f'<g clip-path="url(#r)"><rect width="{lw}" height="20" fill="#4a4a50"/><rect x="{lw}" width="{mw}" height="20" fill="{colour}"/></g>'
+            f'<path d="{ICONS[icon]}" transform="translate({pad} 4)" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'<g font-family="{font}" font-size="11">'
+            f'<text x="{pad + icon_w + gap}" y="14" fill="#fff">{esc(label)}</text>'
+            f'<text x="{lw + pad}" y="14" fill="{ink}">{esc(message)}</text></g></svg>\n')
 
 
 def main():
+    for name, spec in BADGES.items():
+        with open(os.path.join(HERE, f'badge-{name}.svg'), 'w', encoding='utf-8', newline='\n') as fh:
+            fh.write(badge(*spec))
     for name, t in THEMES.items():
         logo = mark_png(t['ink'])
         files = {
