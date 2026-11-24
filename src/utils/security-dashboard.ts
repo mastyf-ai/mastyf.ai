@@ -80,10 +80,12 @@ function severityFromRule(rule: string | null | undefined): SecurityThreatRow['s
   return 'medium';
 }
 
-function pseudoSource(serverName: string, toolName: string): string {
-  const hash = [...`${serverName}:${toolName}`].reduce((s, c) => s + c.charCodeAt(0), 0);
-  const octet = hash % 254 + 1;
-  return `10.${(hash >> 8) % 255}.${octet % 255}.${(hash >> 4) % 255}`;
+/**
+ * Where a threat came from: the server and tool the agent called. Tool calls arrive over stdio or a
+ * local URL, so there is no network address to show, and none is made up.
+ */
+export function threatSource(serverName: string, toolName: string): string {
+  return toolName ? `${serverName} · ${toolName}` : serverName;
 }
 
 function threatIdFromRecord(r: ProxyCallRecord, index: number): string {
@@ -108,7 +110,7 @@ function buildThreatsFromRecords(blocked: ProxyCallRecord[]): SecurityThreatRow[
     id: threatIdFromRecord(r, i),
     threatKey: blockThreatKey(r),
     type: ruleToThreatType(r.blockRule, r.blockReason),
-    source: pseudoSource(r.serverName, r.toolName),
+    source: threatSource(r.serverName, r.toolName),
     severity: severityFromRule(r.blockRule),
     status: 'blocked' as const,
   }));
@@ -124,7 +126,7 @@ async function buildThreatsFromSemantic(
       id: `THR-S${2840 + i}`,
       threatKey: `semantic:${r.id}`,
       type: 'Semantic Prompt Injection',
-      source: pseudoSource(r.serverName, r.toolName || 'unknown'),
+      source: threatSource(r.serverName, r.toolName || ''),
       severity: (r.semanticAudit?.confidence ?? 0) >= 0.85 ? 'critical' : 'high',
       status: r.syncDecision?.action === 'block' ? 'blocked' : 'monitored',
     }));
