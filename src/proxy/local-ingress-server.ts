@@ -6,7 +6,8 @@ import { createServer, type Server } from 'http';
 import type { ProxyManager } from './proxy-manager.js';
 import { Logger } from '../utils/logger.js';
 import { relayMcpHttpRequest } from '../utils/mcp-http-relay.js';
-import { validateHostHeader, applySafeCorsHeaders } from './http-proxy-security.js';
+import { validateHostHeader } from './http-proxy-security.js';
+import { localOnlyRequestError } from '../utils/local-request-guard.js';
 
 export interface LocalIngressOptions {
   listenPort: number;
@@ -34,8 +35,13 @@ export class LocalIngressServer {
         return;
       }
 
-      const safeHeaders: Record<string, string | string[] | undefined> = {};
-      applySafeCorsHeaders(req.headers, safeHeaders);
+      // Loopback bind alone doesn't stop DNS rebinding or a web page posting to 127.0.0.1.
+      const localError = localOnlyRequestError(req, { requireLoopbackHost: true });
+      if (localError) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: localError }));
+        return;
+      }
 
       const path = (req.url || '/').split('?')[0];
       if (req.method === 'POST' && path === '/mcp') {
