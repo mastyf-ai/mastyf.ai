@@ -36,6 +36,45 @@ function gateBadge(ok: unknown) {
   return <Badge variant={ok ? 'success' : 'danger'}>{ok ? 'PASS' : 'FAIL'}</Badge>;
 }
 
+/** `**Label:** text` → bold label; everything else is plain text. */
+function InlineBold({ text }: { text: string }) {
+  const parts = text.split(/\*\*(.+?)\*\*/g);
+  return <>{parts.map((p, i) => (i % 2 ? <strong key={i} style={{ color: 'var(--text)', fontWeight: 'var(--weight-medium)' }}>{p}</strong> : p))}</>;
+}
+
+/**
+ * The report's summary is a little Markdown: `###` headings, `- ` bullets and `**bold**` labels.
+ * Render exactly those, so it reads as a report instead of showing its syntax.
+ */
+function ReportMarkdown({ markdown }: { markdown: string }) {
+  const blocks: Array<{ kind: 'h' | 'p'; text: string } | { kind: 'ul'; items: string[] }> = [];
+  for (const raw of markdown.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('### ')) blocks.push({ kind: 'h', text: line.slice(4) });
+    else if (line.startsWith('- ')) {
+      const last = blocks[blocks.length - 1];
+      if (last && last.kind === 'ul') last.items.push(line.slice(2));
+      else blocks.push({ kind: 'ul', items: [line.slice(2)] });
+    } else blocks.push({ kind: 'p', text: line });
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+      {blocks.map((b, i) =>
+        b.kind === 'h' ? (
+          <p key={i} className="text-sm font-medium" style={{ margin: 'var(--space-2) 0 0' }}>{b.text}</p>
+        ) : b.kind === 'ul' ? (
+          <ul key={i} className="text-sm text-muted" style={{ margin: 0, paddingLeft: 'var(--space-4)' }}>
+            {b.items.map((t, j) => <li key={j}><InlineBold text={t} /></li>)}
+          </ul>
+        ) : (
+          <p key={i} className="text-sm text-muted" style={{ margin: 0 }}><InlineBold text={b.text} /></p>
+        ),
+      )}
+    </div>
+  );
+}
+
 function PlainEnglishSections({ report }: { report: PlainEnglishReport }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
@@ -47,7 +86,9 @@ function PlainEnglishSections({ report }: { report: PlainEnglishReport }) {
           <p className="font-medium text-sm" style={{ marginTop: 'var(--space-2)' }}>{report.headline}</p>
         </div>
       ) : null}
-      {(report.sections ?? []).map(section => (
+      {(report.sections ?? [])
+        .filter(section => section.bullets?.length || section.items?.length || section.markdown)
+        .map(section => (
         <div key={section.id}>
           <h4 className="text-sm font-semibold" style={{ marginBottom: 'var(--space-2)' }}>{section.title}</h4>
           {section.bullets?.length ? (
@@ -55,9 +96,12 @@ function PlainEnglishSections({ report }: { report: PlainEnglishReport }) {
               {section.bullets.map((b, i) => <li key={i}>{b}</li>)}
             </ul>
           ) : null}
-          {section.markdown ? (
-            <pre className="text-xs text-muted" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{section.markdown.slice(0, 1200)}</pre>
+          {section.items?.length ? (
+            <ol className="text-sm text-muted" style={{ margin: 0, paddingLeft: 'var(--space-4)' }}>
+              {section.items.map((item, i) => <li key={i}>{item.text}</li>)}
+            </ol>
           ) : null}
+          {section.markdown ? <ReportMarkdown markdown={section.markdown} /> : null}
         </div>
       ))}
     </div>
