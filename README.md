@@ -11,10 +11,8 @@
   <a href="#connect-your-agents"><img alt="Works with Claude Code, Cursor, VS Code and more" src="docs/assets/readme/badge-agents.svg"></a>
   <a href="https://doi.org/10.5281/zenodo.22179415"><img alt="Paper DOI" src="docs/assets/readme/badge-paper.svg"></a>
   <br>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/corpus-eval.yml"><img alt="Attack corpus" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/corpus-eval.yml/badge.svg"></a>
   <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/codeql.yml/badge.svg"></a>
-  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/gitleaks.yml"><img alt="Secret scan" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/gitleaks.yml/badge.svg"></a>
+  <a href="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/mcp-fuzzer-ci.yml"><img alt="MCP protocol fuzzer" src="https://github.com/mastyf-ai/mastyf.ai/actions/workflows/mcp-fuzzer-ci.yml/badge.svg"></a>
 </p>
 
 <p align="center">
@@ -169,6 +167,11 @@ stateDiagram-v2
 | **While on** | Checks the settings files every few seconds and protects anything new. The choice survives a restart of Mastyf. |
 | **Turning off** | Puts the original server entries back. Entries you changed yourself in the meantime are left alone. |
 | **Left as they are** | Servers already behind another Mastyf (such as the Shield app), remote URL servers, servers inside a Claude Code project, and servers that use agent variables such as `${workspaceFolder}`. |
+
+> [!TIP]
+> **Adding a server to Claude Code?** Use the user scope, so protection picks it up within seconds:
+> `claude mcp add --scope user files -- npx -y @modelcontextprotocol/server-filesystem ~/projects`.
+> Servers added with the default scope belong to one project and are left as they are.
 
 From the command line, `node dist/cli.js connect` and `node dist/cli.js disconnect` do the same once. For an agent Mastyf does not know, `node dist/cli.js connect --print-config <name> --command "<server command>"` prints the entry to paste into its settings.
 
