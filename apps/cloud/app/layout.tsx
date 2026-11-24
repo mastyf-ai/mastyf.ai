@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Bricolage_Grotesque, IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
+import localFont from 'next/font/local';
 import { Analytics } from '@vercel/analytics/next';
 import { SessionProvider } from '@/components/SessionProvider';
 import { CustomCursor } from '@/components/shell/CustomCursor';
@@ -10,25 +10,27 @@ import { isAuthConfigured } from '@/lib/safe-auth';
 import { resolveSiteUrl } from '@/lib/site-url';
 import './globals.css';
 
-const fontDisplay = Bricolage_Grotesque({
-  subsets: ['latin'],
+// Fonts ship with the app (app/fonts, SIL Open Font License) instead of being downloaded from
+// Google Fonts at build time, so a Google Fonts hiccup can no longer fail a deploy.
+const fontDisplay = localFont({
+  src: [{ path: './fonts/bricolage-grotesque-latin.woff2', weight: '600 800', style: 'normal' }],
   display: 'swap',
   variable: '--font-bricolage',
-  weight: ['600', '700', '800'],
 });
 
-const fontUi = IBM_Plex_Sans({
-  subsets: ['latin'],
+const fontUi = localFont({
+  src: [{ path: './fonts/ibm-plex-sans-latin.woff2', weight: '400 600', style: 'normal' }],
   display: 'swap',
   variable: '--font-ui',
-  weight: ['400', '500', '600'],
 });
 
-const fontMono = IBM_Plex_Mono({
-  subsets: ['latin'],
+const fontMono = localFont({
+  src: [
+    { path: './fonts/ibm-plex-mono-400.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/ibm-plex-mono-500.woff2', weight: '500', style: 'normal' },
+  ],
   display: 'swap',
   variable: '--font-mono',
-  weight: ['400', '500'],
 });
 
 const siteUrl = resolveSiteUrl();
