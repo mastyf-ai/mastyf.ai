@@ -570,11 +570,11 @@ export async function startDashboardServer(
       let data = '';
       req.on('data', (chunk: Buffer) => { data += chunk.toString(); });
       req.on('end', () => {
-        const result: Record<string, string> = {};
+        let result: Record<string, string> = {};
         if (data) {
           try {
-            const params = new URLSearchParams(data);
-            for (const [key, value] of params) { result[key] = value; }
+            // fromEntries defines own properties, so a "__proto__" field can't reach Object.prototype.
+            result = Object.fromEntries(new URLSearchParams(data));
           } catch { /* ignore */ }
         }
         resolve(result);
@@ -608,13 +608,66 @@ export async function startDashboardServer(
     writeJson(res, status, { error: message });
   }
 
-  function getClientIp(req: IncomingMessage): string {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-      const first = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0];
-      return (first || '').trim();
+  function ipv4ToInt(ip: string): number | null {
+    const parts = ip.split('.');
+    if (parts.length !== 4) return null;
+    let n = 0;
+    for (const p of parts) {
+      if (!/^\d{1,3}$/.test(p) || Number(p) > 255) return null;
+      n = n * 256 + Number(p);
     }
-    return req.socket?.remoteAddress || 'unknown';
+    return n;
+  }
+
+  /** Exact IPs and IPv4 CIDRs from MASTYF_AI_TRUSTED_PROXIES, e.g. "10.0.0.0/8,127.0.0.1". */
+  const trustedProxyEntries = (process.env['MASTYF_AI_TRUSTED_PROXIES'] ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  function isConfiguredTrustedProxy(ip: string): boolean {
+    const addr = ip.trim().toLowerCase().replace(/^::ffff:/, '');
+    return trustedProxyEntries.some((entry) => {
+      if (!entry.includes('/')) return entry.replace(/^::ffff:/, '') === addr;
+      const [base, bitsRaw] = entry.split('/');
+      const bits = Number(bitsRaw);
+      const a = ipv4ToInt(addr);
+      const b = ipv4ToInt(base ?? '');
+      if (a === null || b === null || !Number.isInteger(bits) || bits < 0 || bits > 32) return false;
+      const block = 2 ** (32 - bits);
+      return Math.floor(a / block) === Math.floor(b / block);
+    });
+  }
+
+  /**
+   * Client address for rate limiting and audit logs. By default this is the socket peer and
+   * X-Forwarded-For is ignored, because any client can write that header. Operators behind a
+   * reverse proxy opt in with either:
+   *   - MASTYF_AI_TRUSTED_PROXIES=<ip|cidr,...>: hops are read right to left, skipping listed
+   *     proxies; the first unlisted address is the client.
+   *   - MASTYF_AI_TRUST_PROXY=true: exactly one proxy in front; its appended (right-most) entry
+   *     is the client.
+   * A value the client wrote (left of the last trusted hop) is never returned.
+   */
+  function getClientIp(req: IncomingMessage): string {
+    const peer = req.socket?.remoteAddress || 'unknown';
+    const forwarded = req.headers['x-forwarded-for'];
+    if (!forwarded) return peer;
+    const hops = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded)
+      .split(',')
+      .map((h) => h.trim())
+      .filter(Boolean);
+    if (hops.length === 0) return peer;
+
+    if (trustedProxyEntries.length > 0) {
+      if (!isConfiguredTrustedProxy(peer)) return peer;
+      for (let i = hops.length - 1; i >= 0; i--) {
+        if (!isConfiguredTrustedProxy(hops[i])) return hops[i];
+      }
+      return peer; // every hop is one of our proxies: no client address to trust
+    }
+    if (process.env['MASTYF_AI_TRUST_PROXY'] === 'true') return hops[hops.length - 1];
+    return peer;
   }
 
   function appendThreatIntelActionAudit(action: Record<string, unknown>): void {
@@ -2321,7 +2374,8 @@ export async function startDashboardServer(
         setCors();
         const ah = req.headers['authorization'];
         if (ah) {
-          const m = ah.match(/^Bearer\s+(.+)$/i);
+          // `\s+(\S.*)` cannot overlap, so a header of many tabs/spaces can't cause backtracking.
+          const m = ah.match(/^Bearer\s+(\S.*)$/i);
           if (m) auth.logout(m[1]);
         }
         const logoutCookies = auth.parseCookies(
