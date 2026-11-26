@@ -1,6 +1,6 @@
 import { createHash, generateKeyPairSync, createSign, createVerify } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
 export interface Receipt {
@@ -46,14 +46,18 @@ function loadOrGenerateKeys(): { publicKey: string; privateKey: string } {
     } catch { /* public key file is optional */ }
     return { privateKey: pem, publicKey: pubPem };
   };
-  if (existsSync(keyPath)) {
+  // Read first instead of checking existence, so there's no gap between a check and the read.
+  try {
     keyPair = readExisting();
     return keyPair;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
   const { publicKey: pub, privateKey: priv } = generateKeyPairSync('ed25519', {
     publicKeyEncoding: { type: 'spki', format: 'pem' },
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
+  mkdirSync(dirname(keyPath), { recursive: true, mode: 0o700 });
   try {
     // 'wx' creates the file only if nothing is there (no following a planted symlink), and
     // 0o600 keeps the signing key readable by this user only.

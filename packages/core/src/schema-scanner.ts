@@ -22,7 +22,9 @@ const SCHEMA_INJECTION_PATTERNS = [
   // Schema poisoning via additionalProperties/unevaluatedProperties
   /additionalProperties\s*:\s*(?:true|false)/i,
   // Validator evasion
-  /"type"\s*:\s*\[[^\]]*"string"[^\]]*"object"[^\]]*\]/i, // polymorphic type evasion
+  // polymorphic type evasion; each run is capped (real type lists are short) so matching
+  // can't backtrack across a long or repeated input
+  /"type"\s*:\s*\[[^\]]{0,100}"string"[^\]]{0,100}"object"[^\]]{0,100}\]/i,
   // Recursive self-referencing
   /\$ref\s*:\s*['"]#\/definitions\/\w+['"]/i,
   // Pattern abuse (ReDoS in schema patterns)
