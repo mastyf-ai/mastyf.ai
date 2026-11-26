@@ -8,7 +8,7 @@ export interface HttpProxyAuthValidator {
 
 function defaultExtractToken(authHeader: string | undefined): string | null {
   if (!authHeader) return null;
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const match = authHeader.match(/^Bearer\s+(\S.*)$/i);
   return match?.[1]?.trim() || null;
 }
 

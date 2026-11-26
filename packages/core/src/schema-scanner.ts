@@ -20,7 +20,7 @@ const SCHEMA_INJECTION_PATTERNS = [
   // Type confusion
   /\b(?:any|never|unknown)\s*:\s*\{/, // suspicious broad types
   // Schema poisoning via additionalProperties/unevaluatedProperties
-  /additionalProperties\s*:\s*(?:true|false)(?:\s*,?\s*unevaluatedProperties)?/i,
+  /additionalProperties\s*:\s*(?:true|false)/i,
   // Validator evasion
   /"type"\s*:\s*\[[^\]]*"string"[^\]]*"object"[^\]]*\]/i, // polymorphic type evasion
   // Recursive self-referencing

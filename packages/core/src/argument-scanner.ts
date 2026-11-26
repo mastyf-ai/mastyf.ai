@@ -577,8 +577,9 @@ const DESERIALIZATION_PATTERNS = [
 // ── ReDoS / Regex Bombing ──────────────────────────────────────────────────
 /** Detect regex-bomb payloads; patterns are bounded — matching uses testPattern(). */
 const REDOS_PATTERNS = [
-  /(?:a+){10,}/i,
-  /(?:a+a+)+b/i,
+  // Same matches as the classic bombs (a+){10,} and (a+a+)+b, without nested quantifiers.
+  /a{10,}/i,
+  /a{2,}b/i,
   /\([^)]{0,20}\)\s*\+\s*\([^)]{0,20}\)\s*\+\s*\([^)]{0,20}\)/,
   /(\w\+)\+\w\+/,
   /\{0,\d+\}\{0,\d+\}\{0,\d+\}/,
@@ -626,7 +627,7 @@ const DANGEROUS_JS_PATTERNS = [
 // ── XSS / HTML / CSS Injection Patterns (Phase 5B) ─────────────────────────
 const XSS_INJECTION_PATTERNS: RegExp[] = [
   // === Reflected XSS ===
-  /<script[^>]*>[^<]{0,100}<\/script>/i,
+  /<script[^>]*>[^<]{0,100}<\/script\s*>/i, // browsers also close on </script >
   /<img[^>]+onerror\s*=/i,
   /<img[^>]+onload\s*=/i,
   /<svg[^>]+onload\s*=/i,

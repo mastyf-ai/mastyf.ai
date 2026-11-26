@@ -48,7 +48,9 @@ function looksLikeLemonKey(token) {
   const raw = String(token || '').trim();
   if (!raw || raw.startsWith('MSH1.')) return false;
   if (raw.length < 10 || raw.length > 128) return false;
-  return /^[A-Za-z0-9_-]+(-[A-Za-z0-9_-]+)+$/.test(raw) || /^[A-Za-z0-9]{16,}$/.test(raw);
+  // Same rule as /^[A-Za-z0-9_-]+(-[A-Za-z0-9_-]+)+$/ (a '-' with a character on each side),
+  // without the nested quantifier that could backtrack exponentially.
+  return (/^[A-Za-z0-9_-]+$/.test(raw) && raw.slice(1, -1).includes('-')) || /^[A-Za-z0-9]{16,}$/.test(raw);
 }
 
 function verifyLicenseToken(token, publicPem, nowMs, machineId) {
