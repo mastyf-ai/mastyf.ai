@@ -570,11 +570,11 @@ export async function startDashboardServer(
       let data = '';
       req.on('data', (chunk: Buffer) => { data += chunk.toString(); });
       req.on('end', () => {
-        const result: Record<string, string> = {};
+        let result: Record<string, string> = {};
         if (data) {
           try {
-            const params = new URLSearchParams(data);
-            for (const [key, value] of params) { result[key] = value; }
+            // fromEntries defines own properties, so a "__proto__" field can't reach Object.prototype.
+            result = Object.fromEntries(new URLSearchParams(data));
           } catch { /* ignore */ }
         }
         resolve(result);
@@ -608,13 +608,40 @@ export async function startDashboardServer(
     writeJson(res, status, { error: message });
   }
 
+  /** Loopback, link-local and private-network addresses: where a reverse proxy in front of us lives. */
+  function isTrustedProxyAddress(ip: string): boolean {
+    const a = ip.replace(/^::ffff:/i, '');
+    return (
+      a === '::1' ||
+      /^127\./.test(a) ||
+      /^10\./.test(a) ||
+      /^192\.168\./.test(a) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(a) ||
+      /^169\.254\./.test(a) ||
+      /^f[cd][0-9a-f]{2}:/i.test(a) ||
+      /^fe80:/i.test(a)
+    );
+  }
+
+  /**
+   * Client address for rate limiting and audit logs. X-Forwarded-For is only honoured when the
+   * request arrives from a proxy address (or MASTYF_AI_TRUST_PROXY=true), and is read from the
+   * right: each proxy appends the address it saw, so the left-most entries are whatever the
+   * client chose to send and must not be trusted.
+   */
   function getClientIp(req: IncomingMessage): string {
+    const peer = req.socket?.remoteAddress || 'unknown';
     const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-      const first = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0];
-      return (first || '').trim();
+    const trustAll = process.env['MASTYF_AI_TRUST_PROXY'] === 'true';
+    if (!forwarded || !(trustAll || isTrustedProxyAddress(peer))) return peer;
+    const hops = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded)
+      .split(',')
+      .map((h) => h.trim())
+      .filter(Boolean);
+    for (let i = hops.length - 1; i >= 0; i--) {
+      if (trustAll ? i === hops.length - 1 : !isTrustedProxyAddress(hops[i])) return hops[i];
     }
-    return req.socket?.remoteAddress || 'unknown';
+    return hops[0] ?? peer;
   }
 
   function appendThreatIntelActionAudit(action: Record<string, unknown>): void {
@@ -2321,7 +2348,8 @@ export async function startDashboardServer(
         setCors();
         const ah = req.headers['authorization'];
         if (ah) {
-          const m = ah.match(/^Bearer\s+(.+)$/i);
+          // `\s+(\S.*)` cannot overlap, so a header of many tabs/spaces can't cause backtracking.
+          const m = ah.match(/^Bearer\s+(\S.*)$/i);
           if (m) auth.logout(m[1]);
         }
         const logoutCookies = auth.parseCookies(
