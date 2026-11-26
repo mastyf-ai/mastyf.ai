@@ -73,7 +73,7 @@ export class RequestAuditor {
   /** Redact argument values — only keep keys and types. */
   private redactArgs(args?: Record<string, unknown>): string {
     if (!args || Object.keys(args).length === 0) return '{}';
-    const summary: Record<string, string> = {};
+    const summary: Record<string, string> = Object.create(null); // keys come from tool args
     for (const [key, value] of Object.entries(args)) {
       if (typeof value === 'string') {
         summary[key] = `string(${value.length} chars)`;

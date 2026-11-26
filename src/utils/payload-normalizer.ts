@@ -326,7 +326,7 @@ export class PayloadNormalizer {
     }
 
     if (value !== null && typeof value === 'object') {
-      const result: Record<string, unknown> = {};
+      const result: Record<string, unknown> = Object.create(null); // keys come from the payload
       for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
         result[key] = this.normalizeJsonValue(val, depth + 1);
       }

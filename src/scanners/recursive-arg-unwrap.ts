@@ -38,7 +38,7 @@ export function recursiveUnwrap(
   path = '',
 ): UnwrapResult {
   const result: UnwrapResult = {
-    flattenedArgs: {},
+    flattenedArgs: Object.create(null), // paths are built from arg keys
     leafValues: [],
     depth,
     hiddenFieldsDetected: [],
@@ -110,7 +110,7 @@ export function recursiveUnwrap(
 
 function unwrapArray(arr: unknown[], depth: number, path: string): UnwrapResult {
   const result: UnwrapResult = {
-    flattenedArgs: {},
+    flattenedArgs: Object.create(null), // paths are built from arg keys
     leafValues: [],
     depth,
     hiddenFieldsDetected: [],

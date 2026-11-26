@@ -65,8 +65,9 @@ export async function hookAgenticObservation(
 
   try {
     const argKeys = Object.keys(args);
-    const argTypes: Record<string, string> = {};
-    const argRanges: Record<string, { min?: number; max?: number; avg?: number }> = {};
+    // Keys come from tool arguments, so use prototype-less maps.
+    const argTypes: Record<string, string> = Object.create(null);
+    const argRanges: Record<string, { min?: number; max?: number; avg?: number }> = Object.create(null);
 
     for (const key of argKeys) {
       const val = args[key];
@@ -298,7 +299,7 @@ export async function runAgenticPreForwardHooks(
       return { blocked: true, reason: `Sandbox shadow tier: ${toolName} logged but not forwarded` };
     }
   } else if (container.sandboxEnforcer.shouldRedact(tierScope)) {
-    const redacted = { ...args };
+    const redacted: typeof args = Object.assign(Object.create(null), args);
     for (const k of Object.keys(redacted)) {
       if (/password|secret|token|key/i.test(k)) redacted[k] = '[REDACTED]';
     }
