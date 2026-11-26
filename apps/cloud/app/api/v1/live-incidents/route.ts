@@ -11,16 +11,25 @@ export interface LiveIncidentItem {
   severity: 'CRITICAL' | 'SEV-1' | 'HIGH';
 }
 
+/**
+ * Plain text from a feed's HTML snippet. Entities are decoded first (with &amp; last, so
+ * "&amp;lt;" stays the literal text "&lt;"), then every tag is stripped until none remain, so
+ * an encoded "&lt;script&gt;" can't turn back into markup after cleaning.
+ */
 function cleanHtml(raw: string): string {
-  return raw
-    .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, '&')
+  let text = raw
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&nbsp;/g, ' ')
-    .trim();
+    .replace(/&amp;/g, '&');
+  let previous;
+  do {
+    previous = text;
+    text = text.replace(/<[^>]*>/g, '');
+  } while (text !== previous);
+  return text.replace(/[<>]/g, '').trim();
 }
 
 function categorize(title: string, snippet: string): {

@@ -85,9 +85,9 @@ export function getRules(): CompiledRule[] {
 }
 
 function shannonEntropy(str: string): number {
-  const freq: Record<string, number> = {};
-  for (const ch of str) freq[ch] = (freq[ch] ?? 0) + 1;
-  return Object.values(freq).reduce((acc, count) => { const p = count / str.length; return acc - p * Math.log2(p); }, 0);
+  const freq = new Map<string, number>();
+  for (const ch of str) freq.set(ch, (freq.get(ch) ?? 0) + 1);
+  return [...freq.values()].reduce((acc, count) => { const p = count / str.length; return acc - p * Math.log2(p); }, 0);
 }
 
 function redact(value: string): string {

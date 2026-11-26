@@ -500,10 +500,27 @@ export type WsDashboardMessage = {
 };
 
 /** API origin: query/env override, else same-origin relative paths (`/api/...`). */
+function isAllowedApiBase(raw: string): boolean {
+  try {
+    const u = new URL(raw, window.location.href);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    return (
+      u.origin === window.location.origin ||
+      u.hostname === 'localhost' ||
+      u.hostname === '127.0.0.1' ||
+      u.hostname === '[::1]'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function resolveApiBase(): string {
   if (typeof window === 'undefined') return '';
+  // ?apiBase= is a development aid. A link can set it, so only this page's own origin or a
+  // local server is accepted; otherwise anyone could point the dashboard at their own API.
   const fromQuery = new URLSearchParams(window.location.search).get('apiBase');
-  if (fromQuery) return fromQuery.replace(/\/$/, '');
+  if (fromQuery && isAllowedApiBase(fromQuery)) return fromQuery.replace(/\/$/, '');
   const envBase = process.env.NEXT_PUBLIC_MASTYF_AI_API;
   if (envBase) return envBase.replace(/\/$/, '');
   return '';
@@ -538,6 +555,12 @@ export async function mastyfAiFetch(
   const base = resolveApiBase();
   const normalized = path.startsWith('/') ? path : `/${path}`;
   const url = path.startsWith('http') ? path : base ? `${base}${normalized}` : normalized;
+  // Absolute URLs must still point at our API (or this origin), never an arbitrary host.
+  if (path.startsWith('http') && typeof window !== 'undefined') {
+    const target = new URL(path).origin;
+    const allowed = [window.location.origin, base ? new URL(base, window.location.href).origin : null];
+    if (!allowed.includes(target)) throw new Error(`Refusing to call non-API origin ${target}`);
+  }
   return fetch(url, {
     credentials: 'include',
     ...init,

@@ -65,7 +65,7 @@ export class PolicyAssist {
     // Rate limit: "rate limit X to 10/min" or "limit calls to 60 per minute"
     const rateMatch = g.match(/rate\s*[- ]?limit|limit\s+(?:calls|requests)/i);
     if (rateMatch) {
-      const numMatch = g.match(/(\d+)\s*(?:\/|per)\s*(?:min|minute)/i);
+      const numMatch = g.match(/(\d{1,9})\s*(?:\/|per)\s*(?:min|minute)/i);
       const targets = this.extractTools(g, rateMatch.index! + rateMatch[0].length);
       return { raw: goal, intent: 'rate_limit', targets, numericValue: numMatch ? parseInt(numMatch[1]) : 60 };
     }
@@ -96,7 +96,7 @@ export class PolicyAssist {
     // Scope restrict: "require admin scope for X"
     const scopeMatch = g.match(/require|need|scope|admin|read-only|write/i);
     if (scopeMatch) {
-      const scopeExtract = g.match(/(?:scope|permission|role)\s*(?:of|is|for)?\s*["']?(\w[\w-]*)["']?/i);
+      const scopeExtract = g.match(/(?:scope|permission|role)(?:\s+(?:of|is|for))?\s*["']?(\w[\w-]*)["']?/i);
       const targets = this.extractTools(g, scopeMatch.index! + scopeMatch[0].length);
       return { raw: goal, intent: 'scope_restrict', targets, scope: scopeExtract?.[1] || 'admin' };
     }

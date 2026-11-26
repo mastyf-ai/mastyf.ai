@@ -36,7 +36,8 @@ declare module 'express-serve-static-core' {
 }
 
 export function parseCookies(header: string | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
+  // No prototype: keys come from the request, so "__proto__" must stay an ordinary key.
+  const out: Record<string, string> = Object.create(null);
   if (!header) return out;
   for (const part of header.split(';')) {
     const eq = part.indexOf('=');

@@ -99,8 +99,8 @@ export class BehaviorCollector {
       complete: false,
       totalCalls: 0,
       uniqueTools: 0,
-      byTool: {},
-      coOccurrences: {},
+      byTool: Object.create(null),
+      coOccurrences: Object.create(null),
       sessionSequences: {},
       stats: {
         totalObservations: 0,
@@ -159,7 +159,7 @@ export class BehaviorCollector {
     if (session.length >= 2) {
       const prev = session[session.length - 2]!;
       if (!w.coOccurrences[prev]) {
-        w.coOccurrences[prev] = {};
+        w.coOccurrences[prev] = Object.create(null);
       }
       w.coOccurrences[prev]![observation.toolName] =
         (w.coOccurrences[prev]![observation.toolName] || 0) + 1;

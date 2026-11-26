@@ -1,7 +1,7 @@
 import { scanServer, scanTool, type ServerScanResult } from '@mastyf_ai/core';
 import { fetchToolsFromStdio } from '@mastyf_ai/core/transports/stdio';
 import type { TrustGrade } from '@mastyf_ai/tool-registry';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -27,8 +27,26 @@ function computeGrade(score: number): TrustGrade {
   return 'F';
 }
 
+/**
+ * An npm package spec: optional @scope/, a name, and an optional exact version or dist-tag.
+ * Range operators (< > ^ = *) are not accepted: on Windows npm runs through cmd.exe, where
+ * < > redirect files and ^ escapes, so only letters, digits and . _ + ~ - may appear.
+ */
+const NPM_PACKAGE_SPEC = /^(?:@[a-z0-9][\w.~-]*\/)?[a-z0-9][\w.~-]*(?:@[\w.+~-]+)?$/i;
+
 export async function preflightCheck(packageName: string): Promise<PreflightReport> {
-  const info = JSON.parse(execSync(`npm view ${packageName} --json`, { encoding: 'utf-8', maxBuffer: 1024 * 1024 }).trim());
+  // The name is checked against the npm naming rules and passed as its own argument (no shell
+  // string), so a value like "x; rm -rf ~" can't run a command. Windows needs a shell to start
+  // npm.cmd, which is safe only because of the check above.
+  if (!NPM_PACKAGE_SPEC.test(packageName)) throw new Error(`Invalid npm package name: ${packageName}`);
+  const win = process.platform === 'win32';
+  const info = JSON.parse(
+    execFileSync(win ? 'npm.cmd' : 'npm', ['view', packageName, '--json'], {
+      encoding: 'utf-8',
+      maxBuffer: 1024 * 1024,
+      shell: win,
+    }).trim(),
+  );
   const version = info.version || 'unknown';
 
   const cacheDir = join(homedir(), '.mastyf-ai', 'preflight-cache');

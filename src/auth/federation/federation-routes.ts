@@ -3,8 +3,8 @@ import type { FederationStore, InMemoryFederationStore } from './federation-stor
 import type { DbFederationStore } from './db-federation-store.js';
 import type { IdpConfig } from './federation-types.js';
 import { startOidcLogin, handleOidcCallback } from './oidc-provider.js';
-import { generateSamlRequestUrl, parseSamlResponse } from './saml-provider.js';
 import type { FederatedUserData } from './federation-types.js';
+import { createAttemptLimiter } from '../attempt-limiter.js';
 
 interface FederationRouteDeps {
   federationStore: FederationStore | InMemoryFederationStore | DbFederationStore;
@@ -73,7 +73,13 @@ function query(req: Request, name: string): string | undefined {
   return val as string | undefined;
 }
 
+const SAML_UNAVAILABLE =
+  'SAML sign-in is not available in this version. Use an OIDC provider for single sign-on.';
+
 export function registerFederationRoutes(router: Router, deps: FederationRouteDeps): void {
+  // SSO start and callback are unauthenticated and each start stores state, so cap them per address.
+  const ssoAttempts = createAttemptLimiter({ max: 30, windowMs: 15 * 60 * 1000 });
+
   router.get('/api/auth/sso/providers', async (req: Request, res: Response) => {
     try {
       const providers = await deps.federationStore.getEnabledProvidersForTenant(getTenantId(req));
@@ -88,7 +94,7 @@ export function registerFederationRoutes(router: Router, deps: FederationRouteDe
     }
   });
 
-  router.get('/api/auth/sso/login/:providerId', async (req: Request, res: Response) => {
+  router.get('/api/auth/sso/login/:providerId', ssoAttempts, async (req: Request, res: Response) => {
     try {
       const tenantId = getTenantId(req);
       const providerId = param(req, 'providerId');
@@ -104,23 +110,14 @@ export function registerFederationRoutes(router: Router, deps: FederationRouteDe
         storeSsoState(state, config.id, codeVerifier, nonce, tenantId);
         res.redirect(302, authorizationUrl);
       } else if (config.providerType === 'saml') {
-        const { url, relayState } = generateSamlRequestUrl({
-          id: config.id, tenantId: config.tenantId || tenantId,
-          name: config.name, issuerUrl: config.issuerUrl, entryPoint: config.redirectUri,
-          cert: config.clientSecret || '',
-          redirectUri: `${req.protocol}://${req.get('host')}/api/auth/sso/callback/${config.id}`,
-          claimMappings: config.claimMappings, roleMap: config.roleMap || {},
-          enabled: config.enabled, createdAt: '', updatedAt: '',
-        });
-        storeSsoState(relayState, config.id, '', '', tenantId);
-        res.redirect(302, url);
+        res.status(501).json({ error: SAML_UNAVAILABLE });
       }
     } catch (err: any) {
       res.status(500).json({ error: 'SSO login failed', message: err.message });
     }
   });
 
-  router.get('/api/auth/sso/callback/:providerId', async (req: Request, res: Response) => {
+  router.get('/api/auth/sso/callback/:providerId', ssoAttempts, async (req: Request, res: Response) => {
     try {
       const tenantId = getTenantId(req);
       const providerId = param(req, 'providerId');
@@ -132,25 +129,7 @@ export function registerFederationRoutes(router: Router, deps: FederationRouteDe
       }
 
       if (config.providerType === 'saml') {
-        const samlBody = (req as any).body?.SAMLResponse || '';
-        const relayState = (req as any).body?.RelayState || query(req, 'RelayState') || '';
-        if (!samlBody) { res.status(400).json({ error: 'Missing SAML response' }); return; }
-        const ssoState = getSsoState(relayState);
-        if (!ssoState) { res.status(400).json({ error: 'Invalid SAML session' }); return; }
-        const samlUser = await parseSamlResponse(samlBody, config as any, relayState);
-        if (!samlUser) { res.status(400).json({ error: 'Invalid SAML response' }); return; }
-        const federatedUser: FederatedUserData = {
-          idpProvider: config.id, idpUserId: samlUser.nameId,
-          email: samlUser.email, displayName: samlUser.displayName,
-          groups: samlUser.groups, roles: [],
-          mappedRoles: Object.entries(config.roleMap || {}).filter(([k]) => samlUser.groups.includes(k)).map(([, v]) => v),
-          accessToken: '', refreshToken: '',
-        };
-        let user = await deps.userStore.findByIdpUser(federatedUser.idpProvider, federatedUser.idpUserId, tenantId);
-        if (!user) { user = await deps.userStore.createFromIdp({ tenantId, username: federatedUser.email || samlUser.nameId, email: federatedUser.email, displayName: federatedUser.displayName, idpProvider: federatedUser.idpProvider, idpUserId: federatedUser.idpUserId, roles: federatedUser.mappedRoles }); }
-        const session = await deps.sessionStore.create(user.id as string, req.ip || '127.0.0.1', req.headers['user-agent'] || '', tenantId);
-        res.cookie('mastyf_ai_session', session.token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, maxAge: 7 * 24 * 60 * 60 * 1000, path: '/' });
-        res.redirect(302, '/?sso=success');
+        res.status(501).json({ error: SAML_UNAVAILABLE });
         return;
       }
 

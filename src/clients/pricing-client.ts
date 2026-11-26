@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { Logger } from '../utils/logger.js';
 import { fetchSignedRemotePricing } from './pricing-remote.js';
 import { detectZeroPricingAlert } from './pricing-signature.js';
@@ -114,12 +114,15 @@ export class PricingClient {
    */
   private async fetchLivePricing(model: string): Promise<{ input: number; output: number } | null> {
     try {
+      // The model name comes from proxied traffic, so it is passed as an argument (sys.argv) and
+      // never pasted into the script or a shell command.
       const pythonScript = `
-import json
+import json, sys
+model, prefix = sys.argv[1], sys.argv[2]
 try:
     import litellm
     # litellm.model_cost has live pricing for all models
-    cost = litellm.model_cost.get("${model}", None)
+    cost = litellm.model_cost.get(model, None)
     if cost:
         print(json.dumps({
             "input": cost.get("input_cost_per_token", 0) * 1_000_000,
@@ -128,7 +131,7 @@ try:
     else:
         # Try fuzzy match via litellm
         for k in litellm.model_cost:
-            if k.startswith("${model.split('-')[0]}"):
+            if k.startswith(prefix):
                 cost = litellm.model_cost[k]
                 print(json.dumps({
                     "input": cost.get("input_cost_per_token", 0) * 1_000_000,
@@ -141,7 +144,7 @@ try:
 except Exception as e:
     print(json.dumps({"error": str(e)}))
 `;
-      const result = execSync(`python3 -c "${pythonScript}"`, {
+      const result = execFileSync('python3', ['-c', pythonScript, model, model.split('-')[0] ?? model], {
         encoding: 'utf-8',
         timeout: 8000,
         stdio: ['pipe', 'pipe', 'pipe'],

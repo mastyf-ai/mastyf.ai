@@ -425,7 +425,7 @@ export class DashboardAuth {
   }
 
   parseCookies(cookieHeader?: string): Record<string, string> {
-    const result: Record<string, string> = {};
+    const result: Record<string, string> = Object.create(null); // keys come from the request
     if (!cookieHeader) return result;
     for (const part of cookieHeader.split(';')) {
       const trimmed = part.trim();
@@ -751,7 +751,7 @@ ${csrfField}
   }
 
   private normalizeHeaders(headers: Record<string, string | string[] | undefined>): Record<string, string> {
-    const result: Record<string, string> = {};
+    const result: Record<string, string> = Object.create(null); // keys come from the request
     for (const [key, value] of Object.entries(headers)) {
       if (Array.isArray(value)) result[key.toLowerCase()] = value[0] || '';
       else if (value !== undefined) result[key.toLowerCase()] = value;

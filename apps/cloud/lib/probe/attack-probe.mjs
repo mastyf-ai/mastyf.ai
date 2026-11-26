@@ -21,10 +21,9 @@
  */
 
 import { createGunzip } from 'node:zlib';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname } from 'node:path';
-import { randomBytes } from 'node:crypto';
 
 const REGISTRY_BASE = 'https://registry.npmjs.org';
 const TIMEOUT_MS = 20000;
@@ -426,7 +425,8 @@ export async function probePackage(packageName, version) {
   if (!tarball) return unable('tarball_download_failed');
 
   // 3. Extract and scan in a temp dir (defence-in-depth; we never execute)
-  const workDir = join(tmpdir(), `mastyf-probe-${randomBytes(8).toString('hex')}`);
+  // mkdtemp: a fresh private directory, created atomically (no pre-created or symlinked path).
+  const workDir = await mkdtemp(join(tmpdir(), 'mastyf-probe-'));
   const findings = [];
   let filesScanned = 0;
   let bytesScanned = 0;

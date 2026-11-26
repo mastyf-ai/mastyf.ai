@@ -4,6 +4,11 @@ import { cloudDbAvailable, getDb } from '@/lib/db';
 import { gcpMarketplaceAccounts, gcpMarketplaceEntitlements } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
+/** One-line text for logs: values from Google/requests can't start a forged log line. */
+function forLog(v: unknown): string {
+  return String(v instanceof Error ? v.message : v).replace(/[\r\n\u2028\u2029]+/g, ' ');
+}
+
 /**
  * Google Cloud Marketplace Procurement Webhook Handler
  * Receives Pub/Sub push messages from Google Cloud Commerce (cloudcommerceprocurement.googleapis.com)
@@ -84,13 +89,15 @@ export async function POST(req: NextRequest) {
     // 2. Lifecycle transitions & Procurement API calls
     switch (eventType) {
       case 'ENTITLEMENT_CREATION_REQUESTED': {
-        console.log(`[GCP Marketplace] Auto-approving requested entitlement: ${entitlementId}`);
+        console.log(`[GCP Marketplace] Auto-approving requested entitlement: ${forLog(entitlementId)}`);
         if (entitlementId) {
           try {
             await gcpProcurement.approveEntitlement(entitlementId);
-            console.log(`[GCP Marketplace] Successfully approved entitlement: ${entitlementId}`);
+            console.log(`[GCP Marketplace] Successfully approved entitlement: ${forLog(entitlementId)}`);
           } catch (procErr: any) {
-            console.error(`[GCP Marketplace] Failed to approve entitlement ${entitlementId}:`, procErr);
+            // The id is passed as a %s argument, not built into the format string, so a "%" in it
+            // can't shift the arguments.
+            console.error('[GCP Marketplace] Failed to approve entitlement %s:', forLog(entitlementId), procErr);
             // Return 200 or 500 depending on retry strategy; Google Pub/Sub will retry on 500
             return NextResponse.json({ error: procErr.message }, { status: 500 });
           }
@@ -99,7 +106,7 @@ export async function POST(req: NextRequest) {
       }
 
       case 'ENTITLEMENT_ACTIVE': {
-        console.log(`[GCP Marketplace] Entitlement is active for account: ${accountId}`);
+        console.log(`[GCP Marketplace] Entitlement is active for account: ${forLog(accountId)}`);
         if (cloudDbAvailable() && entitlementId) {
           try {
             const db = getDb();
@@ -115,7 +122,7 @@ export async function POST(req: NextRequest) {
       }
 
       case 'ENTITLEMENT_PLAN_CHANGED': {
-        console.log(`[GCP Marketplace] Approving plan change to ${planId} for entitlement: ${entitlementId}`);
+        console.log(`[GCP Marketplace] Approving plan change to ${forLog(planId)} for entitlement: ${forLog(entitlementId)}`);
         if (entitlementId) {
           try {
             await gcpProcurement.approveEntitlement(entitlementId);
@@ -131,7 +138,7 @@ export async function POST(req: NextRequest) {
                 .where(eq(gcpMarketplaceEntitlements.id, entitlementId));
             }
           } catch (procErr: any) {
-            console.error(`[GCP Marketplace] Failed to approve plan change for ${entitlementId}:`, procErr);
+            console.error('[GCP Marketplace] Failed to approve plan change for %s:', forLog(entitlementId), procErr);
             return NextResponse.json({ error: procErr.message }, { status: 500 });
           }
         }
@@ -139,7 +146,7 @@ export async function POST(req: NextRequest) {
       }
 
       case 'ENTITLEMENT_CANCELLED': {
-        console.log(`[GCP Marketplace] Entitlement cancelled: ${entitlementId}`);
+        console.log(`[GCP Marketplace] Entitlement cancelled: ${forLog(entitlementId)}`);
         if (cloudDbAvailable() && entitlementId) {
           try {
             const db = getDb();
@@ -155,7 +162,7 @@ export async function POST(req: NextRequest) {
       }
 
       default:
-        console.log(`[GCP Marketplace] Unhandled event type: ${eventType}`);
+        console.log(`[GCP Marketplace] Unhandled event type: ${forLog(eventType)}`);
     }
 
     // Acknowledge Pub/Sub message

@@ -270,8 +270,10 @@ async function proxySecuritySwarmToDashboard(req: Request, res: Response, curren
     return;
   }
 
-  const target = new URL(req.originalUrl || req.url, upstream);
-  // A path such as "//evil.example/x" would otherwise resolve to another host.
+  // Always "<configured upstream>/<path>": the host comes only from configuration, and leading
+  // slashes are collapsed so a path like "//evil.example/x" can't name a different host.
+  const requestPath = (req.originalUrl || req.url || '/').replace(/^\/+/, '');
+  const target = new URL(`${upstream}/${requestPath}`);
   if (target.origin !== upstream) {
     res.status(400).json({ available: false, reason: 'invalid_upstream_path', dataSources: [] });
     return;

@@ -281,7 +281,7 @@ export class OAuthValidator {
   static extractToken(authorizationHeader?: string): string | null {
     if (!authorizationHeader) return null;
     const trimmed = authorizationHeader.trim();
-    const match = trimmed.match(/^Bearer\s+(.+)$/i);
+    const match = trimmed.match(/^Bearer\s+(\S.*)$/i);
     if (match) return match[1];
     if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(trimmed)) {
       return trimmed;

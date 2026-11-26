@@ -114,7 +114,7 @@ export function redactArguments(args: unknown, maxStringLen = 200): Record<strin
       return value.slice(0, 5).map((item, i) => redactValue(item, `${keyPath}[${i}]`));
     }
     if (value && typeof value === 'object') {
-      const out: Record<string, unknown> = {};
+      const out: Record<string, unknown> = Object.create(null); // keys come from tool args
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
         out[k] = redactValue(v, keyPath ? `${keyPath}.${k}` : k);
       }
