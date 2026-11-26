@@ -608,40 +608,66 @@ export async function startDashboardServer(
     writeJson(res, status, { error: message });
   }
 
-  /** Loopback, link-local and private-network addresses: where a reverse proxy in front of us lives. */
-  function isTrustedProxyAddress(ip: string): boolean {
-    const a = ip.replace(/^::ffff:/i, '');
-    return (
-      a === '::1' ||
-      /^127\./.test(a) ||
-      /^10\./.test(a) ||
-      /^192\.168\./.test(a) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(a) ||
-      /^169\.254\./.test(a) ||
-      /^f[cd][0-9a-f]{2}:/i.test(a) ||
-      /^fe80:/i.test(a)
-    );
+  function ipv4ToInt(ip: string): number | null {
+    const parts = ip.split('.');
+    if (parts.length !== 4) return null;
+    let n = 0;
+    for (const p of parts) {
+      if (!/^\d{1,3}$/.test(p) || Number(p) > 255) return null;
+      n = n * 256 + Number(p);
+    }
+    return n;
+  }
+
+  /** Exact IPs and IPv4 CIDRs from MASTYF_AI_TRUSTED_PROXIES, e.g. "10.0.0.0/8,127.0.0.1". */
+  const trustedProxyEntries = (process.env['MASTYF_AI_TRUSTED_PROXIES'] ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  function isConfiguredTrustedProxy(ip: string): boolean {
+    const addr = ip.trim().toLowerCase().replace(/^::ffff:/, '');
+    return trustedProxyEntries.some((entry) => {
+      if (!entry.includes('/')) return entry.replace(/^::ffff:/, '') === addr;
+      const [base, bitsRaw] = entry.split('/');
+      const bits = Number(bitsRaw);
+      const a = ipv4ToInt(addr);
+      const b = ipv4ToInt(base ?? '');
+      if (a === null || b === null || !Number.isInteger(bits) || bits < 0 || bits > 32) return false;
+      const block = 2 ** (32 - bits);
+      return Math.floor(a / block) === Math.floor(b / block);
+    });
   }
 
   /**
-   * Client address for rate limiting and audit logs. X-Forwarded-For is only honoured when the
-   * request arrives from a proxy address (or MASTYF_AI_TRUST_PROXY=true), and is read from the
-   * right: each proxy appends the address it saw, so the left-most entries are whatever the
-   * client chose to send and must not be trusted.
+   * Client address for rate limiting and audit logs. By default this is the socket peer and
+   * X-Forwarded-For is ignored, because any client can write that header. Operators behind a
+   * reverse proxy opt in with either:
+   *   - MASTYF_AI_TRUSTED_PROXIES=<ip|cidr,...>: hops are read right to left, skipping listed
+   *     proxies; the first unlisted address is the client.
+   *   - MASTYF_AI_TRUST_PROXY=true: exactly one proxy in front; its appended (right-most) entry
+   *     is the client.
+   * A value the client wrote (left of the last trusted hop) is never returned.
    */
   function getClientIp(req: IncomingMessage): string {
     const peer = req.socket?.remoteAddress || 'unknown';
     const forwarded = req.headers['x-forwarded-for'];
-    const trustAll = process.env['MASTYF_AI_TRUST_PROXY'] === 'true';
-    if (!forwarded || !(trustAll || isTrustedProxyAddress(peer))) return peer;
+    if (!forwarded) return peer;
     const hops = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded)
       .split(',')
       .map((h) => h.trim())
       .filter(Boolean);
-    for (let i = hops.length - 1; i >= 0; i--) {
-      if (trustAll ? i === hops.length - 1 : !isTrustedProxyAddress(hops[i])) return hops[i];
+    if (hops.length === 0) return peer;
+
+    if (trustedProxyEntries.length > 0) {
+      if (!isConfiguredTrustedProxy(peer)) return peer;
+      for (let i = hops.length - 1; i >= 0; i--) {
+        if (!isConfiguredTrustedProxy(hops[i])) return hops[i];
+      }
+      return peer; // every hop is one of our proxies: no client address to trust
     }
-    return hops[0] ?? peer;
+    if (process.env['MASTYF_AI_TRUST_PROXY'] === 'true') return hops[hops.length - 1];
+    return peer;
   }
 
   function appendThreatIntelActionAudit(action: Record<string, unknown>): void {
