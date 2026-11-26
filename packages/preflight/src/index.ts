@@ -27,8 +27,12 @@ function computeGrade(score: number): TrustGrade {
   return 'F';
 }
 
-/** An npm package spec: optional @scope/, a name, and an optional @version or @tag. */
-const NPM_PACKAGE_SPEC = /^(?:@[a-z0-9][\w.~-]*\/)?[a-z0-9][\w.~-]*(?:@[\w.^~<>=*+-]+)?$/i;
+/**
+ * An npm package spec: optional @scope/, a name, and an optional exact version or dist-tag.
+ * Range operators (< > ^ = *) are not accepted: on Windows npm runs through cmd.exe, where
+ * < > redirect files and ^ escapes, so only letters, digits and . _ + ~ - may appear.
+ */
+const NPM_PACKAGE_SPEC = /^(?:@[a-z0-9][\w.~-]*\/)?[a-z0-9][\w.~-]*(?:@[\w.+~-]+)?$/i;
 
 export async function preflightCheck(packageName: string): Promise<PreflightReport> {
   // The name is checked against the npm naming rules and passed as its own argument (no shell
