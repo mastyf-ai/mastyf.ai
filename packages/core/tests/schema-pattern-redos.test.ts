@@ -47,6 +47,25 @@ describe('schema scan: nested-quantifier patterns', () => {
     expect(flagged({ type: 'object', patternProperties: { '^(x*)*$': { type: 'string' } } })).toBe(true);
   });
 
+  it('still flags an evil pattern hidden after thousands of harmless ones', () => {
+    const properties: Record<string, unknown> = {};
+    for (let i = 0; i < 3000; i++) properties[`p${i}`] = { type: 'string', pattern: '^[a-z]+$' };
+    properties['zz'] = { type: 'string', pattern: '(a+)*' };
+    expect(flagged({ type: 'object', properties })).toBe(true);
+  });
+
+  it('reports a schema nested deeper than the scan limit instead of skipping it', () => {
+    let node: Record<string, unknown> = { type: 'string', pattern: '(a+)*' };
+    for (let i = 0; i < 80; i++) node = { type: 'object', properties: { n: node } };
+    expect(flagged(node)).toBe(true);
+  });
+
+  it('does not crash on a patternProperties object with a huge number of keys', () => {
+    const patternProperties: Record<string, unknown> = {};
+    for (let i = 0; i < 200_000; i++) patternProperties[`^k${i}$`] = {};
+    expect(() => runSchemaScan(tool({ type: 'object', patternProperties }))).not.toThrow();
+  });
+
   it('does not flag a normal pattern', () => {
     expect(flagged({ type: 'object', properties: { q: { type: 'string', pattern: '^[a-z0-9-]{1,40}$' } } })).toBe(false);
   });
