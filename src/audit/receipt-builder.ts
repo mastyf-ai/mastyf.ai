@@ -38,20 +38,36 @@ function getKeyPath(): string {
 function loadOrGenerateKeys(): { publicKey: string; privateKey: string } {
   if (keyPair) return keyPair;
   const keyPath = getKeyPath();
-  if (existsSync(keyPath)) {
+  const readExisting = () => {
     const pem = readFileSync(keyPath, 'utf-8');
-    const pubPath = keyPath + '.pub';
-    const pubPem = existsSync(pubPath) ? readFileSync(pubPath, 'utf-8') : '';
-    keyPair = { privateKey: pem, publicKey: pubPem };
-  } else {
-    const { publicKey: pub, privateKey: priv } = generateKeyPairSync('ed25519', {
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    });
-    writeFileSync(keyPath, priv, 'utf-8');
-    writeFileSync(keyPath + '.pub', pub, 'utf-8');
-    keyPair = { privateKey: priv, publicKey: pub };
+    let pubPem = '';
+    try {
+      pubPem = readFileSync(keyPath + '.pub', 'utf-8');
+    } catch { /* public key file is optional */ }
+    return { privateKey: pem, publicKey: pubPem };
+  };
+  if (existsSync(keyPath)) {
+    keyPair = readExisting();
+    return keyPair;
   }
+  const { publicKey: pub, privateKey: priv } = generateKeyPairSync('ed25519', {
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+  try {
+    // 'wx' creates the file only if nothing is there (no following a planted symlink), and
+    // 0o600 keeps the signing key readable by this user only.
+    writeFileSync(keyPath, priv, { encoding: 'utf-8', flag: 'wx', mode: 0o600 });
+  } catch (err) {
+    // Another process created the key first: use that one so all receipts share one key.
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      keyPair = readExisting();
+      return keyPair;
+    }
+    throw err;
+  }
+  writeFileSync(keyPath + '.pub', pub, 'utf-8');
+  keyPair = { privateKey: priv, publicKey: pub };
   return keyPair;
 }
 

@@ -71,9 +71,16 @@ function ensureSecretDir(): void {
 function readOrCreateFileSecret(): string {
   ensureSecretDir();
   if (!existsSync(SECRET_PATH)) {
-    const secret = randomBytes(32).toString("hex");
-    writeFileSync(SECRET_PATH, secret, { mode: 0o600 });
-    return secret;
+    const fresh = randomBytes(32).toString("hex");
+    try {
+      // 'wx' creates the file only if nothing is there, so two processes starting together
+      // can't each write a different secret and a planted symlink isn't followed.
+      writeFileSync(SECRET_PATH, fresh, { mode: 0o600, flag: "wx" });
+      return fresh;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      // Another process won the race; fall through and use its secret.
+    }
   }
   const secret = readFileSync(SECRET_PATH, "utf8").trim();
   if (secret.length < MIN_SECRET_LENGTH) {

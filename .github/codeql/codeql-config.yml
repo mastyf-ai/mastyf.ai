@@ -7,3 +7,15 @@ paths-ignore:
   - '**/out/**'
   - '**/.next/**'
   - '**/node_modules/**'
+
+# Rules switched off for this codebase, each with the reason. Keep this list short: only add
+# a rule that flags the product's normal design, never one that found a real bug.
+query-filters:
+  # Both flag every flow between the network and the filesystem, with no injection or
+  # traversal condition. Moving data between the two is what a proxy and scanner does
+  # (policy files, caches, logs, uploads). Real risks in those flows are still reported by
+  # js/path-injection, js/request-forgery and the command-injection queries.
+  - exclude:
+      id: js/http-to-file-access
+  - exclude:
+      id: js/file-access-to-http
