@@ -3,7 +3,7 @@
  * Mount via control-plane server when MASTYF_AI_TENANT_API_ENABLED=true.
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync } from 'fs';
-import { join } from 'path';
+import { join, resolve, sep } from 'path';
 import { Logger } from '../utils/logger.js';
 import { parsePolicyConfig, formatPolicyValidationErrors } from '../policy/policy-schema.js';
 import { load } from 'js-yaml';
@@ -19,8 +19,18 @@ export interface TenantRecord {
 
 const TENANTS_ROOT = process.env['MASTYF_AI_TENANTS_DIR'] || 'policy-templates/tenants';
 
+const TENANT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+/**
+ * Directory for one tenant. Tenant ids come from API requests, so they must be plain names:
+ * anything like "../x" would otherwise let a caller read, overwrite or delete other folders.
+ */
 function tenantDir(id: string): string {
-  return join(TENANTS_ROOT, id);
+  if (!TENANT_ID_RE.test(id)) throw new Error(`Invalid tenant id '${id}'`);
+  const root = resolve(TENANTS_ROOT);
+  const dir = resolve(root, id);
+  if (!dir.startsWith(root + sep)) throw new Error(`Invalid tenant id '${id}'`);
+  return dir;
 }
 
 function tenantPolicyPath(id: string): string {
@@ -40,6 +50,7 @@ export function listTenants(): TenantRecord[] {
 }
 
 export function getTenant(id: string): TenantRecord | null {
+  if (!TENANT_ID_RE.test(id)) return null;
   const metaFile = metaPath(id);
   if (!existsSync(metaFile)) return null;
   return JSON.parse(readFileSync(metaFile, 'utf-8')) as TenantRecord;

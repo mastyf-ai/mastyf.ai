@@ -4,6 +4,11 @@ import { cloudDbAvailable, getDb } from '@/lib/db';
 import { gcpMarketplaceAccounts, gcpMarketplaceEntitlements } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
+/** One-line text for logs: values from Google/requests can't start a forged log line. */
+function forLog(v: unknown): string {
+  return String(v instanceof Error ? v.message : v).replace(/[\r\n\u2028\u2029]+/g, ' ');
+}
+
 /**
  * Google Cloud Marketplace Token Resolution API
  * Handles customer redirect from Marketplace console with `x-gcp-marketplace-token`.
@@ -25,7 +30,7 @@ export async function POST(req: NextRequest) {
       const resolveResult = await gcpProcurement.resolveAccount(token);
       accountName = resolveResult.account;
     } catch (resolveErr: any) {
-      console.warn('[GCP Marketplace Resolve] Procurement API fallback:', resolveErr?.message);
+      console.warn('[GCP Marketplace Resolve] Procurement API fallback:', forLog(resolveErr?.message));
       try {
         const parts = token.split('.');
         if (parts.length >= 2) {
@@ -40,23 +45,23 @@ export async function POST(req: NextRequest) {
         accountName = `providers/mastyf/accounts/acct-${Date.now().toString(36)}`;
       }
     }
-    console.log(`[GCP Marketplace Resolve] Resolved account: ${accountName}`);
+    console.log(`[GCP Marketplace Resolve] Resolved account: ${forLog(accountName)}`);
 
     // Fetch account details from Google
     let accountDetails: any = null;
     try {
       accountDetails = await gcpProcurement.getAccount(accountName);
-      console.log(`[GCP Marketplace Resolve] Account state: ${accountDetails.state}`);
+      console.log(`[GCP Marketplace Resolve] Account state: ${forLog(accountDetails.state)}`);
     } catch (accErr) {
-      console.warn('[GCP Marketplace Resolve] Could not fetch account details:', accErr);
+      console.warn('[GCP Marketplace Resolve] Could not fetch account details:', forLog(accErr));
     }
 
     // Auto-approve account signup if pending
     try {
       await gcpProcurement.approveAccount(accountName);
-      console.log(`[GCP Marketplace Resolve] Approved account signup: ${accountName}`);
+      console.log(`[GCP Marketplace Resolve] Approved account signup: ${forLog(accountName)}`);
     } catch (approveErr) {
-      console.warn('[GCP Marketplace Resolve] Account approval warning:', approveErr);
+      console.warn('[GCP Marketplace Resolve] Account approval warning:', forLog(approveErr));
     }
 
     // Persist or update account in Database if DB is available
