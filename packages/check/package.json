@@ -1,6 +1,6 @@
 {
   "name": "@mastyf_ai/check",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Mastyf's free check service: runs the free rules on an agent's tool calls and tool results, locally.",
   "license": "AGPL-3.0-only",
   "homepage": "https://www.mastyf.ai",
