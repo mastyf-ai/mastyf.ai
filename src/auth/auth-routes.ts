@@ -490,7 +490,7 @@ export function registerAuthRoutes(app: Express): void {
     res.json({ user: req.authUser });
   });
 
-  app.post('/api/auth/change-password', requireAuth, async (req: Request, res: Response) => {
+  app.post('/api/auth/change-password', attempts, requireAuth, async (req: Request, res: Response) => {
     try {
       const parsed = changePasswordSchema.safeParse(req.body);
       if (!parsed.success) {
