@@ -39,33 +39,17 @@ export function generateSamlRequestUrl(config: SamlConfig): { url: string; relay
   return { url, relayState };
 }
 
+/**
+ * SAML responses are not accepted in this version. Accepting one requires validating it
+ * against the identity provider (a maintained SAML library), so this always returns null
+ * and the SSO routes answer 501 for SAML providers.
+ */
 export async function parseSamlResponse(
-  samlResponse: string,
-  config: SamlConfig,
-  expectedRelayState: string,
+  _samlResponse: string,
+  _config: SamlConfig,
+  _expectedRelayState: string,
 ): Promise<{ email: string; displayName: string; groups: string[]; nameId: string } | null> {
-  try {
-    const decoded = Buffer.from(samlResponse, 'base64').toString('utf8');
-    const emailMatch = decoded.match(/<saml:Attribute[^>]*Name="email"[^>]*>[\s\S]*?<saml:AttributeValue[^>]*>([^<]+)<\/saml:AttributeValue>/i)
-      || decoded.match(/email[^"]*"[^>]*>([^<]+)</i);
-    const nameMatch = decoded.match(/<saml:Attribute[^>]*Name="displayName"[^>]*>[\s\S]*?<saml:AttributeValue[^>]*>([^<]+)<\/saml:AttributeValue>/i)
-      || decoded.match(/displayName[^"]*"[^>]*>([^<]+)</i);
-    const nameIdMatch = decoded.match(/<saml:NameID[^>]*>([^<]+)<\/saml:NameID>/i);
-
-    const groups: string[] = [];
-    const groupMatches = decoded.matchAll(/<saml:AttributeValue[^>]*>([^<]+)<\/saml:AttributeValue>/gi);
-    for (const m of groupMatches) {
-      const val = m[1].trim();
-      if (val && val.length < 200) groups.push(val);
-    }
-
-    return {
-      email: emailMatch?.[1] || nameIdMatch?.[1] || '',
-      displayName: nameMatch?.[1] || nameIdMatch?.[1] || emailMatch?.[1] || 'SAML User',
-      groups,
-      nameId: nameIdMatch?.[1] || emailMatch?.[1] || '',
-    };
-  } catch { return null; }
+  return null;
 }
 
 function deflateAndEncode(input: string): string {
