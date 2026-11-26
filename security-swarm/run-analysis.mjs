@@ -11,7 +11,7 @@ import './lib/gate-pro.mjs';
  */
 import { runStep } from './lib/run-step.mjs';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, truncateSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -171,8 +171,13 @@ async function withScratchHistory(fn) {
 
 async function main() {
   mkdirSync(SWARM_DIR, { recursive: true });
-  if (QUIET && existsSync(JOB_LOG_PATH)) {
-    writeFileSync(JOB_LOG_PATH, '');
+  if (QUIET) {
+    // Truncate in place (no existence check first); a missing log is fine.
+    try {
+      truncateSync(JOB_LOG_PATH);
+    } catch {
+      /* no previous log */
+    }
   }
 
   const presetJob = QUIET ? loadJob() : null;

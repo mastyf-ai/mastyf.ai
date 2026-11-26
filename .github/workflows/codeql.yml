@@ -36,7 +36,9 @@ jobs:
       - uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
-          queries: security-and-quality
+          # Security queries only. Code-quality findings (unused variables, dead code) are covered
+          # by tsc/lint and would otherwise bury real security alerts.
+          queries: security-extended
           config-file: ./.github/codeql/codeql-config.yml
 
       - uses: github/codeql-action/analyze@v3
