@@ -27,8 +27,8 @@ const SCHEMA_INJECTION_PATTERNS = [
   /"type"\s*:\s*\[[^\]]{0,100}"string"[^\]]{0,100}"object"[^\]]{0,100}\]/i,
   // Recursive self-referencing
   /\$ref\s*:\s*['"]#\/definitions\/\w+['"]/i,
-  // Pattern abuse (ReDoS in schema patterns)
-  /"pattern"\s*:\s*['"](?:\(.*\)\*\{|\(.*\*\)\+|\(.*\+\)\*)['"]/i,
+  // Pattern abuse (ReDoS in schema patterns) is checked by hasNestedQuantifier() on each
+  // parsed "pattern" value, not by a regex over the stringified schema.
   // minLength/maxLength overflow
   /"minLength"\s*:\s*\d{10,}/,
   /"maxLength"\s*:\s*\d{10,}/,
@@ -155,8 +155,106 @@ function scanProperty(
   }
 }
 
+/**
+ * True when a regex source repeats a group that itself contains a quantifier, such as (a+)*,
+ * (a*)+ or (x+){2,} — the shape behind catastrophic backtracking — or stacks a quantifier
+ * straight after a repeated group, such as (ab)*{3}. One linear pass, so it can't be slowed
+ * down by the pattern it inspects, and there is no length cap to hide behind.
+ */
+export function hasNestedQuantifier(src: string): boolean {
+  const groupHasQuantifier: boolean[] = [];
+  let inClass = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '\\') { i++; continue; }
+    if (inClass) { if (c === ']') inClass = false; continue; }
+    if (c === '[') { inClass = true; continue; }
+    if (c === '(') { groupHasQuantifier.push(false); continue; }
+    const isQuantifier = (ch: string | undefined) => ch === '*' || ch === '+' || ch === '{';
+    if (c === ')') {
+      const inner = groupHasQuantifier.pop() ?? false;
+      const next = src[i + 1];
+      if (isQuantifier(next)) {
+        if (inner) return true;
+        // (ab)*{n} / (ab)+* — a second quantifier right after the repeated group.
+        let j = i + 2;
+        if (next === '{') { while (j < src.length && src[j] !== '}') j++; j++; }
+        if (src[j] === '?') j++;
+        if (isQuantifier(src[j])) return true;
+      }
+      if ((inner || isQuantifier(next)) && groupHasQuantifier.length) {
+        groupHasQuantifier[groupHasQuantifier.length - 1] = true;
+      }
+      continue;
+    }
+    if (isQuantifier(c) && groupHasQuantifier.length) {
+      groupHasQuantifier[groupHasQuantifier.length - 1] = true;
+    }
+  }
+  return false;
+}
+
+const MAX_PATTERN_SCAN_DEPTH = 64;
+
+/**
+ * Checks every regex source in a schema ("pattern" values and "patternProperties" keys) as it
+ * is found, with no count limit, so nothing can be hidden behind a pile of harmless patterns.
+ * Walks iteratively (no recursion, no argument spreading), so a huge or deep schema can't crash
+ * the scan. Nesting deeper than any real schema is reported rather than skipped.
+ */
+function scanSchemaPatterns(root: unknown): { evil?: string; tooDeep?: boolean } {
+  const stack: Array<[unknown, number]> = [[root, 0]];
+  while (stack.length > 0) {
+    const [node, depth] = stack.pop()!;
+    if (node === null || typeof node !== 'object') continue;
+    if (depth > MAX_PATTERN_SCAN_DEPTH) return { tooDeep: true };
+    if (Array.isArray(node)) {
+      for (const item of node) stack.push([item, depth + 1]);
+      continue;
+    }
+    for (const key in node as Record<string, unknown>) {
+      if (!Object.prototype.hasOwnProperty.call(node, key)) continue;
+      const value = (node as Record<string, unknown>)[key];
+      if (key === 'pattern' && typeof value === 'string' && hasNestedQuantifier(value)) {
+        return { evil: value };
+      }
+      if (key === 'patternProperties' && value !== null && typeof value === 'object') {
+        for (const source in value as Record<string, unknown>) {
+          if (hasNestedQuantifier(source)) return { evil: source };
+        }
+      }
+      stack.push([value, depth + 1]);
+    }
+  }
+  return {};
+}
+
 function detectSchemaInjection(tool: ToolDefinition, issues: Issue[]): void {
   const schemaStr = JSON.stringify(tool.inputSchema ?? {});
+  let scan: { evil?: string; tooDeep?: boolean; failed?: boolean };
+  try {
+    scan = scanSchemaPatterns(tool.inputSchema);
+  } catch {
+    scan = { failed: true }; // an unscannable schema is itself a finding, never a silent pass
+  }
+  if (scan.evil !== undefined || scan.tooDeep || scan.failed) {
+    const message =
+      scan.evil !== undefined
+        ? `Schema in tool "${tool.name}" declares a regex pattern with nested quantifiers (ReDoS risk)`
+        : scan.tooDeep
+          ? `Schema in tool "${tool.name}" is nested more than ${MAX_PATTERN_SCAN_DEPTH} levels deep; its patterns could not all be checked`
+          : `Schema in tool "${tool.name}" could not be scanned for regex patterns`;
+    issues.push({
+      id: 'MCPG-S-010',
+      layer: 'schema',
+      severity: 'warning',
+      category: 'schema-injection',
+      message,
+      evidence: (scan.evil ?? schemaStr).slice(0, 200),
+      confidence: 0.75,
+    });
+    return; // One schema injection issue per tool is enough
+  }
   for (const pattern of SCHEMA_INJECTION_PATTERNS) {
     if (pattern.test(schemaStr)) {
       issues.push({
