@@ -2,7 +2,7 @@
 /**
  * Aggregate 80+ custom evasion fixtures into evasion-attacks.json (canonical list).
  */
-import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,10 +13,10 @@ const OUT_TESTS = join(__dir, '../../tests/adversarial-harness/evasion-attacks.j
 
 function loadAll(dir) {
   const out = [];
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) out.push(...loadAll(full));
-    else if (name.endsWith('.json')) out.push(JSON.parse(readFileSync(full, 'utf-8')));
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, ent.name);
+    if (ent.isDirectory()) out.push(...loadAll(full));
+    else if (ent.name.endsWith('.json')) out.push(JSON.parse(readFileSync(full, 'utf-8')));
   }
   return out.sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }

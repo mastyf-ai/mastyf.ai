@@ -45,9 +45,10 @@ function loadFixtures(dir: string, source: string): FixtureEntry[] {
   } catch {
     return out;
   }
-  for (const name of readdirSync(dir)) {
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const name = ent.name;
     const full = join(dir, name);
-    if (statSync(full).isDirectory()) {
+    if (ent.isDirectory()) {
       out.push(...loadFixtures(full, source));
     } else if (name.endsWith('.json')) {
       const data = JSON.parse(readFileSync(full, 'utf-8')) as Record<string, unknown>;
