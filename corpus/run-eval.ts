@@ -3,7 +3,7 @@
  * Enterprise corpus evaluation — PolicyEngine + default-policy.yaml.
  * Exits non-zero if any attack expected "block" is not blocked, or benign "pass" is blocked.
  */
-import { readFileSync, readdirSync, writeFileSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { load } from 'js-yaml';
@@ -64,9 +64,10 @@ interface EvalReport {
 
 function loadCorpusFiles(dir: string): { relPath: string; entry: CorpusEntry }[] {
   const out: { relPath: string; entry: CorpusEntry }[] = [];
-  for (const name of readdirSync(dir)) {
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const name = ent.name;
     const full = join(dir, name);
-    if (statSync(full).isDirectory()) {
+    if (ent.isDirectory()) {
       out.push(...loadCorpusFiles(full));
     } else if (name.endsWith('.json')) {
       const entry = JSON.parse(readFileSync(full, 'utf8')) as CorpusEntry;

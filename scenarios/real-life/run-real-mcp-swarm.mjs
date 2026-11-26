@@ -37,8 +37,11 @@ function run(cmd, args, opts = {}) {
 function mergeRealLifeSummary(liveReport) {
   const summaryPath = join(SWARM_DIR, 'summary.md');
   let swarmMd = '';
-  if (existsSync(summaryPath)) {
+  try {
+    // Read directly instead of existsSync-then-read, so the file can't change in between.
     swarmMd = readFileSync(summaryPath, 'utf-8');
+  } catch {
+    swarmMd = '';
   }
 
   const liveSection = `
