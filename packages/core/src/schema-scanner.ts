@@ -27,9 +27,8 @@ const SCHEMA_INJECTION_PATTERNS = [
   /"type"\s*:\s*\[[^\]]{0,100}"string"[^\]]{0,100}"object"[^\]]{0,100}\]/i,
   // Recursive self-referencing
   /\$ref\s*:\s*['"]#\/definitions\/\w+['"]/i,
-  // Pattern abuse (ReDoS in schema patterns)
-  // (inner runs stop at a quote and are capped, so the scan can't backtrack across long input)
-  /"pattern"\s*:\s*['"](?:\([^'"]{0,200}\)\*\{|\([^'"]{0,200}\*\)\+|\([^'"]{0,200}\+\)\*)['"]/i,
+  // Pattern abuse (ReDoS in schema patterns) is checked by hasNestedQuantifier() on each
+  // parsed "pattern" value, not by a regex over the stringified schema.
   // minLength/maxLength overflow
   /"minLength"\s*:\s*\d{10,}/,
   /"maxLength"\s*:\s*\d{10,}/,
@@ -156,8 +155,78 @@ function scanProperty(
   }
 }
 
+/**
+ * True when a regex source repeats a group that itself contains a quantifier, such as (a+)*,
+ * (a*)+ or (x+){2,} — the shape behind catastrophic backtracking — or stacks a quantifier
+ * straight after a repeated group, such as (ab)*{3}. One linear pass, so it can't be slowed
+ * down by the pattern it inspects, and there is no length cap to hide behind.
+ */
+export function hasNestedQuantifier(src: string): boolean {
+  const groupHasQuantifier: boolean[] = [];
+  let inClass = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '\\') { i++; continue; }
+    if (inClass) { if (c === ']') inClass = false; continue; }
+    if (c === '[') { inClass = true; continue; }
+    if (c === '(') { groupHasQuantifier.push(false); continue; }
+    const isQuantifier = (ch: string | undefined) => ch === '*' || ch === '+' || ch === '{';
+    if (c === ')') {
+      const inner = groupHasQuantifier.pop() ?? false;
+      const next = src[i + 1];
+      if (isQuantifier(next)) {
+        if (inner) return true;
+        // (ab)*{n} / (ab)+* — a second quantifier right after the repeated group.
+        let j = i + 2;
+        if (next === '{') { while (j < src.length && src[j] !== '}') j++; j++; }
+        if (src[j] === '?') j++;
+        if (isQuantifier(src[j])) return true;
+      }
+      if ((inner || isQuantifier(next)) && groupHasQuantifier.length) {
+        groupHasQuantifier[groupHasQuantifier.length - 1] = true;
+      }
+      continue;
+    }
+    if (isQuantifier(c) && groupHasQuantifier.length) {
+      groupHasQuantifier[groupHasQuantifier.length - 1] = true;
+    }
+  }
+  return false;
+}
+
+/** Every regex source in a schema: "pattern" values and "patternProperties" keys, any depth. */
+function collectSchemaPatterns(node: unknown, out: string[], depth = 0): void {
+  if (depth > 64 || out.length > 1000 || node === null || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectSchemaPatterns(item, out, depth + 1);
+    return;
+  }
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    if (key === 'pattern' && typeof value === 'string') out.push(value);
+    if (key === 'patternProperties' && value && typeof value === 'object') {
+      out.push(...Object.keys(value as Record<string, unknown>));
+    }
+    collectSchemaPatterns(value, out, depth + 1);
+  }
+}
+
 function detectSchemaInjection(tool: ToolDefinition, issues: Issue[]): void {
   const schemaStr = JSON.stringify(tool.inputSchema ?? {});
+  const patterns: string[] = [];
+  collectSchemaPatterns(tool.inputSchema, patterns);
+  const evil = patterns.find(hasNestedQuantifier);
+  if (evil !== undefined) {
+    issues.push({
+      id: 'MCPG-S-010',
+      layer: 'schema',
+      severity: 'warning',
+      category: 'schema-injection',
+      message: `Schema in tool "${tool.name}" declares a regex pattern with nested quantifiers (ReDoS risk)`,
+      evidence: evil.slice(0, 200),
+      confidence: 0.75,
+    });
+    return; // One schema injection issue per tool is enough
+  }
   for (const pattern of SCHEMA_INJECTION_PATTERNS) {
     if (pattern.test(schemaStr)) {
       issues.push({
