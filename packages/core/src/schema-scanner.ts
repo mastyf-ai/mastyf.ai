@@ -28,7 +28,8 @@ const SCHEMA_INJECTION_PATTERNS = [
   // Recursive self-referencing
   /\$ref\s*:\s*['"]#\/definitions\/\w+['"]/i,
   // Pattern abuse (ReDoS in schema patterns)
-  /"pattern"\s*:\s*['"](?:\(.*\)\*\{|\(.*\*\)\+|\(.*\+\)\*)['"]/i,
+  // (inner runs stop at a quote and are capped, so the scan can't backtrack across long input)
+  /"pattern"\s*:\s*['"](?:\([^'"]{0,200}\)\*\{|\([^'"]{0,200}\*\)\+|\([^'"]{0,200}\+\)\*)['"]/i,
   // minLength/maxLength overflow
   /"minLength"\s*:\s*\d{10,}/,
   /"maxLength"\s*:\s*\d{10,}/,
