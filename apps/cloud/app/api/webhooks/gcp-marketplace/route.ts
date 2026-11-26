@@ -6,7 +6,9 @@ import { eq } from 'drizzle-orm';
 
 /** One-line text for logs: values from Google/requests can't start a forged log line. */
 function forLog(v: unknown): string {
-  return String(v instanceof Error ? v.message : v).replace(/[\r\n\u2028\u2029]+/g, ' ');
+  return String(v instanceof Error ? v.message : v)
+    .replace(/\n|\r/g, ' ')
+    .replace(/\u2028|\u2029/g, ' ');
 }
 
 /**
