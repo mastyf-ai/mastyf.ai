@@ -271,6 +271,11 @@ async function proxySecuritySwarmToDashboard(req: Request, res: Response, curren
   }
 
   const target = new URL(req.originalUrl || req.url, upstream);
+  // A path such as "//evil.example/x" would otherwise resolve to another host.
+  if (target.origin !== upstream) {
+    res.status(400).json({ available: false, reason: 'invalid_upstream_path', dataSources: [] });
+    return;
+  }
   const headers: Record<string, string> = {
     accept: String(req.headers['accept'] ?? 'application/json'),
   };

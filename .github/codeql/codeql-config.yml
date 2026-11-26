@@ -1,0 +1,9 @@
+name: mastyf CodeQL config
+
+# Generated bundles are rebuilt from src/ and packages/*/src, which are already scanned.
+# Scanning them again only produces duplicate, unfixable alerts on minified output.
+paths-ignore:
+  - '**/dist/**'
+  - '**/out/**'
+  - '**/.next/**'
+  - '**/node_modules/**'
