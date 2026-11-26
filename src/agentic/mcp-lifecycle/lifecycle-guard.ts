@@ -8,6 +8,7 @@
  *   - Track MCP protocol state per session
  *   - Full lifecycle audit trail
  */
+import { randomBytes } from 'crypto';
 import { Logger } from '../../utils/logger.js';
 
 export type McpMethod =
@@ -103,7 +104,7 @@ export class McpLifecycleGuard {
     }
 
     const session: McpSession = {
-      sessionId: `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      sessionId: `mcp-${Date.now()}-${randomBytes(6).toString('hex')}`,
       clientId,
       connectedAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),

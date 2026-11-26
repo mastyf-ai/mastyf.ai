@@ -7,7 +7,7 @@
  * env vars for constrained deployments.
  */
 import argon2 from 'argon2';
-import { randomBytes } from 'crypto';
+import { randomInt } from 'crypto';
 import type { PasswordPolicy } from './rbac-types.js';
 
 const ARGON2_MEMORY_COST = parseInt(process.env['AUTH_ARGON2_MEMORY_KB'] || '19456', 10); // ~19 MB
@@ -93,10 +93,10 @@ export function validatePasswordAgainstPolicy(
 /** Generate a cryptographically strong random password (used for admin-issued resets). */
 export function generateRandomPassword(length = 20): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*-_=+';
-  const bytes = randomBytes(length);
   let out = '';
   for (let i = 0; i < length; i++) {
-    out += alphabet[bytes[i] % alphabet.length];
+    // randomInt is uniform; `byte % alphabet.length` would favour the first characters.
+    out += alphabet[randomInt(alphabet.length)];
   }
   return out;
 }

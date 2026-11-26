@@ -185,8 +185,19 @@ export class GcpProcurementClient {
   }
 
   private normalizeResourceName(type: 'accounts' | 'entitlements', nameOrId: string): string {
-    if (nameOrId.startsWith('providers/')) return nameOrId;
-    return `providers/${this.getProviderId()}/${type}/${nameOrId}`;
+    // Only accept this provider's own resource names, so the id cannot steer the
+    // request path (e.g. "../" or "?") to another Procurement endpoint.
+    const id = nameOrId.startsWith('providers/')
+      ? nameOrId.slice(`providers/${this.getProviderId()}/${type}/`.length)
+      : nameOrId;
+    if (
+      (nameOrId.startsWith('providers/') &&
+        !nameOrId.startsWith(`providers/${this.getProviderId()}/${type}/`)) ||
+      !/^[A-Za-z0-9_-]+$/.test(id)
+    ) {
+      throw new Error(`Invalid GCP ${type} resource name: ${nameOrId}`);
+    }
+    return `providers/${this.getProviderId()}/${type}/${encodeURIComponent(id)}`;
   }
 
   /**

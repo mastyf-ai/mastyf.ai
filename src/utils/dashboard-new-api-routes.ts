@@ -136,7 +136,9 @@ export async function handleNewApiRoutes(
   if (url === '/api/registry/badge.svg' && method === 'GET') {
     setCors();
     const score = parseInt((new URL(req.url!, 'http://localhost')).searchParams.get('score') || '0', 10);
-    const grade = (new URL(req.url!, 'http://localhost')).searchParams.get('grade') || 'F';
+    // The grade is written into SVG markup, so only accept a real grade (A–F with optional +/-).
+    const rawGrade = (new URL(req.url!, 'http://localhost')).searchParams.get('grade') || 'F';
+    const grade = /^[A-F][+-]?$/.test(rawGrade) ? rawGrade : 'F';
     const svg = registryBadgeSvg(score, grade);
     res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=3600' });
     res.end(svg);
@@ -343,6 +345,14 @@ export async function handleNewApiRoutes(
 
   if (url === '/api/hooks' && method === 'POST') {
     setCors();
+    // This endpoint compiles caller-supplied JavaScript into a hook. Keep it off unless
+    // the operator explicitly opts in; hooks from local config files are unaffected.
+    if (process.env['MASTYF_AI_ALLOW_REMOTE_HOOK_CODE'] !== 'true') {
+      writeJson(res, 403, {
+        error: 'Creating code hooks over the API is disabled. Set MASTYF_AI_ALLOW_REMOTE_HOOK_CODE=true to enable it.',
+      });
+      return true;
+    }
     const body = await parseBody(req);
     const { name, code, type, priority } = body;
     if (!name || !code || !type) { writeJson(res, 400, { error: 'name, code, and type are required' }); return true; }

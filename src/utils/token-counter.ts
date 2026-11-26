@@ -8,10 +8,34 @@
  * - API usage: prefers usage.input_tokens / output_tokens from responses
  */
 import { get_encoding, type TiktokenEncoding } from 'tiktoken';
-import { execSync, spawnSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import { createRequire } from 'module';
 import { Logger } from './logger.js';
+
+// Child script for syncPostJson: reads {url, headers, body} from stdin, POSTs it, prints the response.
+const SYNC_POST_SCRIPT = `
+let raw = '';
+process.stdin.on('data', (c) => { raw += c; });
+process.stdin.on('end', async () => {
+  try {
+    const { url, headers, body } = JSON.parse(raw);
+    const res = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(5000) });
+    process.stdout.write(await res.text());
+  } catch { process.exit(1); }
+});`;
+
+/**
+ * Synchronous JSON POST without a shell. Secrets and the request body travel over
+ * stdin, so they never appear in a command line or the process list.
+ */
+function syncPostJson(url: string, headers: Record<string, string>, body: unknown): string {
+  return execFileSync(process.execPath, ['-e', SYNC_POST_SCRIPT], {
+    input: JSON.stringify({ url, headers, body: JSON.stringify(body) }),
+    encoding: 'utf-8',
+    timeout: 6000,
+  });
+}
 
 const requireOptional = createRequire(import.meta.url);
 
@@ -460,16 +484,14 @@ export class TokenCounter {
     if (!apiKey) return null;
 
     try {
-      const result = execSync(
-        `curl -s --max-time 5 https://api.anthropic.com/v1/messages/count_tokens \\
-          -H "x-api-key: ${apiKey}" \\
-          -H "anthropic-version: 2023-06-01" \\
-          -H "content-type: application/json" \\
-          -d '${JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: text }],
-          }).replace(/'/g, "'\\''")}'`,
-        { encoding: 'utf-8', timeout: 6000 },
+      const result = syncPostJson(
+        'https://api.anthropic.com/v1/messages/count_tokens',
+        {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        { model, messages: [{ role: 'user', content: text }] },
       );
 
       const data = JSON.parse(result);
@@ -495,14 +517,12 @@ export class TokenCounter {
     const apiKey = process.env['GOOGLE_API_KEY'] || process.env['GEMINI_API_KEY'];
     if (!apiKey) return null;
     const modelId = model.startsWith('models/') ? model : `models/${model}`;
+    if (!/^models\/[A-Za-z0-9._-]+$/.test(modelId)) return null;
     try {
-      const result = execSync(
-        `curl -s --max-time 5 "https://generativelanguage.googleapis.com/v1beta/${modelId}:countTokens?key=${apiKey}" \\
-          -H "content-type: application/json" \\
-          -d '${JSON.stringify({
-            contents: [{ parts: [{ text }] }],
-          }).replace(/'/g, "'\\''")}'`,
-        { encoding: 'utf-8', timeout: 6000 },
+      const result = syncPostJson(
+        `https://generativelanguage.googleapis.com/v1beta/${modelId}:countTokens`,
+        { 'x-goog-api-key': apiKey, 'content-type': 'application/json' },
+        { contents: [{ parts: [{ text }] }] },
       );
       const data = JSON.parse(result) as { totalTokens?: number };
       if (typeof data.totalTokens === 'number') {
