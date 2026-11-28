@@ -5,7 +5,7 @@ every tool result before your model reads it. It all runs on your own machine: n
 Mastyf.
 
 ```bash
-pip install "mastyf-ai[langchain]"      # or [langgraph], [openai-agents]
+pip install "mastyf-ai[middleware]"     # LangChain 1.x agents; or [langchain], [langgraph], [openai-agents]
 ```
 
 The first check starts Mastyf's free check program on this machine (downloaded once from the
@@ -14,11 +14,25 @@ when your program stops.
 
 ## LangChain
 
+With LangChain 1.0 or later, add Mastyf as agent middleware (`pip install "mastyf-ai[middleware]"`):
+
+```python
+from langchain.agents import create_agent
+from mastyf_ai.middleware import MastyfMiddleware
+
+agent = create_agent(model, tools=[search, read_file], middleware=[MastyfMiddleware()])
+```
+
+It checks every tool call the agent makes, including results a tool returns inside a `Command`.
+With LangChain 0.3, or to guard only some tools, wrap the tools instead:
+
 ```python
 from mastyf_ai.langchain import guard_tools
 
 agent = create_agent(model, tools=guard_tools([search, read_file]))
 ```
+
+Full guide: [Use Mastyf with LangChain and LangGraph](https://github.com/mastyf-ai/mastyf.ai/blob/main/docs/integrations/langchain.md).
 
 ## LangGraph
 
@@ -69,7 +83,7 @@ never affects another's:
 
 ```python
 guard = Guard()
-tools = guard_tools([search, read_file], guard=guard)
+tools = guard_tools([search, read_file], guard=guard)   # or MastyfMiddleware(guard=guard)
 
 async def handle(request):
     with guard.session(request.id):

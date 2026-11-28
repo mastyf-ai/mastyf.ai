@@ -42,7 +42,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Test
         working-directory: packages/python-sdk
-        run: uv run --isolated --with pytest --with pytest-asyncio --with ".[langchain,langgraph,openai-agents]" pytest tests -q
+        run: uv run --isolated --with pytest --with pytest-asyncio --with ".[langchain,langgraph,middleware,openai-agents]" pytest tests -q
 
   typescript:
     strategy:
