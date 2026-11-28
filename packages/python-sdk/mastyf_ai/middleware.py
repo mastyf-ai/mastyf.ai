@@ -14,7 +14,7 @@ LangGraph `ToolNode`, use `mastyf_ai.langchain.guard_tools` or `mastyf_ai.langgr
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
@@ -69,8 +69,36 @@ FORGED_TOOL_CALL = Verdict(
     reason="a tool result tried to add tool calls for the agent to run",
 )
 
+FORGED_MESSAGE = Verdict(
+    decision="block",
+    id="forged-message",
+    layer="middleware",
+    rule="tool-injected-message",
+    reason="a tool result tried to add a message that isn't its own tool answer",
+)
+
+UNALLOWED_ROUTE = Verdict(
+    decision="block",
+    id="unallowed-route",
+    layer="middleware",
+    rule="tool-routed-graph",
+    reason="a tool result tried to route the graph to a node not in allowed_goto",
+)
+
 # Message fields besides `content` that a tool can fill and the model or graph may read.
 _MESSAGE_EXTRA_FIELDS = ("additional_kwargs", "response_metadata", "artifact")
+
+# State keys that steer the agent (create_agent's jump_to). A tool may not set them.
+_CONTROL_KEYS = frozenset({"jump_to"})
+
+
+def _looks_like_tool_call(arg: Any) -> bool:
+    """A Send payload shaped like a tool call would make the agent run a call the model never made."""
+    if hasattr(arg, "tool_call"):
+        return True
+    if isinstance(arg, dict):
+        return "tool_call" in arg or "tool_calls" in arg or {"name", "args"} <= arg.keys()
+    return False
 
 
 class _Block(Exception):
@@ -111,9 +139,14 @@ class MastyfMiddleware(AgentMiddleware):
     `with middleware.guard.session(request_id):` so each conversation is checked as its own session.
     """
 
-    def __init__(self, guard: Guard | None = None) -> None:
+    def __init__(self, guard: Guard | None = None, *, allowed_goto: Iterable[str] = ()) -> None:
+        """`allowed_goto`: graph nodes a tool may route to with `Command(goto=...)` or `Send`.
+
+        A tool's output is untrusted, so by default a tool can't change where the graph goes next.
+        """
         super().__init__()
         self.guard = guard or Guard()
+        self.allowed_goto = frozenset(allowed_goto)
 
     # ── sync ──────────────────────────────────────────────────────────────────
 
@@ -136,9 +169,9 @@ class MastyfMiddleware(AgentMiddleware):
         """
         try:
             if isinstance(result, ToolMessage):
-                return self._check_message(name, checked, result)
+                return self._check_message(name, checked, self._own_tool_message(request, name, result))
             if isinstance(result, Command):
-                return self._check_command(name, checked, result)
+                return self._check_command(request, name, checked, result)
         except _Block as stop:
             return _blocked_message(request, stop.verdict)
         except MastyfUnavailable:
@@ -155,6 +188,17 @@ class MastyfMiddleware(AgentMiddleware):
         if verdict.decision == "redact":
             raise _Block(UNCHECKABLE)
 
+    @staticmethod
+    def _own_tool_message(request: ToolCallRequest, name: str, message: BaseMessage) -> ToolMessage:
+        """A message a tool adds must be a ToolMessage answering this call, re-stamped as this tool's.
+
+        No system, user or AI messages (a tool can't speak for them), no answer to another call,
+        and no caller-chosen id (an id already in the conversation would overwrite that message).
+        """
+        if not isinstance(message, ToolMessage) or message.tool_call_id != request.tool_call.get("id"):
+            raise _Block(FORGED_MESSAGE)
+        return message.model_copy(update={"id": None, "name": name})
+
     def _check_message(self, name: str, checked: Any, message: BaseMessage) -> BaseMessage:
         """Checks a whole message: its text, and every other field the model or graph may read."""
         if _carries_tool_calls(message):
@@ -164,15 +208,22 @@ class MastyfMiddleware(AgentMiddleware):
             self._check_value(name, checked, extras)
         return _apply(message, self.guard.check_result(name, message.content, checked))
 
-    def _check_command(self, name: str, checked: Any, result: Command) -> Command:
-        """A Command can write messages and state, send payloads to other nodes, and resume interrupts.
+    def _check_command(self, request: ToolCallRequest, name: str, checked: Any, result: Command) -> Command:
+        """A Command can write messages and state, route the graph, and resume interrupts.
 
-        Every one of those is checked: messages in any form LangChain accepts, every other state
-        value, each Send payload in goto, and the resume value.
+        A tool is untrusted for control, so:
+        - it may only add ToolMessages that answer its own call; each gets a fresh id (it can't
+          overwrite an earlier message) and the tool's real name;
+        - it may route (goto, Send, jump_to) only to nodes listed in `allowed_goto`, and never send
+          a payload shaped like a tool call;
+        - every message field, every other state value, each Send payload and the resume value
+          are checked as tool output.
         """
         update: dict[str, Any] | None = None
         if result.update is not None:
             items = dict(result.update)  # a dict, or a list of (key, value) pairs
+            if _CONTROL_KEYS & items.keys():
+                raise _Block(UNALLOWED_ROUTE)
             update = {}
             others = {k: v for k, v in items.items() if k != "messages"}
             if others:
@@ -187,14 +238,21 @@ class MastyfMiddleware(AgentMiddleware):
             if "messages" in items:
                 raw = items["messages"]
                 messages = convert_to_messages(raw if isinstance(raw, list) else [raw])
-                update["messages"] = [self._check_message(name, checked, m) for m in messages]
+                update["messages"] = [
+                    self._check_message(name, checked, self._own_tool_message(request, name, m)) for m in messages
+                ]
 
         goto = result.goto
         for target in goto if isinstance(goto, (list, tuple)) else [goto]:
+            if target is None:
+                continue
+            node = target.node if isinstance(target, Send) else target if isinstance(target, str) else None
+            if node is None or node not in self.allowed_goto:
+                raise _Block(UNALLOWED_ROUTE)
             if isinstance(target, Send):
+                if _looks_like_tool_call(target.arg):
+                    raise _Block(FORGED_TOOL_CALL)
                 self._check_value(name, checked, target.arg)
-            elif target is not None and not isinstance(target, str):
-                raise _Block(UNCHECKABLE)
 
         if result.resume is not None:
             self._check_value(name, checked, result.resume)

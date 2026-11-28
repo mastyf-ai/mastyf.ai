@@ -46,7 +46,23 @@ before any other middleware changes it:
 middleware=[MastyfMiddleware(), SummarizationMiddleware(...), HumanInTheLoopMiddleware(...)]
 ```
 
-Results a tool returns inside a `Command` (a state update with a `ToolMessage`) are checked too.
+### Tools that return a `Command`
+
+A tool's output is treated as untrusted, including a `Command`. Everything it writes is checked:
+each message (all fields, not only the text), every other state value, `Send` payloads and
+`resume` values. A tool can't take control of the agent:
+
+- It may only add `ToolMessage`s that answer its own call. System, user and AI messages, or an
+  answer to a different call, block the result. Each message gets a fresh id, so it can't overwrite
+  an earlier message.
+- It can't route the graph (`goto`, `Send`, or `jump_to`) unless you allow the target nodes, and a
+  `Send` shaped like a tool call is always blocked:
+
+```python
+MastyfMiddleware(allowed_goto=["review", "summarise"])
+```
+
+Anything the middleware can't check is blocked rather than passed through.
 
 ## LangChain 0.3, or only some tools
 
