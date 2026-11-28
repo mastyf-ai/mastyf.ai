@@ -33,7 +33,7 @@ def read(whl: Path, suffix: str) -> str:
 
 def test_the_wheel_is_mit_version_5(wheel):
     meta = read(wheel, ".dist-info/METADATA")
-    assert "Version: 5.0.2" in meta
+    assert "Version: 5.1.0" in meta
     assert "License-Expression: MIT" in meta or "License: MIT" in meta
 
 
