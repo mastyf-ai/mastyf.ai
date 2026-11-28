@@ -55,11 +55,14 @@ each message (all fields, not only the text), every other state value, `Send` pa
 - It may only add `ToolMessage`s that answer its own call. System, user and AI messages, or an
   answer to a different call, block the result. Each message gets a fresh id, so it can't overwrite
   an earlier message.
-- It can't route the graph (`goto`, `Send`, or `jump_to`) unless you allow the target nodes, and a
-  `Send` shaped like a tool call is always blocked:
+- It can't write other state keys (such as `jump_to`, `structured_response` or call counters)
+  unless you list them. Values it writes to a listed key are still checked.
+- It can't route the graph (`goto` or `Send`) unless you list the target nodes. A `Send` payload
+  must be plain data: text, numbers, lists and dicts. Messages, anything shaped like a tool call,
+  and objects the middleware can't inspect are blocked, at any depth.
 
 ```python
-MastyfMiddleware(allowed_goto=["review", "summarise"])
+MastyfMiddleware(allowed_goto=["review"], allowed_state_keys=["notes"])
 ```
 
 Anything the middleware can't check is blocked rather than passed through.

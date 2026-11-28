@@ -85,19 +85,48 @@ UNALLOWED_ROUTE = Verdict(
     reason="a tool result tried to route the graph to a node not in allowed_goto",
 )
 
+UNALLOWED_STATE = Verdict(
+    decision="block",
+    id="unallowed-state",
+    layer="middleware",
+    rule="tool-wrote-state",
+    reason="a tool result tried to write a state key not in allowed_state_keys",
+)
+
+UNSAFE_PAYLOAD = Verdict(
+    decision="block",
+    id="unsafe-send-payload",
+    layer="middleware",
+    rule="tool-sent-non-data",
+    reason="a Send payload held messages, a tool call or an object that can't be inspected",
+)
+
 # Message fields besides `content` that a tool can fill and the model or graph may read.
 _MESSAGE_EXTRA_FIELDS = ("additional_kwargs", "response_metadata", "artifact")
 
-# State keys that steer the agent (create_agent's jump_to). A tool may not set them.
-_CONTROL_KEYS = frozenset({"jump_to"})
+_MAX_PAYLOAD_DEPTH = 32
+_SCALARS = (str, bytes, int, float, bool, type(None))
+_TOOL_CALL_KEYS = frozenset({"tool_call", "tool_calls", "messages"})
 
 
-def _looks_like_tool_call(arg: Any) -> bool:
-    """A Send payload shaped like a tool call would make the agent run a call the model never made."""
-    if hasattr(arg, "tool_call"):
+def _is_plain_data(value: Any, depth: int = 0) -> bool:
+    """True only for plain data: scalars, and lists, tuples and dicts of plain data, at any depth.
+
+    Messages, tool-call-shaped dicts (a `tool_call`/`tool_calls`/`messages` key, `type ==
+    "tool_call"`, or `name` with `args`) and any other object are not plain data. Allowing a known
+    set of shapes, rather than rejecting known bad ones, means a new disguise can't slip through.
+    """
+    if depth > _MAX_PAYLOAD_DEPTH:
+        return False
+    if isinstance(value, _SCALARS):
         return True
-    if isinstance(arg, dict):
-        return "tool_call" in arg or "tool_calls" in arg or {"name", "args"} <= arg.keys()
+    if isinstance(value, (list, tuple)):
+        return all(_is_plain_data(v, depth + 1) for v in value)
+    if isinstance(value, dict):
+        keys = value.keys()
+        if _TOOL_CALL_KEYS & keys or value.get("type") == "tool_call" or {"name", "args"} <= keys:
+            return False
+        return all(isinstance(k, str) and _is_plain_data(v, depth + 1) for k, v in value.items())
     return False
 
 
@@ -139,14 +168,24 @@ class MastyfMiddleware(AgentMiddleware):
     `with middleware.guard.session(request_id):` so each conversation is checked as its own session.
     """
 
-    def __init__(self, guard: Guard | None = None, *, allowed_goto: Iterable[str] = ()) -> None:
-        """`allowed_goto`: graph nodes a tool may route to with `Command(goto=...)` or `Send`.
+    def __init__(
+        self,
+        guard: Guard | None = None,
+        *,
+        allowed_goto: Iterable[str] = (),
+        allowed_state_keys: Iterable[str] = (),
+    ) -> None:
+        """A tool's output is untrusted, so by default a tool returning a `Command` can only add
+        its own answer to `messages`.
 
-        A tool's output is untrusted, so by default a tool can't change where the graph goes next.
+        `allowed_goto`: graph nodes a tool may route to with `Command(goto=...)` or `Send`.
+        `allowed_state_keys`: state keys besides `messages` a tool may write. Values written there
+        are still checked.
         """
         super().__init__()
         self.guard = guard or Guard()
         self.allowed_goto = frozenset(allowed_goto)
+        self.allowed_state_keys = frozenset(allowed_state_keys) - {"messages"}
 
     # ── sync ──────────────────────────────────────────────────────────────────
 
@@ -214,16 +253,18 @@ class MastyfMiddleware(AgentMiddleware):
         A tool is untrusted for control, so:
         - it may only add ToolMessages that answer its own call; each gets a fresh id (it can't
           overwrite an earlier message) and the tool's real name;
-        - it may route (goto, Send, jump_to) only to nodes listed in `allowed_goto`, and never send
-          a payload shaped like a tool call;
-        - every message field, every other state value, each Send payload and the resume value
+        - it may write other state keys only if they're in `allowed_state_keys` (so not
+          `jump_to`, `structured_response` or call counters unless you list them);
+        - it may route (goto, Send) only to nodes in `allowed_goto`, and a Send payload must be
+          plain data (no messages, nothing shaped like a tool call, no opaque objects);
+        - every message field, every allowed state value, each Send payload and the resume value
           are checked as tool output.
         """
         update: dict[str, Any] | None = None
         if result.update is not None:
             items = dict(result.update)  # a dict, or a list of (key, value) pairs
-            if _CONTROL_KEYS & items.keys():
-                raise _Block(UNALLOWED_ROUTE)
+            if not all(isinstance(k, str) for k in items) or (items.keys() - {"messages"}) - self.allowed_state_keys:
+                raise _Block(UNALLOWED_STATE)
             update = {}
             others = {k: v for k, v in items.items() if k != "messages"}
             if others:
@@ -250,8 +291,8 @@ class MastyfMiddleware(AgentMiddleware):
             if node is None or node not in self.allowed_goto:
                 raise _Block(UNALLOWED_ROUTE)
             if isinstance(target, Send):
-                if _looks_like_tool_call(target.arg):
-                    raise _Block(FORGED_TOOL_CALL)
+                if not _is_plain_data(target.arg):
+                    raise _Block(UNSAFE_PAYLOAD)
                 self._check_value(name, checked, target.arg)
 
         if result.resume is not None:
