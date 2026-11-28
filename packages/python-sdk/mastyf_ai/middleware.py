@@ -18,8 +18,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
-from langchain_core.messages import BaseMessage, ToolMessage, convert_to_messages
-from langgraph.types import Command
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage, convert_to_messages
+from langgraph.types import Command, Send
 
 from .client import MastyfUnavailable
 from .guard import Guard
@@ -59,6 +59,34 @@ UNCHECKABLE = Verdict(
     rule="unchecked-result",
     reason="the tool returned something the middleware could not check",
 )
+
+
+FORGED_TOOL_CALL = Verdict(
+    decision="block",
+    id="forged-tool-call",
+    layer="middleware",
+    rule="tool-injected-tool-call",
+    reason="a tool result tried to add tool calls for the agent to run",
+)
+
+# Message fields besides `content` that a tool can fill and the model or graph may read.
+_MESSAGE_EXTRA_FIELDS = ("additional_kwargs", "response_metadata", "artifact")
+
+
+class _Block(Exception):
+    """Stops checking a result: the whole result is replaced by a blocked tool message."""
+
+    def __init__(self, verdict: Verdict) -> None:
+        super().__init__(verdict.rule)
+        self.verdict = verdict
+
+
+def _carries_tool_calls(message: BaseMessage) -> bool:
+    """Tool calls belong to the model. A tool that adds some could make the agent run them."""
+    if isinstance(message, AIMessage) and (message.tool_calls or message.invalid_tool_calls):
+        return True
+    extra = getattr(message, "additional_kwargs", None) or {}
+    return bool(extra.get("tool_calls") or extra.get("function_call"))
 
 
 def _apply(message: BaseMessage, verdict: Verdict) -> BaseMessage:
@@ -108,44 +136,70 @@ class MastyfMiddleware(AgentMiddleware):
         """
         try:
             if isinstance(result, ToolMessage):
-                return _apply(result, self.guard.check_result(name, result.content, checked))
+                return self._check_message(name, checked, result)
             if isinstance(result, Command):
-                return self._check_command(request, name, checked, result)
+                return self._check_command(name, checked, result)
+        except _Block as stop:
+            return _blocked_message(request, stop.verdict)
         except MastyfUnavailable:
             raise
         except Exception:  # noqa: BLE001 — an error while checking must never let the result through
             pass
         return _blocked_message(request, UNCHECKABLE)
 
-    def _check_command(self, request: ToolCallRequest, name: str, checked: Any, result: Command) -> ToolResult:
-        """A tool that returns a Command can write messages and other state the model reads later.
+    def _check_value(self, name: str, checked: Any, value: Any) -> None:
+        """A value that must pass unchanged: blocked or redacted means the whole result is blocked."""
+        verdict = self.guard.check_result(name, value, checked)
+        if verdict.blocked:
+            raise _Block(verdict)
+        if verdict.decision == "redact":
+            raise _Block(UNCHECKABLE)
 
-        Every message (in any form LangChain accepts) and every other state value is checked.
+    def _check_message(self, name: str, checked: Any, message: BaseMessage) -> BaseMessage:
+        """Checks a whole message: its text, and every other field the model or graph may read."""
+        if _carries_tool_calls(message):
+            raise _Block(FORGED_TOOL_CALL)
+        extras = {f: getattr(message, f) for f in _MESSAGE_EXTRA_FIELDS if getattr(message, f, None)}
+        if extras:
+            self._check_value(name, checked, extras)
+        return _apply(message, self.guard.check_result(name, message.content, checked))
+
+    def _check_command(self, name: str, checked: Any, result: Command) -> Command:
+        """A Command can write messages and state, send payloads to other nodes, and resume interrupts.
+
+        Every one of those is checked: messages in any form LangChain accepts, every other state
+        value, each Send payload in goto, and the resume value.
         """
-        if result.update is None:
-            return result  # only goto/resume: nothing the model will read
-        update = dict(result.update)  # a dict, or a list of (key, value) pairs
-        checked_update: dict[str, Any] = {}
+        update: dict[str, Any] | None = None
+        if result.update is not None:
+            items = dict(result.update)  # a dict, or a list of (key, value) pairs
+            update = {}
+            others = {k: v for k, v in items.items() if k != "messages"}
+            if others:
+                verdict = self.guard.check_result(name, others, checked)
+                if verdict.blocked:
+                    raise _Block(verdict)
+                if verdict.decision == "redact":
+                    if not isinstance(verdict.result, dict) or set(verdict.result) != set(others):
+                        raise _Block(UNCHECKABLE)
+                    others = verdict.result
+                update.update(others)
+            if "messages" in items:
+                raw = items["messages"]
+                messages = convert_to_messages(raw if isinstance(raw, list) else [raw])
+                update["messages"] = [self._check_message(name, checked, m) for m in messages]
 
-        others = {k: v for k, v in update.items() if k != "messages"}
-        if others:
-            verdict = self.guard.check_result(name, others, checked)
-            if verdict.blocked:
-                return _blocked_message(request, verdict)
-            if verdict.decision == "redact":
-                if not isinstance(verdict.result, dict) or set(verdict.result) != set(others):
-                    return _blocked_message(request, UNCHECKABLE)
-                others = verdict.result
-            checked_update.update(others)
+        goto = result.goto
+        for target in goto if isinstance(goto, (list, tuple)) else [goto]:
+            if isinstance(target, Send):
+                self._check_value(name, checked, target.arg)
+            elif target is not None and not isinstance(target, str):
+                raise _Block(UNCHECKABLE)
 
-        if "messages" in update:
-            raw = update["messages"]
-            messages = convert_to_messages(raw if isinstance(raw, list) else [raw])
-            checked_update["messages"] = [
-                _apply(m, self.guard.check_result(name, m.content, checked)) for m in messages
-            ]
+        if result.resume is not None:
+            self._check_value(name, checked, result.resume)
 
-        return Command(graph=result.graph, update=checked_update, resume=result.resume, goto=result.goto)
+        return Command(graph=result.graph, update=update, resume=result.resume, goto=goto)
 
     # ── async ─────────────────────────────────────────────────────────────────
 
