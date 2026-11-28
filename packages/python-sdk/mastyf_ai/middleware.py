@@ -18,9 +18,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import BaseMessage, ToolMessage, convert_to_messages
 from langgraph.types import Command
 
+from .client import MastyfUnavailable
 from .guard import Guard
 from .langchain import _framework_fields, _framework_value, _plain
 from .verdict import Verdict
@@ -51,10 +52,22 @@ def _blocked_message(request: ToolCallRequest, verdict: Verdict) -> ToolMessage:
     )
 
 
-def _apply(message: ToolMessage, verdict: Verdict) -> ToolMessage:
+UNCHECKABLE = Verdict(
+    decision="block",
+    id="uncheckable",
+    layer="middleware",
+    rule="unchecked-result",
+    reason="the tool returned something the middleware could not check",
+)
+
+
+def _apply(message: BaseMessage, verdict: Verdict) -> BaseMessage:
     """The message the model should see, given the verdict on its content."""
     if verdict.blocked:
-        return message.model_copy(update={"content": verdict.model_message(), "status": "error"})
+        update: dict[str, Any] = {"content": verdict.model_message()}
+        if isinstance(message, ToolMessage):
+            update["status"] = "error"
+        return message.model_copy(update=update)
     if verdict.decision == "redact":
         redacted = verdict.result
         if not isinstance(redacted, (str, list)):
@@ -86,13 +99,53 @@ class MastyfMiddleware(AgentMiddleware):
         verdict = self.guard.check_call(name, checked)
         if verdict.blocked:
             return _blocked_message(request, verdict)
-        return self._check_result(name, checked, handler(request))
+        return self._check_result(request, name, checked, handler(request))
 
-    def _check_result(self, name: str, checked: Any, result: ToolResult) -> ToolResult:
-        def check(message: ToolMessage) -> ToolMessage:
-            return _apply(message, self.guard.check_result(name, message.content, checked))
+    def _check_result(self, request: ToolCallRequest, name: str, checked: Any, result: Any) -> ToolResult:
+        """Checks everything the tool sends back. Fails closed: anything it can't check is blocked.
 
-        return _map_tool_messages(result, check)
+        Only "no check service" (MastyfUnavailable) is left to the Guard's on_unavailable setting.
+        """
+        try:
+            if isinstance(result, ToolMessage):
+                return _apply(result, self.guard.check_result(name, result.content, checked))
+            if isinstance(result, Command):
+                return self._check_command(request, name, checked, result)
+        except MastyfUnavailable:
+            raise
+        except Exception:  # noqa: BLE001 — an error while checking must never let the result through
+            pass
+        return _blocked_message(request, UNCHECKABLE)
+
+    def _check_command(self, request: ToolCallRequest, name: str, checked: Any, result: Command) -> ToolResult:
+        """A tool that returns a Command can write messages and other state the model reads later.
+
+        Every message (in any form LangChain accepts) and every other state value is checked.
+        """
+        if result.update is None:
+            return result  # only goto/resume: nothing the model will read
+        update = dict(result.update)  # a dict, or a list of (key, value) pairs
+        checked_update: dict[str, Any] = {}
+
+        others = {k: v for k, v in update.items() if k != "messages"}
+        if others:
+            verdict = self.guard.check_result(name, others, checked)
+            if verdict.blocked:
+                return _blocked_message(request, verdict)
+            if verdict.decision == "redact":
+                if not isinstance(verdict.result, dict) or set(verdict.result) != set(others):
+                    return _blocked_message(request, UNCHECKABLE)
+                others = verdict.result
+            checked_update.update(others)
+
+        if "messages" in update:
+            raw = update["messages"]
+            messages = convert_to_messages(raw if isinstance(raw, list) else [raw])
+            checked_update["messages"] = [
+                _apply(m, self.guard.check_result(name, m.content, checked)) for m in messages
+            ]
+
+        return Command(graph=result.graph, update=checked_update, resume=result.resume, goto=result.goto)
 
     # ── async ─────────────────────────────────────────────────────────────────
 
@@ -108,21 +161,4 @@ class MastyfMiddleware(AgentMiddleware):
             return _blocked_message(request, verdict)
         result = await handler(request)
         # The checks talk to the local check service over HTTP, so they run off the event loop.
-        return await asyncio.to_thread(self._check_result, name, checked, result)
-
-
-def _map_tool_messages(result: ToolResult, fn: Callable[[ToolMessage], ToolMessage]) -> ToolResult:
-    """Apply `fn` to the tool's answer, including answers a tool returns inside a `Command`."""
-    if isinstance(result, ToolMessage):
-        return fn(result)
-    if isinstance(result, Command) and isinstance(result.update, dict):
-        messages = result.update.get("messages")
-        if isinstance(messages, list) and any(isinstance(m, ToolMessage) for m in messages):
-            checked = [fn(m) if isinstance(m, ToolMessage) else m for m in messages]
-            return Command(
-                graph=result.graph,
-                update={**result.update, "messages": checked},
-                resume=result.resume,
-                goto=result.goto,
-            )
-    return result
+        return await asyncio.to_thread(self._check_result, request, name, checked, result)

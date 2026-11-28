@@ -112,6 +112,58 @@ def test_a_result_inside_a_command_is_checked_too(tools):
     assert msg.content.startswith("Blocked by Mastyf")
 
 
+def test_a_dict_form_message_inside_a_command_is_checked(tools):
+    mw = MastyfMiddleware()
+    req = request(tools["fetch_page"], {"url": "https://example.com"})
+
+    def handler(r: ToolCallRequest) -> Command:
+        return Command(update={"messages": [{"role": "tool", "content": f"Page text. {TAKEOVER}", "tool_call_id": "call-1"}]})
+
+    out = mw.wrap_tool_call(req, handler)
+    assert "ignore all previous" not in str(out).lower()
+
+
+def test_a_list_form_command_update_is_checked(tools):
+    mw = MastyfMiddleware()
+    req = request(tools["fetch_page"], {"url": "https://example.com"})
+
+    def handler(r: ToolCallRequest) -> Command:
+        return Command(update=[("messages", [ToolMessage(content=f"Page text. {TAKEOVER}", tool_call_id="call-1")])])
+
+    out = mw.wrap_tool_call(req, handler)
+    assert "ignore all previous" not in str(out).lower()
+
+
+def test_text_written_to_other_state_keys_is_checked(tools):
+    mw = MastyfMiddleware()
+    req = request(tools["fetch_page"], {"url": "https://example.com"})
+
+    def handler(r: ToolCallRequest) -> Command:
+        return Command(update={"notes": f"Page text. {TAKEOVER}", "messages": [ToolMessage(content="saved", tool_call_id="call-1")]})
+
+    out = mw.wrap_tool_call(req, handler)
+    assert "ignore all previous" not in str(out).lower()
+
+
+def test_a_harmless_command_passes_through(tools):
+    mw = MastyfMiddleware()
+    req = request(tools["read_file"], {"path": "./README.md"})
+    original = Command(update={"messages": [ToolMessage(content="fine", tool_call_id="call-1")], "count": 2}, goto="next")
+    out = mw.wrap_tool_call(req, lambda r: original)
+    assert isinstance(out, Command)
+    assert out.goto == "next"
+    assert out.update["count"] == 2
+    assert out.update["messages"][0].content == "fine"
+
+
+def test_a_result_it_cannot_check_is_blocked(tools):
+    mw = MastyfMiddleware()
+    req = request(tools["read_file"], {"path": "./README.md"})
+    out = mw.wrap_tool_call(req, lambda r: object())
+    assert isinstance(out, ToolMessage)
+    assert out.content.startswith("Blocked by Mastyf")
+
+
 def test_the_async_path_blocks_too(tools, calls):
     mw = MastyfMiddleware()
     req = request(tools["read_file"], {"path": "/etc/passwd"})
